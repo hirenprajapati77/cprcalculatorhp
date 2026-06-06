@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  cpr-db:
+    image: postgres:15-alpine
+    container_name: cpr-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: cpr_pro
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  cpr-cache:
+    image: redis:7-alpine
+    container_name: cpr-cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  cpr-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cpr-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://postgres:postgrespassword@cpr-db:5432/cpr_pro?schema=public"
+      REDIS_URL: "redis://cpr-cache:6379"
+      NEXT_PUBLIC_BASE_URL: "http://localhost:3000"
+      NODE_ENV: "production"
+      RATE_LIMIT_MAX: "60"
+      RATE_LIMIT_WINDOW_MS: "60000"
+    depends_on:
+      - cpr-db
+      - cpr-cache
+
+volumes:
+  postgres_data:
+  redis_data:

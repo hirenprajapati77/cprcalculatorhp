@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Calculation {
+  id             String   @id @default(cuid())
+  high           Float
+  low            Float
+  close          Float
+  pivot          Float
+  bc             Float
+  tc             Float
+  r1             Float
+  r2             Float
+  r3             Float
+  r4             Float
+  s1             Float
+  s2             Float
+  s3             Float
+  s4             Float
+  width          Float
+  classification String   // NARROW | NORMAL | WIDE
+  trend          String
+  shareToken     String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([shareToken])
+}
+
+model ScannerResult {
+  id             String   @id @default(cuid())
+  symbol         String
+  date           String   // YYYY-MM-DD
+  ltp            Float    // Last Traded Price
+  volume         Float
+  pivot          Float
+  bc             Float
+  tc             Float
+  r1             Float
+  r2             Float
+  r3             Float
+  r4             Float
+  s1             Float
+  s2             Float
+  s3             Float
+  s4             Float
+  width          Float
+  classification String   // NARROW | NORMAL | WIDE
+  score          Int      // Combined signal score (0-100)
+  signalSummary  String   // Active signals comma-separated
+  createdAt      DateTime @default(now())
+
+  @@unique([symbol, date])
+  @@index([score])
+  @@index([createdAt])
+  @@index([symbol])
+}
+
+model MarketSnapshot {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  price     Float    // Open price
+  volume    Float    // Daily volume
+  avgVolume Float    // 5-day average volume
+  marketCap Float    // Market cap in INR Crores
+  sector    String
+  updatedAt DateTime @updatedAt
+}
+
+model ScanHistory {
+  id          String   @id @default(cuid())
+  filtersJson String   // JSON string of filters
+  resultCount Int
+  durationMs  Int
+  topSymbols  String   // Comma-separated or JSON list of top symbols (max 20)
+  createdAt   DateTime @default(now())
+}
