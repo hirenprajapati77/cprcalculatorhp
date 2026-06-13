@@ -38,6 +38,7 @@ services:
       NODE_ENV: "production"
       RATE_LIMIT_MAX: "60"
       RATE_LIMIT_WINDOW_MS: "60000"
+      MARKET_DATA_MODE: "live"
     depends_on:
       - cpr-db
       - cpr-cache
