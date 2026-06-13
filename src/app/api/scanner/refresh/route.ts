@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     const universe = body.universe || 'NIFTY50';
     const market = body.market || 'NSE';
 
-    if (!['NIFTY50', 'NIFTY200', 'ALL'].includes(universe)) {
+    if (!['NIFTY50', 'NIFTY200', 'NIFTY_FNO', 'ALL'].includes(universe)) {
       return NextResponse.json({ error: 'Invalid universe parameter' }, { status: 400 });
     }
     if (!['NSE', 'BSE'].includes(market)) {

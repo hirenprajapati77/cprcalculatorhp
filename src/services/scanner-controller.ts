@@ -19,7 +19,7 @@ export class ScannerController {
    * 8. Cache the full ranked list for 5 minutes
    */
   static async runFullScan(
-    universeName: 'NIFTY50' | 'NIFTY200' | 'ALL' = 'NIFTY50',
+    universeName: 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL' = 'NIFTY50',
     market: 'NSE' | 'BSE' = 'NSE'
   ): Promise<Array<ScannerSignalResult & { score: number }>> {
     const startTime = Date.now();

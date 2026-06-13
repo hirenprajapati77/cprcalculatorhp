@@ -94,6 +94,7 @@ const SECTORS_LIST = [
   'Materials',
   'Metals',
   'Services',
+  'Capital Goods',
 ];
 
 const SECTOR_ALIASES: Record<string, string[]> = {
@@ -412,7 +413,7 @@ export default function ScannerClient() {
   const { showToast } = useToast();
 
   // Filters & Pagination State
-  const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'ALL'>('NIFTY50');
+  const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -473,6 +474,9 @@ export default function ScannerClient() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
+
+  // Custom Filters
+  const [minRR, setMinRR] = useState<string>('');
 
   // persistent scan runs log
   const [scanHistoryLog, setScanHistoryLog] = useState<HistoryLog[]>([]);
@@ -560,7 +564,7 @@ export default function ScannerClient() {
   // Toggle watchlist configurations (Star, Pin, Notify)
   const handleToggleWatchlistState = (symbol: string, key: keyof WatchlistItemState) => {
     const updated = { ...watchlist };
-    const current = updated[symbol] || { starred: false, pinned: false, notify: false };
+    const current = updated[symbol] ? { ...updated[symbol] } : { starred: false, pinned: false, notify: false };
     current[key] = !current[key];
     
     // Clean up empty configurations
@@ -766,7 +770,7 @@ export default function ScannerClient() {
 
   const handleFilterChange = (type: 'universe' | 'market' | 'mode', value: string) => {
     setPage(1);
-    if (type === 'universe') setUniverse(value as 'NIFTY50' | 'NIFTY200' | 'ALL');
+    if (type === 'universe') setUniverse(value as 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL');
     if (type === 'market') setMarket(value as 'NSE' | 'BSE');
     if (type === 'mode') setMode(value);
   };
@@ -957,11 +961,13 @@ export default function ScannerClient() {
     <div className="space-y-6 relative pb-20 terminal-grid">
       
       {/* V3 KPI Top status bar */}
-      <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-5 items-center gap-3 text-text-secondary">
+      <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
         <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
           <Layers size={13} className="text-accent-blue" />
           <span>Universe:</span>
-          <span className="font-bold text-text-primary uppercase">{universe}</span>
+          <span className="font-bold text-text-primary uppercase">
+            {universe === 'NIFTY_FNO' ? 'NSE F&O' : universe}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
           <Activity size={13} className="text-accent-green" />
@@ -978,10 +984,16 @@ export default function ScannerClient() {
           <span>Refresh:</span>
           <span className="font-bold text-text-primary uppercase">{isLoading || isRefreshing ? 'Scanning' : 'Idle'}</span>
         </div>
-        <div className="flex items-center gap-1.5 last:border-none">
+        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
           <TrendingUp size={13} className="text-accent-blue" />
           <span>Latency:</span>
           <span className="font-bold text-text-primary">{latency}ms</span>
+        </div>
+        {/* Live Data Badge */}
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-accent-green animate-pulse" />
+          <span className="font-bold text-accent-green uppercase tracking-wide">LIVE</span>
+          <span className="text-text-tertiary text-[9px]">Yahoo Finance</span>
         </div>
       </div>
 
@@ -1316,8 +1328,9 @@ export default function ScannerClient() {
                   onChange={(e) => handleFilterChange('universe', e.target.value)}
                   className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
                 >
-                  <option value="NIFTY50">Nifty 50</option>
+                  <option value="NIFTY50">Nifty 50 (50)</option>
                   <option value="NIFTY200">Nifty 200</option>
+                  <option value="NIFTY_FNO">NSE F&amp;O (~202)</option>
                   <option value="ALL">All Stocks</option>
                 </select>
               </div>

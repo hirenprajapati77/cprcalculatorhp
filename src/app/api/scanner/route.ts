@@ -6,11 +6,13 @@ import { MarketService } from '@/services/market.service';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '10', 10);
     const market = (searchParams.get('market') || 'NSE') as 'NSE' | 'BSE';
-    const universe = (searchParams.get('universe') || 'NIFTY50') as 'NIFTY50' | 'NIFTY200' | 'ALL';
+    const universe = (searchParams.get('universe') || 'NIFTY50') as 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL';
     const mode = searchParams.get('mode') || 'ALL'; // NARROW | WIDE | BULLISH | BEARISH | BREAKOUT | etc.
+    const limitParam = searchParams.get('limit') || '10';
+    const isAll = limitParam === 'ALL';
+    const page = isAll ? 1 : parseInt(searchParams.get('page') || '1', 10);
+    const limit = isAll ? undefined : parseInt(limitParam, 10);
     const sortField = searchParams.get('sortField') || 'score';
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
@@ -114,7 +116,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Query Database
-    const offset = (page - 1) * limit;
+    const offset = isAll ? undefined : (page - 1) * limit!;
     
     const [results, total] = await Promise.all([
       prisma.scannerResult.findMany({
@@ -122,8 +124,7 @@ export async function GET(request: NextRequest) {
         orderBy: {
           [sortField]: sortOrder,
         },
-        skip: offset,
-        take: limit,
+        ...(isAll ? {} : { skip: offset, take: limit }),
       }),
       prisma.scannerResult.count({ where }),
     ]);
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: limit ? Math.ceil(total / limit) : 1,
       results: formattedResults,
     }, { status: 200 });
   } catch (err) {
