@@ -1,3 +1,12 @@
+export interface HistoricalCandle {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface MarketStockData {
   symbol: string;
   market: 'NSE' | 'BSE';
@@ -10,6 +19,7 @@ export interface MarketStockData {
   avgVolume: number;
   marketCap: number; // INR Crores
   ltp: number;
+  history?: HistoricalCandle[];
 }
 
 export interface LiveStatus {
@@ -248,26 +258,33 @@ export class MarketService {
 
   /**
    * Returns stock universe metadata based on the selected universe.
-   * Supports NIFTY50, NIFTY200, NIFTY_FNO, and ALL.
+   * Supports Auto, NSE_FNO, NIFTY50, NIFTY100, NIFTY200, ALL_NSE, WATCHLIST.
    */
-  static getUniverse(universe: 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL') {
+  static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST') {
     if (universe === 'NIFTY50')    return STOCK_UNIVERSE.filter(s => s.isNifty50);
+    if (universe === 'NIFTY100') {
+      return STOCK_UNIVERSE.filter(s => s.isNifty200)
+        .sort((a, b) => b.marketCap - a.marketCap)
+        .slice(0, 100);
+    }
     if (universe === 'NIFTY200')   return STOCK_UNIVERSE.filter(s => s.isNifty200);
-    if (universe === 'NIFTY_FNO')  return STOCK_UNIVERSE.filter(s => s.isFnO);
-    return STOCK_UNIVERSE; // ALL
+    if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  return STOCK_UNIVERSE.filter(s => s.isFnO);
+    if (universe === 'WATCHLIST')  return []; // Managed in caller by checking Watchlist database model
+    return STOCK_UNIVERSE; // Auto / ALL_NSE / ALL
   }
 
   /**
    * Returns count of stocks per universe (for UI labels).
    */
-  static getUniverseCount(universe: 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'): number {
+  static getUniverseCount(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST'): number {
+    if (universe === 'WATCHLIST') return 0;
     return this.getUniverse(universe).length;
   }
 
   /**
    * Fetches daily OHLC, Volume, and LTP from Yahoo Finance (LIVE).
+   * Includes last 5 days of candle history.
    * Falls back to paper/mock data ONLY if MARKET_DATA_MODE is explicitly set to 'paper' or 'mock'.
-   * In live mode, throws on failure so the caller can surface the error in the UI.
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
     const dataMode = process.env.MARKET_DATA_MODE || 'live';
@@ -334,6 +351,26 @@ export class MarketService {
             // LTP from regularMarketPrice (most current real-time price)
             const ltp = (meta.regularMarketPrice as number) || prevClose;
 
+            // Map history candles
+            const history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
+            for (let i = 0; i < len; i++) {
+              if (quote.high[i] !== null && quote.low[i] !== null && quote.close[i] !== null) {
+                const timestamp = result.timestamp?.[i];
+                const dateStr = timestamp
+                  ? new Date(timestamp * 1000).toISOString().split('T')[0]
+                  : new Date(Date.now() - (len - 1 - i) * 86400 * 1000).toISOString().split('T')[0];
+
+                history.push({
+                  date: dateStr,
+                  open: (quote.open?.[i] as number) || (quote.close[i] as number),
+                  high: quote.high[i] as number,
+                  low: quote.low[i] as number,
+                  close: quote.close[i] as number,
+                  volume: (quote.volume?.[i] as number) || 100000,
+                });
+              }
+            }
+
             return {
               symbol,
               market,
@@ -346,6 +383,7 @@ export class MarketService {
               avgVolume,
               marketCap,
               ltp,
+              history,
             };
           }
         }
@@ -353,13 +391,12 @@ export class MarketService {
         throw new Error(`Invalid quote data from Yahoo Finance for ${ticker}`);
 
       } catch (err) {
-        // In LIVE mode, log and return null — caller's batch skip handles this gracefully
         console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}:`, err);
         return null;
       }
     }
 
-    // ── PAPER MODE: Deterministic Price Simulation (with time-based fluctuation) ──
+    // ── PAPER/MOCK MODE: Deterministic Price Simulation ──
     const seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const basePrice = staticMeta?.marketCap
       ? Math.sqrt(staticMeta.marketCap) * 2
@@ -397,6 +434,29 @@ export class MarketService {
       volume = volume * (0.8 + ((seed + timeSeed) % 5) / 10);
     }
 
-    return { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp };
+    // Generate deterministic history of last 5 days
+    const history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
+    for (let day = 4; day >= 0; day--) {
+      const daySeed = seed + dateSeed - day;
+      const dayPctChange = ((daySeed) % 10 - 5) / 100;
+      const dayClose = basePrice * (1 + dayPctChange);
+      const dayOpen = dayClose * (1 - dayPctChange * 0.2);
+      const dayHigh = Math.max(dayOpen, dayClose) * (1 + narrowFactor);
+      const dayLow = Math.min(dayOpen, dayClose) * (1 - narrowFactor);
+      const dayVolume = avgVolume * (0.8 + (daySeed % 5) * 0.1);
+      const dateStr = new Date(Date.now() - day * 86400 * 1000).toISOString().split('T')[0];
+
+      history.push({
+        date: dateStr,
+        open: dayOpen,
+        high: dayHigh,
+        low: dayLow,
+        close: dayClose,
+        volume: dayVolume,
+      });
+    }
+
+    return { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history };
   }
 }
+

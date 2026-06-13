@@ -53,6 +53,7 @@ model ScannerResult {
   width          Float
   classification String   // NARROW | NORMAL | WIDE
   score          Int      // Combined signal score (0-100)
+  confidence     Int      @default(50)
   signalSummary  String   // Active signals comma-separated
   createdAt      DateTime @default(now())
 
@@ -81,3 +82,12 @@ model ScanHistory {
   topSymbols  String   // Comma-separated or JSON list of top symbols (max 20)
   createdAt   DateTime @default(now())
 }
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  pinned    Boolean  @default(false)
+  notify    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+

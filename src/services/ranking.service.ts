@@ -5,36 +5,53 @@ export class RankingService {
    * Calculates a score out of 100 for a stock based on active signals.
    *
    * Weights:
-   * - Narrow CPR: +30
-   * - Breakout: +25
-   * - Bullish: +20
-   * - Volume Spike (or Vol ratio >= 1.5): +15
+   * - Compression (Narrow CPR): +25
+   * - Higher Value (or Inside Value): +20
+   * - Breakout: +20
+   * - Volume (Volume Spike): +10
    * - Momentum: +10
-   * - Inside CPR: +5
+   * - Liquidity (High Market Cap / Volume Ratio): +10
+   * - Hot Zone: +5
    *
-   * The total score is capped at 100.
+   * The total score is normalized between 0-100.
    */
-  static calculateScore(result: Omit<ScannerSignalResult, 'score'>): number {
+  static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
     let score = 0;
-    const { signals, volume, avgVolume } = result;
+    const { signals, volume, avgVolume, marketCap } = result;
     const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
 
+    // 1. Compression (Narrow CPR)
     if (signals.includes('NARROW')) {
-      score += 30;
-    }
-    if (signals.includes('BREAKOUT')) {
       score += 25;
     }
-    if (signals.includes('BULLISH')) {
+    
+    // 2. Higher Value (or Inside Value)
+    if (signals.includes('HIGHER_VALUE') || signals.includes('INSIDE_VALUE')) {
       score += 20;
     }
-    if (signals.includes('VOLUME_SPIKE') || volumeRatio >= 1.5) {
-      score += 15;
+    
+    // 3. Breakout
+    if (signals.includes('BREAKOUT') || signals.includes('LONG_BUILD') || signals.includes('SHORT_BUILD')) {
+      score += 20;
     }
+    
+    // 4. Volume
+    if (signals.includes('VOLUME_SPIKE') || volumeRatio >= 1.5) {
+      score += 10;
+    }
+    
+    // 5. Momentum
     if (signals.includes('MOMENTUM')) {
       score += 10;
     }
-    if (signals.includes('INSIDE')) {
+    
+    // 6. Liquidity
+    if (marketCap >= 15000 || volumeRatio >= 1.0) {
+      score += 10;
+    }
+    
+    // 7. Hot Zone
+    if (signals.includes('HOT_ZONE')) {
       score += 5;
     }
 
@@ -44,12 +61,11 @@ export class RankingService {
   /**
    * Returns the qualitative classification label based on the numerical score.
    */
-  static getClassification(score: number): 'Strong Buy' | 'Opportunity' | 'Watch' | 'Ignore' | 'Avoid' {
-    if (score >= 90) return 'Strong Buy';
-    if (score >= 70) return 'Opportunity';
-    if (score >= 40) return 'Watch';
-    if (score >= 20) return 'Ignore';
-    return 'Avoid';
+  static getClassification(score: number): 'A+' | 'A' | 'B' | 'Ignore' {
+    if (score >= 90) return 'A+';
+    if (score >= 70) return 'A';
+    if (score >= 50) return 'B';
+    return 'Ignore';
   }
 
   /**
@@ -68,3 +84,4 @@ export class RankingService {
     return scored.sort((a, b) => b.score - a.score);
   }
 }
+

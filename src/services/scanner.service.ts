@@ -1,5 +1,7 @@
 import { calculateCPR } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
+import { SignalService } from './signal.service';
+import { RankingService } from './ranking.service';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -16,11 +18,14 @@ export interface ScannerSignalResult extends MarketStockData {
   width: number;
   classification: 'NARROW' | 'NORMAL' | 'WIDE';
   signals: string[]; // Active signal tags
+  score: number; // Quant score
   entry: number;
   sl: number;
   target: number;
   rr: string; // Risk-Reward ratio, e.g. "1:2.5"
+  confidence: number; // Trade confidence percentage
 }
+
 
 export class ScannerService {
   /**
@@ -34,69 +39,52 @@ export class ScannerService {
       close: stock.close,
     });
 
-    const signals: string[] = [];
-    const ltp = stock.ltp;
     const tc = cpr.tc;
     const bc = cpr.bc;
+    const ltp = stock.ltp;
     const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
-    // 2. Evaluate Signals
-    // Width Classification
-    if (cpr.classification === 'NARROW') {
-      signals.push('NARROW');
-    } else if (cpr.classification === 'WIDE') {
-      signals.push('WIDE');
-    } else {
-      signals.push('NORMAL');
-    }
+    // 2. Fetch Advanced Signals
+    const signalData = SignalService.getSignals(stock);
+    const signals = signalData.signals;
 
-    // Bullish / Bearish / Inside
-    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
-    if (ltp > tc) {
-      signals.push('BULLISH');
-      bias = 'BULLISH';
-    } else if (ltp < bc) {
-      signals.push('BEARISH');
-      bias = 'BEARISH';
-    } else {
-      signals.push('INSIDE');
-      bias = 'RANGE';
-    }
+    // 3. Calculate Quant Score & Classification
+    // Create temporary object to calculate score
+    const tempResult: Omit<ScannerSignalResult, 'score' | 'confidence'> = {
+      ...stock,
+      pivot: cpr.pivot,
+      bc,
+      tc,
+      r1: cpr.r1,
+      r2: cpr.r2,
+      r3: cpr.r3,
+      r4: cpr.r4,
+      s1: cpr.s1,
+      s2: cpr.s2,
+      s3: cpr.s3,
+      s4: cpr.s4,
+      width: cpr.width,
+      classification: cpr.classification,
+      signals,
+      entry: 0,
+      sl: 0,
+      target: 0,
+      rr: '1:1',
+    };
+    const score = RankingService.calculateScore(tempResult);
 
-    // Gap Up / Gap Down
-    if (stock.open > stock.high) {
-      signals.push('GAP_UP');
-    } else if (stock.open < stock.low) {
-      signals.push('GAP_DOWN');
-    }
-
-    // Virgin CPR
-    const todayMinPrice = Math.min(stock.open, ltp);
-    const todayMaxPrice = Math.max(stock.open, ltp);
-    if (todayMinPrice > tc || todayMaxPrice < bc) {
-      signals.push('VIRGIN');
-    }
-
-    // Volume Spike
-    if (volumeRatio >= 2.0) {
-      signals.push('VOLUME_SPIKE');
-    }
-
-    // Breakout (Volume Spike + Bullish Break of CPR)
-    if (volumeRatio >= 1.5 && ltp > tc) {
-      signals.push('BREAKOUT');
-    }
-
-    // Momentum
-    if (ltp > cpr.r1 || ltp < cpr.s1) {
-      signals.push('MOMENTUM');
-    }
-
-    // 3. Trade Setup (Entry, SL, Target, RR) Calculations
+    // 4. Trade Setup (Entry, SL, Target, RR) & Confidence Calculations
     let entry = 0;
     let sl = 0;
     let target = 0;
     let rrRatio = 1.0;
+    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
+
+    if (ltp > tc) {
+      bias = 'BULLISH';
+    } else if (ltp < bc) {
+      bias = 'BEARISH';
+    }
 
     if (bias === 'BULLISH') {
       entry = tc;
@@ -127,14 +115,26 @@ export class ScannerService {
       rrRatio = risk > 0 ? reward / risk : 1.0;
     }
 
-    // Format risk-reward string e.g. "1:2.5"
     const rr = `1:${rrRatio.toFixed(1)}`;
+
+    // 5. Confidence Score Calculation
+    let confidence = 50; // Base confidence
+    if (score >= 80) confidence += 15;
+    if (volumeRatio >= 1.8) confidence += 15;
+    if (cpr.classification === 'NARROW') confidence += 10;
+    if (signals.includes('BREAKOUT') || signals.includes('LONG_BUILD') || signals.includes('SHORT_BUILD')) {
+      confidence += 10;
+    }
+    if (signals.includes('INSIDE_VALUE') || signals.includes('HIGHER_VALUE') || signals.includes('LOWER_VALUE')) {
+      confidence += 10;
+    }
+    confidence = Math.min(confidence, 98); // Max cap at 98%
 
     return {
       ...stock,
       pivot: cpr.pivot,
-      bc: cpr.bc,
-      tc: cpr.tc,
+      bc,
+      tc,
       r1: cpr.r1,
       r2: cpr.r2,
       r3: cpr.r3,
@@ -146,10 +146,13 @@ export class ScannerService {
       width: cpr.width,
       classification: cpr.classification,
       signals,
+      score,
       entry,
       sl,
       target,
       rr,
+      confidence,
     };
   }
 }
+

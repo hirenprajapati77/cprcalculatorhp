@@ -19,13 +19,20 @@ export class ScannerController {
    * 8. Cache the full ranked list for 5 minutes
    */
   static async runFullScan(
-    universeName: 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL' = 'NIFTY50',
+    universeName: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' = 'NSE_FNO',
     market: 'NSE' | 'BSE' = 'NSE'
   ): Promise<Array<ScannerSignalResult & { score: number }>> {
     const startTime = Date.now();
     console.log(`Starting CPR Scan V2 for universe=${universeName}, market=${market}...`);
     
-    const stocks = MarketService.getUniverse(universeName);
+    let stocks: { symbol: string }[] = [];
+    if (universeName === 'WATCHLIST') {
+      const watchlistItems = await prisma.watchlist.findMany();
+      stocks = watchlistItems.map(item => ({ symbol: item.symbol }));
+    } else {
+      stocks = MarketService.getUniverse(universeName);
+    }
+
     const rawResults: ScannerSignalResult[] = [];
 
     // Parallel fetch with batching to avoid API rate limits (batches of 10)
@@ -45,8 +52,8 @@ export class ScannerController {
         return null;
       });
 
-      const batchResults = await Promise.all(batchPromises);
-      batchResults.forEach((r) => {
+      const batchPromisesResults = await Promise.all(batchPromises);
+      batchPromisesResults.forEach((r) => {
         if (r) rawResults.push(r);
       });
     }
@@ -87,6 +94,7 @@ export class ScannerController {
               width: r.width,
               classification: r.classification,
               score: r.score,
+              confidence: r.confidence,
               signalSummary: signalsStr,
             },
             create: {
@@ -108,6 +116,7 @@ export class ScannerController {
               width: r.width,
               classification: r.classification,
               score: r.score,
+              confidence: r.confidence,
               signalSummary: signalsStr,
             },
           });

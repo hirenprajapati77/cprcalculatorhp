@@ -100,6 +100,8 @@ export async function GET(request: NextRequest, { params }: Props) {
       current: {
         ...current,
         symbol: cleanSymbol,
+        price: currentSnapshot ? currentSnapshot.price : current.ltp,
+        signal: current.signalSummary,
         signals: currentSignals,
       },
       history: history.map(h => ({

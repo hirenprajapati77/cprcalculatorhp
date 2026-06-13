@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, History, Columns, Info, HelpCircle, Radar } from 'lucide-react';
+import { Activity, History, Columns, Info, HelpCircle, Radar, Star, LayoutGrid, Settings } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
@@ -11,8 +11,11 @@ export const Navbar: React.FC = () => {
   const links = [
     { href: '/calculate', label: 'Calculator', icon: <Activity size={14} /> },
     { href: '/scanner', label: 'Scanner', icon: <Radar size={14} /> },
+    { href: '/watchlist', label: 'Watchlist', icon: <Star size={14} /> },
+    { href: '/heatmap', label: 'Heatmap', icon: <LayoutGrid size={14} /> },
     { href: '/history', label: 'History', icon: <History size={14} /> },
     { href: '/compare', label: 'Compare', icon: <Columns size={14} /> },
+    { href: '/settings', label: 'Settings', icon: <Settings size={14} /> },
     { href: '/about', label: 'About', icon: <Info size={14} /> },
     { href: '/faq', label: 'FAQ', icon: <HelpCircle size={14} /> },
   ];

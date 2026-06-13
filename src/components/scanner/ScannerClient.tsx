@@ -562,7 +562,7 @@ export default function ScannerClient() {
   };
 
   // Toggle watchlist configurations (Star, Pin, Notify)
-  const handleToggleWatchlistState = (symbol: string, key: keyof WatchlistItemState) => {
+  const handleToggleWatchlistState = async (symbol: string, key: keyof WatchlistItemState) => {
     const updated = { ...watchlist };
     const current = updated[symbol] ? { ...updated[symbol] } : { starred: false, pinned: false, notify: false };
     current[key] = !current[key];
@@ -570,8 +570,33 @@ export default function ScannerClient() {
     // Clean up empty configurations
     if (!current.starred && !current.pinned && !current.notify) {
       delete updated[symbol];
+      try {
+        await fetch(`/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+      } catch (err) {
+        console.error('Failed to sync watchlist deletion with DB:', err);
+      }
     } else {
       updated[symbol] = current;
+      try {
+        await fetch('/api/watchlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol }),
+        });
+        
+        // Also update pinned/notify configurations
+        await fetch('/api/watchlist', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol,
+            pinned: current.pinned,
+            notify: current.notify,
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to sync watchlist updates with DB:', err);
+      }
     }
     
     saveWatchlistSettings(updated);
