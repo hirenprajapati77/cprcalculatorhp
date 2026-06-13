@@ -28,11 +28,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     formState: { errors },
   } = useForm<CPRInputSchemaType>({
     resolver: zodResolver(CPRInputSchema),
-    defaultValues: {
-      high: undefined,
-      low: undefined,
-      close: undefined,
-    },
+    defaultValues: {},
   });
 
   const onSubmit = (data: CPRInputSchemaType) => {
@@ -46,11 +42,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   };
 
   const handleReset = () => {
-    reset({
-      high: undefined,
-      low: undefined,
-      close: undefined,
-    });
+    reset({});
     onReset();
   };
 
@@ -62,7 +54,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
           placeholder="e.g. 25050"
           type="number"
           step="any"
-          error={errors.high?.message}
+          error={errors.high?.message || undefined}
           {...register('high', { valueAsNumber: true })}
         />
 
@@ -71,7 +63,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
           placeholder="e.g. 24820"
           type="number"
           step="any"
-          error={errors.low?.message}
+          error={errors.low?.message || undefined}
           {...register('low', { valueAsNumber: true })}
         />
 
@@ -80,7 +72,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
           placeholder="e.g. 24970"
           type="number"
           step="any"
-          error={errors.close?.message}
+          error={errors.close?.message || undefined}
           {...register('close', { valueAsNumber: true })}
         />
 

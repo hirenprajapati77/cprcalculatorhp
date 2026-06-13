@@ -109,16 +109,12 @@ export class SignalService {
     }
 
     // 7. Bullish / Bearish / Inside
-    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
     if (ltp > tc) {
       signals.push('BULLISH');
-      bias = 'BULLISH';
     } else if (ltp < bc) {
       signals.push('BEARISH');
-      bias = 'BEARISH';
     } else {
       signals.push('INSIDE');
-      bias = 'RANGE';
     }
 
     // 8. Gap Up / Gap Down

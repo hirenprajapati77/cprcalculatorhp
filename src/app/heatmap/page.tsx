@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { LayoutGrid, Sparkles, RefreshCw, BarChart2, ShieldAlert, Award } from 'lucide-react';
+import { LayoutGrid, RefreshCw, BarChart2, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
 
 interface HeatmapItem {

@@ -476,7 +476,12 @@ export default function ScannerClient() {
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
   // Custom Filters
-  const [minRR, setMinRR] = useState<string>('');
+
+  const [insightCounts, setInsightCounts] = useState({
+    strongBuy: 0,
+    breakoutReady: 0,
+    avoid: 0
+  });
 
   // persistent scan runs log
   const [scanHistoryLog, setScanHistoryLog] = useState<HistoryLog[]>([]);
@@ -644,6 +649,9 @@ export default function ScannerClient() {
 
       const data = await res.json();
       if (data.success) {
+        if (data.insights) {
+          setInsightCounts(data.insights);
+        }
         let items = data.results as ScannedStock[];
 
         // Client-side watchlist only filter
@@ -967,10 +975,10 @@ export default function ScannerClient() {
   }, [results]);
 
   // V2 Scanner Insights
-  const strongBuyCount = results.filter(r => r.score >= 90).length;
-  const breakoutReadyCount = results.filter(r => r.signals.includes('BREAKOUT') && r.signals.includes('NARROW')).length;
+  const strongBuyCount = insightCounts.strongBuy;
+  const breakoutReadyCount = insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
-  const avoidCount = results.filter(r => r.score < 40 || (r.signals.includes('BEARISH') && r.signals.includes('WIDE'))).length;
+  const avoidCount = insightCounts.avoid;
 
   // KPI calculations
   const totalActiveSignals = useMemo(() => {
@@ -1130,7 +1138,7 @@ export default function ScannerClient() {
                   <div className="text-text-secondary mt-1.5 space-y-1">
                     <div>Filters: {log.filters.universe || 'ALL'} | {log.filters.market || 'NSE'}</div>
                     <div>Execution time: {log.durationMs}ms</div>
-                    <div className="text-[10px] text-text-tertiary">Top tickers: {log.topSymbols}</div>
+                    <div className="text-[10px] text-text-tertiary truncate">Top tickers: {log.topSymbols}</div>
                     <div className="text-[9px] text-text-tertiary border-t border-border-primary/50 pt-1 mt-1">
                       {new Date(log.createdAt).toLocaleString('en-IN')}
                     </div>

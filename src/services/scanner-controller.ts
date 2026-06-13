@@ -33,6 +33,25 @@ export class ScannerController {
       stocks = MarketService.getUniverse(universeName);
     }
 
+    const execMode = process.env.EXECUTION_MODE || 'auto';
+    const queueThreshold = parseInt(process.env.SCAN_QUEUE_THRESHOLD || '75', 10);
+    
+    const shouldQueue = 
+      execMode === 'queue' || 
+      (execMode === 'auto' && stocks.length >= queueThreshold);
+
+    if (shouldQueue) {
+      // Import here to avoid circular dependency issues if any
+      const { QueueService } = await import('./queue.service');
+      if (QueueService.isEnabled && QueueService.scannerQueue) {
+        console.log(`Offloading scan to queue (threshold ${queueThreshold} exceeded by ${stocks.length} symbols).`);
+        await QueueService.scannerQueue.add('full-scan', { universeName, market, stocks });
+        return []; // Return empty or a job status indicator in a real app
+      } else {
+        console.warn('Queue is disabled or unavailable. Falling back to sync execution.');
+      }
+    }
+
     const rawResults: ScannerSignalResult[] = [];
 
     // Parallel fetch with batching to avoid API rate limits (batches of 10)
@@ -163,7 +182,7 @@ export class ScannerController {
 
     // Cache the ranked list for 5 minutes (300 seconds)
     const cacheKey = `list:${universeName}:${market}`;
-    await CacheService.setScannerCache(cacheKey, ranked, 300);
+    await CacheService.set(cacheKey, ranked, 300);
 
     return ranked;
   }

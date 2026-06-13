@@ -118,16 +118,31 @@ export async function GET(request: NextRequest) {
     // 5. Query Database
     const offset = isAll ? undefined : (page - 1) * limit!;
     
-    const [results, total] = await Promise.all([
+    const [results, total, fullStats] = await Promise.all([
       prisma.scannerResult.findMany({
         where,
         orderBy: {
           [sortField]: sortOrder,
         },
-        ...(isAll ? {} : { skip: offset, take: limit }),
+        ...(isAll || offset === undefined ? {} : { skip: offset }),
+        ...(isAll || limit === undefined ? {} : { take: limit }),
       }),
       prisma.scannerResult.count({ where }),
+      prisma.scannerResult.findMany({
+        where,
+        select: { score: true, signalSummary: true }
+      })
     ]);
+
+    let strongBuyCount = 0;
+    let breakoutReadyCount = 0;
+    let avoidCount = 0;
+
+    for (const r of fullStats) {
+      if (r.score >= 90) strongBuyCount++;
+      if (r.signalSummary.includes('BREAKOUT') && r.signalSummary.includes('NARROW')) breakoutReadyCount++;
+      if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
+    }
 
     // 6. Join Metadata from MarketSnapshots and calculate Trade setups
     const formattedResults = results.map((r) => {
@@ -194,6 +209,11 @@ export async function GET(request: NextRequest) {
       total,
       totalPages: limit ? Math.ceil(total / limit) : 1,
       results: formattedResults,
+      insights: {
+        strongBuy: strongBuyCount,
+        breakoutReady: breakoutReadyCount,
+        avoid: avoidCount,
+      }
     }, { status: 200 });
   } catch (err) {
     console.error('Error fetching V2 scanner data:', err);

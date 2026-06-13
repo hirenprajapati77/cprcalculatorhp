@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Sparkles, Sliders, Play, Database, ShieldAlert, Cpu } from 'lucide-react';
+import { Settings, Save, Sliders, Play, Database, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';

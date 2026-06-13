@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Star, Pin, Bell, Trash2, Search, Plus, Sparkles, TrendingUp, ShieldAlert, Award } from 'lucide-react';
+import { Star, Pin, Bell, Trash2, Search, Plus, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -58,12 +58,12 @@ export default function WatchlistPage() {
           if (scan) {
             return {
               ...item,
-              score: scan.score,
-              ltp: scan.ltp,
-              width: scan.width,
-              classification: scan.classification,
-              signals: scan.signals,
-            };
+              ...(scan.score !== undefined ? { score: scan.score } : {}),
+              ...(scan.ltp !== undefined ? { ltp: scan.ltp } : {}),
+              ...(scan.width !== undefined ? { width: scan.width } : {}),
+              ...(scan.classification !== undefined ? { classification: scan.classification } : {}),
+              ...(scan.signals !== undefined ? { signals: scan.signals } : {}),
+            } as WatchlistItem;
           }
           return item;
         });
