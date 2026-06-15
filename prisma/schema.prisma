@@ -24,7 +24,7 @@ model Calculation {
   s3             Float
   s4             Float
   width          Float
-  classification String   // NARROW | NORMAL | WIDE
+  classification String // NARROW | NORMAL | WIDE
   trend          String
   shareToken     String?  @unique
   createdAt      DateTime @default(now())
@@ -36,8 +36,8 @@ model Calculation {
 model ScannerResult {
   id             String   @id @default(cuid())
   symbol         String
-  date           String   // YYYY-MM-DD
-  ltp            Float    // Last Traded Price
+  date           String // YYYY-MM-DD
+  ltp            Float // Last Traded Price
   volume         Float
   pivot          Float
   bc             Float
@@ -51,10 +51,10 @@ model ScannerResult {
   s3             Float
   s4             Float
   width          Float
-  classification String   // NARROW | NORMAL | WIDE
-  score          Int      // Combined signal score (0-100)
+  classification String // NARROW | NORMAL | WIDE
+  score          Int // Combined signal score (0-100)
   confidence     Int      @default(50)
-  signalSummary  String   // Active signals comma-separated
+  signalSummary  String // Active signals comma-separated
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])
@@ -66,20 +66,20 @@ model ScannerResult {
 model MarketSnapshot {
   id        String   @id @default(cuid())
   symbol    String   @unique
-  price     Float    // Open price
-  volume    Float    // Daily volume
-  avgVolume Float    // 5-day average volume
-  marketCap Float    // Market cap in INR Crores
+  price     Float // Open price
+  volume    Float // Daily volume
+  avgVolume Float // 5-day average volume
+  marketCap Float // Market cap in INR Crores
   sector    String
   updatedAt DateTime @updatedAt
 }
 
 model ScanHistory {
   id          String   @id @default(cuid())
-  filtersJson String   // JSON string of filters
+  filtersJson String // JSON string of filters
   resultCount Int
   durationMs  Int
-  topSymbols  String   // Comma-separated or JSON list of top symbols (max 20)
+  topSymbols  String // Comma-separated or JSON list of top symbols (max 20)
   createdAt   DateTime @default(now())
 }
 
@@ -91,3 +91,111 @@ model Watchlist {
   createdAt DateTime @default(now())
 }
 
+model BacktestRun {
+  id             String   @id @default(cuid())
+  name           String
+  universe       String
+  startDate      DateTime
+  endDate        DateTime
+  capital        Float
+  riskModel      String
+  executionMode  String
+  status         String
+  metricsVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  trades      Trade[]
+  metrics     BacktestMetrics?
+  snapshots   BacktestMetricSnapshot[]
+  checkpoints BacktestCheckpoint[]
+}
+
+model BacktestCheckpoint {
+  id               String   @id @default(cuid())
+  runId            String
+  batchNumber      Int
+  processedSymbols Int
+  processedTrades  Int
+  elapsedMs        Int
+  createdAt        DateTime @default(now())
+
+  run BacktestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, batchNumber])
+}
+
+model Trade {
+  id            String @id @default(cuid())
+  backtestRunId String
+  symbol        String
+  type          String
+  signal        String
+  status        String
+
+  entryDate   DateTime
+  entryPrice  Float
+  entryReason String
+  exitDate    DateTime?
+  exitPrice   Float?
+  exitReason  String?
+
+  stopLoss         Float
+  target           Float
+  riskAmount       Float
+  fees             Float
+  slippage         Float
+  executionDelayMs Int
+
+  rr           Float?
+  durationDays Int?
+  positionSize Float
+  pnl          Float?
+  pnlPercent   Float?
+
+  run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+  journal Journal[]
+
+  @@index([backtestRunId])
+  @@index([symbol])
+}
+
+model Journal {
+  id        String   @id @default(cuid())
+  tradeId   String
+  timestamp DateTime
+  event     String
+  details   String?
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+}
+
+model BacktestMetrics {
+  id            String   @id @default(cuid())
+  backtestRunId String   @unique
+  winRate       Float
+  profitFactor  Float
+  expectancy    Float
+  maxDrawdown   Float
+  sharpe        Float
+  sortino       Float
+  avgRR         Float
+  createdAt     DateTime @default(now())
+
+  run BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+}
+
+model BacktestMetricSnapshot {
+  id            String   @id @default(cuid())
+  backtestRunId String
+  period        String
+  metricType    String
+  metricKey     String
+  metricValue   Float
+  createdAt     DateTime @default(now())
+
+  run BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+
+  @@index([backtestRunId, metricType])
+}
