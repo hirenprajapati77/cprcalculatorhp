@@ -16,8 +16,9 @@ export default function BacktestPage() {
   const { data: runs, isLoading } = useQuery({
     queryKey: ['backtests'],
     queryFn: async () => {
-      // In a real app we'd fetch from /api/backtest
-      return [] as unknown[];
+      const res = await fetch('/api/backtest');
+      if (!res.ok) throw new Error('Failed to fetch runs');
+      return res.json() as Promise<unknown[]>;
     }
   });
 
