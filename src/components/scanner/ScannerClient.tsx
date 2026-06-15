@@ -109,9 +109,9 @@ const SECTOR_ALIASES: Record<string, string[]> = {
   'Healthcare': ['pharma', 'hospital', 'medicine', 'drug', 'clinic'],
 };
 
-const getConfidenceStyle = (score: number) => {
-  if (score > 80) return 'text-accent-green';
-  if (score >= 60) return 'text-accent-amber';
+const getConfidenceStyle = (confidence: number) => {
+  if (confidence > 80) return 'text-accent-green';
+  if (confidence >= 60) return 'text-accent-amber';
   return 'text-accent-red';
 };
 
@@ -309,7 +309,7 @@ const StockRow = React.memo(({
         <td className={cellPadding}>
           <div className="space-y-0.5 font-mono text-left">
             <div className="font-bold text-text-primary text-[13px] leading-none">{row.score}</div>
-            <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.score)}`}>{row.score}%</div>
+            <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}%</div>
             {densityMode === 'detailed' && <div className="mt-1">{
               row.score >= 90 ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge> :
               row.score >= 70 ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge> :
@@ -1775,7 +1775,7 @@ export default function ScannerClient() {
                           <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.score)}`}>Conf {drawerStock.score}%</span>
+                          <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Conf {drawerStock.confidence}%</span>
                           {getRatingBadge(drawerStock.score)}
                         </div>
                       </div>
