@@ -65,6 +65,13 @@ interface ScannedStock {
   sl: number;
   target: number;
   rr: string;
+  signalTime?: string;
+  expectedGap?: number | null;
+  expectedMove?: number | null;
+  exitStrategy?: string | null;
+  state?: string;
+  rejectionReason?: string | null;
+  btstClassification?: string;
 }
 
 interface WatchlistItemState {
@@ -322,6 +329,60 @@ const StockRow = React.memo(({
         </td>
       )}
 
+      {visibleColumns.includes('signalTime') && (
+        <td className={cellPadding}>
+          <span className="font-mono text-text-secondary">{row.signalTime || '—'}</span>
+        </td>
+      )}
+
+      {visibleColumns.includes('gap') && (
+        <td className={cellPadding}>
+          {row.expectedGap !== null && row.expectedGap !== undefined ? (
+            <span className="text-accent-green font-semibold">+{row.expectedGap}%</span>
+          ) : (
+            <span className="text-text-tertiary">Rejected</span>
+          )}
+        </td>
+      )}
+
+      {visibleColumns.includes('move') && (
+        <td className={cellPadding}>
+          {row.expectedMove !== null && row.expectedMove !== undefined ? (
+            <span className="text-accent-blue font-semibold">+{row.expectedMove}%</span>
+          ) : (
+            <span className="text-text-tertiary">—</span>
+          )}
+        </td>
+      )}
+
+      {visibleColumns.includes('confidence') && (
+        <td className={cellPadding}>
+          {row.confidence !== null && row.confidence !== undefined ? (
+            <div className="flex items-center gap-1">
+              <div className="w-12 bg-bg-primary rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className={`h-full ${row.confidence >= 80 ? 'bg-accent-green' : row.confidence >= 60 ? 'bg-accent-blue' : 'bg-accent-amber'}`} 
+                  style={{ width: `${row.confidence}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-bold text-text-secondary">{row.confidence}%</span>
+            </div>
+          ) : (
+            <span className="text-text-tertiary">—</span>
+          )}
+        </td>
+      )}
+
+      {visibleColumns.includes('exit') && (
+        <td className={cellPadding}>
+          {row.exitStrategy ? (
+            <span className="px-2 py-0.5 rounded text-[10px] bg-accent-blue/20 text-accent-blue font-bold border border-accent-blue/30">{row.exitStrategy}</span>
+          ) : (
+            <span className="text-text-tertiary text-[10px] italic">{row.rejectionReason || '—'}</span>
+          )}
+        </td>
+      )}
+
       <td className={`${cellPadding} text-right`}>
         <div className="flex items-center justify-end gap-1">
           {densityMode === 'detailed' ? (
@@ -417,6 +478,7 @@ export default function ScannerClient() {
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
+  const [scannerMode, setScannerMode] = useState<'CPR' | 'BTST'>('CPR');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -508,7 +570,12 @@ export default function ScannerClient() {
     { key: 'rr', label: 'Risk Reward Ratio' },
     { key: 'signals', label: 'Active Signals' },
     { key: 'score', label: 'Score & Confidence' },
-    { key: 'action', label: 'Inspection Action' }
+    { key: 'action', label: 'Inspection Action' },
+    { key: 'signalTime', label: 'Signal Time' },
+    { key: 'gap', label: 'Gap %' },
+    { key: 'move', label: 'Move %' },
+    { key: 'confidence', label: 'Confidence' },
+    { key: 'exit', label: 'Exit / Status' }
   ];
 
   // Debounce search query input (300ms)
@@ -544,6 +611,23 @@ export default function ScannerClient() {
       setDensityMode(savedDensity as 'compact' | 'detailed');
     }
   }, []);
+
+  useEffect(() => {
+    if (scannerMode === 'BTST') {
+      setVisibleColumns(['symbol', 'signalTime', 'score', 'gap', 'move', 'confidence', 'exit']);
+    } else {
+      const savedColumns = localStorage.getItem('cpr_scanner_columns');
+      if (savedColumns) {
+        try {
+          setVisibleColumns(JSON.parse(savedColumns));
+        } catch {
+          setVisibleColumns(['checkbox', 'watchlist', 'symbol', 'ltp', 'distance', 'width', 'setup', 'rr', 'signals', 'score']);
+        }
+      } else {
+        setVisibleColumns(['checkbox', 'watchlist', 'symbol', 'ltp', 'distance', 'width', 'setup', 'rr', 'signals', 'score']);
+      }
+    }
+  }, [scannerMode]);
 
   const saveWatchlistSettings = (updated: Record<string, WatchlistItemState>) => {
     setWatchlist(updated);
@@ -627,6 +711,77 @@ export default function ScannerClient() {
     if (!silent) setIsLoading(true);
     const startFetchTime = Date.now();
     try {
+      if (scannerMode === 'BTST') {
+        const res = await fetch('/api/btst');
+        if (!res.ok) throw new Error('Failed to retrieve BTST signals');
+        const data = await res.json();
+        
+        const mapped = data.map((sig: {
+          id: string;
+          symbol: string;
+          entry?: number | null;
+          classification: string;
+          state: string;
+          btstScore?: number | null;
+          stopLoss?: number | null;
+          target?: number | null;
+          confidence?: number | null;
+          createdAt: string;
+          signalTime: string;
+          expectedGap?: number | null;
+          expectedMove?: number | null;
+          exitStrategy?: string | null;
+          rejectionReason?: string | null;
+        }) => ({
+          id: sig.id,
+          symbol: sig.symbol,
+          market: 'NSE' as const,
+          sector: 'F&O Stock',
+          price: sig.entry || 0,
+          open: sig.entry || 0,
+          volume: 0,
+          avgVolume: 0,
+          marketCap: 0,
+          ltp: sig.entry || 0,
+          pivot: 0,
+          bc: 0,
+          tc: 0,
+          r1: 0,
+          r2: 0,
+          r3: 0,
+          r4: 0,
+          s1: 0,
+          s2: 0,
+          s3: 0,
+          s4: 0,
+          width: 0,
+          classification: 'NORMAL' as const,
+          btstClassification: sig.classification,
+          signals: [sig.state],
+          score: sig.btstScore || 0,
+          entry: sig.entry || 0,
+          sl: sig.stopLoss || 0,
+          target: sig.target || 0,
+          rr: '1:2.5',
+          confidence: sig.confidence || 0,
+          createdAt: sig.createdAt,
+          signalTime: sig.signalTime,
+          expectedGap: sig.expectedGap,
+          expectedMove: sig.expectedMove,
+          exitStrategy: sig.exitStrategy,
+          state: sig.state,
+          rejectionReason: sig.rejectionReason,
+          volumeRatio: 1
+        }));
+
+        setResults(mapped);
+        setTotal(mapped.length);
+        setTotalPages(1);
+        setLatency(Date.now() - startFetchTime);
+        setLastRefreshed(new Date().toLocaleTimeString());
+        return;
+      }
+
       const queryParams = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -709,7 +864,7 @@ export default function ScannerClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, lastRefreshed, showToast]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, lastRefreshed, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {
@@ -1300,12 +1455,20 @@ export default function ScannerClient() {
         headerAction={
           <div className="flex items-center gap-1">
             <Button
+              onClick={() => setScannerMode(scannerMode === 'CPR' ? 'BTST' : 'CPR')}
+              size="sm"
+              variant="secondary"
+              className={`text-[10px] h-7 font-bold ${scannerMode === 'BTST' ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50' : ''}`}
+            >
+              Mode: {scannerMode}
+            </Button>
+            <Button
               onClick={toggleDensityMode}
               size="sm"
               variant="ghost"
               className="text-[10px] h-7"
             >
-              Mode: {densityMode === 'detailed' ? 'Detailed' : 'Compact'}
+              Density: {densityMode === 'detailed' ? 'Detailed' : 'Compact'}
             </Button>
             <div className="relative">
               <Button
@@ -1571,6 +1734,11 @@ export default function ScannerClient() {
                         <div className="flex items-center gap-1">Symbol <ArrowUpDown size={11} /></div>
                       </th>
                     )}
+                    {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
+                    {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
+                    {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
+                    {visibleColumns.includes('confidence') && <th className="p-2.5">Confidence</th>}
+                    {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
                     {visibleColumns.includes('ltp') && (
                       <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('ltp')}>
                         <div className="flex items-center gap-1">LTP & Price <ArrowUpDown size={11} /></div>

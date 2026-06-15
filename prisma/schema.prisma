@@ -200,3 +200,32 @@ model BacktestMetricSnapshot {
 
   @@index([backtestRunId, metricType])
 }
+
+model BtstSignal {
+  id              String   @id @default(cuid())
+  symbol          String
+  signalDate      String   // YYYY-MM-DD
+  signalTime      String   // HH:MM (e.g. 15:22)
+  entry           Float?
+  stopLoss        Float?
+  target          Float?
+  btstScore       Int?     // Numeric score, null if INVALID
+  expectedGap     Float?
+  expectedMove    Float?
+  riskLevel       String?  // LOW | MEDIUM | HIGH
+  confidence      Int?
+  exitStrategy    String?  // OPEN | R1 | EOD
+  actualExit      Float?
+  actualReturn    Float?
+  executed        Boolean  @default(false)
+  classification  String   // STRONG_BTST | BTST_READY | WATCH | IGNORE
+  state           String   // DISCOVERING | ACTIVE | FROZEN | EXECUTED | EXPIRED
+  freezeTime      String?  // HH:MM
+  rejectionReason String?  // Explanation for rejection
+  version         Int      @default(1)
+  createdAt       DateTime @default(now())
+
+  @@unique([symbol, signalDate, signalTime])
+  @@index([signalDate])
+  @@index([btstScore])
+}
