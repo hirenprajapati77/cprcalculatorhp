@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
-import * as os from 'os';
-
 export async function GET() {
-  const cacheMemory = CacheService.getMemoryUsage();
-  
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
   

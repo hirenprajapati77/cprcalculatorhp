@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+
 const URLS = [
   'http://localhost:3000/api/scanner',
   'http://localhost:3000/api/scanner/heatmap',
@@ -22,7 +24,7 @@ async function measureLatency(url: string, limit: number) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       await res.json();
       latencies.push(Date.now() - start);
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -39,7 +41,7 @@ function percentile(sortedArray: number[], p: number) {
 }
 
 async function runBenchmark() {
-  const results: any[] = [];
+  const results: Record<string, unknown>[] = [];
   
   for (const url of URLS) {
     for (const rows of ROWS_MATRIX) {
@@ -71,11 +73,11 @@ async function runBenchmark() {
   }
 
   // Get Health
-  let health: any = {};
+  let health: Record<string, unknown> = {};
   try {
     const res = await fetch('http://localhost:3000/api/health');
-    health = await res.json();
-  } catch(e) {}
+    health = await res.json() as Record<string, unknown>;
+  } catch {}
 
   const finalOutput = {
     timestamp: new Date().toISOString(),
@@ -91,7 +93,6 @@ async function runBenchmark() {
   console.log('\nCache Metrics:', health?.cache);
   
   // JSON
-  const fs = require('fs');
   fs.writeFileSync('benchmark-results.json', JSON.stringify(finalOutput, null, 2));
   
   // Markdown
