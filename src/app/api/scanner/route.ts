@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

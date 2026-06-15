@@ -301,7 +301,7 @@ export class MarketService {
         const res = await fetch(
           `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`,
           {
-            next: { revalidate: 60 }, // Server-side cache for 60 seconds
+            cache: 'no-store', // Disable Next.js fetch cache. CacheService handles it.
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': 'application/json',
