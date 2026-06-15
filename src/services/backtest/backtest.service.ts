@@ -101,6 +101,10 @@ export class BacktestService {
     let symbols: string[] = [];
     if (run.universe === 'NIFTY50') {
       symbols = Array.from({length: 50}, (_, i) => `SYM${i+1}`); // Mock 50 symbols
+    } else if (run.universe === 'NSE_FNO') {
+      symbols = Array.from({length: 50}, (_, i) => `FNO${i+1}`); // Mock 50 F&O symbols
+    } else {
+      symbols = Array.from({length: 50}, (_, i) => `SYM${i+1}`); // Default fallback
     }
 
     const BATCH_SIZE = 50;

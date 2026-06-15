@@ -34,6 +34,11 @@ export async function GET(req: NextRequest) {
 
   const runs = await prisma.backtestRun.findMany({
     orderBy: { createdAt: 'desc' },
+    include: {
+      _count: {
+        select: { trades: true }
+      }
+    },
     take: 20
   });
 
