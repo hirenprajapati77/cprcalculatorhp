@@ -18,14 +18,15 @@ export async function GET(req: NextRequest) {
     });
 
     // Group by metricType
-    const grouped = snapshots.reduce((acc: any, curr) => {
+    const grouped = snapshots.reduce((acc: Record<string, typeof snapshots>, curr) => {
       if (!acc[curr.metricType]) acc[curr.metricType] = [];
       acc[curr.metricType].push(curr);
       return acc;
     }, {});
 
     return NextResponse.json(grouped);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

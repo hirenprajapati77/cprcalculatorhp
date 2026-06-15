@@ -30,7 +30,7 @@ export class ReplayService {
     // Approximate 20 trading days roughly as 30 calendar days
     startDate.setDate(startDate.getDate() - 30); 
     
-    let endDate = trade.exitDate ? new Date(trade.exitDate) : new Date();
+    const endDate = trade.exitDate ? new Date(trade.exitDate) : new Date();
     endDate.setDate(endDate.getDate() + 30);
 
     let ohlc = await HistoricalProvider.getHistory(trade.symbol, startDate, endDate);

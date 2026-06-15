@@ -1,9 +1,8 @@
-import * as fs from 'fs';
 import * as os from 'os';
 
 const URL = 'http://localhost:3000/api/scanner?limit=50';
 
-async function fetchWithTiming(reqId: number): Promise<any> {
+async function fetchWithTiming(reqId: number): Promise<unknown> {
   const start = Date.now();
   try {
     const res = await fetch(URL);
@@ -16,7 +15,7 @@ async function fetchWithTiming(reqId: number): Promise<any> {
 }
 
 function calcStats(latencies: number[]) {
-  if (latencies.length === 0) return { p50: 0, p95: 0, p99: 0, stdDev: 0 };
+  if (latencies.length === 0) return { p50: 0, p95: 0, p99: 0, stdDev: '0' };
   const sorted = [...latencies].sort((a, b) => a - b);
   const p50 = sorted[Math.floor(sorted.length * 0.50)];
   const p95 = sorted[Math.floor(sorted.length * 0.95)];
@@ -41,9 +40,9 @@ async function runTestScenario(name: string, warmup: number, rounds: number) {
   // Measure
   console.log(`Executing ${rounds} measurement rounds...`);
   const latencies: number[] = [];
-  const results = [];
+  const results: unknown[] = [];
   for (let i = 0; i < rounds; i++) {
-    const res = await fetchWithTiming(i + 1);
+    const res = await fetchWithTiming(i + 1) as { success: boolean, duration: number };
     if (res.success) latencies.push(res.duration);
     results.push(res);
   }
@@ -61,14 +60,15 @@ async function main() {
   // Cold Cache Simulation (first hit after a pause or mock server restart)
   // We can't guarantee pure cold without restarting Next.js, but we'll try to capture the exact first request timing if it wasn't warmed up.
   // We'll assume the server is live and might already have warm cache. So we'll fetch Health API to get provider.
-  let health: any = {};
+  let health: unknown = {};
   try {
     const r = await fetch('http://localhost:3000/api/health');
     health = await r.json();
   } catch {}
 
   console.log('System Status:');
-  console.log('- Cache Provider:', health?.cache?.provider || 'Unknown');
+  const healthObj = health as { cache?: { provider: string } };
+  console.log('- Cache Provider:', healthObj?.cache?.provider || 'Unknown');
   console.log('- Memory:', Math.round(os.freemem() / 1024 / 1024) + 'MB Free');
   
   // Run Standard Warm Cache Scenario
@@ -80,8 +80,7 @@ async function main() {
   console.log('OUTPUT / REPORT');
   console.log('================================================');
   
-  let p99 = warmResults.stats.p99;
-  let singleColdEvent = false;
+  const p99 = warmResults.stats.p99;
   
   // Hardcoded analysis based on expected system architecture.
   // 6402ms is the exact time required to sequentially or concurrently fetch 50 stocks from Yahoo Finance API (approx 100ms per stock if concurrent, or 100ms * 50 = 5s sequentially).

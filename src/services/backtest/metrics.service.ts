@@ -6,7 +6,7 @@ export class MetricsService {
   /**
    * Calculate BacktestMetrics from Trade table
    */
-  static async calculateAndStoreMetrics(runId: string, version: number) {
+  static async calculateAndStoreMetrics(runId: string) {
     const trades = await prisma.trade.findMany({
       where: { backtestRunId: runId }
     });

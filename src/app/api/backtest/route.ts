@@ -8,9 +8,15 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const result = await BacktestService.submitRun(body);
+    
+    if (result.status === 'UNAVAILABLE') {
+      return NextResponse.json({ feature: 'backtest', status: 'unavailable' }, { status: 503 });
+    }
+    
     return NextResponse.json(result);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

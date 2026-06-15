@@ -32,7 +32,7 @@ export class HistoricalProvider {
 
   private static generateMockHistory(start: Date, end: Date): OHLC[] {
     const data: OHLC[] = [];
-    let current = new Date(start);
+    const current = new Date(start);
     let price = 1000;
     while (current <= end) {
       if (current.getDay() !== 0 && current.getDay() !== 6) { // Skip weekends

@@ -1,8 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
-import { TradeEngineService, BacktestTradeConfig } from './trade-engine.service';
+import { TradeEngineService } from './trade-engine.service';
 import { HistoricalProvider } from './historical.provider';
-import { JournalService } from './journal.service';
 import { MetricsService } from './metrics.service';
 
 const prisma = new PrismaClient();
@@ -12,9 +11,22 @@ const connection = {
   port: parseInt(process.env.REDIS_PORT || '6379'),
 };
 
-export const backtestQueue = new Queue('backtest.queue', { connection });
-
 export class BacktestService {
+  private static queueInstance: Queue | null = null;
+
+  static getQueue() {
+    if (process.env.BACKTEST_EXECUTION_MODE !== 'queue') return null;
+    if (!this.queueInstance) {
+      try {
+        this.queueInstance = new Queue('backtest.queue', { connection });
+      } catch (error) {
+        console.error('Failed to initialize Redis queue:', error);
+        return null;
+      }
+    }
+    return this.queueInstance;
+  }
+
   /**
    * Queues a backtest run.
    */
@@ -28,6 +40,18 @@ export class BacktestService {
     executionMode: string;
     metricsVersion?: number;
   }) {
+    const mode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
+    
+    if (mode === 'disabled') {
+      return {
+        jobId: null,
+        status: 'UNAVAILABLE',
+        progress: 0,
+        estimatedDuration: 'Unknown',
+        resumeSupported: false
+      };
+    }
+
     const run = await prisma.backtestRun.create({
       data: {
         name: config.name,
@@ -42,7 +66,18 @@ export class BacktestService {
       }
     });
 
-    await backtestQueue.add('process-run', { runId: run.id });
+    if (mode === 'sync') {
+      // Execute directly in background without waiting
+      this.processRun(run.id).catch(console.error);
+    } else {
+      const q = this.getQueue();
+      if (q) {
+        await q.add('process-run', { runId: run.id });
+      } else {
+        // Fallback to sync if queue initialization fails
+        this.processRun(run.id).catch(console.error);
+      }
+    }
 
     return {
       jobId: run.id,
@@ -170,7 +205,7 @@ export class BacktestService {
     }
 
     // Post processing metrics
-    await MetricsService.calculateAndStoreMetrics(runId, run.metricsVersion);
+    await MetricsService.calculateAndStoreMetrics(runId);
 
     await prisma.backtestRun.update({ where: { id: runId }, data: { status: 'COMPLETED' } });
   }
