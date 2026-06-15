@@ -17,6 +17,11 @@ class CacheServiceImpl {
   private redisClient: Redis | null = null;
   private provider: 'redis' | 'memory' = 'memory';
 
+  // Metrics tracking
+  private hits = 0;
+  private misses = 0;
+  private evictions = 0;
+
   constructor() {
     this.init();
   }
@@ -65,15 +70,26 @@ class CacheServiceImpl {
   }
 
   async get<T>(key: string): Promise<T | null> {
+    let result: T | null = null;
+    
     if (this.isRedisConnected) {
       try {
         const data = await this.redisClient!.get(key);
-        return data ? JSON.parse(data) : null;
+        result = data ? JSON.parse(data) : null;
       } catch {
-        return memoryCache.get(key) as T | null || null;
+        result = memoryCache.get(key) as T | null || null;
       }
+    } else {
+      result = memoryCache.get(key) as T | null || null;
     }
-    return memoryCache.get(key) as T | null || null;
+
+    if (result !== null) {
+      this.hits++;
+    } else {
+      this.misses++;
+    }
+    
+    return result;
   }
 
   async set(key: string, value: NonNullable<unknown>, ttlSeconds: number): Promise<void> {
@@ -89,6 +105,7 @@ class CacheServiceImpl {
   }
 
   async delete(key: string): Promise<void> {
+    this.evictions++;
     if (this.isRedisConnected) {
       await this.redisClient!.del(key);
     }
@@ -96,6 +113,7 @@ class CacheServiceImpl {
   }
 
   async clearNamespace(prefix: string): Promise<void> {
+    this.evictions++;
     if (this.isRedisConnected) {
       const keys = await this.redisClient!.keys(`${prefix}*`);
       if (keys.length > 0) {
@@ -113,6 +131,27 @@ class CacheServiceImpl {
     return {
       size: memoryCache.size,
       max: memoryCache.max,
+    };
+  }
+
+  async getMetrics() {
+    const total = this.hits + this.misses;
+    let keysCount = memoryCache.size;
+    if (this.isRedisConnected) {
+      try {
+        keysCount = await this.redisClient!.dbsize();
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      provider: this.provider,
+      hitRate: total > 0 ? ((this.hits / total) * 100).toFixed(2) + '%' : '0%',
+      hits: this.hits,
+      misses: this.misses,
+      evictions: this.evictions,
+      keys: keysCount
     };
   }
 }
