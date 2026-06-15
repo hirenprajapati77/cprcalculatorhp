@@ -43,6 +43,7 @@ interface ScannedStock {
   marketCap: number;
   ltp: number;
   score: number;
+  confidence: number;
   signalSummary: string;
   pivot: number;
   bc: number;
