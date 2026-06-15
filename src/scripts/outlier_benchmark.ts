@@ -9,7 +9,7 @@ async function fetchWithTiming(reqId: number): Promise<unknown> {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     await res.json();
     return { reqId, duration: Date.now() - start, success: true };
-  } catch (e) {
+  } catch {
     return { reqId, duration: Date.now() - start, success: false };
   }
 }
@@ -64,7 +64,9 @@ async function main() {
   try {
     const r = await fetch('http://localhost:3000/api/health');
     health = await r.json();
-  } catch {}
+  } catch {
+    console.error('Benchmark failed');
+  }
 
   console.log('System Status:');
   const healthObj = health as { cache?: { provider: string } };

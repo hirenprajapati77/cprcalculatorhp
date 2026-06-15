@@ -25,6 +25,11 @@ export async function GET() {
       mode: backtestMode,
       status: backtestMode === 'disabled' ? 'unavailable' : 'active'
     },
+    retention: (await import('@/services/retention/retention.service')).RetentionService.getHealth(),
+    historicalProvider: {
+      mode: process.env.HISTORICAL_MODE || 'mock',
+      status: 'active'
+    },
     redis: {
       status: btQueue ? 'connected' : 'disconnected'
     },

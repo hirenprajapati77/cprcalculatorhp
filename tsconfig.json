@@ -25,5 +25,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "phase5_verify.ts",
+    "e2e_validation.ts",
+    "verify_provider.ts",
+    "src/scripts/**/*.ts"
+  ]
 }

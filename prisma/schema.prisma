@@ -103,6 +103,7 @@ model BacktestRun {
   status         String
   metricsVersion Int      @default(1)
   createdAt      DateTime @default(now())
+  deletedAt      DateTime?
 
   trades      Trade[]
   metrics     BacktestMetrics?

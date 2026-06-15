@@ -39,6 +39,8 @@ export const metadata: Metadata = {
   robots: 'index, follow',
 };
 
+import Providers from '@/components/Providers';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -49,13 +51,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col bg-background text-foreground terminal-grid`}
       >
-        <ToastProvider>
-          <Navbar />
-          <main className="flex-grow flex flex-col w-full max-w-7xl mx-auto px-4 py-6">
-            {children}
-          </main>
-          <Footer />
-        </ToastProvider>
+        <Providers>
+          <ToastProvider>
+            <Navbar />
+            <main className="flex-grow flex flex-col w-full max-w-7xl mx-auto px-4 py-6">
+              {children}
+            </main>
+            <Footer />
+          </ToastProvider>
+        </Providers>
       </body>
     </html>
   );
