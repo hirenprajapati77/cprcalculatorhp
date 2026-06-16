@@ -632,6 +632,7 @@ export default function ScannerClient() {
   // Table Configs: Density Mode & Column Visibility Show/Hide
   const [densityMode, setDensityMode] = useState<'compact' | 'detailed'>('detailed');
   const [showColumnSettings, setShowColumnSettings] = useState<boolean>(false);
+  const [showFilters, setShowFilters] = useState<boolean>(true); // collapsed on mobile by default via CSS
   const [visibleColumns, setVisibleColumns] = useState<string[]>([
     'checkbox',
     'watchlist',
@@ -1792,193 +1793,181 @@ export default function ScannerClient() {
         <div className="space-y-4">
           
           {/* V2/V3 Advanced Filters board */}
-          <div className="bg-bg-primary/50 border border-border-primary rounded p-4 font-mono text-xs space-y-4 max-sm:sticky max-sm:top-14 max-sm:z-20 max-sm:bg-bg-secondary">
-            <span className="font-semibold text-text-primary flex items-center gap-1.5 uppercase text-[10px] tracking-wider">
-              <Activity size={13} className="text-accent-blue" />
-              Advanced Scanner Filters
-            </span>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              
-              {/* Universe */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Universe</span>
-                <select
-                  value={universe}
-                  onChange={(e) => handleFilterChange('universe', e.target.value)}
-                  className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
-                >
-                  <option value="NIFTY50">Nifty 50 (50)</option>
-                  <option value="NIFTY200">Nifty 200</option>
-                  <option value="NIFTY_FNO">NSE F&amp;O (~202)</option>
-                  <option value="ALL">All Stocks</option>
-                </select>
-              </div>
-
-              {/* Market */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Exchange</span>
-                <select
-                  value={market}
-                  onChange={(e) => handleFilterChange('market', e.target.value)}
-                  className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
-                >
-                  <option value="NSE">NSE (India)</option>
-                  <option value="BSE">BSE (India)</option>
-                </select>
-              </div>
-
-              {/* Sector */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Sector</span>
-                <select
-                  value={selectedSector}
-                  onChange={(e) => setSelectedSector(e.target.value)}
-                  className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
-                >
-                  <option value="ALL">All Sectors</option>
-                  {SECTORS_LIST.map(sec => (
-                    <option key={sec} value={sec}>{sec}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Market Cap Category */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Market Cap</span>
-                <select
-                  value={marketCapCategory}
-                  onChange={(e) => setMarketCapCategory(e.target.value)}
-                  className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
-                >
-                  <option value="ALL">All Sizes</option>
-                  <option value="LARGE">Large Cap (&gt;20k Cr)</option>
-                  <option value="MID">Mid Cap (5k-20k Cr)</option>
-                  <option value="SMALL">Small Cap (&lt;5k Cr)</option>
-                </select>
-              </div>
-
-              {/* Search query (supports partial symbols, sectors) */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Quick Search</span>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Symbol, Sector..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary pl-8 pr-3 py-1.5 rounded focus:outline-none focus:border-accent-blue w-full"
-                  />
-                  <Search size={12} className="absolute left-2.5 top-2.5 text-text-tertiary" />
-                </div>
-              </div>
-
-              {/* Price Ranges */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Price Min/Max</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    placeholder="Min"
-                    value={minPrice}
-                    onChange={(e) => setMinPrice(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Max"
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                </div>
-              </div>
-
-              {/* Score Ranges */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Score Min/Max</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    placeholder="Min"
-                    value={minScore}
-                    onChange={(e) => setMinScore(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Max"
-                    value={maxScore}
-                    onChange={(e) => setMaxScore(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                </div>
-              </div>
-
-              {/* CPR Width Ranges */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Width % Min/Max</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Min"
-                    value={minWidth}
-                    onChange={(e) => setMinWidth(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Max"
-                    value={maxWidth}
-                    onChange={(e) => setMaxWidth(e.target.value)}
-                    className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2"
-                  />
-                </div>
-              </div>
-
-              {/* Active Signal filters */}
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] text-text-tertiary uppercase">Active Signal</span>
-                <select
-                  value={mode}
-                  onChange={(e) => handleFilterChange('mode', e.target.value)}
-                  className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer"
-                >
-                  <option value="ALL">All Signals</option>
-                  <option value="NARROW">Narrow CPR</option>
-                  <option value="WIDE">Wide CPR</option>
-                  <option value="NORMAL">Normal CPR</option>
-                  <option value="BULLISH">Bullish Bias</option>
-                  <option value="BEARISH">Bearish Bias</option>
-                  <option value="INSIDE">Inside CPR</option>
-                  <option value="BREAKOUT">Breakout</option>
-                  <option value="VIRGIN">Virgin CPR</option>
-                  <option value="GAP_UP">Gap Up</option>
-                  <option value="GAP_DOWN">Gap Down</option>
-                  <option value="VOLUME_SPIKE">Volume Spike</option>
-                  <option value="MOMENTUM">Momentum</option>
-                </select>
-              </div>
-
-              <div className="flex items-end gap-2">
-                <button
-                  onClick={() => {
-                    setShowWatchlistOnly(!showWatchlistOnly);
-                    setPage(1);
-                  }}
-                  className={`flex items-center justify-center gap-1.5 w-full py-2 rounded border text-[11px] font-bold transition-all ${
-                    showWatchlistOnly
-                      ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
-                      : 'bg-bg-secondary border-border-secondary text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  <Star size={12} fill={showWatchlistOnly ? 'currentColor' : 'none'} />
-                  Starred Only
-                </button>
+          <div className="bg-bg-primary/50 border border-border-primary rounded font-mono text-xs">
+            {/* Filter header — always visible, toggle on mobile */}
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
+              onClick={() => setShowFilters(v => !v)}
+            >
+              <span className="font-semibold text-text-primary flex items-center gap-1.5 uppercase text-[10px] tracking-wider">
+                <Activity size={13} className="text-accent-blue" />
+                Filters
+                {results.length > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded-full bg-accent-blue/15 text-accent-blue text-[8px] font-bold border border-accent-blue/20">
+                    {results.length} stocks
+                  </span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                {/* Quick active filter pills */}
+                {universe !== 'NIFTY50' && <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-accent-amber/10 text-accent-amber text-[8px] border border-accent-amber/20">{universe}</span>}
+                {selectedSector !== 'ALL' && <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-accent-purple/10 text-accent-purple text-[8px] border border-accent-purple/20">{selectedSector}</span>}
+                <ChevronRight
+                  size={13}
+                  className={`text-text-tertiary transition-transform duration-200 ${showFilters ? 'rotate-90' : ''}`}
+                />
               </div>
             </div>
+
+            {/* Collapsible filter body */}
+            {showFilters && (
+              <div className="px-4 pb-4 space-y-3 border-t border-border-primary/40">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-3">
+
+                  {/* Universe */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Universe</span>
+                    <select
+                      value={universe}
+                      onChange={(e) => handleFilterChange('universe', e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                    >
+                      <option value="NIFTY50">Nifty 50 (50)</option>
+                      <option value="NIFTY200">Nifty 200</option>
+                      <option value="NIFTY_FNO">NSE F&amp;O (~202)</option>
+                      <option value="ALL">All Stocks</option>
+                    </select>
+                  </div>
+
+                  {/* Market */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Exchange</span>
+                    <select
+                      value={market}
+                      onChange={(e) => handleFilterChange('market', e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                    >
+                      <option value="NSE">NSE (India)</option>
+                      <option value="BSE">BSE (India)</option>
+                    </select>
+                  </div>
+
+                  {/* Sector */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Sector</span>
+                    <select
+                      value={selectedSector}
+                      onChange={(e) => setSelectedSector(e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                    >
+                      <option value="ALL">All Sectors</option>
+                      {SECTORS_LIST.map(sec => (
+                        <option key={sec} value={sec}>{sec}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Market Cap Category */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Market Cap</span>
+                    <select
+                      value={marketCapCategory}
+                      onChange={(e) => setMarketCapCategory(e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                    >
+                      <option value="ALL">All Sizes</option>
+                      <option value="LARGE">Large Cap (&gt;20k Cr)</option>
+                      <option value="MID">Mid Cap (5k-20k Cr)</option>
+                      <option value="SMALL">Small Cap (&lt;5k Cr)</option>
+                    </select>
+                  </div>
+
+                  {/* Search */}
+                  <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Quick Search</span>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Symbol, Sector..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary pl-8 pr-3 py-1.5 rounded focus:outline-none focus:border-accent-blue w-full text-[11px]"
+                      />
+                      <Search size={12} className="absolute left-2.5 top-2.5 text-text-tertiary" />
+                    </div>
+                  </div>
+
+                  {/* Price Range */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Price Min/Max</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" placeholder="Min" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                      <input type="number" placeholder="Max" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                    </div>
+                  </div>
+
+                  {/* Score Range */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Score Min/Max</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" placeholder="Min" value={minScore} onChange={(e) => setMinScore(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                      <input type="number" placeholder="Max" value={maxScore} onChange={(e) => setMaxScore(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                    </div>
+                  </div>
+
+                  {/* Width Range */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Width % Min/Max</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" step="0.01" placeholder="Min" value={minWidth} onChange={(e) => setMinWidth(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                      <input type="number" step="0.01" placeholder="Max" value={maxWidth} onChange={(e) => setMaxWidth(e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
+                    </div>
+                  </div>
+
+                  {/* Active Signal */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-text-tertiary uppercase">Active Signal</span>
+                    <select value={mode} onChange={(e) => handleFilterChange('mode', e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]">
+                      <option value="ALL">All Signals</option>
+                      <option value="NARROW">Narrow CPR</option>
+                      <option value="WIDE">Wide CPR</option>
+                      <option value="NORMAL">Normal CPR</option>
+                      <option value="BULLISH">Bullish Bias</option>
+                      <option value="BEARISH">Bearish Bias</option>
+                      <option value="INSIDE">Inside CPR</option>
+                      <option value="BREAKOUT">Breakout</option>
+                      <option value="VIRGIN">Virgin CPR</option>
+                      <option value="GAP_UP">Gap Up</option>
+                      <option value="GAP_DOWN">Gap Down</option>
+                      <option value="VOLUME_SPIKE">Volume Spike</option>
+                      <option value="MOMENTUM">Momentum</option>
+                    </select>
+                  </div>
+
+                  {/* Starred Only */}
+                  <div className="flex items-end gap-2">
+                    <button
+                      onClick={() => { setShowWatchlistOnly(!showWatchlistOnly); setPage(1); }}
+                      className={`flex items-center justify-center gap-1.5 w-full py-2 rounded border text-[11px] font-bold transition-all ${
+                        showWatchlistOnly
+                          ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
+                          : 'bg-bg-secondary border-border-secondary text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      <Star size={12} fill={showWatchlistOnly ? 'currentColor' : 'none'} />
+                      Starred Only
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* BTST Telemetry Panel */}
