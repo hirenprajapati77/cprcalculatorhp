@@ -52,10 +52,10 @@ export default function BacktestPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap gap-2 justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-600">Backtest Engine</h1>
-          <p className="text-muted-foreground mt-1">Validate strategies using historical data</p>
+          <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-600">Backtest Engine</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Validate strategies using historical data</p>
         </div>
       </div>
 
@@ -95,7 +95,7 @@ export default function BacktestPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1 block text-muted-foreground">Risk %</label>
                 <input type="number" step="0.1" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} />

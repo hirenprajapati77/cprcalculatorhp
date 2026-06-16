@@ -51,7 +51,6 @@ export default function HeatmapPage() {
     'VOLUME_SPIKE',
   ];
 
-  // Calculate highest count value to scale cell brightness dynamically
   const maxCount = Math.max(
     1,
     ...heatmapData.flatMap((item) =>
@@ -62,43 +61,43 @@ export default function HeatmapPage() {
   );
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto px-4 py-6 font-mono text-xs">
+    <div className="space-y-4 max-w-6xl mx-auto font-mono text-xs">
       {/* Title Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <LayoutGrid size={120} className="text-blue-500 rotate-12" />
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-2xl relative overflow-hidden select-none">
+        <div className="absolute top-0 right-0 p-6 opacity-10 hidden sm:block">
+          <LayoutGrid size={100} className="text-blue-500 rotate-12" />
         </div>
         <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
-          <LayoutGrid size={13} className="text-blue-400" />
+          <LayoutGrid size={12} className="text-blue-400" />
           Quant Signal Heatmap
         </span>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white uppercase mt-1">
+        <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white uppercase mt-1">
           Sector Confluence Heatmap
         </h1>
-        <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed mt-2">
-          Visualize real-time signal density and value migration vectors. Identify capital rotations and volatility compressions across distinct industrial sectors.
+        <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed mt-2 hidden sm:block">
+          Visualize real-time signal density across industrial sectors. Identify capital rotations and volatility compressions.
         </p>
       </div>
 
       {/* Control Board */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
-            <BarChart2 size={16} className="text-blue-400" />
+            <BarChart2 size={14} className="text-blue-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white uppercase">Confluence Density</h2>
-            <p className="text-[10px] text-slate-400">Cell intensity indicates signal concentration ratios.</p>
+            <h2 className="text-xs font-bold text-white uppercase">Confluence Density</h2>
+            <p className="text-[10px] text-slate-400 hidden sm:block">Cell intensity indicates signal concentration ratios.</p>
           </div>
         </div>
 
         <button
           onClick={() => fetchHeatmap(true)}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 text-white border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors h-9"
+          className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 text-white border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors h-8"
         >
-          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-          Refresh Heatmap
+          <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+          Refresh
         </button>
       </div>
 
@@ -117,15 +116,20 @@ export default function HeatmapPage() {
           </p>
         </Card>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+          {/* Mobile scroll hint */}
+          <div className="sm:hidden flex items-center justify-between px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[9px] text-slate-500 uppercase tracking-wider">
+            <span>← Scroll horizontally →</span>
+            <span>{heatmapData.length} sectors</span>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse select-none">
+            <table className="w-full text-left border-collapse select-none" style={{ minWidth: 560 }}>
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[10px] uppercase">
-                  <th className="p-4 w-[200px]">Sector Domain</th>
+                <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[9px] uppercase">
+                  <th className="p-2 sm:p-4 w-[110px] sm:w-[200px] sticky left-0 bg-slate-950 z-10">Sector</th>
                   {trackedSignals.map((sig) => (
-                    <th key={sig} className="p-4 text-center text-[9px] font-bold tracking-wide">
-                      {sig.replace('_', '\n')}
+                    <th key={sig} className="p-2 sm:p-4 text-center text-[8px] sm:text-[9px] font-bold tracking-wide whitespace-nowrap">
+                      {sig.replace('_', ' ')}
                     </th>
                   ))}
                 </tr>
@@ -136,24 +140,23 @@ export default function HeatmapPage() {
                     key={item.sector}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: rowIdx * 0.05 }}
+                    transition={{ delay: rowIdx * 0.04 }}
                     className="hover:bg-slate-800/10 text-slate-300"
                   >
-                    {/* Sector Name */}
-                    <td className="p-4 font-bold text-white border-r border-slate-800 bg-slate-950/20">
-                      {item.sector}
+                    {/* Sticky sector name on mobile */}
+                    <td className="p-2 sm:p-4 font-bold text-white border-r border-slate-800 bg-slate-950/80 sticky left-0 z-10 text-[10px] sm:text-xs">
+                      <span className="block truncate max-w-[100px] sm:max-w-none" title={item.sector}>
+                        {item.sector}
+                      </span>
                     </td>
 
-                    {/* Signal Cells */}
                     {trackedSignals.map((sig) => {
                       const count = item.signals[sig] || 0;
                       const ratio = count / maxCount;
-                      
-                      // Color schemes based on signal classification
+
                       const isBullish = sig === 'BULLISH' || sig === 'BREAKOUT' || sig === 'LONG_BUILD';
                       const isBearish = sig === 'BEARISH' || sig === 'SHORT_BUILD';
-                      
-                      // Calculate opacity/brightness color
+
                       const cellClass = 'bg-slate-950/40 text-slate-600 border border-slate-900/40';
                       let style: React.CSSProperties = {};
 
@@ -171,7 +174,6 @@ export default function HeatmapPage() {
                             fontWeight: 'bold',
                           };
                         } else {
-                          // Compressions or spikes (blue/amber)
                           style = {
                             backgroundColor: `rgba(59, 130, 246, ${0.1 + ratio * 0.75})`,
                             color: ratio > 0.5 ? '#ffffff' : '#bfdbfe',
@@ -183,10 +185,10 @@ export default function HeatmapPage() {
                       return (
                         <td
                           key={sig}
-                          className={`p-4 text-center text-xs transition-all ${cellClass}`}
+                          className={`p-2 sm:p-4 text-center text-xs transition-all ${cellClass}`}
                           style={style}
                         >
-                          <span className={count > 0 ? 'scale-110 block font-semibold' : 'opacity-40'}>
+                          <span className={count > 0 ? 'block font-semibold' : 'opacity-40'}>
                             {count}
                           </span>
                         </td>

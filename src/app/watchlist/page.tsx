@@ -178,31 +178,31 @@ export default function WatchlistPage() {
       </div>
 
       {/* Control Board */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
-            <TrendingUp size={16} className="text-blue-400" />
+            <TrendingUp size={14} className="text-blue-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white font-mono">Monitor Basket</h2>
-            <p className="text-[10px] text-slate-400 font-mono">Total tracked items: {watchlist.length}</p>
+            <h2 className="text-xs font-bold text-white font-mono">Monitor Basket</h2>
+            <p className="text-[10px] text-slate-400 font-mono">Total tracked: {watchlist.length}</p>
           </div>
         </div>
 
-        <form onSubmit={handleAddSymbol} className="flex items-center gap-2">
-          <div className="relative">
+        <form onSubmit={handleAddSymbol} className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none">
             <input
               type="text"
               placeholder="Add symbol (e.g. INFY)..."
               value={searchSymbol}
               onChange={(e) => setSearchSymbol(e.target.value)}
               disabled={isAdding}
-              className="bg-slate-950 border border-slate-800 text-white pl-8 pr-3 py-2 rounded-lg text-xs focus:outline-none focus:border-blue-500 w-[220px] font-mono"
+              className="bg-slate-950 border border-slate-800 text-white pl-8 pr-3 py-2 rounded-lg text-xs focus:outline-none focus:border-blue-500 w-full sm:w-[200px] font-mono"
             />
-            <Search size={13} className="absolute left-2.5 top-3 text-slate-500" />
+            <Search size={12} className="absolute left-2.5 top-3 text-slate-500" />
           </div>
-          <Button type="submit" size="sm" variant="primary" disabled={isAdding} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg h-9">
-            <Plus size={14} /> Add
+          <Button type="submit" size="sm" variant="primary" disabled={isAdding} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg h-9 shrink-0">
+            <Plus size={13} /> Add
           </Button>
         </form>
       </div>
@@ -218,149 +218,162 @@ export default function WatchlistPage() {
           <Star size={40} className="mx-auto text-slate-700 mb-3" />
           <h3 className="text-sm font-bold text-white font-mono uppercase">Your Watchlist is Empty</h3>
           <p className="text-xs text-slate-500 font-mono mt-1 leading-relaxed">
-            Search and add symbols above, or star them directly in the Discovery Scanner to monitor key breakout candidates here.
+            Search and add symbols above, or star them directly in the Discovery Scanner.
           </p>
         </Card>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse font-mono text-xs select-none">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[10px] uppercase">
-                  <th className="p-4 w-[60px] text-center">Pin</th>
-                  <th className="p-4 w-[60px] text-center">Alerts</th>
-                  <th className="p-4">Symbol</th>
-                  <th className="p-4">LTP</th>
-                  <th className="p-4">CPR Width</th>
-                  <th className="p-4">CPR Class</th>
-                  <th className="p-4">Active Signals</th>
-                  <th className="p-4 text-center">Score</th>
-                  <th className="p-4 text-center w-[80px]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                <AnimatePresence initial={false}>
-                  {watchlist.map((item) => (
-                    <motion.tr
-                      key={item.symbol}
-                      layout
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      className="hover:bg-slate-800/20 text-slate-300"
-                    >
-                      {/* Pinned Icon Toggle */}
-                      <td className="p-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleState(item.symbol, 'pinned', !item.pinned)}
-                          className={`hover:scale-110 transition-transform ${item.pinned ? 'text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}
-                        >
-                          <Pin size={14} className={item.pinned ? 'fill-blue-400' : ''} />
-                        </button>
-                      </td>
-
-                      {/* Notification Alert Toggle */}
-                      <td className="p-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleState(item.symbol, 'notify', !item.notify)}
-                          className={`hover:scale-110 transition-transform ${item.notify ? 'text-yellow-500' : 'text-slate-600 hover:text-slate-400'}`}
-                        >
-                          <Bell size={14} className={item.notify ? 'fill-yellow-500' : ''} />
-                        </button>
-                      </td>
-
-                      {/* Symbol */}
-                      <td className="p-4 font-bold text-white text-sm">
-                        {item.symbol}
-                      </td>
-
-                      {/* LTP */}
-                      <td className="p-4 font-semibold">
-                        {item.ltp ? (
-                          <span className="text-white">₹{fmt(item.ltp)}</span>
-                        ) : (
-                          <span className="text-slate-600">Pending Scan</span>
-                        )}
-                      </td>
-
-                      {/* Width */}
-                      <td className="p-4 text-slate-300">
-                        {item.width !== undefined ? `${item.width.toFixed(3)}%` : '-'}
-                      </td>
-
-                      {/* Classification */}
-                      <td className="p-4">
-                        {item.classification ? (
-                          <Badge variant={item.classification === 'NARROW' ? 'amber' : item.classification === 'WIDE' ? 'red' : 'blue'}>
-                            {item.classification}
-                          </Badge>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-
-                      {/* Active Signals */}
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-1 max-w-[280px]">
-                          {item.signals && item.signals.length > 0 ? (
-                            item.signals.slice(0, 3).map((sig) => {
-                              const isBullish = sig === 'BULLISH' || sig === 'BREAKOUT' || sig === 'LONG_BUILD';
-                              const isBearish = sig === 'BEARISH' || sig === 'SHORT_BUILD';
-                              return (
-                                <span
-                                  key={sig}
-                                  className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide border ${
-                                    isBullish
-                                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                                      : isBearish
-                                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                                      : 'bg-slate-800 border-slate-700 text-slate-400'
-                                  }`}
-                                >
-                                  {sig}
-                                </span>
-                              );
-                            })
-                          ) : (
-                            <span className="text-[10px] text-slate-600 italic">No triggers</span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Score */}
-                      <td className="p-4 text-center font-bold">
-                        {item.score !== undefined ? (
-                          <span className={`${
-                            item.score >= 90 ? 'text-emerald-400 text-sm' :
-                            item.score >= 70 ? 'text-blue-400' :
-                            item.score >= 50 ? 'text-amber-500' : 'text-slate-500'
-                          }`}>
-                            {item.score}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-
-                      {/* Trash/Delete Action */}
-                      <td className="p-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSymbol(item.symbol)}
-                          className="text-slate-600 hover:text-rose-400 hover:scale-110 transition-transform p-1 rounded hover:bg-rose-500/10"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              </tbody>
-            </table>
+        <>
+          {/* Mobile card view */}
+          <div className="sm:hidden space-y-2">
+            <AnimatePresence initial={false}>
+              {watchlist.map((item) => (
+                <motion.div
+                  key={item.symbol}
+                  layout
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-white text-sm">{item.symbol}</span>
+                    <div className="flex items-center gap-2">
+                      {item.score !== undefined && (
+                        <span className={`text-xs font-bold ${
+                          item.score >= 90 ? 'text-emerald-400' :
+                          item.score >= 70 ? 'text-blue-400' :
+                          item.score >= 50 ? 'text-amber-500' : 'text-slate-500'
+                        }`}>{item.score}</span>
+                      )}
+                      <button onClick={() => handleRemoveSymbol(item.symbol)}
+                        className="text-slate-600 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-all">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                    {item.ltp && <span className="text-white font-semibold">₹{fmt(item.ltp)}</span>}
+                    {item.width !== undefined && <span>{item.width.toFixed(2)}% width</span>}
+                    {item.classification && (
+                      <Badge variant={item.classification === 'NARROW' ? 'amber' : item.classification === 'WIDE' ? 'red' : 'blue'}>
+                        {item.classification}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex flex-wrap gap-1">
+                      {item.signals?.slice(0, 3).map((sig) => (
+                        <span key={sig} className="text-[8px] px-1.5 py-0.5 rounded font-bold bg-slate-800 border border-slate-700 text-slate-400 uppercase">{sig}</span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleToggleState(item.symbol, 'pinned', !item.pinned)}
+                        className={`${item.pinned ? 'text-blue-400' : 'text-slate-600'} transition-colors`}>
+                        <Pin size={13} className={item.pinned ? 'fill-blue-400' : ''} />
+                      </button>
+                      <button onClick={() => handleToggleState(item.symbol, 'notify', !item.notify)}
+                        className={`${item.notify ? 'text-yellow-500' : 'text-slate-600'} transition-colors`}>
+                        <Bell size={13} className={item.notify ? 'fill-yellow-500' : ''} />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </div>
+
+          {/* Desktop table view */}
+          <div className="hidden sm:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse font-mono text-xs select-none">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[10px] uppercase">
+                    <th className="p-4 w-[50px] text-center">Pin</th>
+                    <th className="p-4 w-[50px] text-center">Alert</th>
+                    <th className="p-4">Symbol</th>
+                    <th className="p-4">LTP</th>
+                    <th className="p-4">CPR Width</th>
+                    <th className="p-4">CPR Class</th>
+                    <th className="p-4">Signals</th>
+                    <th className="p-4 text-center">Score</th>
+                    <th className="p-4 text-center w-[60px]">Del</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  <AnimatePresence initial={false}>
+                    {watchlist.map((item) => (
+                      <motion.tr
+                        key={item.symbol}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="hover:bg-slate-800/20 text-slate-300"
+                      >
+                        <td className="p-4 text-center">
+                          <button type="button" onClick={() => handleToggleState(item.symbol, 'pinned', !item.pinned)}
+                            className={`hover:scale-110 transition-transform ${item.pinned ? 'text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}>
+                            <Pin size={14} className={item.pinned ? 'fill-blue-400' : ''} />
+                          </button>
+                        </td>
+                        <td className="p-4 text-center">
+                          <button type="button" onClick={() => handleToggleState(item.symbol, 'notify', !item.notify)}
+                            className={`hover:scale-110 transition-transform ${item.notify ? 'text-yellow-500' : 'text-slate-600 hover:text-slate-400'}`}>
+                            <Bell size={14} className={item.notify ? 'fill-yellow-500' : ''} />
+                          </button>
+                        </td>
+                        <td className="p-4 font-bold text-white text-sm">{item.symbol}</td>
+                        <td className="p-4 font-semibold">
+                          {item.ltp ? <span className="text-white">₹{fmt(item.ltp)}</span> : <span className="text-slate-600">Pending</span>}
+                        </td>
+                        <td className="p-4 text-slate-300">{item.width !== undefined ? `${item.width.toFixed(3)}%` : '-'}</td>
+                        <td className="p-4">
+                          {item.classification ? (
+                            <Badge variant={item.classification === 'NARROW' ? 'amber' : item.classification === 'WIDE' ? 'red' : 'blue'}>
+                              {item.classification}
+                            </Badge>
+                          ) : '-'}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {item.signals && item.signals.length > 0 ? (
+                              item.signals.slice(0, 3).map((sig) => {
+                                const isBullish = sig === 'BULLISH' || sig === 'BREAKOUT' || sig === 'LONG_BUILD';
+                                const isBearish = sig === 'BEARISH' || sig === 'SHORT_BUILD';
+                                return (
+                                  <span key={sig} className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide border ${
+                                    isBullish ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                                    isBearish ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                                    'bg-slate-800 border-slate-700 text-slate-400'
+                                  }`}>{sig}</span>
+                                );
+                              })
+                            ) : <span className="text-[10px] text-slate-600 italic">No triggers</span>}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-bold">
+                          {item.score !== undefined ? (
+                            <span className={`${
+                              item.score >= 90 ? 'text-emerald-400 text-sm' :
+                              item.score >= 70 ? 'text-blue-400' :
+                              item.score >= 50 ? 'text-amber-500' : 'text-slate-500'
+                            }`}>{item.score}</span>
+                          ) : '-'}
+                        </td>
+                        <td className="p-4 text-center">
+                          <button type="button" onClick={() => handleRemoveSymbol(item.symbol)}
+                            className="text-slate-600 hover:text-rose-400 hover:scale-110 transition-transform p-1 rounded hover:bg-rose-500/10">
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
