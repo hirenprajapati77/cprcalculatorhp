@@ -1,26 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08090c;
-  --foreground: #f3f4f6;
+  --background: #06070b;
+  --foreground: #f1f5f9;
 
-  --bg-primary: #08090c;
-  --bg-secondary: #0f111a;
-  --bg-tertiary: #161924;
+  --bg-primary: #06070b;
+  --bg-secondary: #0d0f18;
+  --bg-tertiary: #13172200;
 
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-tertiary: #6b7280;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
 
-  --border-primary: #1b1e2a;
-  --border-secondary: #272c3e;
-  --border-tertiary: #383f56;
+  --border-primary: #1e2333;
+  --border-secondary: #2a3048;
+  --border-tertiary: #3a4260;
 
   --accent-green: #10b981;
   --accent-red: #ef4444;
   --accent-blue: #3b82f6;
   --accent-amber: #f59e0b;
   --accent-purple: #8b5cf6;
+  --accent-cyan: #06b6d4;
 
   --font-geist-sans: "Geist Sans", sans-serif;
   --font-geist-mono: "Geist Mono", monospace;
@@ -43,8 +44,18 @@
   --color-accent-blue: var(--accent-blue);
   --color-accent-amber: var(--accent-amber);
   --color-accent-purple: var(--accent-purple);
+  --color-accent-cyan: var(--accent-cyan);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* ── Reset & Base ─────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -54,65 +65,97 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom glow effects & grid lines for the terminal aesthetic */
-.glow-green {
-  text-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
-}
-.glow-red {
-  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
-}
-.glow-blue {
-  text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
-}
-.glow-amber {
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
-}
-
-.glow-card-green:hover {
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
-}
-.glow-card-red:hover {
-  box-shadow: 0 0 15px rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
-}
-.glow-card-blue:hover {
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-/* Grid pattern background for trading terminal vibe */
+/* ── Terminal Grid Background ─────────────────────────────────────── */
 .terminal-grid {
-  background-size: 20px 20px;
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-image:
+    linear-gradient(to right, rgba(59, 130, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-tertiary);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
+/* ── Glow Effects ─────────────────────────────────────────────────── */
+.glow-green  { text-shadow: 0 0 12px rgba(16, 185, 129, 0.45); }
+.glow-red    { text-shadow: 0 0 12px rgba(239, 68, 68, 0.45); }
+.glow-blue   { text-shadow: 0 0 12px rgba(59, 130, 246, 0.45); }
+.glow-amber  { text-shadow: 0 0 12px rgba(245, 158, 11, 0.45); }
+.glow-purple { text-shadow: 0 0 12px rgba(139, 92, 246, 0.45); }
 
-/* Custom animations */
+.glow-card-green:hover  { box-shadow: 0 0 20px rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.35) !important; }
+.glow-card-red:hover    { box-shadow: 0 0 20px rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.35) !important; }
+.glow-card-blue:hover   { box-shadow: 0 0 20px rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.35) !important; }
+.glow-card-amber:hover  { box-shadow: 0 0 20px rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.35) !important; }
+.glow-card-purple:hover { box-shadow: 0 0 20px rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.35) !important; }
+
+/* ── Custom Scrollbars ─────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-secondary); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-tertiary); }
+
+/* ── Animations ───────────────────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+@keyframes fadeInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70%  { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.animate-fade-in      { animation: fadeIn 0.35s ease-out forwards; }
+.animate-fade-in-left { animation: fadeInLeft 0.35s ease-out forwards; }
+.animate-slide-down   { animation: slideDown 0.25s ease-out forwards; }
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.animate-pulse-ring { animation: pulse-ring 2s cubic-bezier(0.455,0.03,0.515,0.955) infinite; }
+
+/* ── Glassmorphism Card ────────────────────────────────────────────── */
+.glass-card {
+  background: rgba(13, 15, 24, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Table Utilities ───────────────────────────────────────────────── */
+.table-fixed-layout { table-layout: fixed; }
+
+/* ── Score Bar ─────────────────────────────────────────────────────── */
+.score-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.6s ease;
+}
+
+/* ── Selection Highlight ─────────────────────────────────────────── */
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #fff;
 }

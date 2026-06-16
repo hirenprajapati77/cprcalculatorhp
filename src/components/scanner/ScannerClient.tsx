@@ -151,7 +151,7 @@ interface ScannedStock {
   ltp: number;
   score: number;
   confidence: number;
-  signalSummary: string;
+  signalSummary?: string;
   pivot: number;
   bc: number;
   tc: number;
@@ -849,52 +849,46 @@ export default function ScannerClient() {
     if (!silent) setIsLoading(true);
     const startFetchTime = Date.now();
     try {
-      if (scannerMode !== 'CPR') {
-        let endpoint = '/api/overnight';
-        if (scannerMode !== 'OVERNIGHT') {
-          endpoint += '?direction=' + scannerMode;
-        }
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error('Failed to retrieve BTST signals');
+      if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
+        // Live scoring engine — calls /api/btst which runs BtstService.evaluateOvernight on all NIFTY50 stocks in real-time
+        const res = await fetch('/api/btst?universe=NIFTY50');
+        if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
-        
-        const mapped = data.map((sig: {
-          id: string;
+
+        // Filter by direction based on scannerMode
+        const allResults: Array<{
           symbol: string;
-          entry?: number | null;
-          classification: string;
-          state: string;
-          btstScore?: number | null;
-          overnightScore?: number | null;
-          direction?: string;
-          stopLoss?: number | null;
-          target?: number | null;
-          confidence?: number | null;
-          createdAt: string;
-          signalTime: string;
-          expectedGap?: number | null;
-          expectedMove?: number | null;
-          exitStrategy?: string | null;
-          rejectionReason?: string | null;
-          scoreBreakdown?: {
-            vdu?: number;
-            cprNarrow?: number;
-            higherValue?: number;
-            vwap?: number;
-            conf15m?: number;
-            closeStrength?: number;
-          };
-        }) => ({
-          id: sig.id,
+          ltp: number;
+          longScore: number;
+          shortScore: number;
+          tag: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
+          signals: string[];
+          entry: number;
+          sl: number;
+          target: number;
+          rr: string;
+          sector: string;
+          marketCap: number;
+        }> = data.results || [];
+
+        const filtered = allResults.filter(r => {
+          if (scannerMode === 'BTST') return r.tag === 'LONG';
+          if (scannerMode === 'STBT') return r.tag === 'SHORT';
+          return r.tag === 'LONG' || r.tag === 'SHORT' || r.tag === 'NEUTRAL_CONFLICT';
+        });
+
+        const mapped: ScannedStock[] = filtered.map((sig, idx) => ({
+          id: `btst-live-${idx}`,
           symbol: sig.symbol,
+          date: new Date().toISOString().split('T')[0],
           market: 'NSE' as const,
-          sector: 'F&O Stock',
-          price: sig.entry || 0,
-          open: sig.entry || 0,
+          sector: sig.sector || 'NIFTY50',
+          price: sig.ltp,
+          open: sig.ltp,
           volume: 0,
           avgVolume: 0,
-          marketCap: 0,
-          ltp: sig.entry || 0,
+          marketCap: sig.marketCap || 0,
+          ltp: sig.ltp,
           pivot: 0,
           bc: 0,
           tc: 0,
@@ -908,25 +902,31 @@ export default function ScannerClient() {
           s4: 0,
           width: 0,
           classification: 'NORMAL' as const,
-          btstClassification: sig.classification,
-          direction: sig.direction as 'LONG' | 'SHORT',
-          signals: [sig.state],
-          score: sig.overnightScore || sig.btstScore || 0,
-          entry: sig.entry || 0,
-          sl: sig.stopLoss || 0,
-          target: sig.target || 0,
-          rr: '1:2.5',
-          confidence: sig.confidence || 0,
-          createdAt: sig.createdAt,
-          signalTime: sig.signalTime,
-          expectedGap: sig.expectedGap,
-          expectedMove: sig.expectedMove,
-          exitStrategy: sig.exitStrategy,
-          state: sig.state,
-          rejectionReason: sig.rejectionReason,
+          direction: sig.tag === 'LONG' ? 'LONG' : sig.tag === 'SHORT' ? 'SHORT' : undefined,
+          signals: sig.signals,
+          score: Math.max(sig.longScore, sig.shortScore),
+          confidence: Math.max(sig.longScore, sig.shortScore),
+          entry: sig.entry,
+          sl: sig.sl,
+          target: sig.target,
+          rr: sig.rr || '1:2.0',
+          createdAt: new Date().toISOString(),
+          signalTime: new Date().toLocaleTimeString('en-IN'),
+          expectedGap: null,
+          expectedMove: null,
+          exitStrategy: null,
+          rejectionReason: null,
           volumeRatio: 1,
-          scoreBreakdown: sig.scoreBreakdown || {}
         }));
+
+        // Update KPI insights
+        if (data.insights) {
+          setInsightCounts({
+            strongBuy: data.insights.strongSignal || 0,
+            breakoutReady: data.insights.breakoutReady || 0,
+            avoid: data.insights.avoid || 0,
+          });
+        }
 
         setResults(mapped);
         setTotal(mapped.length);
