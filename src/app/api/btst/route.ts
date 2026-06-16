@@ -1,67 +1,77 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { NextResponse } from 'next/server';
+import { MarketService } from '@/services/market.service';
+import { BtstService, BtstScoreResult } from '@/services/backtest/btst.service';
 
-const prisma = new PrismaClient();
-
-export async function GET(req: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(req.url);
-    const activeOnly = searchParams.get('activeOnly') === 'true';
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const { searchParams } = new URL(request.url);
+    const universe = searchParams.get('universe') || 'NIFTY50';
 
-    const whereClause: Record<string, unknown> = {
-      signalDate: date
-    };
+    const executionWindowOpen = BtstService.isExecutionWindowOpen();
 
-    if (activeOnly) {
-      whereClause.classification = {
-        in: ['STRONG_BTST', 'BTST_READY', 'WATCH']
-      };
-      whereClause.state = 'ACTIVE';
-    }
+    const stocks = MarketService.getUniverse(universe as any);
+    const results: BtstScoreResult[] = [];
 
-    const signals = await prisma.btstSignal.findMany({
-      where: whereClause,
-      orderBy: [
-        { btstScore: 'desc' }
-      ]
-    });
+    let strongSignal = 0;
+    let breakoutReady = 0;
+    let avoid = 0;
+    let totalLong = 0;
+    let totalShort = 0;
+    let totalConflict = 0;
 
-    return NextResponse.json(signals);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { symbol, signalDate, signalTime, classification, state } = body;
-
-    if (!symbol || !signalDate || !signalTime) {
-      return NextResponse.json({ error: 'Missing required keys (symbol, signalDate, signalTime)' }, { status: 400 });
-    }
-
-    const signal = await prisma.btstSignal.upsert({
-      where: {
-        symbol_signalDate_signalTime: {
-          symbol,
-          signalDate,
-          signalTime
+    for (const stockMeta of stocks) {
+      const stock = await MarketService.getStockData(stockMeta.symbol);
+      if (stock) {
+        const result = BtstService.evaluateOvernight(stock);
+        
+        // Count metrics
+        const maxScore = Math.max(result.longScore, result.shortScore);
+        
+        if (result.tag === 'NEUTRAL_CONFLICT') {
+          totalConflict++;
+          avoid++;
+        } else if (result.tag === 'WEAK') {
+          avoid++;
+        } else {
+          if (maxScore >= 90) {
+            strongSignal++;
+          } else if (maxScore >= 70) {
+            breakoutReady++;
+          } else if (maxScore < 40) {
+            avoid++;
+          }
+          
+          if (result.tag === 'LONG') totalLong++;
+          if (result.tag === 'SHORT') totalShort++;
         }
-      },
-      update: body,
-      create: {
-        ...body,
-        classification: classification || 'IGNORE',
-        state: state || 'DISCOVERING'
+
+        // Exclude WEAK
+        if (result.tag !== 'WEAK') {
+          results.push(result);
+        }
+      }
+    }
+
+    // Sort results by max score
+    results.sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore));
+
+    return NextResponse.json({
+      success: true,
+      executionWindowOpen,
+      scannedAt: new Date().toISOString(),
+      results,
+      insights: {
+        strongSignal,
+        breakoutReady,
+        avoid,
+        totalLong,
+        totalShort,
+        totalConflict
       }
     });
 
-    return NextResponse.json(signal);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    console.error('BTST API Error:', error);
+    return NextResponse.json({ success: false, error: 'Failed to evaluate BTST setups' }, { status: 500 });
   }
 }

@@ -20,6 +20,8 @@ export interface MarketStockData {
   marketCap: number; // INR Crores
   ltp: number;
   history?: HistoricalCandle[];
+  vwap?: number;
+  candle15m?: { open: number; high: number; low: number; close: number; volume: number } | null;
 }
 
 export interface LiveStatus {
@@ -299,7 +301,7 @@ export class MarketService {
     if (dataMode === 'live') {
       try {
         const res = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`,
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`,
           {
             cache: 'no-store', // Disable Next.js fetch cache. CacheService handles it.
             headers: {
@@ -342,8 +344,9 @@ export class MarketService {
             const prevOpen   = (quote.open?.[idx] as number) || prevClose;
             const prevVolume = (quote.volume?.[idx] as number) || 100000;
 
-            // Average volume over last 5 days
-            const validVolumes = (quote.volume as (number | null)[]).filter(v => v !== null) as number[];
+            // Average volume over the window, excluding today's partial candle
+            const validVolumesAll = (quote.volume as (number | null)[]).filter(v => v !== null) as number[];
+            const validVolumes = validVolumesAll.length > 1 ? validVolumesAll.slice(0, -1) : validVolumesAll;
             const avgVolume = validVolumes.length > 0
               ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
               : prevVolume;
@@ -371,6 +374,61 @@ export class MarketService {
               }
             }
 
+            // -- Fetch 15m intraday data for VWAP and candle15m --
+            let vwap = (prevHigh + prevLow + prevClose) / 3;
+            let candle15m = null;
+            try {
+              const res15m = await fetch(
+                `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=15m&range=1d`,
+                {
+                  cache: 'no-store',
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0',
+                    'Accept': 'application/json',
+                  },
+                }
+              );
+              if (res15m.ok) {
+                const json15 = await res15m.json();
+                const result15 = json15?.chart?.result?.[0];
+                const quotes15 = result15?.indicators?.quote?.[0];
+                if (quotes15 && quotes15.close && quotes15.close.length > 0) {
+                  let sumPriceVol = 0;
+                  let sumVol = 0;
+                  for (let i = 0; i < quotes15.close.length; i++) {
+                    const h = quotes15.high[i];
+                    const l = quotes15.low[i];
+                    const c = quotes15.close[i];
+                    const v = quotes15.volume[i] || 0;
+                    if (h !== null && l !== null && c !== null) {
+                      const typ = (h + l + c) / 3;
+                      sumPriceVol += typ * v;
+                      sumVol += v;
+                    }
+                  }
+                  if (sumVol > 0) {
+                    vwap = sumPriceVol / sumVol;
+                  }
+                  
+                  let lastValidIdx = quotes15.close.length - 1;
+                  while (lastValidIdx >= 0 && quotes15.close[lastValidIdx] === null) {
+                    lastValidIdx--;
+                  }
+                  if (lastValidIdx >= 0) {
+                    candle15m = {
+                      open: quotes15.open[lastValidIdx] || quotes15.close[lastValidIdx],
+                      high: quotes15.high[lastValidIdx],
+                      low: quotes15.low[lastValidIdx],
+                      close: quotes15.close[lastValidIdx],
+                      volume: quotes15.volume[lastValidIdx] || 0
+                    };
+                  }
+                }
+              }
+            } catch (err) {
+              // Fallback handled by initial vwap assignment
+            }
+
             return {
               symbol,
               market,
@@ -384,6 +442,8 @@ export class MarketService {
               marketCap,
               ltp,
               history,
+              vwap,
+              candle15m
             };
           }
         }

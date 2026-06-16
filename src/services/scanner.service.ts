@@ -42,7 +42,7 @@ export class ScannerService {
     const tc = cpr.tc;
     const bc = cpr.bc;
     const ltp = stock.ltp;
-    const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
+    const _volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
     // 2. Fetch Advanced Signals
     const signalData = SignalService.getSignals(stock);
@@ -118,16 +118,7 @@ export class ScannerService {
     const rr = `1:${rrRatio.toFixed(1)}`;
 
     // 5. Confidence Score Calculation
-    let confidence = 50; // Base confidence
-    if (score >= 80) confidence += 15;
-    if (volumeRatio >= 1.8) confidence += 15;
-    if (cpr.classification === 'NARROW') confidence += 10;
-    if (signals.includes('BREAKOUT') || signals.includes('LONG_BUILD') || signals.includes('SHORT_BUILD')) {
-      confidence += 10;
-    }
-    if (signals.includes('INSIDE_VALUE') || signals.includes('HIGHER_VALUE') || signals.includes('LOWER_VALUE')) {
-      confidence += 10;
-    }
+    let confidence = score;
     confidence = Math.min(confidence, 98); // Max cap at 98%
 
     return {

@@ -10,6 +10,7 @@ export class EntryManagerService {
    * Validates if a stock is eligible for a BTST signal based on the universe filters and reject rules.
    */
   static evaluateEligibility(
+    direction: 'LONG' | 'SHORT',
     stock: MarketStockData,
     tomorrowCpr: { tc: number; bc: number; width: number; classification: string },
     todayCpr: { tc: number; bc: number },
@@ -41,9 +42,16 @@ export class EntryManagerService {
       return { eligible: false, reason: 'Missing intraday data' };
     }
 
-    // 5. Price > VWAP + 2% (Avoid late extended entries)
-    if (stock.ltp > vwap * 1.02) {
-      return { eligible: false, reason: 'Price extended > VWAP + 2%' };
+    // 5. Directional VWAP Rejections
+    if (direction === 'LONG') {
+      if (stock.ltp > vwap * 1.02) {
+        return { eligible: false, reason: 'LONG rejected: Price extended > VWAP + 2%' };
+      }
+    } else {
+      // SHORT
+      if (stock.ltp < vwap * 0.98) {
+        return { eligible: false, reason: 'SHORT rejected: Price extended < VWAP - 2%' };
+      }
     }
 
     // 6. Close inside today's or tomorrow's CPR

@@ -44,6 +44,10 @@ export class ReplayService {
     return {
       tradeId: trade.id,
       symbol: trade.symbol,
+      type: trade.type,
+      entryPrice: trade.entryPrice,
+      stopLoss: trade.stopLoss,
+      target: trade.target,
       ohlc,
       events,
       truncated: truncatedEvents || truncatedCandles

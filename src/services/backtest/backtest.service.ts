@@ -129,66 +129,75 @@ export class BacktestService {
             const ohlc = await HistoricalProvider.getHistory(symbol, run.startDate, run.endDate);
             if (ohlc.length < 2) continue;
 
-            // Mock: find a Bullish signal on day 0
             const entryPrice = ohlc[0].close;
-            const sl = entryPrice * 0.95;
-            const target = entryPrice * 1.10;
-
-            const tradeResult = TradeEngineService.simulateTrade(
-              'LONG',
-              entryPrice,
-              sl,
-              target,
-              ohlc,
-              {
-                capital: run.capital,
-                riskModel: run.riskModel,
-                riskValue: 1, // 1% risk
-                executionMode: run.executionMode
-              }
-            );
-
-            const trade = await tx.trade.create({
-              data: {
-                backtestRunId: runId,
-                symbol,
-                type: 'LONG',
-                signal: 'Breakout',
-                status: tradeResult.status,
-                entryDate: new Date(ohlc[0].date),
-                entryPrice,
-                entryReason: 'Scanner Trigger',
-                exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
-                exitPrice: tradeResult.exitPrice,
-                exitReason: tradeResult.exitReason,
-                stopLoss: sl,
-                target: target,
-                riskAmount: tradeResult.riskAmount,
-                fees: 0,
-                slippage: 0,
-                executionDelayMs: 0,
-                rr: tradeResult.rr,
-                durationDays: tradeResult.durationDays,
-                positionSize: tradeResult.positionSize,
-                pnl: tradeResult.pnl,
-                pnlPercent: tradeResult.pnlPercent
-              }
-            });
-
-            // Journals
-            if (tradeResult.journalEvents.length > 0) {
-              const limitedEvents = tradeResult.journalEvents.slice(0, 100);
-              await tx.journal.createMany({
-                data: limitedEvents.map(e => ({
-                  tradeId: trade.id,
-                  timestamp: e.timestamp,
-                  event: e.event,
-                  details: e.details
-                }))
-              });
+            
+            const directions = [];
+            if (run.executionMode === 'LONG_ONLY' || run.executionMode === 'COMBINED' || !run.executionMode.includes('SHORT')) {
+              directions.push('LONG');
+            }
+            if (run.executionMode === 'SHORT_ONLY' || run.executionMode === 'COMBINED') {
+              directions.push('SHORT');
             }
 
-            processedTrades++;
+            for (const type of directions) {
+              const sl = type === 'LONG' ? entryPrice * 0.95 : entryPrice * 1.05;
+              const target = type === 'LONG' ? entryPrice * 1.10 : entryPrice * 0.90;
+
+              const tradeResult = TradeEngineService.simulateTrade(
+                type as 'LONG' | 'SHORT',
+                entryPrice,
+                sl,
+                target,
+                ohlc,
+                {
+                  capital: run.capital,
+                  riskModel: run.riskModel,
+                  riskValue: 1, // 1% risk
+                  executionMode: 'optimistic'
+                }
+              );
+
+              const trade = await tx.trade.create({
+                data: {
+                  backtestRunId: runId,
+                  symbol,
+                  type: type,
+                  signal: type === 'LONG' ? 'BTST Breakout' : 'STBT Breakdown',
+                  status: tradeResult.status,
+                  entryDate: new Date(ohlc[0].date),
+                  entryPrice,
+                  entryReason: 'Scanner Trigger',
+                  exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
+                  exitPrice: tradeResult.exitPrice,
+                  exitReason: tradeResult.exitReason,
+                  stopLoss: sl,
+                  target: target,
+                  riskAmount: tradeResult.riskAmount,
+                  fees: 0,
+                  slippage: 0,
+                  executionDelayMs: 0,
+                  rr: tradeResult.rr,
+                  durationDays: tradeResult.durationDays,
+                  positionSize: tradeResult.positionSize,
+                  pnl: tradeResult.pnl,
+                  pnlPercent: tradeResult.pnlPercent
+                }
+              });
+
+              if (tradeResult.journalEvents.length > 0) {
+                const limitedEvents = tradeResult.journalEvents.slice(0, 100);
+                await tx.journal.createMany({
+                  data: limitedEvents.map(e => ({
+                    tradeId: trade.id,
+                    timestamp: e.timestamp,
+                    event: e.event,
+                    details: e.details
+                  }))
+                });
+              }
+
+              processedTrades++;
+            }
           } catch (e) {
             // Failure Rule: If one symbol fails, record failure and continue
             console.error(`Symbol ${symbol} failed backtest:`, e);

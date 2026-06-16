@@ -11,9 +11,8 @@ export async function GET(req: NextRequest) {
     const signals = await prisma.overnightSignal.findMany({
       where: {
         signalDate: date,
-        direction: 'LONG',
         classification: {
-          in: ['STRONG_BTST', 'BTST_READY']
+          in: ['STRONG_BTST', 'STRONG_STBT']
         }
       },
       orderBy: {

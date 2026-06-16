@@ -6,6 +6,7 @@ export interface OvernightRiskMetrics {
   sectorRisk: number;      // Risk score/multiplier based on sector (0.5 to 2.0)
   indexCorrelation: number;// Beta proxy (0.5 to 1.5)
   volatility: number;      // Volatility (standard deviation of daily changes)
+  shortSqueezeProb: number; // Probability of short squeeze (0 to 100)
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
@@ -74,13 +75,23 @@ export class OvernightRiskService {
       volatility = Math.sqrt(variance);
     }
 
+    // 6. Short Squeeze Probability
+    // Proxy: High volatility + strong recent upward momentum increases squeeze probability
+    let shortSqueezeProb = 10;
+    if (len >= 3) {
+      const recentReturn = ((stock.close - history[len - 3].close) / history[len - 3].close) * 100;
+      if (recentReturn > 0) {
+        shortSqueezeProb = Math.min(100, Math.floor((recentReturn * 2) + (volatility * 5) + 10));
+      }
+    }
+
     // Determine aggregate Risk Level
-    // Combined metric based on gapRisk, volatility, and sectorRisk
-    const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2);
+    // Combined metric based on gapRisk, volatility, sectorRisk, and squeeze risk
+    const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2) + (shortSqueezeProb * 0.01);
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
     if (riskFactor < 1.0) {
       riskLevel = 'LOW';
-    } else if (riskFactor > 2.0) {
+    } else if (riskFactor > 2.5) {
       riskLevel = 'HIGH';
     }
 
@@ -90,6 +101,7 @@ export class OvernightRiskService {
       sectorRisk,
       indexCorrelation,
       volatility,
+      shortSqueezeProb,
       riskLevel
     };
   }

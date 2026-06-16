@@ -5,13 +5,14 @@ export async function POST(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const mockTime = searchParams.get('mockTime'); // Support testing different times
+    const direction = (searchParams.get('direction') as 'LONG' | 'SHORT' | 'BOTH') || 'BOTH';
 
     let dateOverride: Date | undefined;
     if (mockTime) {
       dateOverride = new Date(mockTime);
     }
 
-    const signals = await OvernightService.discover('LONG', dateOverride);
+    const signals = await OvernightService.discover(direction, dateOverride);
     return NextResponse.json({ success: true, count: signals.length, signals });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

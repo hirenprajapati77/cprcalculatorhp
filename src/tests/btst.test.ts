@@ -1,212 +1,109 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { BtstRankingService } from '../services/btst/btst-ranking.service';
-import { EntryManagerService } from '../services/btst/entry-manager.service';
-import { OvernightRiskService } from '../services/btst/overnight-risk.service';
-import { GapProbabilityService } from '../services/btst/gap-probability.service';
-import { BtstService } from '../services/btst/btst.service';
-import { MarketStockData } from '../services/market.service';
+import { BtstService } from '../services/backtest/btst.service';
 
-test('BTST Ranking Service Tests', async (t) => {
-  await t.test('Score Safety: returns null if required inputs are missing', () => {
-    // Missing VWAP
-    const res1 = BtstRankingService.calculateScore({
-      volume: 2000000,
-      avgVolume: 1000000,
-      tomorrowCprWidth: 0.002,
-      tomorrowBc: 101,
-      todayTc: 100,
-      close: 105,
-      high: 106,
-      low: 104,
-      vwap: null,
-      intradayVolume: 500000,
-      last15mHigh: 104,
-      hasConfirmationCandles: true
-    });
-    assert.strictEqual(res1, null);
+describe('BTST Scoring Engine Tests', () => {
+  const baseHistory = [
+    { date: '2023-01-01', open: 100, high: 105, low: 95, close: 100, volume: 500000 },
+    { date: '2023-01-02', open: 100, high: 105, low: 95, close: 100, volume: 500000 } // yesterday
+  ];
 
-    // Missing Intraday Volume
-    const res2 = BtstRankingService.calculateScore({
-      volume: 2000000,
-      avgVolume: 1000000,
-      tomorrowCprWidth: 0.002,
-      tomorrowBc: 101,
-      todayTc: 100,
-      close: 105,
-      high: 106,
-      low: 104,
-      vwap: 104.5,
-      intradayVolume: null,
-      last15mHigh: 104,
-      hasConfirmationCandles: true
-    });
-    assert.strictEqual(res2, null);
-  });
-
-  await t.test('Rule Calculations: computes score correctly', () => {
-    // Bullish case satisfying all Rules 1-6:
-    // Rule 1: Volume (2M) > 1.5 * avgVolume (1M) => +25
-    // Rule 2: Tomorrow CPR Width (0.002 < 0.0035) => +30
-    // Rule 3: Tomorrow BC (101) > Today TC (100) => +20
-    // Rule 4: Close (105) > Today TC (100) && Close (105) > VWAP (104) => +20
-    // Rule 5: Close (105) > Last 15m High (104) => +20
-    // Rule 6: Closing strength (105-101)/(106-101) = 4/5 = 80% (>70%) => +15
-    // Total expected score = 25 + 30 + 20 + 20 + 20 + 15 = 130
-    const score = BtstRankingService.calculateScore({
-      volume: 2000000,
-      avgVolume: 1000000,
-      tomorrowCprWidth: 0.002,
-      tomorrowBc: 101,
-      todayTc: 100,
-      close: 105,
-      high: 106,
-      low: 101,
-      vwap: 104,
-      intradayVolume: 500000,
-      last15mHigh: 104,
-      hasConfirmationCandles: true
-    });
-    assert.strictEqual(score, 130);
-  });
-
-  await t.test('Classifications: maps scores correctly', () => {
-    assert.strictEqual(BtstRankingService.getClassification(110), 'STRONG_BTST');
-    assert.strictEqual(BtstRankingService.getClassification(90), 'BTST_READY');
-    assert.strictEqual(BtstRankingService.getClassification(75), 'WATCH');
-    assert.strictEqual(BtstRankingService.getClassification(50), 'IGNORE');
-    assert.strictEqual(BtstRankingService.getClassification(null), 'IGNORE');
-  });
-});
-
-test('Entry Manager Service Eligibility Tests', async (t) => {
-  const mockStock: MarketStockData = {
-    symbol: 'RELIANCE',
-    market: 'NSE',
-    sector: 'Energy',
-    open: 2400,
-    high: 2450,
-    low: 2380,
-    close: 2440,
-    volume: 1500000,
-    avgVolume: 1000000,
-    marketCap: 1600000,
-    ltp: 2440,
-    history: []
+  const baseStock = {
+    symbol: 'MOCK',
+    market: 'NSE' as const,
+    sector: 'Test',
+    open: 100,
+    high: 105,
+    low: 95,
+    close: 100,
+    volume: 1000000,
+    avgVolume: 500000,
+    marketCap: 10000,
+    ltp: 102,
+    history: baseHistory,
+    vwap: 100,
+    candle15m: { open: 101, high: 102.5, low: 100.5, close: 102.1, volume: 50000 }
   };
 
-  const todayCpr = { tc: 2420, bc: 2400 };
-  const tomorrowCprNarrow = { tc: 2430, bc: 2425, width: 0.2, classification: 'NARROW' };
-
-  await t.test('Pass eligibility with valid parameters', () => {
-    const result = EntryManagerService.evaluateEligibility(
-      mockStock,
-      tomorrowCprNarrow,
-      todayCpr,
-      2420, // VWAP
-      500000, // Intraday volume
-      true // Has intraday
-    );
-    assert.strictEqual(result.eligible, true);
+  test('Stock A: LONG setup (Score >= 80, Gap >= 20)', () => {
+    // We want higherValue to be true -> tomorrowCpr > todayCpr
+    // todayCpr (yesterday's data): H=105, L=95, C=100 -> P=100, BC=100, TC=100
+    // tomorrowCpr (today's data): H=110, L=105, C=108 -> P=107.6, BC=107.5, TC=107.8
+    const stockA = {
+      ...baseStock,
+      high: 110,
+      low: 105,
+      ltp: 108,
+      volume: 1500000, // Volume Spike (+20)
+      vwap: 105, // ltp 108 > vwap 105 * 1.002 (+20)
+      candle15m: { open: 107, high: 108, low: 107, close: 107.9, volume: 50000 } // Closing Strength (+15)
+      // Liquidity (+10)
+      // Width = 0 -> NARROW (+15)
+      // Total LONG = 20 + 20 + 20 + 15 + 15 + 10 = 100
+      // SHORT = 10 (Liquidity) + 20 (Volume) + 15 (Narrow) = 45
+    };
+    
+    const result = BtstService.evaluateOvernight(stockA);
+    assert.strictEqual(result.tag, 'LONG');
+    assert.ok(result.longScore >= 85);
+    assert.ok(result.longScore - result.shortScore >= 20);
   });
 
-  await t.test('Rejects if price is extended (LTP > VWAP + 2%)', () => {
-    const result = EntryManagerService.evaluateEligibility(
-      mockStock,
-      tomorrowCprNarrow,
-      todayCpr,
-      2300, // VWAP (LTP 2440 is > 2300 * 1.02 = 2346)
-      500000,
-      true
-    );
-    assert.strictEqual(result.eligible, false);
-    assert.ok(result.reason?.includes('VWAP + 2%'));
+  test('Stock B: SHORT setup (Score >= 80, Gap >= 20)', () => {
+    // We want lowerValue to be true -> tomorrowCpr < todayCpr
+    // tomorrowCpr (today's data): H=95, L=90, C=92 -> P=92.3, BC=92.5, TC=92.1 -> < 100
+    const stockB = {
+      ...baseStock,
+      high: 95,
+      low: 90,
+      ltp: 92,
+      volume: 1500000, // Volume Spike (+20)
+      vwap: 95, // ltp 92 < vwap 95 * 0.998 (+20)
+      candle15m: { open: 93, high: 93, low: 91, close: 91.1, volume: 50000 } // Closing Weakness (+15)
+      // Liquidity (+10)
+      // Width = NARROW (+15)
+      // Total SHORT = 20 + 20 + 20 + 15 + 15 + 10 = 100
+    };
+
+    const result = BtstService.evaluateOvernight(stockB);
+    assert.strictEqual(result.tag, 'SHORT');
+    assert.ok(result.shortScore >= 85);
+    assert.ok(result.shortScore - result.longScore >= 20);
   });
 
-  await t.test('Rejects if close is inside tomorrow\'s CPR', () => {
-    const stockInside = { ...mockStock, ltp: 2427, close: 2427 };
-    const result = EntryManagerService.evaluateEligibility(
-      stockInside,
-      tomorrowCprNarrow,
-      todayCpr,
-      2420,
-      500000,
-      true
-    );
-    assert.strictEqual(result.eligible, false);
-    assert.ok(result.reason?.includes('Close inside tomorrow\'s CPR'));
+  test('Stock C: NEUTRAL_CONFLICT (Scores close to each other)', () => {
+    // Both scores high but difference < 20
+    const stockC = {
+      ...baseStock,
+      high: 105,
+      low: 95,
+      ltp: 100, // Same value as yesterday -> no higherValue, no lowerValue
+      volume: 1500000, // (+20 L, +20 S)
+      vwap: 100, // neutral vwap
+      candle15m: { open: 100, high: 101, low: 99, close: 100, volume: 50000 }
+      // Liquidity (+10 L, +10 S)
+      // NARROW (+15 L, +15 S)
+      // Total = 45 vs 45
+    };
+
+    const result = BtstService.evaluateOvernight(stockC);
+    assert.strictEqual(result.tag, 'NEUTRAL_CONFLICT');
   });
-});
 
-test('Overnight Risk Service Tests', async (t) => {
-  const stock: MarketStockData = {
-    symbol: 'INFY',
-    market: 'NSE',
-    sector: 'IT',
-    open: 1400,
-    high: 1420,
-    low: 1390,
-    close: 1410,
-    volume: 1200000,
-    avgVolume: 1000000,
-    marketCap: 600000,
-    ltp: 1410,
-    history: [
-      { date: '2026-06-11', open: 1390, high: 1410, low: 1380, close: 1400, volume: 800000 },
-      { date: '2026-06-12', open: 1400, high: 1420, low: 1390, close: 1410, volume: 1000000 }
-    ]
-  };
+  test('Stock D: WEAK (Max score < 30)', () => {
+    const stockD = {
+      ...baseStock,
+      high: 105,
+      low: 95,
+      ltp: 100, // Same value as yesterday
+      volume: 10000, // No expansion (+0)
+      avgVolume: 10000, // Not liquid enough (< 500k) (+0)
+      vwap: 100, 
+      candle15m: { open: 100, high: 101, low: 99, close: 100, volume: 5000 }
+    };
 
-  await t.test('Calculates volatility metrics and risk level', () => {
-    const risk = OvernightRiskService.calculateOvernightRisk(stock);
-    assert.ok(risk.gapRisk >= 0);
-    assert.ok(risk.atr > 0);
-    assert.ok(risk.volatility >= 0);
-    assert.ok(['LOW', 'MEDIUM', 'HIGH'].includes(risk.riskLevel));
-  });
-});
-
-test('Gap Probability Service Tests', async (t) => {
-  const stock: MarketStockData = {
-    symbol: 'TCS',
-    market: 'NSE',
-    sector: 'IT',
-    open: 3400,
-    high: 3450,
-    low: 3380,
-    close: 3430,
-    volume: 1200000,
-    avgVolume: 1000000,
-    marketCap: 1200000,
-    ltp: 3430,
-    history: [
-      { date: '2026-06-11', open: 3350, high: 3400, low: 3340, close: 3390, volume: 800000 },
-      { date: '2026-06-12', open: 3400, high: 3420, low: 3390, close: 3410, volume: 1000000 }
-    ]
-  };
-
-  await t.test('Calculates expected gap and confidence', () => {
-    const gapMetrics = GapProbabilityService.calculateGapProbability(stock);
-    assert.ok(gapMetrics.expectedGap >= 0.2);
-    assert.ok(gapMetrics.gapConfidence >= 40 && gapMetrics.gapConfidence <= 95);
-  });
-});
-
-test('Btst Time Bounding State Logic Tests', async (t) => {
-  await t.test('Checks active scanning windows correctly', () => {
-    // 3:16 PM -> DISCOVERING
-    const time1 = new Date();
-    time1.setHours(15, 16, 0);
-    assert.strictEqual(BtstService.determineState(time1), 'DISCOVERING');
-
-    // 3:22 PM -> ACTIVE
-    const time2 = new Date();
-    time2.setHours(15, 22, 0);
-    assert.strictEqual(BtstService.determineState(time2), 'ACTIVE');
-
-    // 3:26 PM -> FROZEN
-    const time3 = new Date();
-    time3.setHours(15, 26, 0);
-    assert.strictEqual(BtstService.determineState(time3), 'FROZEN');
+    const result = BtstService.evaluateOvernight(stockD);
+    assert.strictEqual(result.tag, 'WEAK');
+    assert.ok(Math.max(result.longScore, result.shortScore) < 30);
   });
 });

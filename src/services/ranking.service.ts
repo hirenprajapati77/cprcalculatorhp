@@ -46,13 +46,23 @@ export class RankingService {
     }
     
     // 6. Liquidity
-    if (marketCap >= 15000 || volumeRatio >= 1.0) {
+    if (volumeRatio >= 1.2) {
       score += 10;
     }
     
     // 7. Hot Zone
     if (signals.includes('HOT_ZONE')) {
       score += 5;
+    }
+
+    // 8. Normal Trend Alignment
+    if (signals.includes('NORMAL') && (signals.includes('BULLISH') || signals.includes('BEARISH'))) {
+      score += 15;
+    }
+
+    // 9. Virgin CPR
+    if (signals.includes('NORMAL') && signals.includes('VIRGIN')) {
+      score += 10;
     }
 
     return Math.min(score, 100);

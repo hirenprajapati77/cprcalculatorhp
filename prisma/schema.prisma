@@ -86,6 +86,7 @@ model ScanHistory {
 model Watchlist {
   id        String   @id @default(cuid())
   symbol    String   @unique
+  starred   Boolean  @default(false)
   pinned    Boolean  @default(false)
   notify    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -201,31 +202,46 @@ model BacktestMetricSnapshot {
   @@index([backtestRunId, metricType])
 }
 
-model BtstSignal {
+model OvernightSignal {
   id              String   @id @default(cuid())
+
   symbol          String
-  signalDate      String   // YYYY-MM-DD
-  signalTime      String   // HH:MM (e.g. 15:22)
+  signalDate      String
+  signalTime      String
+
+  direction       String @default("LONG")
+
   entry           Float?
   stopLoss        Float?
   target          Float?
-  btstScore       Int?     // Numeric score, null if INVALID
+
+  overnightScore  Int?
+
   expectedGap     Float?
   expectedMove    Float?
-  riskLevel       String?  // LOW | MEDIUM | HIGH
+
   confidence      Int?
-  exitStrategy    String?  // OPEN | R1 | EOD
+
+  exitStrategy    String?
+
   actualExit      Float?
   actualReturn    Float?
-  executed        Boolean  @default(false)
-  classification  String   // STRONG_BTST | BTST_READY | WATCH | IGNORE
-  state           String   // DISCOVERING | ACTIVE | FROZEN | EXECUTED | EXPIRED
-  freezeTime      String?  // HH:MM
-  rejectionReason String?  // Explanation for rejection
-  version         Int      @default(1)
+
+  executed        Boolean @default(false)
+
+  classification  String
+
+  freezeTime      DateTime?
+
+  rejectionReason String?
+
   createdAt       DateTime @default(now())
 
   @@unique([symbol, signalDate, signalTime])
+
+  @@index([direction])
+  @@index([classification])
   @@index([signalDate])
-  @@index([btstScore])
+
+  @@map("BtstSignal")
 }

@@ -21,7 +21,8 @@ import {
   Target,
   Sparkles,
   Clock,
-  LayoutGrid
+  LayoutGrid,
+  Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -137,6 +138,7 @@ const BtstStateBanner = () => {
 
 interface ScannedStock {
   id: string;
+  direction?: 'LONG' | 'SHORT';
   symbol: string;
   date: string;
   market: 'NSE' | 'BSE';
@@ -432,6 +434,18 @@ const StockRow = React.memo(({
         </td>
       )}
 
+            {visibleColumns.includes('direction') && (
+        <td className={cellPadding}>
+          {row.direction ? (
+            <span className={`font-bold text-[10px] px-2 py-0.5 rounded ${row.direction === 'LONG' ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red'}`}>
+              {row.direction}
+            </span>
+          ) : (
+            <span className="text-text-tertiary">—</span>
+          )}
+        </td>
+      )}
+
       {visibleColumns.includes('score') && (
         <td className={cellPadding}>
           <div className="space-y-0.5 font-mono text-left">
@@ -597,7 +611,7 @@ export default function ScannerClient() {
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
-  const [scannerMode, setScannerMode] = useState<'CPR' | 'BTST'>('CPR');
+  const [scannerMode, setScannerMode] = useState<'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT'>('CPR');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -671,6 +685,7 @@ export default function ScannerClient() {
 
   // Quick Analyze Drawer State & Tab Selection
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes'>('overview');
   const [drawerHistory, setDrawerHistory] = useState<{ date: string; ltp: number; width: number; score: number }[]>([]);
@@ -689,6 +704,7 @@ export default function ScannerClient() {
     { key: 'rr', label: 'Risk Reward Ratio' },
     { key: 'signals', label: 'Active Signals' },
     { key: 'score', label: 'Score & Confidence' },
+    { key: 'direction', label: 'Direction' },
     { key: 'action', label: 'Inspection Action' },
     { key: 'signalTime', label: 'Signal Time' },
     { key: 'gap', label: 'Gap %' },
@@ -707,14 +723,12 @@ export default function ScannerClient() {
 
   // Load Watchlist and Column configurations on mount
   useEffect(() => {
-    const savedWatchlist = localStorage.getItem('cpr_watchlist_v2');
-    if (savedWatchlist) {
-      try {
-        setWatchlist(JSON.parse(savedWatchlist));
-      } catch (err) {
-        console.error('Failed to parse watchlist settings:', err);
-      }
-    }
+    fetch('/api/watchlist')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setWatchlist(data);
+      })
+      .catch(err => console.error('Failed to load watchlist:', err));
 
     const savedColumns = localStorage.getItem('cpr_scanner_columns');
     if (savedColumns) {
@@ -732,8 +746,8 @@ export default function ScannerClient() {
   }, []);
 
   useEffect(() => {
-    if (scannerMode === 'BTST') {
-      setVisibleColumns(['symbol', 'signalTime', 'score', 'gap', 'move', 'confidence', 'exit']);
+    if (scannerMode !== 'CPR') {
+      setVisibleColumns(['symbol', 'direction', 'signalTime', 'score', 'gap', 'move', 'confidence', 'exit']);
     } else {
       const savedColumns = localStorage.getItem('cpr_scanner_columns');
       if (savedColumns) {
@@ -835,8 +849,12 @@ export default function ScannerClient() {
     if (!silent) setIsLoading(true);
     const startFetchTime = Date.now();
     try {
-      if (scannerMode === 'BTST') {
-        const res = await fetch('/api/btst');
+      if (scannerMode !== 'CPR') {
+        let endpoint = '/api/overnight';
+        if (scannerMode !== 'OVERNIGHT') {
+          endpoint += '?direction=' + scannerMode;
+        }
+        const res = await fetch(endpoint);
         if (!res.ok) throw new Error('Failed to retrieve BTST signals');
         const data = await res.json();
         
@@ -847,6 +865,8 @@ export default function ScannerClient() {
           classification: string;
           state: string;
           btstScore?: number | null;
+          overnightScore?: number | null;
+          direction?: string;
           stopLoss?: number | null;
           target?: number | null;
           confidence?: number | null;
@@ -889,8 +909,9 @@ export default function ScannerClient() {
           width: 0,
           classification: 'NORMAL' as const,
           btstClassification: sig.classification,
+          direction: sig.direction as 'LONG' | 'SHORT',
           signals: [sig.state],
-          score: sig.btstScore || 0,
+          score: sig.overnightScore || sig.btstScore || 0,
           entry: sig.entry || 0,
           sl: sig.stopLoss || 0,
           target: sig.target || 0,
@@ -1118,7 +1139,7 @@ export default function ScannerClient() {
     setStockNotes(savedNotes);
 
     try {
-      const res = await fetch(`/api/stock/${stock.symbol}`);
+      const res = await fetch(`/api/scanner/history?symbol=${stock.symbol}`);
       if (res.ok) {
         const data = await res.json();
         setDrawerHistory(data.history || []);
@@ -1264,10 +1285,10 @@ export default function ScannerClient() {
   }, [results]);
 
   // V2 Scanner Insights
-  const strongBuyCount = insightCounts.strongBuy;
-  const breakoutReadyCount = insightCounts.breakoutReady;
+  const strongBuyCount = results.filter(r => r.score >= 90 && !r.rejectionReason).length || insightCounts.strongBuy;
+  const breakoutReadyCount = results.filter(r => r.score >= 70 && r.score < 90).length || insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
-  const avoidCount = insightCounts.avoid;
+  const avoidCount = results.filter(r => r.score < 40 || r.classification === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
 
   // KPI calculations
   const totalActiveSignals = useMemo(() => {
@@ -1280,7 +1301,7 @@ export default function ScannerClient() {
   }, [results]);
 
   const btstMetrics = useMemo(() => {
-    if (scannerMode !== 'BTST' || results.length === 0) return { ready: 0, strong: 0, avgGap: 0, avgConf: 0 };
+    if (scannerMode === 'CPR' || results.length === 0) return { ready: 0, strong: 0, avgGap: 0, avgConf: 0 };
     let ready = 0, strong = 0, gapSum = 0, confSum = 0;
     results.forEach(r => {
       ready++;
@@ -1299,7 +1320,7 @@ export default function ScannerClient() {
   return (
     <div className="space-y-6 relative pb-20 terminal-grid">
       
-      {scannerMode === 'BTST' && <BtstStateBanner />}
+      {scannerMode !== 'CPR' && <BtstStateBanner />}
 
       {/* V3 KPI Top status bar */}
       <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
@@ -1459,7 +1480,7 @@ export default function ScannerClient() {
       )}
 
       {/* V3 Insights Cards */}
-      {scannerMode === 'BTST' ? (
+      {scannerMode !== 'CPR' ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
@@ -1502,7 +1523,8 @@ export default function ScannerClient() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Strong Buy (&gt;=90)</span>
+              <span className="text-[10px] text-text-tertiary uppercase">Strong Signal</span>
+              <p className="text-[9px] opacity-70">Score ≥ 90</p>
               <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
             </div>
             <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
@@ -1513,6 +1535,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Breakout Ready</span>
+              <p className="text-[9px] opacity-70">Score 70-89</p>
               <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
             </div>
             <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
@@ -1533,6 +1556,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Avoid / Ignore</span>
+              <p className="text-[9px] opacity-70">Score &lt; 40 or Conflict</p>
               <h2 className="text-2xl font-bold text-accent-red">{avoidCount}</h2>
             </div>
             <div className="h-10 w-10 rounded bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
@@ -1648,13 +1672,28 @@ export default function ScannerClient() {
         headerAction={
           <div className="flex items-center gap-1">
             <Button
-              onClick={() => setScannerMode(scannerMode === 'CPR' ? 'BTST' : 'CPR')}
+              onClick={() => {
+                if (scannerMode === 'CPR') setScannerMode('BTST');
+                else if (scannerMode === 'BTST') setScannerMode('STBT');
+                else if (scannerMode === 'STBT') setScannerMode('OVERNIGHT');
+                else setScannerMode('CPR');
+              }}
               size="sm"
               variant="secondary"
-              className={`text-[10px] h-7 font-bold ${scannerMode === 'BTST' ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50' : ''}`}
+              className={`text-[10px] h-7 font-bold ${scannerMode !== 'CPR' ? (scannerMode === 'BTST' ? 'bg-accent-green/20 text-accent-green border border-accent-green/50' : scannerMode === 'STBT' ? 'bg-accent-red/20 text-accent-red border border-accent-red/50' : 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50') : ''}`}
             >
               Mode: {scannerMode}
             </Button>
+            <Button
+              onClick={() => setShowHelp(true)}
+              size="sm"
+              variant="ghost"
+              className="text-[10px] h-7 px-2 text-text-tertiary hover:text-accent-blue"
+              title="How this system works"
+            >
+              <Info size={14} />
+            </Button>
+
             <Button
               onClick={toggleDensityMode}
               size="sm"
@@ -1892,7 +1931,7 @@ export default function ScannerClient() {
           </div>
 
           {/* BTST Telemetry Panel */}
-          {scannerMode === 'BTST' && (
+          {scannerMode !== 'CPR' && (
             <div className="bg-bg-primary/30 border border-border-primary rounded p-4 font-mono text-xs flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-text-secondary">
                 <Activity size={13} className="text-accent-blue" />
@@ -1948,7 +1987,7 @@ export default function ScannerClient() {
                     No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
                   </p>
                 </div>
-              ) : scannerMode === 'BTST' ? <BtstEmptyState /> : (
+              ) : scannerMode !== 'CPR' ? <BtstEmptyState /> : (
                 <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                   <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
                   <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
@@ -2196,7 +2235,7 @@ export default function ScannerClient() {
                       </p>
                     </div>
 
-                    {scannerMode === 'BTST' && (
+                    {scannerMode !== 'CPR' && (
                       <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2 mt-4">
                         <span className="font-bold text-accent-purple flex items-center gap-1 uppercase">
                           <Target size={12} /> BTST Score Explainability
@@ -2274,6 +2313,8 @@ export default function ScannerClient() {
                         {drawerStock.signals.includes('BEARISH') && <li><strong>Bearish Bias:</strong> LTP is trading below yesterday&apos;s BC level.</li>}
                         {drawerStock.signals.includes('INSIDE') && <li><strong>Inside CPR:</strong> Price is consolidating inside the BC-TC zone. Neutral range setup.</li>}
                         {drawerStock.signals.includes('VIRGIN') && <li><strong>Virgin CPR:</strong> Today&apos;s candle does not touch the CPR channel. High likelihood of strong test tomorrow.</li>}
+                        {drawerStock.signals.includes('TREND_ALIGNMENT') && <li><strong>Trend Alignment:</strong> Price aligns powerfully with the dominant trend.</li>}
+                        {drawerStock.signals.includes('VIRGIN_CPR') && <li><strong>Virgin CPR (Confirmed):</strong> Unbroken CPR zone acting as a magnet.</li>}
                       </ul>
                     </div>
                   </div>
@@ -2478,6 +2519,59 @@ export default function ScannerClient() {
                 </Button>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bg-primary/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-bg-secondary border border-border-primary rounded-xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-border-primary/50 bg-bg-tertiary/50">
+              <div className="flex items-center gap-2 text-accent-blue">
+                <Info size={18} />
+                <h3 className="font-bold text-sm">Overnight Engine System Guide</h3>
+              </div>
+              <button onClick={() => setShowHelp(false)} className="text-text-tertiary hover:text-text-primary">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4 text-[13px] text-text-secondary leading-relaxed">
+              <p>
+                The Overnight Engine discovers high-probability trade setups designed to be held overnight. It operates on specific schedule rules and computes scores based on price relative to VWAP, Central Pivot Range (CPR) width, liquidity, and value relationship (Higher/Lower Value).
+              </p>
+              
+              <div className="space-y-2">
+                <h4 className="font-bold text-accent-blue">When to Take Trades?</h4>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li><strong>BTST (Buy Today, Sell Tomorrow) / LONG:</strong> Look for stocks that show breakout momentum towards the end of the day. Take entry near 15:20 IST to avoid intraday volatility and capture the next day&apos;s gap-up open.</li>
+                  <li><strong>STBT (Sell Today, Buy Tomorrow) / SHORT:</strong> Look for stocks breaking down with heavy selling pressure. Entry should similarly be taken near 15:20 IST aiming for a gap-down open.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-accent-blue">Understanding the Engine Modes</h4>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li><strong>CPR Mode:</strong> Standard Intraday CPR Scanner.</li>
+                  <li><strong className="text-accent-green">BTST Mode:</strong> Filters strictly for LONG setups. Shows gap-up predictions.</li>
+                  <li><strong className="text-accent-red">STBT Mode:</strong> Filters strictly for SHORT setups. Shows gap-down predictions.</li>
+                  <li><strong className="text-accent-purple">OVERNIGHT Mode:</strong> Combined view displaying both BTST and STBT opportunities, with conflict-resolution tagging applied if a stock qualifies for both.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-accent-blue">Scores and Confidence</h4>
+                <p>
+                  Scores out of 100 represent the alignment of indicators. 
+                  A score <strong>≥ 90</strong> is considered a Strong Buy/Sell. 
+                  Confidence percentage reflects the mathematical probability of a successful gap based on historical performance of the setup.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-border-primary/50 flex justify-end">
+              <Button onClick={() => setShowHelp(false)} variant="primary" size="sm" className="font-bold">Understood</Button>
             </div>
           </div>
         </div>

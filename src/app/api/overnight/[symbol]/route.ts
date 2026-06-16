@@ -18,7 +18,7 @@ export async function GET(
 
   try {
     const history = await prisma.overnightSignal.findMany({
-      where: { symbol, direction: 'LONG' },
+      where: { symbol },
       orderBy: { createdAt: 'desc' },
       take: 10
     });
