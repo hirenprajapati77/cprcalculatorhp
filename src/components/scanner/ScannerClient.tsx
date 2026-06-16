@@ -1288,7 +1288,8 @@ export default function ScannerClient() {
   const strongBuyCount = results.filter(r => r.score >= 90 && !r.rejectionReason).length || insightCounts.strongBuy;
   const breakoutReadyCount = results.filter(r => r.score >= 70 && r.score < 90).length || insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
-  const avoidCount = results.filter(r => r.score < 40 || r.classification === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
+  // @ts-expect-error btstStatus is optional and sometimes added by the backend
+  const avoidCount = results.filter(r => r.score < 40 || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
 
   // KPI calculations
   const totalActiveSignals = useMemo(() => {

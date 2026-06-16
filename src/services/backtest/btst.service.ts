@@ -1,7 +1,8 @@
 // SIMPLE ENGINE: Used by /api/btst (Nifty50 quick scan)
 // Max score 100, no eligibility gates
 import { MarketStockData } from '../market.service';
-import { calculateCPR, CprResult } from '@/lib/cpr-engine';
+import { calculateCPR } from '@/lib/cpr-engine';
+import { CPRResult } from '@/types/cpr.types';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -54,8 +55,8 @@ export class BtstService {
    */
   static calculateLongScore(
     stock: MarketStockData,
-    todayCpr: CprResult,
-    tomorrowCpr: CprResult,
+    todayCpr: CPRResult,
+    tomorrowCpr: CPRResult,
     volumeRatio: number,
     virginCPR: boolean
   ): { score: number; signals: string[] } {
@@ -113,8 +114,8 @@ export class BtstService {
    */
   static calculateShortScore(
     stock: MarketStockData,
-    todayCpr: CprResult,
-    tomorrowCpr: CprResult,
+    todayCpr: CPRResult,
+    tomorrowCpr: CPRResult,
     volumeRatio: number,
     virginCPR: boolean
   ): { score: number; signals: string[] } {
