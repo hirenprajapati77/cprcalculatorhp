@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "build:clean": "rm -rf .next && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts src/tests/overnight.test.ts"
