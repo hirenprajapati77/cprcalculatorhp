@@ -1600,43 +1600,84 @@ export default function ScannerClient() {
                       {Object.keys(row).filter(k => k !== 'Total').map(sig => {
                         const cell = row[sig];
                         const count = cell.count;
-                        
+
                         let bgClass = 'bg-transparent';
                         let textClass = 'text-text-tertiary';
+                        let chipColorClass = 'bg-slate-700 text-slate-300';
                         if (count > 0) {
                           textClass = 'text-text-primary font-bold';
                           if (sig === 'Strong Buy' || sig === 'Breakout') {
                             bgClass = count >= 3 ? 'bg-accent-purple/30' : 'bg-accent-purple/10';
+                            chipColorClass = 'bg-violet-900/60 text-violet-200 border border-violet-500/30';
                           } else if (sig === 'Bullish') {
                             bgClass = count >= 3 ? 'bg-accent-green/30' : 'bg-accent-green/10';
+                            chipColorClass = 'bg-emerald-900/60 text-emerald-200 border border-emerald-500/30';
                           } else if (sig === 'Bearish') {
                             bgClass = count >= 3 ? 'bg-accent-red/30' : 'bg-accent-red/10';
+                            chipColorClass = 'bg-red-900/60 text-red-200 border border-red-500/30';
                           } else {
                             bgClass = count >= 3 ? 'bg-accent-amber/30' : 'bg-accent-amber/10';
+                            chipColorClass = 'bg-amber-900/60 text-amber-200 border border-amber-500/30';
                           }
                         }
 
                         return (
-                          <td 
-                            key={sig} 
-                            className={`p-2.5 border-l border-border-primary/30 transition-all cursor-help ${bgClass} ${textClass}`}
-                            title={`Avg Score: ${cell.avgScore.toFixed(0)} | Top Stock: ${cell.topStock || 'N/A'} (Score: ${cell.topStockScore}) | Symbols: ${cell.symbols.join(', ')}`}
+                          <td
+                            key={sig}
+                            className={`border-l border-border-primary/30 transition-all ${bgClass} ${textClass}`}
+                            style={{ verticalAlign: 'top', padding: 0, position: 'relative' }}
                           >
-                            <span className="block font-semibold">{count}</span>
-                            {count > 0 && (
-                              <span className="block text-[8px] text-text-secondary mt-0.5 truncate max-w-[80px] mx-auto">
-                                {cell.symbols.slice(0, 2).join(',')}
-                              </span>
+                            {count === 0 ? (
+                              <div className="p-2.5 text-center text-text-tertiary">0</div>
+                            ) : (
+                              <div
+                                className="group p-2 cursor-pointer"
+                                style={{ minWidth: 90 }}
+                              >
+                                {/* Count badge */}
+                                <div className="text-sm font-extrabold mb-1 text-center">{count}</div>
+                                {/* Stock chips — show all, wrap */}
+                                <div className="flex flex-wrap gap-0.5 justify-center">
+                                  {cell.symbols.map((sym: string) => (
+                                    <span
+                                      key={sym}
+                                      className={`inline-block px-1 py-0 rounded text-[7px] font-bold tracking-tight ${chipColorClass}`}
+                                    >
+                                      {sym}
+                                    </span>
+                                  ))}
+                                </div>
+                                {/* Hover tooltip showing avg score */}
+                                <div
+                                  className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block pointer-events-none"
+                                  style={{ minWidth: 160 }}
+                                >
+                                  <div className="bg-slate-900 border border-slate-600 rounded-lg p-2.5 shadow-2xl text-left">
+                                    <div className="text-[9px] text-slate-400 font-semibold uppercase mb-1">{sig} — {sectorName}</div>
+                                    <div className="text-[9px] text-slate-300 mb-1.5">Avg Score: <span className="font-bold text-white">{cell.avgScore.toFixed(0)}</span> | Top: <span className="font-bold text-yellow-300">{cell.topStock || 'N/A'}</span></div>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {cell.symbols.map((sym: string) => (
+                                        <span key={sym} className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold ${chipColorClass}`}>{sym}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="w-2 h-2 bg-slate-900 border-b border-r border-slate-600 rotate-45 mx-auto -mt-1" />
+                                </div>
+                              </div>
                             )}
                           </td>
                         );
                       })}
                       {/* Row Total */}
-                      <td 
-                        className="p-2.5 border-l border-border-primary font-bold bg-bg-secondary/35 text-text-primary cursor-help"
-                        title={`Avg Score: ${row.Total?.avgScore.toFixed(0) || 0} | Top Stock: ${row.Total?.topStock || 'N/A'} (Score: ${row.Total?.topStockScore || 0})`}
+                      <td
+                        className="p-2.5 border-l border-border-primary font-bold bg-bg-secondary/35 text-text-primary"
                       >
-                        {row.Total?.count || 0}
+                        <div className="text-sm font-extrabold">{row.Total?.count || 0}</div>
+                        {(row.Total?.count || 0) > 0 && (
+                          <div className="text-[8px] text-text-secondary mt-0.5">
+                            Avg: {row.Total?.avgScore?.toFixed(0) || 0}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1647,17 +1688,21 @@ export default function ScannerClient() {
                   {Object.keys(heatmapGridData.colTotals).map(sig => {
                     const colTotal = heatmapGridData.colTotals[sig];
                     return (
-                      <td 
-                        key={sig} 
-                        className="p-2.5 border-l border-border-primary/30 cursor-help"
-                        title={`Avg Score: ${colTotal.avgScore.toFixed(0)} | Top Stock: ${colTotal.topStock || 'N/A'} (Score: ${colTotal.topStockScore}) | Symbols: ${colTotal.symbols.join(', ')}`}
+                      <td
+                        key={sig}
+                        className="p-2.5 border-l border-border-primary/30"
                       >
-                        {colTotal.count}
+                        <div className="text-sm font-extrabold">{colTotal.count}</div>
+                        {colTotal.count > 0 && (
+                          <div className="text-[8px] text-text-secondary mt-0.5">
+                            Avg: {colTotal.avgScore.toFixed(0)}
+                          </div>
+                        )}
                       </td>
                     );
                   })}
                   <td className="p-2.5 border-l border-border-primary text-accent-blue font-extrabold bg-bg-primary/30">
-                    {results.length}
+                    <div className="text-sm">{results.length}</div>
                   </td>
                 </tr>
               </tbody>
