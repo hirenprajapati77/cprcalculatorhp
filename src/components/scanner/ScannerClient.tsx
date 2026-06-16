@@ -738,7 +738,12 @@ export default function ScannerClient() {
       const savedColumns = localStorage.getItem('cpr_scanner_columns');
       if (savedColumns) {
         try {
-          setVisibleColumns(JSON.parse(savedColumns));
+          const parsed = JSON.parse(savedColumns);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setVisibleColumns(parsed);
+          } else {
+            setVisibleColumns(['checkbox', 'watchlist', 'symbol', 'ltp', 'distance', 'width', 'setup', 'rr', 'signals', 'score']);
+          }
         } catch {
           setVisibleColumns(['checkbox', 'watchlist', 'symbol', 'ltp', 'distance', 'width', 'setup', 'rr', 'signals', 'score']);
         }
