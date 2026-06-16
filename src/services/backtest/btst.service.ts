@@ -191,7 +191,7 @@ export class BtstService {
     
     let tag: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK' = 'NEUTRAL_CONFLICT';
     let finalSignals: string[] = [];
-    let entry = stock.ltp;
+    const entry = stock.ltp;
     let sl = 0;
     let target = 0;
 

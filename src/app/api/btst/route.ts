@@ -9,7 +9,7 @@ export async function GET(request: Request) {
 
     const executionWindowOpen = BtstService.isExecutionWindowOpen();
 
-    const stocks = MarketService.getUniverse(universe as any);
+    const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
     const results: BtstScoreResult[] = [];
 
     let strongSignal = 0;
