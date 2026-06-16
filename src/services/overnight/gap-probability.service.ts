@@ -9,7 +9,10 @@ export class GapProbabilityService {
   /**
    * Calculates the expected opening gap percentage and prediction confidence.
    */
-  static calculateGapProbability(stock: MarketStockData): GapProbabilityResult {
+  static calculateGapProbability(
+    stock: MarketStockData,
+    direction: 'LONG' | 'SHORT' = 'LONG'
+  ): GapProbabilityResult {
     const history = stock.history || [];
     const len = history.length;
 
@@ -37,9 +40,11 @@ export class GapProbabilityService {
           const prevClose = prevDay.close;
           const gapPct = ((todayOpen - prevClose) / prevClose) * 100;
 
-          if (gapPct > 0) {
-            positiveGapCount++;
-          }
+          if (direction === 'LONG' && gapPct > 0) {
+          positiveGapCount++;
+        } else if (direction === 'SHORT' && gapPct < 0) {
+          positiveGapCount++;
+        }
           gapPercentageSum += gapPct;
         }
       }

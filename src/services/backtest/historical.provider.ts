@@ -18,7 +18,7 @@ export interface HistoricalMetadata {
 
 export class HistoricalProvider {
   static getMode(): string {
-    return process.env.HISTORICAL_MODE || 'mock'; // mock | cached | live
+    return process.env.HISTORICAL_MODE || 'live'; // mock | cached | live
   }
 
   static async getHistory(symbol: string, startDate: Date, endDate: Date): Promise<OHLC[]> {

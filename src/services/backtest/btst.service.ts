@@ -1,3 +1,5 @@
+// SIMPLE ENGINE: Used by /api/btst (Nifty50 quick scan)
+// Max score 100, no eligibility gates
 import { MarketStockData } from '../market.service';
 import { calculateCPR, CprResult } from '@/lib/cpr-engine';
 

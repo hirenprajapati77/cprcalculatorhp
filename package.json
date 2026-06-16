@@ -7,7 +7,7 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts"
+    "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts src/tests/overnight.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

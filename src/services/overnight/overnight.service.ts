@@ -1,3 +1,5 @@
+// ADVANCED ENGINE: Used by /api/overnight (NSE FNO)
+// Max score 130, eligibility gates, DB persistence
 import { PrismaClient, OvernightSignal, Prisma } from '@prisma/client';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { MarketService, MarketStockData } from '../market.service';
@@ -46,8 +48,12 @@ export class OvernightService {
    * Helper to determine signal state based on time.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
-    const hours = time.getHours();
-    const minutes = time.getMinutes();
+    const istParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata', hour12: false,
+      hour: 'numeric', minute: 'numeric'
+    }).formatToParts(time);
+    const hours = parseInt(istParts.find(p => p.type === 'hour')?.value || '0', 10);
+    const minutes = parseInt(istParts.find(p => p.type === 'minute')?.value || '0', 10);
     const totalMinutes = hours * 60 + minutes;
 
     const startMinutes = 15 * 60 + 15; // 3:15 PM

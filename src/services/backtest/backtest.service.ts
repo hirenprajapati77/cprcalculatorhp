@@ -1,3 +1,4 @@
+import { MarketService } from '../market.service';
 import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { TradeEngineService } from './trade-engine.service';
