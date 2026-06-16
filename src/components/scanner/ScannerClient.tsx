@@ -30,6 +30,111 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt } from '@/utils/format';
 
+function useBtstState() {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hours = now.getHours();
+  const minutes = now.getMinutes();
+  const time = hours * 100 + minutes;
+
+  let state = 'PREMARKET';
+  let message = 'Signals unlock at 15:20 IST';
+  let emptyMessage = 'BTST discovery has not started.';
+  let nextRefresh = '';
+  
+  if (time < 1515) {
+    state = 'PREMARKET';
+    message = 'Signals unlock at 15:20 IST';
+    emptyMessage = 'BTST discovery has not started.';
+    const target = new Date(now); target.setHours(15, 15, 0, 0);
+    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
+  } else if (time >= 1515 && time < 1520) {
+    state = 'DISCOVERING';
+    message = 'Collecting final market structure';
+    emptyMessage = 'BTST discovery has not started.';
+    const target = new Date(now); target.setHours(15, 20, 0, 0);
+    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
+  } else if (time >= 1520 && time < 1525) {
+    state = 'ACTIVE';
+    message = 'Generating BTST candidates';
+    emptyMessage = 'Scanning live candidates…';
+    const target = new Date(now); target.setHours(15, 25, 0, 0);
+    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
+    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
+  } else if (time >= 1525 && time < 1530) {
+    state = 'FROZEN';
+    message = 'Signal generation locked';
+    emptyMessage = 'No qualified BTST setups today.';
+    nextRefresh = 'Locked';
+  } else {
+    state = 'MARKET_CLOSED';
+    message = 'Market is closed';
+    emptyMessage = 'No qualified BTST setups today.';
+    nextRefresh = 'Locked';
+  }
+
+  return { state, message, emptyMessage, nextRefresh, timeStr: now.toLocaleTimeString('en-IN') };
+}
+
+const BtstEmptyState = () => {
+  const { emptyMessage, nextRefresh } = useBtstState();
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none animate-fade-in">
+      <Radar size={48} className="text-accent-blue/40 mb-3 animate-pulse" />
+      <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
+      <p className="text-[10px] text-accent-blue mt-1 max-w-[280px]">
+        {emptyMessage}
+      </p>
+      {nextRefresh !== 'Locked' && nextRefresh !== '' && (
+        <p className="text-[9px] text-text-secondary mt-2">Next Event: {nextRefresh}</p>
+      )}
+    </div>
+  );
+};
+
+const BtstStateBanner = () => {
+  const { state, message, nextRefresh, timeStr } = useBtstState();
+  
+  const getColors = () => {
+    switch (state) {
+      case 'PREMARKET': return 'bg-bg-secondary text-text-secondary border-border-primary';
+      case 'DISCOVERING': return 'bg-accent-amber/10 text-accent-amber border-accent-amber/30';
+      case 'ACTIVE': return 'bg-accent-blue/10 text-accent-blue border-accent-blue/30';
+      case 'FROZEN': return 'bg-accent-purple/10 text-accent-purple border-accent-purple/30';
+      default: return 'bg-bg-tertiary text-text-tertiary border-border-secondary';
+    }
+  };
+
+  return (
+    <div className={`flex items-center justify-between p-3 rounded-lg border font-mono text-[11px] mb-4 ${getColors()}`}>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          {state === 'ACTIVE' && <span className="h-2 w-2 rounded-full bg-accent-blue animate-pulse" />}
+          <span className="font-bold tracking-wider">{state}</span>
+        </div>
+        <span className="hidden sm:inline">{message}</span>
+      </div>
+      <div className="flex items-center gap-4 text-right">
+        <div>
+          <span className="block text-[9px] uppercase opacity-70">Current Time</span>
+          <span className="font-bold">{timeStr}</span>
+        </div>
+        <div>
+          <span className="block text-[9px] uppercase opacity-70">Next Event</span>
+          <span className="font-bold">{nextRefresh}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface ScannedStock {
   id: string;
   symbol: string;
@@ -72,6 +177,14 @@ interface ScannedStock {
   state?: string;
   rejectionReason?: string | null;
   btstClassification?: string;
+  scoreBreakdown?: {
+    vdu?: number;
+    cprNarrow?: number;
+    higherValue?: number;
+    vwap?: number;
+    conf15m?: number;
+    closeStrength?: number;
+  };
 }
 
 interface WatchlistItemState {
@@ -156,11 +269,17 @@ const StockRow = React.memo(({
   const distTC = ((row.ltp - row.tc) / row.tc) * 100;
   const distBC = ((row.ltp - row.bc) / row.bc) * 100;
 
+  let rowClass = isPinned ? 'bg-accent-blue/5 border-l-2 border-accent-blue' : '';
+  if (row.btstClassification) {
+    if (row.btstClassification === 'STRONG_BTST') rowClass += ' border-l-2 border-accent-green bg-accent-green/5';
+    else if (row.btstClassification === 'BTST_READY') rowClass += ' border-l-2 border-accent-blue bg-accent-blue/5';
+    else if (row.btstClassification === 'WATCH') rowClass += ' border-l-2 border-accent-amber bg-accent-amber/5';
+    else if (row.btstClassification === 'IGNORE') rowClass += ' border-l-2 border-text-tertiary bg-bg-tertiary/5';
+  }
+
   return (
     <tr 
-      className={`hover:bg-bg-tertiary/30 transition-colors group border-b border-border-primary/30 ${
-        isPinned ? 'bg-accent-blue/5 border-l-2 border-accent-blue' : ''
-      }`}
+      className={`hover:bg-bg-tertiary/30 transition-colors group border-b border-border-primary/30 ${rowClass}`}
     >
       {visibleColumns.includes('checkbox') && (
         <td className={`${cellPadding} text-center`}>
@@ -732,6 +851,14 @@ export default function ScannerClient() {
           expectedMove?: number | null;
           exitStrategy?: string | null;
           rejectionReason?: string | null;
+          scoreBreakdown?: {
+            vdu?: number;
+            cprNarrow?: number;
+            higherValue?: number;
+            vwap?: number;
+            conf15m?: number;
+            closeStrength?: number;
+          };
         }) => ({
           id: sig.id,
           symbol: sig.symbol,
@@ -771,7 +898,8 @@ export default function ScannerClient() {
           exitStrategy: sig.exitStrategy,
           state: sig.state,
           rejectionReason: sig.rejectionReason,
-          volumeRatio: 1
+          volumeRatio: 1,
+          scoreBreakdown: sig.scoreBreakdown || {}
         }));
 
         setResults(mapped);
@@ -1146,9 +1274,28 @@ export default function ScannerClient() {
     return results.reduce((sum, item) => sum + item.score, 0) / results.length;
   }, [results]);
 
+  const btstMetrics = useMemo(() => {
+    if (scannerMode !== 'BTST' || results.length === 0) return { ready: 0, strong: 0, avgGap: 0, avgConf: 0 };
+    let ready = 0, strong = 0, gapSum = 0, confSum = 0;
+    results.forEach(r => {
+      ready++;
+      if (r.btstClassification === 'STRONG_BTST') strong++;
+      gapSum += r.expectedGap || 0;
+      confSum += r.confidence || 0;
+    });
+    return {
+      ready,
+      strong,
+      avgGap: gapSum / results.length,
+      avgConf: confSum / results.length
+    };
+  }, [results, scannerMode]);
+
   return (
     <div className="space-y-6 relative pb-20 terminal-grid">
       
+      {scannerMode === 'BTST' && <BtstStateBanner />}
+
       {/* V3 KPI Top status bar */}
       <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
         <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
@@ -1307,47 +1454,88 @@ export default function ScannerClient() {
       )}
 
       {/* V3 Insights Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-        <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-text-tertiary uppercase">Strong Buy (&gt;=90)</span>
-            <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
+      {scannerMode === 'BTST' ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">BTST Ready</span>
+              <h2 className="text-2xl font-bold text-accent-blue">{btstMetrics.ready}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue">
+              <TrendingUp size={18} />
+            </div>
           </div>
-          <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
-            <Award size={18} />
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Strong BTST</span>
+              <h2 className="text-2xl font-bold text-accent-green">{btstMetrics.strong}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
+              <Award size={18} />
+            </div>
+          </div>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Avg Expected Gap %</span>
+              <h2 className="text-2xl font-bold text-accent-purple">+{btstMetrics.avgGap.toFixed(2)}%</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+              <Activity size={18} />
+            </div>
+          </div>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Avg Confidence</span>
+              <h2 className="text-2xl font-bold text-accent-amber">{btstMetrics.avgConf.toFixed(1)}%</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
+              <Target size={18} />
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Strong Buy (&gt;=90)</span>
+              <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+              <Award size={18} />
+            </div>
+          </div>
 
-        <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-text-tertiary uppercase">Breakout Ready</span>
-            <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Breakout Ready</span>
+              <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
+              <TrendingUp size={18} />
+            </div>
           </div>
-          <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
-            <TrendingUp size={18} />
-          </div>
-        </div>
 
-        <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-text-tertiary uppercase">Watchlist Items</span>
-            <h2 className="text-2xl font-bold text-accent-amber">{watchlistCount}</h2>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Watchlist Items</span>
+              <h2 className="text-2xl font-bold text-accent-amber">{watchlistCount}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
+              <Star size={18} fill="currentColor" />
+            </div>
           </div>
-          <div className="h-10 w-10 rounded bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
-            <Star size={18} fill="currentColor" />
-          </div>
-        </div>
 
-        <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-          <div className="space-y-1">
-            <span className="text-[10px] text-text-tertiary uppercase">Avoid / Ignore</span>
-            <h2 className="text-2xl font-bold text-accent-red">{avoidCount}</h2>
-          </div>
-          <div className="h-10 w-10 rounded bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
-            <AlertTriangle size={18} />
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Avoid / Ignore</span>
+              <h2 className="text-2xl font-bold text-accent-red">{avoidCount}</h2>
+            </div>
+            <div className="h-10 w-10 rounded bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
+              <AlertTriangle size={18} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Sector Signal Heatmap Grid */}
       <Card title="Market Sector Concentration Heatmap" icon={<LayoutGrid size={14} className="text-accent-blue" />}>
@@ -1698,6 +1886,47 @@ export default function ScannerClient() {
             </div>
           </div>
 
+          {/* BTST Telemetry Panel */}
+          {scannerMode === 'BTST' && (
+            <div className="bg-bg-primary/30 border border-border-primary rounded p-4 font-mono text-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-text-secondary">
+                <Activity size={13} className="text-accent-blue" />
+                Live Telemetry
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-[11px]">
+                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                  <span className="text-text-tertiary">Discovery State:</span>
+                  <div className="flex items-center gap-1">
+                    <span className={`h-2 w-2 rounded-full ${
+                      new Date().getHours() * 100 + new Date().getMinutes() < 1515 ? 'bg-accent-amber' : 
+                      new Date().getHours() * 100 + new Date().getMinutes() < 1525 ? 'bg-accent-green animate-pulse' : 'bg-accent-red'
+                    }`} />
+                    <span className="font-bold text-text-primary uppercase">
+                      {new Date().getHours() * 100 + new Date().getMinutes() < 1515 ? 'PREMARKET' : 
+                       new Date().getHours() * 100 + new Date().getMinutes() < 1525 ? 'ACTIVE' : 'FROZEN'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                  <span className="text-text-tertiary">Candidates:</span>
+                  <span className="font-bold text-accent-blue">{results.length}</span>
+                </div>
+                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                  <span className="text-text-tertiary">Rejected:</span>
+                  <span className="font-bold text-accent-red">{results.filter(r => r.rejectionReason).length}</span>
+                </div>
+                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                  <span className="text-text-tertiary">Freeze Time:</span>
+                  <span className="font-bold text-text-primary">15:25 IST</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-text-tertiary">Latency:</span>
+                  <span className="font-bold text-accent-green">{latency}ms</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Results Table */}
           <div className="overflow-x-auto border border-border-primary rounded bg-bg-secondary/20">
             {isLoading ? (
@@ -1714,7 +1943,7 @@ export default function ScannerClient() {
                     No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
                   </p>
                 </div>
-              ) : (
+              ) : scannerMode === 'BTST' ? <BtstEmptyState /> : (
                 <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                   <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
                   <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
@@ -1961,6 +2190,56 @@ export default function ScannerClient() {
                           : ' A normal CPR is typically neutral, showing normal continuation setups.'}
                       </p>
                     </div>
+
+                    {scannerMode === 'BTST' && (
+                      <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2 mt-4">
+                        <span className="font-bold text-accent-purple flex items-center gap-1 uppercase">
+                          <Target size={12} /> BTST Score Explainability
+                        </span>
+                        
+                        <div className="grid grid-cols-2 gap-2 mt-2 border-t border-border-primary/50 pt-2">
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">VDU</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.vdu ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">CPR Narrow</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.cprNarrow ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">Higher Value</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.higherValue ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">VWAP</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.vwap ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">15m Confirmation</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.conf15m ?? '—'}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                            <span className="text-text-tertiary">Closing Strength</span>
+                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.closeStrength ?? '—'}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center mt-2 bg-bg-primary/50 p-2 rounded border border-border-primary">
+                          <span className="font-bold text-text-primary uppercase tracking-wider">Total Score</span>
+                          <span className="font-bold text-accent-purple text-sm">{drawerStock.score}</span>
+                        </div>
+
+                        {drawerStock.rejectionReason && (
+                          <div className="mt-3 p-2 border border-accent-red/30 bg-accent-red/10 rounded flex items-start gap-2">
+                            <AlertTriangle size={14} className="text-accent-red shrink-0 mt-0.5" />
+                            <div>
+                              <span className="block font-bold text-accent-red uppercase tracking-wide mb-1">Rejection Reason</span>
+                              <span className="text-accent-red/90">{drawerStock.rejectionReason}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

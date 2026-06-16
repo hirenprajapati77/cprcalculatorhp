@@ -10,8 +10,12 @@ export default function BacktestPage() {
   const queryClient = useQueryClient();
   const [universe, setUniverse] = useState('NIFTY50');
   const [capital, setCapital] = useState(100000);
+  const [startDate, setStartDate] = useState('2023-01-01');
+  const [endDate, setEndDate] = useState('2023-06-30');
+  const [riskPercent, setRiskPercent] = useState(1.0);
+  const [exitStrategy, setExitStrategy] = useState('target');
+  const [executionMode, setExecutionMode] = useState('conservative');
   
-  // Actually, we need to create the form state and history logic.
   // We'll mock the hook for now to satisfy the render
   const { data: runs, isLoading } = useQuery({
     queryKey: ['backtests'],
@@ -30,11 +34,12 @@ export default function BacktestPage() {
         body: JSON.stringify({
           name: `Run ${new Date().toISOString()}`,
           universe,
-          startDate: '2023-01-01',
-          endDate: '2023-06-30',
+          startDate,
+          endDate,
           capital,
-          riskModel: 'Fixed',
-          executionMode: 'conservative'
+          riskPercent,
+          exitStrategy,
+          executionMode
         })
       });
       if (!res.ok) throw new Error('Failed to submit');
@@ -79,6 +84,39 @@ export default function BacktestPage() {
               <input type="number" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={capital} onChange={(e) => setCapital(Number(e.target.value))} />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">Start Date</label>
+                <input type="date" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">End Date</label>
+                <input type="date" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">Risk %</label>
+                <input type="number" step="0.1" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={riskPercent} onChange={(e) => setRiskPercent(Number(e.target.value))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">Exit Strategy</label>
+                <select className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={exitStrategy} onChange={(e) => setExitStrategy(e.target.value)}>
+                  <option value="target">Target 1:1</option>
+                  <option value="trail">Trailing SL</option>
+                  <option value="eod">End of Day</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block text-muted-foreground">Execution</label>
+                <select className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={executionMode} onChange={(e) => setExecutionMode(e.target.value)}>
+                  <option value="conservative">Conservative</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+              </div>
+            </div>
+
             <button 
               className="mt-4 w-full flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white py-2 rounded-md font-medium transition-all"
               onClick={() => submitMutation.mutate()}
@@ -106,25 +144,48 @@ export default function BacktestPage() {
                 <tr className="border-b border-border/50">
                   <th className="py-3 px-4 font-medium text-muted-foreground">Status</th>
                   <th className="py-3 px-4 font-medium text-muted-foreground">Trades</th>
+                  <th className="py-3 px-4 font-medium text-muted-foreground">Win %</th>
+                  <th className="py-3 px-4 font-medium text-muted-foreground">PF</th>
+                  <th className="py-3 px-4 font-medium text-muted-foreground">Sharpe</th>
                   <th className="py-3 px-4 font-medium text-muted-foreground">Created</th>
                   <th className="py-3 px-4 font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Loading runs...</td></tr>
+                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Loading runs...</td></tr>
                 ) : runs?.length === 0 ? (
-                  <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No backtest runs found. Create one to begin.</td></tr>
+                  <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">No backtest runs found. Create one to begin.</td></tr>
                 ) : (
                   runs?.map((run: unknown) => {
-                    const r = run as { id: string, status: string, _count?: { trades: number }, createdAt: string };
+                    const r = run as { 
+                      id: string, 
+                      status: string, 
+                      _count?: { trades: number }, 
+                      createdAt: string,
+                      metrics?: {
+                        winRate: number;
+                        profitFactor: number;
+                        sharpe: number;
+                      }
+                    };
+                    
+                    const statusColor = 
+                      r.status.toLowerCase() === 'completed' ? 'bg-green-500/20 text-green-400' :
+                      r.status.toLowerCase() === 'running' ? 'bg-blue-500/20 text-blue-400 animate-pulse' :
+                      r.status.toLowerCase() === 'queued' ? 'bg-amber-500/20 text-amber-400' :
+                      'bg-cyan-500/20 text-cyan-400';
+
                     return (
                     <tr key={r.id} className="border-b border-border/50 hover:bg-white/5 transition-colors">
                       <td className="py-3 px-4">
-                        <span className="px-2 py-1 rounded text-xs bg-cyan-500/20 text-cyan-400">{r.status}</span>
+                        <span className={`px-2 py-1 rounded text-xs font-mono uppercase ${statusColor}`}>{r.status}</span>
                       </td>
-                      <td className="py-3 px-4">{r._count?.trades || 0}</td>
-                      <td className="py-3 px-4">{new Date(r.createdAt).toLocaleDateString()}</td>
+                      <td className="py-3 px-4 font-mono">{r._count?.trades || 0}</td>
+                      <td className="py-3 px-4 font-mono">{r.metrics?.winRate !== undefined ? `${r.metrics.winRate.toFixed(1)}%` : '—'}</td>
+                      <td className="py-3 px-4 font-mono">{r.metrics?.profitFactor !== undefined ? r.metrics.profitFactor.toFixed(2) : '—'}</td>
+                      <td className="py-3 px-4 font-mono">{r.metrics?.sharpe !== undefined ? r.metrics.sharpe.toFixed(2) : '—'}</td>
+                      <td className="py-3 px-4 font-mono text-sm">{new Date(r.createdAt).toLocaleDateString()}</td>
                       <td className="py-3 px-4 flex gap-2">
                         <Link href={`/analytics/${r.id}`} className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-sm">
                           <Activity className="w-4 h-4" /> Analytics

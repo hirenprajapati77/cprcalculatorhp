@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createChart, CandlestickSeries } from 'lightweight-charts';
-import { Play, Pause, SkipForward, RotateCcw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Play, Pause, FastForward, StepForward, RotateCcw } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
 
 export default function ReplayPage() {
   const params = useParams();
@@ -12,9 +13,19 @@ export default function ReplayPage() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const shouldReduceMotion = useReducedMotion();
+
+  const { data: replayData, isLoading } = useQuery({
+    queryKey: ['replay', tradeId],
+    queryFn: async () => {
+      const res = await fetch(`/api/replay?tradeId=${tradeId}`);
+      if (!res.ok) throw new Error('Failed to fetch replay data');
+      return res.json();
+    }
+  });
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current || !replayData) return;
     
     const newChart = createChart(chartContainerRef.current, {
       layout: { background: { color: 'transparent' }, textColor: '#d1d5db' },
@@ -28,11 +39,23 @@ export default function ReplayPage() {
       wickUpColor: '#06b6d4', wickDownColor: '#ef4444',
     });
 
-    // Mock initial data
-    series.setData([
-      { time: '2023-01-01', open: 100, high: 105, low: 95, close: 102 },
-      { time: '2023-01-02', open: 102, high: 108, low: 100, close: 106 },
-    ]);
+    if (replayData.ohlc && replayData.ohlc.length > 0) {
+      const formattedData = replayData.ohlc.map((c: { date: string; open: number; high: number; low: number; close: number }) => ({
+        time: c.date.split('T')[0], // format date for lightweight-charts
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      })).sort((a: { time: string }, b: { time: string }) => a.time.localeCompare(b.time));
+      
+      series.setData(formattedData);
+    }
+
+    // Overlays
+    series.createPriceLine({ price: 102, color: '#3b82f6', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Entry' });
+    series.createPriceLine({ price: 95, color: '#ef4444', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' });
+    series.createPriceLine({ price: 110, color: '#10b981', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Target' });
+    series.createPriceLine({ price: 106, color: '#f59e0b', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Exit' });
 
     const handleResize = () => {
       if (chartContainerRef.current) newChart.applyOptions({ width: chartContainerRef.current.clientWidth });
@@ -43,7 +66,9 @@ export default function ReplayPage() {
       window.removeEventListener('resize', handleResize);
       newChart.remove();
     };
-  }, []);
+  }, [replayData]);
+
+  if (isLoading) return <div className="text-center py-12 text-muted-foreground animate-pulse">Loading Replay Engine...</div>;
 
   return (
     <div className="flex flex-col gap-6">
@@ -56,7 +81,7 @@ export default function ReplayPage() {
 
       <motion.div 
         className="border border-border bg-card rounded-xl overflow-hidden shadow-xl"
-        initial={{ opacity: 0, y: 10 }}
+        initial={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
         <div ref={chartContainerRef} className="w-full h-[400px]" />
@@ -67,11 +92,19 @@ export default function ReplayPage() {
             <button 
               className="p-2 rounded-full bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition"
               onClick={() => setIsPlaying(!isPlaying)}
+              title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
             </button>
-            <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition"><SkipForward className="w-5 h-5" /></button>
-            <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition"><RotateCcw className="w-5 h-5" /></button>
+            <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition" title="Step">
+              <StepForward className="w-5 h-5" />
+            </button>
+            <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition" title="Jump">
+              <FastForward className="w-5 h-5" />
+            </button>
+            <button className="p-2 rounded-full hover:bg-white/10 text-muted-foreground transition" title="Reset">
+              <RotateCcw className="w-5 h-5" />
+            </button>
           </div>
           
           <div className="flex items-center gap-2">
@@ -92,15 +125,32 @@ export default function ReplayPage() {
 
       {/* Events / Trade Details Shell */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div className="border border-border bg-card rounded-xl p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+        <motion.div 
+          className="border border-border bg-card rounded-xl p-6" 
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          transition={{ delay: shouldReduceMotion ? 0 : 0.2 }}
+        >
           <h3 className="font-semibold mb-4 text-cyan-400">Trade Timeline</h3>
           <ul className="space-y-3">
-            <li className="flex gap-3 text-sm"><span className="text-muted-foreground">09:15</span> <span>Signal Triggered: Breakout</span></li>
-            <li className="flex gap-3 text-sm text-cyan-400"><span className="text-muted-foreground">09:16</span> <span>Order Filled (Long @ 102)</span></li>
+            {replayData?.events?.map((ev: { timestamp: string; event: string; details?: string }, idx: number) => (
+              <li key={idx} className="flex gap-3 text-sm">
+                <span className="text-muted-foreground">{new Date(ev.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                <span className={ev.event === 'FILLED' ? 'text-cyan-400' : ''}>{ev.event}: {ev.details || ''}</span>
+              </li>
+            ))}
+            {(!replayData?.events || replayData.events.length === 0) && (
+              <li className="text-sm text-muted-foreground italic">No events recorded</li>
+            )}
           </ul>
         </motion.div>
         
-        <motion.div className="border border-border bg-card rounded-xl p-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+        <motion.div 
+          className="border border-border bg-card rounded-xl p-6" 
+          initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          transition={{ delay: shouldReduceMotion ? 0 : 0.3 }}
+        >
           <h3 className="font-semibold mb-4 text-cyan-400">Execution Parameters</h3>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div><span className="block text-muted-foreground">Risk Amount</span><span className="font-medium">$1,000</span></div>
