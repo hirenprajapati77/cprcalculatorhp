@@ -667,6 +667,7 @@ export default function ScannerClient() {
   const [results, setResults] = useState<ScannedStock[]>([]);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [universeCount, setUniverseCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -1013,6 +1014,7 @@ export default function ScannerClient() {
         setResults(items);
         setTotal(showWatchlistOnly || debouncedSearchQuery ? items.length : data.total);
         setTotalPages(showWatchlistOnly || debouncedSearchQuery ? Math.ceil(items.length / limit) : data.totalPages);
+        if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
 
         if (items.length > 0 && !lastRefreshed) {
@@ -1832,9 +1834,9 @@ export default function ScannerClient() {
                       onChange={(e) => handleFilterChange('universe', e.target.value)}
                       className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
                     >
-                      <option value="NIFTY50">Nifty 50 (50)</option>
+                      <option value="NIFTY50">Nifty 50 {universeCount > 0 && universe === 'NIFTY50' ? `(${universeCount})` : '(50)'}</option>
                       <option value="NIFTY200">Nifty 200</option>
-                      <option value="NIFTY_FNO">NSE F&amp;O (~202)</option>
+                      <option value="NIFTY_FNO">NSE F&amp;O {universeCount > 0 && universe === 'NIFTY_FNO' ? `(${universeCount})` : '(182)'}</option>
                       <option value="ALL">All Stocks</option>
                     </select>
                   </div>

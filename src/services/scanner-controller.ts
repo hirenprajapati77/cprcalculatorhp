@@ -4,6 +4,9 @@ import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
 
+// Module-level failure tracker — persists across scan runs within the same process
+const PERSISTENT_FAILURES = new Map<string, number>();
+
 export class ScannerController {
   /**
    * Runs a complete stock scanner execution for a specific universe and market.
@@ -60,13 +63,25 @@ export class ScannerController {
       const batch = stocks.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (stockMeta) => {
+        // Skip blacklisted symbols (3+ consecutive fetch failures)
+        if ((PERSISTENT_FAILURES.get(stockMeta.symbol) || 0) >= 3) return null;
+
         try {
           const data = await MarketService.getStockData(stockMeta.symbol, market);
           if (data) {
+            // Reset failure count on success
+            PERSISTENT_FAILURES.delete(stockMeta.symbol);
             return ScannerService.scanStock(data);
           }
         } catch (err) {
-          console.error(`Failed to scan stock ${stockMeta.symbol}:`, err);
+          const sym = stockMeta.symbol;
+          const failCount = (PERSISTENT_FAILURES.get(sym) || 0) + 1;
+          PERSISTENT_FAILURES.set(sym, failCount);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[SKIP] ${sym} - fetch failed: ${errMsg}`);
+          if (failCount >= 3) {
+            console.warn(`[BLACKLIST] ${sym} - 3 consecutive failures, skipping future scans`);
+          }
         }
         return null;
       });
@@ -79,12 +94,16 @@ export class ScannerController {
 
     // Rank the stocks using the RankingService
     const ranked = RankingService.rankStocks(rawResults);
+
+    // Score gate: filter out completely useless results (score < 10)
+    const filtered = ranked.filter(r => r.score >= 10);
     const today = new Date().toISOString().split('T')[0];
+    console.log(`[SCAN] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
 
     // Background database persist (upserts)
     try {
       await Promise.all(
-        ranked.map(async (r) => {
+        filtered.map(async (r) => {
           const signalsStr = r.signals.join(',');
           const dbSymbol = r.market === 'NSE' ? r.symbol : `${r.symbol}:BSE`;
 
@@ -163,27 +182,27 @@ export class ScannerController {
       );
       
       const durationMs = Date.now() - startTime;
-      const topSymbols = ranked.slice(0, 20).map(s => s.symbol).join(',');
+      const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
 
       // 3. Log Scan History Run
       await prisma.scanHistory.create({
         data: {
           filtersJson: JSON.stringify({ universe: universeName, market }),
-          resultCount: ranked.length,
+          resultCount: filtered.length,
           durationMs,
           topSymbols,
         },
       });
 
-      console.log(`Scanner database V2 persistence completed for ${ranked.length} stocks in ${durationMs}ms.`);
+      console.log(`Scanner database V2 persistence completed for ${filtered.length} stocks in ${durationMs}ms.`);
     } catch (dbErr) {
       console.error('Error persisting scanner results to DB:', dbErr);
     }
 
-    // Cache the ranked list for 5 minutes (300 seconds)
+    // Cache the filtered list for 5 minutes (300 seconds)
     const cacheKey = `list:${universeName}:${market}`;
-    await CacheService.set(cacheKey, ranked, 300);
+    await CacheService.set(cacheKey, filtered, 300);
 
-    return ranked;
+    return filtered;
   }
 }

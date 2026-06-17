@@ -146,44 +146,33 @@ export async function GET(request: NextRequest) {
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
     }
 
-    // 6. Join Metadata from MarketSnapshots and calculate Trade setups
+    // 6. Join Metadata from MarketSnapshots — use V3 SL/Target logic (matches scanner.service.ts)
     const formattedResults = results.map((r) => {
       const snap = matchingSnapshots.find(s => s.symbol === r.symbol);
-      const cleanSymbol = r.symbol.split(':')[0]; // Remove :BSE suffix for UI uniformity
+      const cleanSymbol = r.symbol.split(':')[0];
 
-      // Derive Entry, SL, Target and RR on-the-fly
+      // Determine bias
       const bias = r.ltp > r.tc ? 'BULLISH' : r.ltp < r.bc ? 'BEARISH' : 'RANGE';
-      let entry = 0;
-      let sl = 0;
-      let target = 0;
-      let rrRatio = 1.0;
+      let entry = 0, sl = 0, target = 0;
 
       if (bias === 'BULLISH') {
         entry = r.tc;
-        sl = r.bc;
-        target = r.r2;
-        const risk = entry - sl;
-        const reward = target - entry;
-        rrRatio = risk > 0 ? reward / risk : 1.0;
+        const dayLowSL = snap ? snap.price * 0.98 : entry * 0.995; // approximate low from snapshot
+        const minSL = entry * 0.995;
+        sl = Math.min(dayLowSL, minSL);
+        target = entry + (entry - sl) * 2;
       } else if (bias === 'BEARISH') {
         entry = r.bc;
-        sl = r.tc;
-        target = r.s2;
-        const risk = sl - entry;
-        const reward = entry - target;
-        rrRatio = risk > 0 ? reward / risk : 1.0;
+        const dayHighSL = snap ? snap.price * 1.02 : entry * 1.005;
+        const maxSL = entry * 1.005;
+        sl = Math.max(dayHighSL, maxSL);
+        target = entry - (sl - entry) * 2;
       } else {
         entry = r.pivot;
-        if (r.ltp >= r.pivot) {
-          sl = r.s1;
-          target = r.r1;
-        } else {
-          sl = r.r1;
-          target = r.s1;
-        }
-        const risk = Math.abs(entry - sl);
-        const reward = Math.abs(target - entry);
-        rrRatio = risk > 0 ? reward / risk : 1.0;
+        const rangeSL = entry * 0.995;
+        sl = r.ltp >= r.pivot ? rangeSL : entry * 1.005;
+        const riskRange = Math.abs(entry - sl);
+        target = r.ltp >= r.pivot ? entry + riskRange * 2 : entry - riskRange * 2;
       }
 
       return {
@@ -200,9 +189,11 @@ export async function GET(request: NextRequest) {
         entry,
         sl,
         target,
-        rr: `1:${rrRatio.toFixed(1)}`,
+        rr: '1:2.0',
       };
     });
+
+    const universeCount = MarketService.getUniverseCount(universe);
 
     return NextResponse.json({
       success: true,
@@ -210,6 +201,10 @@ export async function GET(request: NextRequest) {
       limit,
       total,
       totalPages: limit ? Math.ceil(total / limit) : 1,
+      universeCount,
+      totalScanned: universeStocks.length,
+      totalReturned: formattedResults.length,
+      filteredOut: universeStocks.length - formattedResults.length,
       results: formattedResults,
       insights: {
         strongBuy: strongBuyCount,

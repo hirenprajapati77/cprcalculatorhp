@@ -52,7 +52,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'BAJAJFINSV',   name: 'Bajaj Finserv',                sector: 'Financial Services', marketCap: 240000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'LICI',         name: 'Life Insurance Corp',          sector: 'Financial Services', marketCap: 580000, isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'SBILIFE',      name: 'SBI Life Insurance',           sector: 'Financial Services', marketCap: 140000, isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'HDFCLIFE',     name: 'HDFC Life Insurance',          sector: 'Financial Services', marketCap: 130000, isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'HDFCLIFE',     name: 'HDFC Life Insurance',          sector: 'Financial Services', marketCap: 130000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'ICICIGI',      name: 'ICICI General Insurance',      sector: 'Financial Services', marketCap: 85000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'BANDHANBNK',   name: 'Bandhan Bank',                 sector: 'Financial Services', marketCap: 38000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'FEDERALBNK',   name: 'Federal Bank',                 sector: 'Financial Services', marketCap: 42000,  isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -68,15 +68,15 @@ const STOCK_UNIVERSE: {
   { symbol: 'RECLTD',       name: 'REC Limited',                  sector: 'Financial Services', marketCap: 115000, isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'PFC',          name: 'Power Finance Corporation',    sector: 'Financial Services', marketCap: 130000, isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'M&MFIN',       name: 'M&M Financial Services',       sector: 'Financial Services', marketCap: 22000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'SHRIRAMFIN',   name: 'Shriram Finance',              sector: 'Financial Services', marketCap: 62000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'SHRIRAMFIN',   name: 'Shriram Finance',              sector: 'Financial Services', marketCap: 62000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
 
   // ── Information Technology ───────────────────────────────────────────────────
   { symbol: 'TCS',          name: 'Tata Consultancy Services',    sector: 'IT', marketCap: 1250000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'INFY',         name: 'Infosys',                      sector: 'IT', marketCap: 620000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
-  { symbol: 'WIPRO',        name: 'Wipro Limited',                sector: 'IT', marketCap: 230000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'HCLTECH',      name: 'HCL Technologies',             sector: 'IT', marketCap: 340000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'TECHM',        name: 'Tech Mahindra',                sector: 'IT', marketCap: 110000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'LTIM',         name: 'LTIMindtree',                  sector: 'IT', marketCap: 140000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'WIPRO',        name: 'Wipro Limited',                sector: 'IT', marketCap: 230000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'HCLTECH',      name: 'HCL Technologies',             sector: 'IT', marketCap: 340000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'TECHM',        name: 'Tech Mahindra',                sector: 'IT', marketCap: 110000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'LTIM',         name: 'LTIMindtree',                  sector: 'IT', marketCap: 140000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'PERSISTENT',   name: 'Persistent Systems',           sector: 'IT', marketCap: 72000,   isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'MPHASIS',      name: 'Mphasis',                      sector: 'IT', marketCap: 38000,   isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'COFORGE',      name: 'Coforge',                      sector: 'IT', marketCap: 28000,   isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -85,8 +85,8 @@ const STOCK_UNIVERSE: {
 
   // ── Energy & Oil ─────────────────────────────────────────────────────────────
   { symbol: 'RELIANCE',     name: 'Reliance Industries',          sector: 'Energy', marketCap: 1680000, isNifty50: true,  isNifty200: true,  isFnO: true  },
-  { symbol: 'ONGC',         name: 'Oil & Natural Gas Corp',       sector: 'Energy', marketCap: 260000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'BPCL',         name: 'Bharat Petroleum',             sector: 'Energy', marketCap: 95000,   isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'ONGC',         name: 'Oil & Natural Gas Corp',       sector: 'Energy', marketCap: 260000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'BPCL',         name: 'Bharat Petroleum',             sector: 'Energy', marketCap: 95000,   isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'IOC',          name: 'Indian Oil Corporation',       sector: 'Energy', marketCap: 190000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'HINDPETRO',    name: 'Hindustan Petroleum',          sector: 'Energy', marketCap: 70000,   isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'GAIL',         name: 'GAIL India',                   sector: 'Energy', marketCap: 130000,  isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -98,15 +98,15 @@ const STOCK_UNIVERSE: {
 
   // ── Healthcare & Pharma ──────────────────────────────────────────────────────
   { symbol: 'SUNPHARMA',    name: 'Sun Pharmaceutical',           sector: 'Healthcare', marketCap: 250000, isNifty50: true,  isNifty200: true,  isFnO: true  },
-  { symbol: 'DRREDDY',      name: 'Dr. Reddy\'s Laboratories',    sector: 'Healthcare', marketCap: 95000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'CIPLA',        name: 'Cipla',                        sector: 'Healthcare', marketCap: 90000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'DIVISLAB',     name: "Divi's Laboratories",          sector: 'Healthcare', marketCap: 75000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'DRREDDY',      name: 'Dr. Reddy\'s Laboratories',    sector: 'Healthcare', marketCap: 95000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'CIPLA',        name: 'Cipla',                        sector: 'Healthcare', marketCap: 90000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'DIVISLAB',     name: "Divi's Laboratories",          sector: 'Healthcare', marketCap: 75000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'BIOCON',       name: 'Biocon',                       sector: 'Healthcare', marketCap: 32000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'AUROPHARMA',   name: 'Aurobindo Pharma',             sector: 'Healthcare', marketCap: 45000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'LUPIN',        name: 'Lupin',                        sector: 'Healthcare', marketCap: 55000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'ALKEM',        name: 'Alkem Laboratories',           sector: 'Healthcare', marketCap: 28000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'TORNTPHARM',   name: 'Torrent Pharmaceuticals',      sector: 'Healthcare', marketCap: 52000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'APOLLOHOSP',   name: 'Apollo Hospitals',             sector: 'Healthcare', marketCap: 95000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'APOLLOHOSP',   name: 'Apollo Hospitals',             sector: 'Healthcare', marketCap: 95000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'MAXHEALTH',    name: 'Max Healthcare',               sector: 'Healthcare', marketCap: 72000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'FORTIS',       name: 'Fortis Healthcare',            sector: 'Healthcare', marketCap: 38000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'GRANULES',     name: 'Granules India',               sector: 'Healthcare', marketCap: 8500,   isNifty50: false, isNifty200: false, isFnO: true  },
@@ -131,7 +131,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'MARUTI',       name: 'Maruti Suzuki India',          sector: 'Automotive', marketCap: 280000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'BAJAJ-AUTO',   name: 'Bajaj Auto',                   sector: 'Automotive', marketCap: 195000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'EICHERMOT',    name: 'Eicher Motors',                sector: 'Automotive', marketCap: 115000, isNifty50: true,  isNifty200: true,  isFnO: true  },
-  { symbol: 'HEROMOTOCO',   name: 'Hero MotoCorp',                sector: 'Automotive', marketCap: 85000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'HEROMOTOCO',   name: 'Hero MotoCorp',                sector: 'Automotive', marketCap: 85000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'TVSMOTOR',     name: 'TVS Motor Company',            sector: 'Automotive', marketCap: 82000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'ASHOKLEY',     name: 'Ashok Leyland',                sector: 'Automotive', marketCap: 52000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'ESCORTS',      name: 'Escorts Kubota',               sector: 'Automotive', marketCap: 22000,  isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -145,8 +145,8 @@ const STOCK_UNIVERSE: {
   // ── Consumer Goods & FMCG ────────────────────────────────────────────────────
   { symbol: 'HINDUNILVR',   name: 'Hindustan Unilever',           sector: 'Consumer Goods', marketCap: 590000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'ITC',          name: 'ITC Limited',                  sector: 'Consumer Goods', marketCap: 480000, isNifty50: true,  isNifty200: true,  isFnO: true  },
-  { symbol: 'BRITANNIA',    name: 'Britannia Industries',         sector: 'Consumer Goods', marketCap: 95000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'NESTLEIND',    name: 'Nestle India',                 sector: 'Consumer Goods', marketCap: 225000, isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'BRITANNIA',    name: 'Britannia Industries',         sector: 'Consumer Goods', marketCap: 95000,  isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'NESTLEIND',    name: 'Nestle India',                 sector: 'Consumer Goods', marketCap: 225000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'GODREJCP',     name: 'Godrej Consumer Products',     sector: 'Consumer Goods', marketCap: 110000, isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'DABUR',        name: 'Dabur India',                  sector: 'Consumer Goods', marketCap: 88000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'EMAMILTD',     name: 'Emami',                        sector: 'Consumer Goods', marketCap: 30000,  isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -221,7 +221,7 @@ const STOCK_UNIVERSE: {
 
   // ── Consumer Discretionary / Retail ─────────────────────────────────────────
   { symbol: 'DMART',        name: 'Avenue Supermarts (D-Mart)',   sector: 'Consumer Goods', marketCap: 250000, isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'TRENT',        name: 'Trent',                        sector: 'Consumer Goods', marketCap: 110000, isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'TRENT',        name: 'Trent',                        sector: 'Consumer Goods', marketCap: 110000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'ABFRL',        name: 'Aditya Birla Fashion',         sector: 'Consumer Goods', marketCap: 22000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'PAGEIND',      name: 'Page Industries',              sector: 'Consumer Goods', marketCap: 38000,  isNifty50: false, isNifty200: true,  isFnO: true  },
 
@@ -241,10 +241,24 @@ const STOCK_UNIVERSE: {
 
   // ── Defence / PSU ────────────────────────────────────────────────────────────
   { symbol: 'HAL',          name: 'Hindustan Aeronautics',        sector: 'Capital Goods', marketCap: 225000, isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'BEL',          name: 'Bharat Electronics',           sector: 'Capital Goods', marketCap: 195000, isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'BEL',          name: 'Bharat Electronics',           sector: 'Capital Goods', marketCap: 195000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'COCHINSHIP',   name: 'Cochin Shipyard',              sector: 'Capital Goods', marketCap: 28000,  isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'MAZAGON',      name: 'Mazagon Dock',                 sector: 'Capital Goods', marketCap: 58000,  isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'HUDCO',        name: 'Housing & Urban Development',  sector: 'Financial Services', marketCap: 42000, isNifty50: false, isNifty200: true, isFnO: true },
+  { symbol: 'HUDCO',        name: 'Housing & Urban Development',  sector: 'Financial Services', marketCap: 42000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+
+  // ── New FnO additions (June 2026) ────────────────────────────────────────────
+  { symbol: 'ABCAPITAL',   name: 'Aditya Birla Capital',         sector: 'Financial Services', marketCap: 45000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'ANGELONE',    name: 'Angel One',                    sector: 'Financial Services', marketCap: 18000,  isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'BAJAJHFL',    name: 'Bajaj Housing Finance',        sector: 'Financial Services', marketCap: 55000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'BANKBARODA',  name: 'Bank of Baroda',               sector: 'Financial Services', marketCap: 58000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'DIXON',       name: 'Dixon Technologies',           sector: 'Capital Goods',      marketCap: 42000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'FACT',        name: 'FACT',                         sector: 'Materials',          marketCap: 12000,  isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'GMRINFRA',    name: 'GMR Airports',                 sector: 'Services',           marketCap: 55000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'JSWINFRA',    name: 'JSW Infrastructure',           sector: 'Services',           marketCap: 45000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'KAYNES',      name: 'Kaynes Technology',            sector: 'Capital Goods',      marketCap: 18000,  isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'LALPATHLAB',  name: 'Dr Lal PathLabs',              sector: 'Healthcare',         marketCap: 22000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'LAURUSLABS',  name: 'Laurus Labs',                  sector: 'Healthcare',         marketCap: 18000,  isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'TIINDIA',     name: 'Tube Investments',             sector: 'Capital Goods',      marketCap: 32000,  isNifty50: false, isNifty200: true,  isFnO: true  },
 ];
 
 export class MarketService {
