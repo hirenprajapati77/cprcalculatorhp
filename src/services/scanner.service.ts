@@ -99,12 +99,11 @@ export class ScannerService {
     };
     const score = RankingService.calculateScore(tempResult);
 
-    // 4. Trade Setup V3 — Entry, SL, Target, RR
-    // SL is anchored to day's price range (min 0.5% buffer from entry).
-    // Target is always RR 1:2 from actual SL distance — honest and consistent.
+    // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
     let entry = 0;
     let sl = 0;
     let target = 0;
+    let rr = '1:2.0';
 
     // Determine bias from LTP vs TODAY's CPR band
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
@@ -112,36 +111,98 @@ export class ScannerService {
     else if (ltp < cprToday.bc) bias = 'BEARISH';
 
     if (bias === 'BULLISH') {
-      // LONG SETUP: entry at tomorrow TC
+      // LONG SETUP: entry at tomorrow's TC
       entry = cprTomorrow.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
       const dayLowSL = stock.low;
       const minSL = entry * 0.995;
       sl = Math.min(dayLowSL, minSL);
-      // Target = RR 1:2 from actual SL distance
-      const slDistance = entry - sl;
-      target = entry + (slDistance * 2);
+      const risk = entry - sl;
+
+      if (risk > 0) {
+        // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
+        const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
+        let chosenTarget = entry + risk * 1.5; // fallback
+        for (const t of targets) {
+          if (t > entry && (t - entry) / risk >= 1.5) {
+            chosenTarget = t;
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((target - entry) / risk).toFixed(1)}`;
+      } else {
+        target = entry * 1.01;
+        rr = '1:2.0';
+      }
     } else if (bias === 'BEARISH') {
-      // SHORT SETUP: entry at tomorrow BC
+      // SHORT SETUP: entry at tomorrow's BC
       entry = cprTomorrow.bc;
       // SL = day high OR minimum 0.5% above entry (whichever is higher)
       const dayHighSL = stock.high;
       const maxSL = entry * 1.005;
       sl = Math.max(dayHighSL, maxSL);
-      // Target = RR 1:2 from actual SL distance
-      const slDistShort = sl - entry;
-      target = entry - (slDistShort * 2);
-    } else {
-      // RANGE: entry at tomorrow's pivot, SL is always 0.5% below entry
-      entry = cprTomorrow.pivot;
-      sl = entry * 0.995;
-      const riskRange = entry - sl;
-      // Target direction determined by LTP vs tomorrow's pivot
-      target = ltp >= cprTomorrow.pivot ? entry + (riskRange * 2) : entry - (riskRange * 2);
-    }
+      const risk = sl - entry;
 
-    // RR is always 1:2.0 — clean, honest, consistent
-    const rr = '1:2.0';
+      if (risk > 0) {
+        // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
+        const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
+        let chosenTarget = entry - risk * 1.5; // fallback
+        for (const t of targets) {
+          if (t < entry && (entry - t) / risk >= 1.5) {
+            chosenTarget = t;
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((entry - target) / risk).toFixed(1)}`;
+      } else {
+        target = entry * 0.99;
+        rr = '1:2.0';
+      }
+    } else {
+      // RANGE SETUP
+      entry = cprTomorrow.pivot;
+      const isLongRange = ltp >= cprTomorrow.pivot;
+
+      if (isLongRange) {
+        sl = entry * 0.995;
+        const risk = entry - sl;
+        if (risk > 0) {
+          const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
+          let chosenTarget = entry + risk * 1.5; // fallback
+          for (const t of targets) {
+            if (t > entry && (t - entry) / risk >= 1.5) {
+              chosenTarget = t;
+              break;
+            }
+          }
+          target = chosenTarget;
+          rr = `1:${((target - entry) / risk).toFixed(1)}`;
+        } else {
+          target = entry * 1.01;
+          rr = '1:2.0';
+        }
+      } else {
+        sl = entry * 1.005;
+        const risk = sl - entry;
+        if (risk > 0) {
+          const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
+          let chosenTarget = entry - risk * 1.5; // fallback
+          for (const t of targets) {
+            if (t < entry && (entry - t) / risk >= 1.5) {
+              chosenTarget = t;
+              break;
+            }
+          }
+          target = chosenTarget;
+          rr = `1:${((entry - target) / risk).toFixed(1)}`;
+        } else {
+          target = entry * 0.99;
+          rr = '1:2.0';
+        }
+      }
+    }
 
     // 5. Confidence Score Calculation
     let confidence = score;
