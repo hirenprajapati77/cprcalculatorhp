@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
 import { MarketService } from '@/services/market.service';
 import { BtstService, BtstScoreResult } from '@/services/backtest/btst.service';
+import { GapProbabilityService } from '@/services/overnight/gap-probability.service';
+
+export interface BtstScoreResultEnriched extends BtstScoreResult {
+  expectedGap: number;
+  expectedMove: number;
+  gapConfidence: number;
+  exitStrategy: string;
+}
 
 export async function GET(request: Request) {
   try {
@@ -10,7 +18,7 @@ export async function GET(request: Request) {
     const executionWindowOpen = BtstService.isExecutionWindowOpen();
 
     const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
-    const results: BtstScoreResult[] = [];
+    const results: BtstScoreResultEnriched[] = [];
 
     let strongSignal = 0;
     let breakoutReady = 0;
@@ -34,10 +42,14 @@ export async function GET(request: Request) {
     for (const { stock } of stockResults) {
       if (stock) {
         const result = BtstService.evaluateOvernight(stock);
-        
+
+        // Compute gap probability based on direction
+        const direction = result.tag === 'SHORT' ? 'SHORT' : 'LONG';
+        const gapMetrics = GapProbabilityService.calculateGapProbability(stock, direction);
+
         // Count metrics
         const maxScore = Math.max(result.longScore, result.shortScore);
-        
+
         if (result.tag === 'NEUTRAL_CONFLICT') {
           totalConflict++;
           avoid++;
@@ -51,14 +63,20 @@ export async function GET(request: Request) {
           } else if (maxScore < 40) {
             avoid++;
           }
-          
+
           if (result.tag === 'LONG') totalLong++;
           if (result.tag === 'SHORT') totalShort++;
         }
 
         // Exclude WEAK
         if (result.tag !== 'WEAK') {
-          results.push(result);
+          results.push({
+            ...result,
+            expectedGap: gapMetrics.expectedGap,
+            expectedMove: parseFloat((gapMetrics.expectedGap * 2.0).toFixed(2)),
+            gapConfidence: gapMetrics.gapConfidence,
+            exitStrategy: 'EOD'
+          });
         }
       }
     }

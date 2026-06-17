@@ -21,7 +21,7 @@ const DynamicChartsGrid = dynamic(() => import('./ChartsGrid'), {
 
 export default function AnalyticsPage() {
   const params = useParams();
-  const runId = params?.runId as string;
+  const runId = params?.runId as string | undefined;
 
   const { data: runData, isLoading } = useQuery({
     queryKey: ['metrics', runId],
@@ -29,12 +29,28 @@ export default function AnalyticsPage() {
       const res = await fetch(`/api/backtest?runId=${runId}`);
       if (!res.ok) throw new Error('Failed to fetch run data');
       return res.json();
-    }
+    },
+    enabled: !!runId && runId !== 'undefined'
   });
 
   const metrics = runData?.metrics;
 
+  if (!runId || runId === 'undefined') return (
+    <div className="text-center py-16 text-muted-foreground">
+      <p className="text-lg font-semibold mb-2">Invalid Run ID</p>
+      <p className="text-sm">Please navigate to Analytics from a valid backtest run.</p>
+    </div>
+  );
+
   if (isLoading) return <div className="text-center py-12 text-muted-foreground animate-pulse">Loading Analytics Context...</div>;
+
+  if (!metrics && runData) return (
+    <div className="text-center py-16 text-muted-foreground">
+      <p className="text-lg font-semibold mb-2">Metrics Not Yet Available</p>
+      <p className="text-sm">Run status: <span className="font-mono text-cyan-400">{runData.status || 'UNKNOWN'}</span></p>
+      <p className="text-xs mt-2">Metrics are computed once the backtest run completes. Please wait and refresh.</p>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-6">

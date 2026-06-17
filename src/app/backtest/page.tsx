@@ -42,11 +42,23 @@ export default function BacktestPage() {
           executionMode
         })
       });
-      if (!res.ok) throw new Error('Failed to submit');
+      if (res.status === 503) {
+        throw new Error('Backtest engine is currently unavailable. Please try again later.');
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to start backtest');
+      }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['backtests'] });
+      if (data.status === 'QUEUED') {
+        alert(`✅ Backtest queued! Run ID: ${data.jobId}\nIt will process in the background. Refresh the run history to check progress.`);
+      }
+    },
+    onError: (err: Error) => {
+      alert(`❌ Error: ${err.message}`);
     }
   });
 

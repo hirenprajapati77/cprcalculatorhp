@@ -31,6 +31,18 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt } from '@/utils/format';
 
+function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinutes: number } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).formatToParts(date);
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  return { hour, minute, totalMinutes: hour * 60 + minute };
+}
+
 function useBtstState() {
   const [now, setNow] = useState(new Date());
 
@@ -39,8 +51,7 @@ function useBtstState() {
     return () => clearInterval(timer);
   }, []);
 
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
+  const { hour: hours, minute: minutes } = getISTTimeParts(now);
   const time = hours * 100 + minutes;
 
   let state = 'PREMARKET';
@@ -81,7 +92,14 @@ function useBtstState() {
     nextRefresh = 'Locked';
   }
 
-  return { state, message, emptyMessage, nextRefresh, timeStr: now.toLocaleTimeString('en-IN') };
+  const timeStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }).format(now);
+  return { state, message, emptyMessage, nextRefresh, timeStr };
 }
 
 const BtstEmptyState = () => {
@@ -877,6 +895,10 @@ export default function ScannerClient() {
           rr: string;
           sector: string;
           marketCap: number;
+          expectedGap: number;
+          expectedMove: number;
+          gapConfidence: number;
+          exitStrategy: string;
         }> = data.results || [];
 
         const filtered = allResults.filter(r => {
@@ -913,16 +935,22 @@ export default function ScannerClient() {
             classification: 'NORMAL' as const,
             signals: sig.signals,
             score: Math.max(sig.longScore, sig.shortScore),
-            confidence: Math.max(sig.longScore, sig.shortScore),
+            confidence: sig.gapConfidence ?? Math.max(sig.longScore, sig.shortScore),
             entry: sig.entry,
             sl: sig.sl,
             target: sig.target,
             rr: sig.rr || '1:2.0',
             createdAt: new Date().toISOString(),
-            signalTime: new Date().toLocaleTimeString('en-IN'),
-            expectedGap: null,
-            expectedMove: null,
-            exitStrategy: null,
+            signalTime: new Intl.DateTimeFormat('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true
+            }).format(new Date()),
+            expectedGap: sig.expectedGap ?? null,
+            expectedMove: sig.expectedMove ?? null,
+            exitStrategy: sig.exitStrategy || 'EOD',
             rejectionReason: null,
             volumeRatio: 1,
           };
@@ -1022,17 +1050,14 @@ export default function ScannerClient() {
         setTotalPages(showWatchlistOnly || debouncedSearchQuery ? Math.ceil(items.length / limit) : data.totalPages);
         if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
-
-        if (items.length > 0 && !lastRefreshed) {
-          setLastRefreshed(new Date(items[0].createdAt).toLocaleTimeString());
-        }
+        setLastRefreshed(new Date().toLocaleTimeString());
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, lastRefreshed, showToast, scannerMode]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {
