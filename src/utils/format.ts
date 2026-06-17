@@ -10,6 +10,14 @@ export function fmt(n: number): string {
 }
 
 /**
+ * Formats a number as INR currency (₹) with en-IN local style.
+ */
+export function fmtINR(n: number): string {
+  if (n === undefined || n === null || isNaN(n)) return '—';
+  return `₹${fmt(n)}`;
+}
+
+/**
  * Formats a percentage value to 3 decimal places with trailing % symbol.
  */
 export function formatPct(n: number): string {

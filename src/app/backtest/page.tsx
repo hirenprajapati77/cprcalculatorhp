@@ -92,7 +92,7 @@ export default function BacktestPage() {
             </div>
             
             <div>
-              <label className="text-sm font-medium mb-1 block text-muted-foreground">Capital</label>
+              <label className="text-sm font-medium mb-1 block text-muted-foreground">Capital (₹)</label>
               <input type="number" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={capital} onChange={(e) => setCapital(Number(e.target.value))} />
             </div>
 

@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { LineChart as LineChartIcon, TrendingUp, DollarSign, Activity } from 'lucide-react';
+import { LineChart as LineChartIcon, TrendingUp, IndianRupee, Activity } from 'lucide-react';
 import { fmt } from '@/utils/format';
 
 interface StockHistoryRecord {
@@ -146,7 +146,7 @@ export const MultiStockCompareChart: React.FC<MultiStockCompareChartProps> = ({ 
             variant={metric === 'ltp' ? 'primary' : 'ghost'}
             className="h-7 px-2.5 text-[10px]"
           >
-            <DollarSign size={11} /> Price
+            <IndianRupee size={11} /> Price
           </Button>
           <Button
             onClick={() => setMetric('width')}

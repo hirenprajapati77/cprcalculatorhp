@@ -77,8 +77,11 @@ export default function ChartsGrid({ runId }: { runId: string }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={snapshots}>
             <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} width={50} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
+            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} width={70} />
+            <Tooltip 
+              contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} 
+              formatter={(value) => value != null ? [`₹${Number(value).toLocaleString('en-IN')}`, 'Equity'] : ['—', 'Equity']}
+            />
             <Line type="monotone" dataKey="value" stroke="#06b6d4" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>

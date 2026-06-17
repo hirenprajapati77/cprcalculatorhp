@@ -53,7 +53,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'BAJFINANCE',   name: 'Bajaj Finance',                sector: 'Financial Services', marketCap: 410000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'BAJAJFINSV',   name: 'Bajaj Finserv',                sector: 'Financial Services', marketCap: 240000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'LICI',         name: 'Life Insurance Corp',          sector: 'Financial Services', marketCap: 580000, isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'SBILIFE',      name: 'SBI Life Insurance',           sector: 'Financial Services', marketCap: 140000, isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'SBILIFE',      name: 'SBI Life Insurance',           sector: 'Financial Services', marketCap: 140000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'HDFCLIFE',     name: 'HDFC Life Insurance',          sector: 'Financial Services', marketCap: 130000, isNifty50: true,  isNifty200: true,  isFnO: true  },
   { symbol: 'ICICIGI',      name: 'ICICI General Insurance',      sector: 'Financial Services', marketCap: 85000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'BANDHANBNK',   name: 'Bandhan Bank',                 sector: 'Financial Services', marketCap: 38000,  isNifty50: false, isNifty200: true,  isFnO: true  },
@@ -243,7 +243,7 @@ const STOCK_UNIVERSE: {
 
   // ── Defence / PSU ────────────────────────────────────────────────────────────
   { symbol: 'HAL',          name: 'Hindustan Aeronautics',        sector: 'Capital Goods', marketCap: 225000, isNifty50: false, isNifty200: true,  isFnO: true  },
-  { symbol: 'BEL',          name: 'Bharat Electronics',           sector: 'Capital Goods', marketCap: 195000, isNifty50: true,  isNifty200: true,  isFnO: true  },
+  { symbol: 'BEL',          name: 'Bharat Electronics',           sector: 'Capital Goods', marketCap: 195000, isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'COCHINSHIP',   name: 'Cochin Shipyard',              sector: 'Capital Goods', marketCap: 28000,  isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'MAZAGON',      name: 'Mazagon Dock',                 sector: 'Capital Goods', marketCap: 58000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'HUDCO',        name: 'Housing & Urban Development',  sector: 'Financial Services', marketCap: 42000,  isNifty50: false, isNifty200: true,  isFnO: true  },

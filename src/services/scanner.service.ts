@@ -32,15 +32,42 @@ export class ScannerService {
    * Evaluates all CPR levels, price-action signals, entry targets, and SL parameters.
    */
   static scanStock(stock: MarketStockData): ScannerSignalResult {
-    // 1. Calculate CPR levels using yesterday's OHLC
-    const cpr = calculateCPR({
-      high: stock.high,
-      low: stock.low,
-      close: stock.close,
+    // Differentiate yesterday's and today's daily candles robustly
+    const todayStr = new Date().toISOString().split('T')[0];
+    let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
+    let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
+
+    if (stock.history && stock.history.length > 0) {
+      const lastCandle = stock.history[stock.history.length - 1];
+      const isLastToday = lastCandle.date === todayStr;
+      
+      todayCandle = isLastToday ? lastCandle : {
+        high: stock.high,
+        low: stock.low,
+        close: stock.ltp
+      };
+      
+      yesterdayCandle = isLastToday 
+        ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
+        : lastCandle;
+    }
+
+    // 1. Calculate Today's CPR using yesterday's OHLC
+    const cprToday = calculateCPR({
+      high: yesterdayCandle.high,
+      low: yesterdayCandle.low,
+      close: yesterdayCandle.close,
     });
 
-    const tc = cpr.tc;
-    const bc = cpr.bc;
+    // Calculate Tomorrow's CPR using today's OHLC
+    const cprTomorrow = calculateCPR({
+      high: todayCandle.high,
+      low: todayCandle.low,
+      close: todayCandle.close,
+    });
+
+    const tc = cprToday.tc;
+    const bc = cprToday.bc;
     const ltp = stock.ltp;
     const _volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
@@ -48,23 +75,22 @@ export class ScannerService {
     const signalData = SignalService.getSignals(stock);
     const signals = signalData.signals;
 
-    // 3. Calculate Quant Score & Classification
-    // Create temporary object to calculate score
+    // 3. Calculate Quant Score & Classification (uses cprToday values)
     const tempResult: Omit<ScannerSignalResult, 'score' | 'confidence'> = {
       ...stock,
-      pivot: cpr.pivot,
+      pivot: cprToday.pivot,
       bc,
       tc,
-      r1: cpr.r1,
-      r2: cpr.r2,
-      r3: cpr.r3,
-      r4: cpr.r4,
-      s1: cpr.s1,
-      s2: cpr.s2,
-      s3: cpr.s3,
-      s4: cpr.s4,
-      width: cpr.width,
-      classification: cpr.classification,
+      r1: cprToday.r1,
+      r2: cprToday.r2,
+      r3: cprToday.r3,
+      r4: cprToday.r4,
+      s1: cprToday.s1,
+      s2: cprToday.s2,
+      s3: cprToday.s3,
+      s4: cprToday.s4,
+      width: cprToday.width,
+      classification: cprToday.classification,
       signals,
       entry: 0,
       sl: 0,
@@ -80,14 +106,14 @@ export class ScannerService {
     let sl = 0;
     let target = 0;
 
-    // Determine bias from LTP vs CPR band
+    // Determine bias from LTP vs TODAY's CPR band
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
-    if (ltp > tc) bias = 'BULLISH';
-    else if (ltp < bc) bias = 'BEARISH';
+    if (ltp > cprToday.tc) bias = 'BULLISH';
+    else if (ltp < cprToday.bc) bias = 'BEARISH';
 
     if (bias === 'BULLISH') {
       // LONG SETUP: entry at tomorrow TC
-      entry = tc;
+      entry = cprTomorrow.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
       const dayLowSL = stock.low;
       const minSL = entry * 0.995;
@@ -97,7 +123,7 @@ export class ScannerService {
       target = entry + (slDistance * 2);
     } else if (bias === 'BEARISH') {
       // SHORT SETUP: entry at tomorrow BC
-      entry = bc;
+      entry = cprTomorrow.bc;
       // SL = day high OR minimum 0.5% above entry (whichever is higher)
       const dayHighSL = stock.high;
       const maxSL = entry * 1.005;
@@ -106,12 +132,12 @@ export class ScannerService {
       const slDistShort = sl - entry;
       target = entry - (slDistShort * 2);
     } else {
-      // RANGE: entry at pivot, SL = 0.5% from entry, target = 2× SL distance
-      entry = cpr.pivot;
-      const rangeSL = entry * 0.995;
-      sl = ltp >= cpr.pivot ? rangeSL : entry * 1.005;
-      const riskRange = Math.abs(entry - sl);
-      target = ltp >= cpr.pivot ? entry + (riskRange * 2) : entry - (riskRange * 2);
+      // RANGE: entry at tomorrow's pivot, SL is always 0.5% below entry
+      entry = cprTomorrow.pivot;
+      sl = entry * 0.995;
+      const riskRange = entry - sl;
+      // Target direction determined by LTP vs tomorrow's pivot
+      target = ltp >= cprTomorrow.pivot ? entry + (riskRange * 2) : entry - (riskRange * 2);
     }
 
     // RR is always 1:2.0 — clean, honest, consistent
@@ -123,19 +149,19 @@ export class ScannerService {
 
     return {
       ...stock,
-      pivot: cpr.pivot,
+      pivot: cprToday.pivot,
       bc,
       tc,
-      r1: cpr.r1,
-      r2: cpr.r2,
-      r3: cpr.r3,
-      r4: cpr.r4,
-      s1: cpr.s1,
-      s2: cpr.s2,
-      s3: cpr.s3,
-      s4: cpr.s4,
-      width: cpr.width,
-      classification: cpr.classification,
+      r1: cprToday.r1,
+      r2: cprToday.r2,
+      r3: cprToday.r3,
+      r4: cprToday.r4,
+      s1: cprToday.s1,
+      s2: cprToday.s2,
+      s3: cprToday.s3,
+      s4: cprToday.s4,
+      width: cprToday.width,
+      classification: cprToday.classification,
       signals,
       score,
       entry,

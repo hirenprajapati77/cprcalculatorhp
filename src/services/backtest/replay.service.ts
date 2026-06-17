@@ -48,6 +48,9 @@ export class ReplayService {
       entryPrice: trade.entryPrice,
       stopLoss: trade.stopLoss,
       target: trade.target,
+      exitPrice: trade.exitPrice,
+      riskAmount: trade.riskAmount,
+      positionSize: trade.positionSize,
       ohlc,
       events,
       truncated: truncatedEvents || truncatedCandles

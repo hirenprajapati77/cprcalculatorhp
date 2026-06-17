@@ -2165,11 +2165,6 @@ export default function ScannerClient() {
                         <div className="flex items-center gap-1">Symbol <ArrowUpDown size={11} /></div>
                       </th>
                     )}
-                    {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
-                    {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
-                    {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
-                    {visibleColumns.includes('confidence') && <th className="p-2.5">Confidence</th>}
-                    {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
                     {visibleColumns.includes('ltp') && (
                       <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('ltp')}>
                         <div className="flex items-center gap-1">LTP & Price <ArrowUpDown size={11} /></div>
@@ -2180,11 +2175,17 @@ export default function ScannerClient() {
                     {visibleColumns.includes('setup') && <th className="p-2.5">Trade Setup (V3)</th>}
                     {visibleColumns.includes('rr') && <th className="p-2.5 max-md:hidden">RR</th>}
                     {visibleColumns.includes('signals') && <th className="p-2.5">Signals</th>}
+                    {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
                     {visibleColumns.includes('score') && (
                       <th className="p-2.5 cursor-pointer hover:text-text-primary w-28" onClick={() => handleSort('score')}>
-                        <div className="flex items-center gap-1">Score & Conf <ArrowUpDown size={11} /></div>
+                        <div className="flex items-center gap-1">Score & Freq <ArrowUpDown size={11} /></div>
                       </th>
                     )}
+                    {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
+                    {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
+                    {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
+                    {visibleColumns.includes('confidence') && <th className="p-2.5">Gap Freq %</th>}
+                    {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
                     <th className="p-2.5 text-right">Inspect</th>
                   </tr>
                 </thead>
@@ -2375,7 +2376,7 @@ export default function ScannerClient() {
                           <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Conf {drawerStock.confidence}%</span>
+                           <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Gap Freq {drawerStock.confidence}%</span>
                           {getRatingBadge(drawerStock.score)}
                         </div>
                       </div>

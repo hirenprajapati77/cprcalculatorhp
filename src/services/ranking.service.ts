@@ -61,7 +61,7 @@ export class RankingService {
     }
 
     // 9. Virgin CPR
-    if (signals.includes('NORMAL') && signals.includes('VIRGIN')) {
+    if (signals.includes('VIRGIN')) {
       score += 10;
     }
 

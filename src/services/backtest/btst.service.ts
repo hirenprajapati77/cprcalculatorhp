@@ -167,20 +167,36 @@ export class BtstService {
   }
 
   static evaluateOvernight(stock: MarketStockData): BtstScoreResult {
-    // CPR Computations
-    let prevHigh = stock.high;
-    let prevLow = stock.low;
-    let prevClose = stock.close; // This is yesterday's close
+    const todayStr = new Date().toISOString().split('T')[0];
+    let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
+    let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
-    if (stock.history && stock.history.length > 1) {
-      const yesterday = stock.history[stock.history.length - 2];
-      prevHigh = yesterday.high;
-      prevLow = yesterday.low;
-      prevClose = yesterday.close;
+    if (stock.history && stock.history.length > 0) {
+      const lastCandle = stock.history[stock.history.length - 1];
+      const isLastToday = lastCandle.date === todayStr;
+      
+      todayCandle = isLastToday ? lastCandle : {
+        high: stock.high,
+        low: stock.low,
+        close: stock.ltp
+      };
+      
+      yesterdayCandle = isLastToday 
+        ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
+        : lastCandle;
     }
 
-    const todayCpr = calculateCPR({ high: prevHigh, low: prevLow, close: prevClose });
-    const tomorrowCpr = calculateCPR({ high: stock.high, low: stock.low, close: stock.ltp });
+    const todayCpr = calculateCPR({
+      high: yesterdayCandle.high,
+      low: yesterdayCandle.low,
+      close: yesterdayCandle.close,
+    });
+
+    const tomorrowCpr = calculateCPR({
+      high: todayCandle.high,
+      low: todayCandle.low,
+      close: todayCandle.close,
+    });
 
     const virginCPR = stock.low > Math.max(todayCpr.tc, todayCpr.bc) || stock.high < Math.min(todayCpr.tc, todayCpr.bc);
     

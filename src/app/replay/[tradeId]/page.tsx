@@ -52,10 +52,18 @@ export default function ReplayPage() {
     }
 
     // Overlays
-    series.createPriceLine({ price: 102, color: '#3b82f6', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Entry' });
-    series.createPriceLine({ price: 95, color: '#ef4444', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' });
-    series.createPriceLine({ price: 110, color: '#10b981', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Target' });
-    series.createPriceLine({ price: 106, color: '#f59e0b', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Exit' });
+    if (replayData.entryPrice) {
+      series.createPriceLine({ price: replayData.entryPrice, color: '#3b82f6', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Entry' });
+    }
+    if (replayData.stopLoss) {
+      series.createPriceLine({ price: replayData.stopLoss, color: '#ef4444', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'SL' });
+    }
+    if (replayData.target) {
+      series.createPriceLine({ price: replayData.target, color: '#10b981', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Target' });
+    }
+    if (replayData.exitPrice) {
+      series.createPriceLine({ price: replayData.exitPrice, color: '#f59e0b', lineWidth: 2, lineStyle: 2, axisLabelVisible: true, title: 'Exit' });
+    }
 
     const handleResize = () => {
       if (chartContainerRef.current) newChart.applyOptions({ width: chartContainerRef.current.clientWidth });
@@ -153,10 +161,30 @@ export default function ReplayPage() {
         >
           <h3 className="font-semibold mb-4 text-cyan-400">Execution Parameters</h3>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><span className="block text-muted-foreground">Risk Amount</span><span className="font-medium">$1,000</span></div>
-            <div><span className="block text-muted-foreground">Position Size</span><span className="font-medium">250 Qty</span></div>
-            <div><span className="block text-muted-foreground">Stop Loss</span><span className="font-medium text-red-400">95.00</span></div>
-            <div><span className="block text-muted-foreground">Target</span><span className="font-medium text-green-400">110.00</span></div>
+            <div>
+              <span className="block text-muted-foreground">Risk Amount</span>
+              <span className="font-medium">
+                {replayData?.riskAmount != null ? `₹${Number(replayData.riskAmount).toLocaleString('en-IN')}` : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Position Size</span>
+              <span className="font-medium">
+                {replayData?.positionSize != null ? `${Number(replayData.positionSize).toFixed(0)} Qty` : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Stop Loss</span>
+              <span className="font-medium text-red-400">
+                {replayData?.stopLoss != null ? `₹${Number(replayData.stopLoss).toFixed(2)}` : '—'}
+              </span>
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Target</span>
+              <span className="font-medium text-green-400">
+                {replayData?.target != null ? `₹${Number(replayData.target).toFixed(2)}` : '—'}
+              </span>
+            </div>
           </div>
         </motion.div>
       </div>

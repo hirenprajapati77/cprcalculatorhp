@@ -24,11 +24,38 @@ export class SignalService {
     const signals: string[] = [];
     const ltp = stock.ltp;
     
+    // Differentiate yesterday's and today's daily candles robustly
+    const todayStr = new Date().toISOString().split('T')[0];
+    let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
+    let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
+
+    if (stock.history && stock.history.length > 0) {
+      const lastCandle = stock.history[stock.history.length - 1];
+      const isLastToday = lastCandle.date === todayStr;
+      
+      todayCandle = isLastToday ? lastCandle : {
+        high: stock.high,
+        low: stock.low,
+        close: stock.ltp
+      };
+      
+      yesterdayCandle = isLastToday 
+        ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
+        : lastCandle;
+    }
+
     // 1. Calculate Today's CPR using yesterday's OHLC
     const cprToday = calculateCPR({
-      high: stock.high,
-      low: stock.low,
-      close: stock.close,
+      high: yesterdayCandle.high,
+      low: yesterdayCandle.low,
+      close: yesterdayCandle.close,
+    });
+
+    // Calculate Tomorrow's CPR using today's OHLC
+    const cprTomorrow = calculateCPR({
+      high: todayCandle.high,
+      low: todayCandle.low,
+      close: todayCandle.close,
     });
 
     const tc = cprToday.tc;
@@ -42,44 +69,21 @@ export class SignalService {
     let lowerValue = false;
     let overlappingValue = false;
 
-    // We need at least 2 historical daily candles to compare today's CPR with yesterday's CPR
-    if (stock.history && stock.history.length >= 2) {
-      // history[length - 1] is yesterday's candle (used for today's CPR)
-      // history[length - 2] is the day before yesterday's candle (used for yesterday's CPR)
-      const prevCandle = stock.history[stock.history.length - 2];
-      const cprYesterday = calculateCPR({
-        high: prevCandle.high,
-        low: prevCandle.low,
-        close: prevCandle.close,
-      });
+    // Compare tomorrow's CPR to today's CPR
+    insideValue = cprTomorrow.bc >= cprToday.bc && cprTomorrow.tc <= cprToday.tc;
+    higherValue = cprTomorrow.bc > cprToday.bc && cprTomorrow.tc > cprToday.tc;
+    lowerValue = cprTomorrow.bc < cprToday.bc && cprTomorrow.tc < cprToday.tc;
+    overlappingValue = !insideValue && !higherValue && !lowerValue && 
+                       (cprTomorrow.bc <= cprToday.tc && cprTomorrow.tc >= cprToday.bc);
 
-      const tcYesterday = cprYesterday.tc;
-      const bcYesterday = cprYesterday.bc;
-
-      // Inside Value Relationship
-      insideValue = bc >= bcYesterday && tc <= tcYesterday;
-      
-      // Higher Value Relationship
-      higherValue = bc > bcYesterday && tc > tcYesterday;
-      
-      // Lower Value Relationship
-      lowerValue = bc < bcYesterday && tc < tcYesterday;
-      
-      // Overlapping Value Relationship
-      overlappingValue = !insideValue && !higherValue && !lowerValue && 
-                         (bc <= tcYesterday && tc >= bcYesterday);
-
-      if (insideValue) signals.push('INSIDE_VALUE');
-      if (higherValue) signals.push('HIGHER_VALUE');
-      if (lowerValue) signals.push('LOWER_VALUE');
-      if (overlappingValue) signals.push('OVERLAPPING_VALUE');
-    }
+    if (insideValue) signals.push('INSIDE_VALUE');
+    if (higherValue) signals.push('HIGHER_VALUE');
+    if (lowerValue) signals.push('LOWER_VALUE');
+    if (overlappingValue) signals.push('OVERLAPPING_VALUE');
 
     // 3. Virgin CPR Check
-    // If price during today's session did not cross the CPR levels (TC/BC range)
-    const todayMinPrice = Math.min(stock.open, ltp);
-    const todayMaxPrice = Math.max(stock.open, ltp);
-    const virginCPR = todayMinPrice > tc || todayMaxPrice < bc;
+    // If today's actual range (stock.low to stock.high) did not touch today's CPR range
+    const virginCPR = stock.low > Math.max(cprToday.tc, cprToday.bc) || stock.high < Math.min(cprToday.tc, cprToday.bc);
     if (virginCPR) {
       signals.push('VIRGIN');
     }

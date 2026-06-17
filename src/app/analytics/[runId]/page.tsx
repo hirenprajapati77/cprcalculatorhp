@@ -60,10 +60,10 @@ export default function AnalyticsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Win Rate', value: metrics?.winRate !== undefined && metrics?.winRate !== null ? `${metrics.winRate}%` : '—' },
-          { label: 'Profit Factor', value: metrics?.profitFactor !== undefined && metrics?.profitFactor !== null ? metrics.profitFactor : '—' },
-          { label: 'Max Drawdown', value: metrics?.maxDrawdown !== undefined && metrics?.maxDrawdown !== null ? `${metrics.maxDrawdown}%` : '—' },
-          { label: 'Expectancy', value: metrics?.expectancy !== undefined && metrics?.expectancy !== null ? metrics.expectancy : '—' }
+          { label: 'Win Rate', value: metrics?.winRate != null ? `${Number(metrics.winRate).toFixed(2)}%` : '—' },
+          { label: 'Profit Factor', value: metrics?.profitFactor != null ? Number(metrics.profitFactor).toFixed(2) : '—' },
+          { label: 'Max Drawdown', value: metrics?.maxDrawdown != null ? `${Number(metrics.maxDrawdown).toFixed(2)}%` : '—' },
+          { label: 'Expectancy', value: metrics?.expectancy != null ? Number(metrics.expectancy).toFixed(2) : '—' }
         ].map((kpi, i) => (
           <motion.div 
             key={kpi.label}

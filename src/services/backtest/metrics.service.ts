@@ -7,6 +7,9 @@ export class MetricsService {
    * Calculate BacktestMetrics from Trade table
    */
   static async calculateAndStoreMetrics(runId: string) {
+    const run = await prisma.backtestRun.findUnique({
+      where: { id: runId }
+    });
     const trades = await prisma.trade.findMany({
       where: { backtestRunId: runId }
     });
@@ -20,7 +23,7 @@ export class MetricsService {
     let totalRR = 0;
     
     // For Drawdown calculation
-    let equity = 100000; // Starting proxy
+    let equity = run ? run.capital : 100000;
     let peak = equity;
     let maxDrawdown = 0;
 
