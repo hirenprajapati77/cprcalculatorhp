@@ -37,7 +37,7 @@ export class BacktestService {
     startDate: string;
     endDate: string;
     capital: number;
-    riskModel: string;
+    riskModel?: string;
     executionMode: string;
     metricsVersion?: number;
   }) {
@@ -60,7 +60,7 @@ export class BacktestService {
         startDate: new Date(config.startDate),
         endDate: new Date(config.endDate),
         capital: config.capital,
-        riskModel: config.riskModel,
+        riskModel: config.riskModel || 'Risk%',
         executionMode: config.executionMode,
         status: 'QUEUED',
         metricsVersion: config.metricsVersion || 1,
