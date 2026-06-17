@@ -51,7 +51,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
 
 test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async (t) => {
   await t.test('calculates correct trade setups for BULLISH bias', () => {
-    // Bullish: LTP > TC. Entry = TC, SL = BC, Target = R2
+    // BULLISH: LTP > TC. Entry = TC, SL = min(dayLow, entry×0.995), Target = entry + 2×slDist, RR = 1:2.0
     const mockStock: MarketStockData = {
       symbol: 'BULLSTOCK',
       market: 'NSE',
@@ -59,27 +59,31 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
       open: 100,
       high: 105,
       low: 95,
-      close: 101, // P = 100.33, BC = 100, TC = 100.67, R2 = P + (H - L) = 100.33 + 10 = 110.33
+      close: 101, // P = 100.33, BC = 100, TC = 100.67
       volume: 100000,
       avgVolume: 100000,
       marketCap: 50000,
-      ltp: 102, // Bullish
+      ltp: 102, // Bullish (ltp > TC)
     };
 
     const result = ScannerService.scanStock(mockStock);
 
+    // Entry = TC
     assert.strictEqual(result.entry, result.tc);
-    assert.strictEqual(result.sl, result.bc);
-    assert.strictEqual(result.target, result.r2);
-    
-    // Risk = Entry - SL = 100.67 - 100 = 0.67
-    // Reward = Target - Entry = 110.33 - 100.67 = 9.66
-    // RR Ratio = Reward / Risk = 9.66 / 0.67 = 14.4
-    assert.strictEqual(result.rr, '1:14.5');
+
+    // SL = min(dayLow=95, entry×0.995=100.67×0.995≈100.17) → dayLow=95 wins
+    assert.strictEqual(result.sl, 95);
+
+    // slDist = 100.67 - 95 = 5.67, target = 100.67 + 2×5.67 = 112.01
+    const expectedTarget = parseFloat((result.entry + (result.entry - result.sl) * 2).toFixed(10));
+    assert.ok(Math.abs(result.target - expectedTarget) < 0.01, `Target mismatch: got ${result.target}, expected ~${expectedTarget}`);
+
+    // RR is always 1:2.0
+    assert.strictEqual(result.rr, '1:2.0');
   });
 
   await t.test('calculates correct trade setups for BEARISH bias', () => {
-    // Bearish: LTP < BC. Entry = BC, SL = TC, Target = S2
+    // BEARISH: LTP < BC. Entry = BC, SL = max(dayHigh, entry×1.005), Target = entry - 2×slDist, RR = 1:2.0
     const mockStock: MarketStockData = {
       symbol: 'BEARSTOCK',
       market: 'NSE',
@@ -87,23 +91,27 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
       open: 100,
       high: 105,
       low: 95,
-      close: 101, // P = 100.33, BC = 100, TC = 100.67, S2 = P - (H - L) = 100.33 - 10 = 90.33
+      close: 101, // P = 100.33, BC = 100, TC = 100.67
       volume: 100000,
       avgVolume: 100000,
       marketCap: 50000,
-      ltp: 98, // Bearish
+      ltp: 98, // Bearish (ltp < BC)
     };
 
     const result = ScannerService.scanStock(mockStock);
 
+    // Entry = BC
     assert.strictEqual(result.entry, result.bc);
-    assert.strictEqual(result.sl, result.tc);
-    assert.strictEqual(result.target, result.s2);
-    
-    // Risk = SL - Entry = 100.67 - 100 = 0.67
-    // Reward = Entry - Target = 100 - 90.33 = 9.67
-    // RR Ratio = Reward / Risk = 9.67 / 0.67 = 14.4
-    assert.strictEqual(result.rr, '1:14.5');
+
+    // SL = max(dayHigh=105, entry×1.005=100×1.005=100.5) → dayHigh=105 wins
+    assert.strictEqual(result.sl, 105);
+
+    // slDist = 105 - 100 = 5, target = 100 - 2×5 = 90
+    const expectedTarget = parseFloat((result.entry - (result.sl - result.entry) * 2).toFixed(10));
+    assert.ok(Math.abs(result.target - expectedTarget) < 0.01, `Target mismatch: got ${result.target}, expected ~${expectedTarget}`);
+
+    // RR is always 1:2.0
+    assert.strictEqual(result.rr, '1:2.0');
   });
 });
 

@@ -73,49 +73,49 @@ export class ScannerService {
     };
     const score = RankingService.calculateScore(tempResult);
 
-    // 4. Trade Setup (Entry, SL, Target, RR) & Confidence Calculations
+    // 4. Trade Setup V3 — Entry, SL, Target, RR
+    // SL is anchored to day's price range (min 0.5% buffer from entry).
+    // Target is always RR 1:2 from actual SL distance — honest and consistent.
     let entry = 0;
     let sl = 0;
     let target = 0;
-    let rrRatio = 1.0;
-    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
 
-    if (ltp > tc) {
-      bias = 'BULLISH';
-    } else if (ltp < bc) {
-      bias = 'BEARISH';
-    }
+    // Determine bias from LTP vs CPR band
+    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
+    if (ltp > tc) bias = 'BULLISH';
+    else if (ltp < bc) bias = 'BEARISH';
 
     if (bias === 'BULLISH') {
+      // LONG SETUP: entry at tomorrow TC
       entry = tc;
-      sl = bc;
-      target = cpr.r2; // Target range ceiling R2
-      const risk = entry - sl;
-      const reward = target - entry;
-      rrRatio = risk > 0 ? reward / risk : 1.0;
+      // SL = day low OR minimum 0.5% below entry (whichever is lower)
+      const dayLowSL = stock.low;
+      const minSL = entry * 0.995;
+      sl = Math.min(dayLowSL, minSL);
+      // Target = RR 1:2 from actual SL distance
+      const slDistance = entry - sl;
+      target = entry + (slDistance * 2);
     } else if (bias === 'BEARISH') {
+      // SHORT SETUP: entry at tomorrow BC
       entry = bc;
-      sl = tc;
-      target = cpr.s2; // Target range ceiling S2
-      const risk = sl - entry;
-      const reward = entry - target;
-      rrRatio = risk > 0 ? reward / risk : 1.0;
+      // SL = day high OR minimum 0.5% above entry (whichever is higher)
+      const dayHighSL = stock.high;
+      const maxSL = entry * 1.005;
+      sl = Math.max(dayHighSL, maxSL);
+      // Target = RR 1:2 from actual SL distance
+      const slDistShort = sl - entry;
+      target = entry - (slDistShort * 2);
     } else {
-      // Rangebound mean reversion: entry at pivot, SL at extremes
+      // RANGE: entry at pivot, SL = 0.5% from entry, target = 2× SL distance
       entry = cpr.pivot;
-      if (ltp >= cpr.pivot) {
-        sl = cpr.s1;
-        target = cpr.r1;
-      } else {
-        sl = cpr.r1;
-        target = cpr.s1;
-      }
-      const risk = Math.abs(entry - sl);
-      const reward = Math.abs(target - entry);
-      rrRatio = risk > 0 ? reward / risk : 1.0;
+      const rangeSL = entry * 0.995;
+      sl = ltp >= cpr.pivot ? rangeSL : entry * 1.005;
+      const riskRange = Math.abs(entry - sl);
+      target = ltp >= cpr.pivot ? entry + (riskRange * 2) : entry - (riskRange * 2);
     }
 
-    const rr = `1:${rrRatio.toFixed(1)}`;
+    // RR is always 1:2.0 — clean, honest, consistent
+    const rr = '1:2.0';
 
     // 5. Confidence Score Calculation
     let confidence = score;
