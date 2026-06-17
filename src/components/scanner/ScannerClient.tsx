@@ -2644,7 +2644,7 @@ export default function ScannerClient() {
                       Notes are saved automatically in your browser localStorage with date-specific keys.
                     </div>
                   </div>
-                
+                )}
 
               </div>
 
