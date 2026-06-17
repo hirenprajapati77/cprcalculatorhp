@@ -690,10 +690,17 @@ export default function ScannerClient() {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes'>('overview');
-  const [drawerHistory, setDrawerHistory] = useState<any[]>([]);
+  const [drawerHistory, setDrawerHistory] = useState<{
+    date: string;
+    score: number;
+    tag?: string;
+    signalSummary?: string;
+    width?: number;
+    cprWidth?: number;
+  }[]>([]);
   const [isDrawerHistoryLoading, setIsDrawerHistoryLoading] = useState<boolean>(false);
   const [stockNotes, setStockNotes] = useState<string>('');
-  const [compareStocks, setCompareStocks] = useState<any[]>([]);
+  const [compareStocks, setCompareStocks] = useState<ScannedStock[]>([]);
   const [isCompareLoading, setIsCompareLoading] = useState<boolean>(false);
   const [compareError, setCompareError] = useState<string | null>(null);
   const [isNotesSaving, setIsNotesSaving] = useState<boolean>(false);

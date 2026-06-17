@@ -8,6 +8,11 @@ import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
 
+export interface MockOvernightStock extends MarketStockData {
+  longScoreOverride?: number;
+  shortScoreOverride?: number;
+}
+
 const prisma = new PrismaClient();
 
 
@@ -64,7 +69,7 @@ export class OvernightService {
    * Helper to determine signal state based on time.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
-    const { hour: hours, minute: minutes, totalMinutes } = this.getISTTime(time);
+    const { totalMinutes } = this.getISTTime(time);
 
     const startMinutes = 15 * 60 + 15; // 3:15 PM
     const activeMinutes = 15 * 60 + 20; // 3:20 PM
@@ -160,11 +165,11 @@ export class OvernightService {
           hasIntraday
         };
 
-      } catch (_err) {
+      } catch {
         return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
       }
     } else {
-      const { hour: hours, minute: minutes, totalMinutes } = OvernightService.getISTTime(currentTime);
+      const { totalMinutes } = OvernightService.getISTTime(currentTime);
 
       const startMinutes = 9 * 60 + 15;
       let elapsedCandles = Math.floor((totalMinutes - startMinutes) / 5);
@@ -248,7 +253,7 @@ export class OvernightService {
   static async discover(
     direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', 
     dateOverride?: Date,
-    mockStocks?: any[]
+    mockStocks?: MockOvernightStock[]
   ): Promise<OvernightSignal[]> {
     const currentTime = dateOverride || new Date();
     
@@ -285,13 +290,15 @@ export class OvernightService {
         const tomorrowCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.ltp });
         const intraday = await this.getIntradayData(fullStock, currentTime);
 
+        const mockStock = fullStock as MockOvernightStock;
+
         // -- Evaluate LONG --
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
           const elig = EntryManagerService.evaluateEligibility('LONG', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
-            const score = (fullStock as any).longScoreOverride !== undefined
-              ? (fullStock as any).longScoreOverride
+            const score = mockStock.longScoreOverride !== undefined
+              ? mockStock.longScoreOverride
               : BtstRankingService.calculateScore({
                   volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                   tomorrowCprWidth: tomorrowCpr.width, tomorrowBc: tomorrowCpr.bc, todayTc: todayCpr.tc,
@@ -311,8 +318,8 @@ export class OvernightService {
         if (direction === 'SHORT' || direction === 'BOTH') {
           const elig = EntryManagerService.evaluateEligibility('SHORT', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
-            const score = (fullStock as any).shortScoreOverride !== undefined
-              ? (fullStock as any).shortScoreOverride
+            const score = mockStock.shortScoreOverride !== undefined
+              ? mockStock.shortScoreOverride
               : StbtRankingService.calculateScore({
                   volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                   tomorrowCprWidth: tomorrowCpr.width, tomorrowTc: tomorrowCpr.tc, todayBc: todayCpr.bc,
