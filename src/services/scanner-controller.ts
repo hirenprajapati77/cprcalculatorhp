@@ -134,6 +134,10 @@ export class ScannerController {
               score: r.score,
               confidence: r.confidence,
               signalSummary: signalsStr,
+              entry: r.entry,
+              sl: r.sl,
+              target: r.target,
+              rr: r.rr,
             },
             create: {
               symbol: dbSymbol,
@@ -156,6 +160,10 @@ export class ScannerController {
               score: r.score,
               confidence: r.confidence,
               signalSummary: signalsStr,
+              entry: r.entry,
+              sl: r.sl,
+              target: r.target,
+              rr: r.rr,
             },
           });
 

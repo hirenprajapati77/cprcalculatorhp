@@ -146,34 +146,10 @@ export async function GET(request: NextRequest) {
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
     }
 
-    // 6. Join Metadata from MarketSnapshots — use V3 SL/Target logic (matches scanner.service.ts)
+    // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
     const formattedResults = results.map((r) => {
       const snap = matchingSnapshots.find(s => s.symbol === r.symbol);
       const cleanSymbol = r.symbol.split(':')[0];
-
-      // Determine bias
-      const bias = r.ltp > r.tc ? 'BULLISH' : r.ltp < r.bc ? 'BEARISH' : 'RANGE';
-      let entry = 0, sl = 0, target = 0;
-
-      if (bias === 'BULLISH') {
-        entry = r.tc;
-        const dayLowSL = snap ? snap.price * 0.98 : entry * 0.995; // approximate low from snapshot
-        const minSL = entry * 0.995;
-        sl = Math.min(dayLowSL, minSL);
-        target = entry + (entry - sl) * 2;
-      } else if (bias === 'BEARISH') {
-        entry = r.bc;
-        const dayHighSL = snap ? snap.price * 1.02 : entry * 1.005;
-        const maxSL = entry * 1.005;
-        sl = Math.max(dayHighSL, maxSL);
-        target = entry - (sl - entry) * 2;
-      } else {
-        entry = r.pivot;
-        const rangeSL = entry * 0.995;
-        sl = r.ltp >= r.pivot ? rangeSL : entry * 1.005;
-        const riskRange = Math.abs(entry - sl);
-        target = r.ltp >= r.pivot ? entry + riskRange * 2 : entry - riskRange * 2;
-      }
 
       return {
         ...r,
@@ -186,10 +162,10 @@ export async function GET(request: NextRequest) {
         marketCap: snap ? snap.marketCap : 50000,
         signals: r.signalSummary ? r.signalSummary.split(',') : [],
         volumeRatio: (snap && snap.avgVolume > 0) ? r.volume / snap.avgVolume : 1.0,
-        entry,
-        sl,
-        target,
-        rr: '1:2.0',
+        entry: r.entry,
+        sl: r.sl,
+        target: r.target,
+        rr: r.rr,
       };
     });
 

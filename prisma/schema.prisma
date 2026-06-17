@@ -55,6 +55,10 @@ model ScannerResult {
   score          Int // Combined signal score (0-100)
   confidence     Int      @default(50)
   signalSummary  String // Active signals comma-separated
+  entry          Float    @default(0)
+  sl             Float    @default(0)
+  target         Float    @default(0)
+  rr             String   @default("1:2.0")
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])
