@@ -690,9 +690,14 @@ export default function ScannerClient() {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes'>('overview');
-  const [drawerHistory, setDrawerHistory] = useState<{ date: string; ltp: number; width: number; score: number }[]>([]);
+  const [drawerHistory, setDrawerHistory] = useState<any[]>([]);
   const [isDrawerHistoryLoading, setIsDrawerHistoryLoading] = useState<boolean>(false);
   const [stockNotes, setStockNotes] = useState<string>('');
+  const [compareStocks, setCompareStocks] = useState<any[]>([]);
+  const [isCompareLoading, setIsCompareLoading] = useState<boolean>(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
+  const [isNotesSaving, setIsNotesSaving] = useState<boolean>(false);
+  const [showSavedIndicator, setShowSavedIndicator] = useState<boolean>(false);
 
   // List of all column definitions for Show/Hide Checklist
   const COLUMN_DEFS = [
@@ -811,15 +816,9 @@ export default function ScannerClient() {
         await fetch('/api/watchlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol }),
-        });
-        
-        // Also update pinned/notify configurations
-        await fetch('/api/watchlist', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             symbol,
+            starred: current.starred,
             pinned: current.pinned,
             notify: current.notify,
           }),
@@ -1135,38 +1134,123 @@ export default function ScannerClient() {
     }
     setPage(1);
   };
+  const getTodayISTString = () => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(new Date());
+    const yyyy = parts.find(p => p.type === 'year')?.value || '2026';
+    const mm = parts.find(p => p.type === 'month')?.value || '06';
+    const dd = parts.find(p => p.type === 'day')?.value || '17';
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
-  // Open Quick Analyze Drawer & Load notes/history
+  // Open Quick Analyze Drawer & Load notes/history (history lazy-loaded on tab open)
   const handleOpenDrawer = async (stock: ScannedStock) => {
     setDrawerStock(stock);
     setDrawerOpen(true);
     setDrawerTab('overview');
-    setIsDrawerHistoryLoading(true);
-
-    const savedNotes = localStorage.getItem(`cpr_stock_notes_${stock.symbol}`) || '';
-    setStockNotes(savedNotes);
-
-    try {
-      const res = await fetch(`/api/scanner/history?symbol=${stock.symbol}`);
-      if (res.ok) {
-        const data = await res.json();
-        setDrawerHistory(data.history || []);
-      }
-    } catch (err) {
-      console.error('Failed to load drawer history:', err);
-    } finally {
-      setIsDrawerHistoryLoading(false);
-    }
+    
+    // Clear old tab data
+    setDrawerHistory([]);
+    setCompareStocks([]);
+    setCompareError(null);
   };
 
-  // Save stock user notes
+  // Save stock user notes state
   const handleSaveNotes = (val: string) => {
     setStockNotes(val);
+  };
+
+  const handleClearNote = () => {
+    setStockNotes('');
     if (drawerStock) {
-      localStorage.setItem(`cpr_stock_notes_${drawerStock.symbol}`, val);
+      const dateStr = getTodayISTString();
+      const key = `cpr_notes_${drawerStock.symbol}_${dateStr}`;
+      localStorage.removeItem(key);
+      setShowSavedIndicator(true);
+      setTimeout(() => setShowSavedIndicator(false), 2000);
     }
   };
 
+  // Lazy load history, compare and notes on tab open
+  useEffect(() => {
+    if (!drawerStock || !drawerOpen) return;
+
+    if (drawerTab === 'history') {
+      setIsDrawerHistoryLoading(true);
+      fetch(`/api/scanner/history?symbol=${drawerStock.symbol}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to load history');
+          return res.json();
+        })
+        .then(data => {
+          setDrawerHistory(data.history || []);
+        })
+        .catch(err => {
+          console.error('Failed to load drawer history:', err);
+          setDrawerHistory([]);
+        })
+        .finally(() => {
+          setIsDrawerHistoryLoading(false);
+        });
+    }
+
+    if (drawerTab === 'compare') {
+      setIsCompareLoading(true);
+      setCompareError(null);
+      fetch('/api/scanner/top?limit=5')
+        .then(res => {
+          if (!res.ok) throw new Error('Compare data unavailable.');
+          return res.json();
+        })
+        .then(data => {
+          setCompareStocks(data.results || []);
+        })
+        .catch(err => {
+          console.error('Failed to load compare stocks:', err);
+          setCompareError('Compare data unavailable.');
+        })
+        .finally(() => {
+          setIsCompareLoading(false);
+        });
+    }
+
+    if (drawerTab === 'notes') {
+      const dateStr = getTodayISTString();
+      const key = `cpr_notes_${drawerStock.symbol}_${dateStr}`;
+      const saved = localStorage.getItem(key) || '';
+      setStockNotes(saved);
+      setShowSavedIndicator(false);
+      setIsNotesSaving(false);
+    }
+  }, [drawerTab, drawerStock, drawerOpen]);
+
+  // Debounced auto-save notes to localStorage
+  useEffect(() => {
+    if (!drawerStock || drawerOpen === false || drawerTab !== 'notes') return;
+
+    const dateStr = getTodayISTString();
+    const key = `cpr_notes_${drawerStock.symbol}_${dateStr}`;
+    const saved = localStorage.getItem(key) || '';
+
+    if (stockNotes === saved) return;
+
+    setIsNotesSaving(true);
+    const timeout = setTimeout(() => {
+      localStorage.setItem(key, stockNotes);
+      setIsNotesSaving(false);
+      setShowSavedIndicator(true);
+      const hideIndicator = setTimeout(() => {
+        setShowSavedIndicator(false);
+      }, 2000);
+      return () => clearTimeout(hideIndicator);
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [stockNotes, drawerStock, drawerTab, drawerOpen]);
   // Multi-stock compare selection (capped at 5)
   const handleToggleCompareCheckbox = (symbol: string) => {
     if (compareSymbols.includes(symbol)) {
@@ -2331,9 +2415,8 @@ export default function ScannerClient() {
 
                 {drawerTab === 'signals' && (
                   <div className="space-y-3 animate-fade-in">
-                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Active Signal Breakdown</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {drawerStock.signals.map(sig => (
+                    <span className="text-[9px] text-text-tertiary upperca                    <div className="flex flex-wrap gap-1.5">
+                      {(drawerStock.signals || []).map(sig => (
                         <span
                           key={sig}
                           className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getRatingColorClass(
@@ -2349,22 +2432,51 @@ export default function ScannerClient() {
                     <div className="border border-border-primary rounded p-3 text-[10px] space-y-2 text-text-secondary mt-2">
                       <span className="font-bold text-text-primary block uppercase">Signal Meaning</span>
                       <ul className="list-disc pl-4 space-y-1.5 leading-relaxed">
-                        {drawerStock.signals.includes('BREAKOUT') && <li><strong>Breakout:</strong> Heavy volume spike coinciding with a price break above TC. Extremely strong bullish indicator.</li>}
-                        {drawerStock.signals.includes('NARROW') && <li><strong>Narrow CPR:</strong> Width is under 0.3%, indicating major consolidation and imminent breakout.</li>}
-                        {drawerStock.signals.includes('BULLISH') && <li><strong>Bullish Bias:</strong> LTP is trading above yesterday&apos;s TC level.</li>}
-                        {drawerStock.signals.includes('BEARISH') && <li><strong>Bearish Bias:</strong> LTP is trading below yesterday&apos;s BC level.</li>}
-                        {drawerStock.signals.includes('INSIDE') && <li><strong>Inside CPR:</strong> Price is consolidating inside the BC-TC zone. Neutral range setup.</li>}
-                        {drawerStock.signals.includes('VIRGIN') && <li><strong>Virgin CPR:</strong> Today&apos;s candle does not touch the CPR channel. High likelihood of strong test tomorrow.</li>}
-                        {drawerStock.signals.includes('TREND_ALIGNMENT') && <li><strong>Trend Alignment:</strong> Price aligns powerfully with the dominant trend.</li>}
-                        {drawerStock.signals.includes('VIRGIN_CPR') && <li><strong>Virgin CPR (Confirmed):</strong> Unbroken CPR zone acting as a magnet.</li>}
+                        {(drawerStock.signals || []).map(sig => {
+                          const explMap: Record<string, string> = {
+                            HIGHER_VALUE: "Today CPR is above yesterday's CPR. Bullish value migration.",
+                            INSIDE_VALUE: "Today CPR overlaps yesterday. Consolidation, await breakout.",
+                            LOWER_VALUE: "Today CPR below yesterday's CPR. Bearish value migration.",
+                            BREAKOUT: "Heavy volume + price above TC. Strong bullish breakout.",
+                            NARROW: "CPR width < 0.3%. High probability trending day ahead.",
+                            VIRGIN: "CPR never tested. Strong magnet zone.",
+                            HOT_ZONE: "Price within 0.5% of CPR band. High-reaction zone.",
+                            VOLUME_SPIKE: "Volume > 2x average. Institutional activity.",
+                            BULLISH: "Bias based on price vs yesterday TC/BC level.",
+                            BEARISH: "Bias based on price vs yesterday TC/BC level."
+                          };
+                          const expl = explMap[sig];
+                          if (!expl) return null;
+                          return (
+                            <li key={sig}>
+                              <strong>{sig}:</strong> {expl}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   </div>
                 )}
 
-                {drawerTab === 'tradeSetup' && (
-                  <div className="space-y-4 animate-fade-in">
-                    {drawerStock.entry > 0 && (
+                {drawerTab === 'tradeSetup' && (() => {
+                  const direction = drawerStock.direction || (drawerStock.score >= 50 ? 'LONG' : 'SHORT');
+                  const calculatedEntry = direction === 'LONG' ? drawerStock.tc : drawerStock.bc;
+                  
+                  const calculatedSL = direction === 'LONG' 
+                    ? Math.min(calculatedEntry * 0.99, calculatedEntry * 0.995) 
+                    : Math.max(calculatedEntry * 1.01, calculatedEntry * 1.005);
+                  
+                  const calculatedTarget = direction === 'LONG'
+                    ? calculatedEntry + Math.abs(calculatedEntry - calculatedSL) * 2
+                    : calculatedEntry - Math.abs(calculatedEntry - calculatedSL) * 2;
+                  
+                  const entry = drawerStock.entry || calculatedEntry;
+                  const sl = drawerStock.sl || calculatedSL;
+                  const target = drawerStock.target || calculatedTarget;
+                  const rr = '1:2.0';
+
+                  return (
+                    <div className="space-y-4 animate-fade-in">
                       <div className="bg-bg-primary/30 border border-border-primary rounded p-4 space-y-3">
                         <span className="font-semibold text-text-primary flex items-center gap-1.5 text-[11px] uppercase border-b border-border-primary pb-2">
                           <Sparkles size={13} className="text-accent-amber" />
@@ -2373,80 +2485,96 @@ export default function ScannerClient() {
                         <div className="grid grid-cols-2 gap-3 text-xs">
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Entry Threshold</span>
-                            <span className="font-bold text-text-primary text-sm">₹{fmt(drawerStock.entry)}</span>
+                            <span className="font-bold text-text-primary text-sm">₹{fmt(entry)}</span>
                           </div>
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Target Objective</span>
-                            <span className="font-bold text-accent-green text-sm">₹{fmt(drawerStock.target)}</span>
+                            <span className="font-bold text-accent-green text-sm">₹{fmt(target)}</span>
                           </div>
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Stop Loss</span>
-                            <span className="font-bold text-accent-red text-sm">₹{fmt(drawerStock.sl)}</span>
+                            <span className="font-bold text-accent-red text-sm">₹{fmt(sl)}</span>
                           </div>
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Risk Reward Ratio</span>
-                            <span className="font-bold text-accent-blue text-sm">{drawerStock.rr}</span>
+                            <span className="font-bold text-accent-blue text-sm">{rr}</span>
                           </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className="border border-border-primary rounded p-3 text-[10px] text-text-secondary leading-relaxed">
-                      <span className="font-bold text-text-primary block uppercase mb-1">Trading Strategy Guide</span>
-                      {drawerStock.score >= 70 ? (
-                        <p className="text-accent-green bg-accent-green/5 p-2 rounded">
-                          ★ <strong>Bullish Strategy:</strong> Consider buying near support or at the Entry threshold of ₹{fmt(drawerStock.entry)}. Hold for target objective ₹{fmt(drawerStock.target)}, and cut loss strictly if price sustains below stop loss ₹{fmt(drawerStock.sl)}.
-                        </p>
-                      ) : drawerStock.score < 20 ? (
-                        <p className="text-accent-red bg-accent-red/5 p-2 rounded">
-                          ▼ <strong>Bearish Strategy:</strong> Consider selling rallies near resistance or at the Entry boundary ₹{fmt(drawerStock.entry)}. Hold for target objective ₹{fmt(drawerStock.target)}, maintaining stop loss strictly at ₹{fmt(drawerStock.sl)}.
-                        </p>
-                      ) : (
-                        <p className="text-accent-amber bg-accent-amber/5 p-2 rounded">
-                          ⧉ <strong>Rangebound Strategy:</strong> Clustered consolidations favor fading range extremes. Buy near S1 and sell near R1. Avoid chasing breakout momentum unless volume spikes heavily.
-                        </p>
-                      )}
-                    </div>
+                      <div className="border border-border-primary rounded p-3 text-[10px] text-text-secondary leading-relaxed">
+                        <span className="font-bold text-text-primary block uppercase mb-1">Trading Strategy Guide</span>
+                        {direction === 'LONG' ? (
+                          <p className="text-accent-green bg-accent-green/5 p-2 rounded">
+                            ★ <strong>Bullish Strategy:</strong> Consider buying near TC at ₹{fmt(entry)}. Hold for ₹{fmt(target)}. Exit if below ₹{fmt(sl)}.
+                          </p>
+                        ) : (
+                          <p className="text-accent-red bg-accent-red/5 p-2 rounded">
+                            ▼ <strong>Bearish Strategy:</strong> Consider shorting near BC at ₹{fmt(entry)}. Cover at ₹{fmt(target)}. Exit if above ₹{fmt(sl)}.
+                          </p>
+                        )}
+                      </div>
 
-                    <div className="space-y-1 mt-2">
-                      <span className="text-[9px] text-text-tertiary uppercase tracking-wider block mb-1">CPR Band Level Chart</span>
-                      <LevelChart record={{ ...drawerStock, trend: 'Trending' }} />
+                      <div className="space-y-1 mt-2">
+                        <span className="text-[9px] text-text-tertiary uppercase tracking-wider block mb-1">CPR Band Level Chart</span>
+                        <LevelChart record={{ ...drawerStock, trend: 'Trending' }} />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {drawerTab === 'compare' && (
                   <div className="space-y-3 animate-fade-in">
                     <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">
-                      Sector Peer Group Comparison ({drawerStock.sector})
+                      Top 5 Active Scanner Opportunities Comparison
                     </span>
-                    {results.filter(r => r.sector === drawerStock.sector && r.symbol !== drawerStock.symbol).length === 0 ? (
-                      <div className="text-center py-5 text-text-tertiary text-xs">
-                        No other stocks found in this sector.
-                      </div>
+                    {isCompareLoading ? (
+                      <div className="text-center py-5 text-text-secondary text-xs">Loading comparison...</div>
+                    ) : compareError ? (
+                      <div className="text-center py-5 text-accent-red text-xs">{compareError}</div>
+                    ) : compareStocks.length === 0 ? (
+                      <div className="text-center py-5 text-text-tertiary text-xs">Compare data unavailable.</div>
                     ) : (
                       <div className="border border-border-primary rounded overflow-hidden">
                         <table className="w-full text-left border-collapse text-[10px]">
                           <thead>
                             <tr className="bg-bg-primary/50 text-text-secondary uppercase border-b border-border-primary">
-                              <th className="p-2">Peer Ticker</th>
-                              <th className="p-2">LTP</th>
-                              <th className="p-2">CPR Classification</th>
-                              <th className="p-2 text-right">Score</th>
+                              <th className="p-2">Symbol</th>
+                              <th className="p-2">Score</th>
+                              <th className="p-2">Width%</th>
+                              <th className="p-2">Bias</th>
+                              <th className="p-2 text-right">RR</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border-primary/30">
-                            {results
-                              .filter(r => r.sector === drawerStock.sector && r.symbol !== drawerStock.symbol)
-                              .slice(0, 5)
-                              .map((peer) => (
-                                <tr key={peer.symbol} className="hover:bg-bg-tertiary/10">
-                                  <td className="p-2 font-bold text-text-primary">{peer.symbol}</td>
-                                  <td className="p-2 text-text-secondary">₹{fmt(peer.ltp)}</td>
-                                  <td className="p-2 text-text-secondary">{peer.classification}</td>
-                                  <td className="p-2 text-right font-bold text-accent-blue">{peer.score}</td>
-                                </tr>
-                              ))}
+                            {(() => {
+                              const listToRender = [...compareStocks];
+                              const hasCurrent = listToRender.some(s => s.symbol === drawerStock.symbol);
+                              if (!hasCurrent) {
+                                listToRender.unshift(drawerStock);
+                              }
+                              
+                              return listToRender.slice(0, 6).map((stock) => {
+                                const isCurrent = stock.symbol === drawerStock.symbol;
+                                const direction = stock.direction || (stock.score >= 50 ? 'LONG' : 'SHORT');
+                                const bias = direction === 'LONG' ? 'BULLISH' : 'BEARISH';
+                                return (
+                                  <tr 
+                                    key={stock.symbol} 
+                                    className={`hover:bg-bg-tertiary/10 transition-colors ${isCurrent ? 'bg-accent-blue/10 font-bold border-l-2 border-accent-blue' : ''}`}
+                                  >
+                                    <td className="p-2 text-text-primary uppercase flex items-center gap-1">
+                                      {stock.symbol}
+                                      {isCurrent && <span className="text-[8px] bg-accent-blue/20 text-accent-blue px-1 rounded uppercase">Current</span>}
+                                    </td>
+                                    <td className="p-2 text-text-secondary">{stock.score}</td>
+                                    <td className="p-2 text-text-secondary">{(stock.width || 0).toFixed(3)}%</td>
+                                    <td className={`p-2 font-bold ${bias === 'BULLISH' ? 'text-accent-green' : 'text-accent-red'}`}>{bias}</td>
+                                    <td className="p-2 text-right text-text-secondary">{stock.rr || '1:2.0'}</td>
+                                  </tr>
+                                );
+                              });
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -2456,29 +2584,31 @@ export default function ScannerClient() {
 
                 {drawerTab === 'history' && (
                   <div className="space-y-2 animate-fade-in">
-                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Historical Scans (Last 5 Sessions)</span>
+                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Historical Scans (Last 10 Sessions)</span>
                     {isDrawerHistoryLoading ? (
                       <div className="text-center py-5 text-text-secondary text-xs">Loading history...</div>
                     ) : drawerHistory.length === 0 ? (
-                      <div className="text-center py-5 text-text-tertiary text-xs">No scan history recorded.</div>
+                      <div className="text-center py-5 text-text-tertiary text-xs">No scan history yet for this symbol.</div>
                     ) : (
                       <div className="border border-border-primary rounded overflow-hidden">
                         <table className="w-full text-left border-collapse text-[10px]">
                           <thead>
                             <tr className="bg-bg-primary/50 text-text-secondary uppercase border-b border-border-primary">
                               <th className="p-2">Date</th>
-                              <th className="p-2">LTP</th>
-                              <th className="p-2">CPR Width %</th>
-                              <th className="p-2 text-right">Score</th>
+                              <th className="p-2">Score</th>
+                              <th className="p-2">Tag</th>
+                              <th className="p-2">Signals</th>
+                              <th className="p-2 text-right">Width%</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border-primary/30">
-                            {drawerHistory.slice(0, 5).map((h, i) => (
+                            {drawerHistory.slice(0, 10).map((h, i) => (
                               <tr key={i} className="hover:bg-bg-tertiary/10">
                                 <td className="p-2 text-text-secondary">{h.date}</td>
-                                <td className="p-2 text-text-primary font-semibold">₹{fmt(h.ltp)}</td>
-                                <td className="p-2 text-text-secondary">{h.width.toFixed(3)}%</td>
-                                <td className="p-2 text-right font-bold text-accent-blue">{h.score}</td>
+                                <td className="p-2 font-bold text-accent-blue">{h.score}</td>
+                                <td className="p-2 text-text-primary uppercase">{h.tag || 'N/A'}</td>
+                                <td className="p-2 text-text-secondary">{h.signalSummary || 'None'}</td>
+                                <td className="p-2 text-right text-text-secondary">{(h.width || h.cprWidth || 0).toFixed(3)}%</td>
                               </tr>
                             ))}
                           </tbody>
@@ -2490,7 +2620,19 @@ export default function ScannerClient() {
 
                 {drawerTab === 'notes' && (
                   <div className="space-y-3 animate-fade-in">
-                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Stock Notes (Local Persistence)</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Stock Notes (Local Persistence)</span>
+                      <div className="flex items-center gap-2 font-mono">
+                        {isNotesSaving && <span className="text-[10px] text-text-secondary">Saving...</span>}
+                        {showSavedIndicator && <span className="text-[10px] text-accent-green font-bold">Saved ✓</span>}
+                        <button
+                          onClick={handleClearNote}
+                          className="text-[10px] text-accent-red hover:underline font-bold uppercase transition-all"
+                        >
+                          Clear Note
+                        </button>
+                      </div>
+                    </div>
                     <textarea
                       placeholder="Type your notes or analysis about this stock here (e.g. Breakout target raised, quarterly results positive)..."
                       value={stockNotes}
@@ -2498,10 +2640,10 @@ export default function ScannerClient() {
                       className="w-full h-36 bg-bg-primary border border-border-secondary rounded p-3 text-text-primary text-xs focus:outline-none focus:border-accent-blue font-mono resize-none"
                     />
                     <div className="text-[9px] text-text-tertiary italic">
-                      Notes are saved automatically in your browser localStorage.
+                      Notes are saved automatically in your browser localStorage with date-specific keys.
                     </div>
                   </div>
-                )}
+                
 
               </div>
 

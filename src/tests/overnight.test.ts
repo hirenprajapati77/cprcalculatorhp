@@ -1,78 +1,81 @@
-import { describe, test, mock } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { OvernightService } from '../services/overnight/overnight.service';
-import { MarketService } from '../services/market.service';
 
 describe('Overnight Engine Tests', () => {
-  test('should discover LONG setups correctly', async () => {
-    mock.method(MarketService, 'getUniverse', () => [{ symbol: 'RELIANCE' }]);
-    mock.method(MarketService, 'getStockData', async () => ({
+  const testTime = new Date('2026-06-17T15:20:00+05:30'); // 15:20 IST (within market hours)
+
+  test('Case 1: longScore=85, shortScore=40 -> tag LONG', async () => {
+    const mockStock = {
       symbol: 'RELIANCE',
-      ltp: 2500, // Fixed 'price' to 'ltp' based on typical MarketStockData
-      open: 2480,
-      close: 2510,
-      high: 2520,
-      low: 2470,
+      market: 'NSE' as const,
+      sector: 'Energy',
+      open: 2500,
+      high: 2550,
+      low: 2490,
+      close: 2540,
       volume: 1000000,
       avgVolume: 800000,
       marketCap: 1500000,
-      vwap: 2495,
-      rsi: 60,
-      sector: 'Energy',
-      date: new Date().toISOString(),
+      ltp: 2540,
+      longScoreOverride: 85,
+      shortScoreOverride: 40,
       history: []
-    }));
+    };
 
-    const signals = await OvernightService.discover('LONG');
-    assert.ok(signals !== undefined);
-    mock.restoreAll();
+    const signals = await OvernightService.discover('BOTH', testTime, [mockStock]);
+    assert.strictEqual(signals.length, 1);
+    assert.strictEqual(signals[0].symbol, 'RELIANCE');
+    assert.strictEqual(signals[0].direction, 'LONG');
+    assert.strictEqual(signals[0].overnightScore, 85);
   });
 
-  test('should discover SHORT setups correctly', async () => {
-    mock.method(MarketService, 'getUniverse', () => [{ symbol: 'HDFC' }]);
-    mock.method(MarketService, 'getStockData', async () => ({
-      symbol: 'HDFC',
-      ltp: 1500,
-      open: 1520,
-      close: 1480,
-      high: 1530,
-      low: 1470,
-      volume: 1500000,
-      avgVolume: 1000000,
-      marketCap: 800000,
-      vwap: 1505,
-      rsi: 30,
-      sector: 'Financial Services',
-      date: new Date().toISOString(),
-      history: []
-    }));
-
-    const signals = await OvernightService.discover('SHORT');
-    assert.ok(signals !== undefined);
-    mock.restoreAll();
-  });
-
-  test('should resolve conflicts in BOTH mode', async () => {
-    mock.method(MarketService, 'getUniverse', () => [{ symbol: 'TCS' }]);
-    mock.method(MarketService, 'getStockData', async () => ({
+  test('Case 2: longScore=40, shortScore=82 -> tag SHORT', async () => {
+    const mockStock = {
       symbol: 'TCS',
-      ltp: 3500,
-      open: 3510,
-      close: 3500,
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 3500,
       high: 3520,
-      low: 3490,
+      low: 3450,
+      close: 3460,
       volume: 500000,
       avgVolume: 400000,
       marketCap: 1200000,
-      vwap: 3505,
-      rsi: 50,
-      sector: 'IT',
-      date: new Date().toISOString(),
+      ltp: 3460,
+      longScoreOverride: 40,
+      shortScoreOverride: 82,
       history: []
-    }));
+    };
 
-    const signals = await OvernightService.discover('BOTH');
-    assert.ok(signals !== undefined);
-    mock.restoreAll();
+    const signals = await OvernightService.discover('BOTH', testTime, [mockStock]);
+    assert.strictEqual(signals.length, 1);
+    assert.strictEqual(signals[0].symbol, 'TCS');
+    assert.strictEqual(signals[0].direction, 'SHORT');
+    assert.strictEqual(signals[0].overnightScore, 82);
+  });
+
+  test('Case 3: longScore=75, shortScore=72 -> NEUTRAL_CONFLICT', async () => {
+    const mockStock = {
+      symbol: 'INFY',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 1500,
+      high: 1520,
+      low: 1480,
+      close: 1510,
+      volume: 1200000,
+      avgVolume: 1000000,
+      marketCap: 600000,
+      ltp: 1510,
+      longScoreOverride: 75,
+      shortScoreOverride: 72,
+      history: []
+    };
+
+    const signals = await OvernightService.discover('BOTH', testTime, [mockStock]);
+    assert.strictEqual(signals.length, 1);
+    assert.strictEqual(signals[0].symbol, 'INFY');
+    assert.strictEqual(signals[0].classification, 'NEUTRAL_CONFLICT');
   });
 });

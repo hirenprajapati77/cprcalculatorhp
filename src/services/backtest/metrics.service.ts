@@ -65,6 +65,39 @@ export class MetricsService {
     const avgRR = totalTrades > 0 ? totalRR / totalTrades : 0;
     const expectancy = (winRate / 100 * (grossProfit / winningTrades)) - ((1 - winRate / 100) * (grossLoss / (totalTrades - winningTrades || 1)));
     
+    const RISK_FREE_DAILY = 0.065 / 252;
+    const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.exitPrice !== null && t.exitPrice !== undefined);
+    const dailyReturns = closedTrades.map(t => 
+      ((t.exitPrice as number) - t.entryPrice) / t.entryPrice
+    );
+
+    const avgReturn = dailyReturns.reduce(
+      (a, b) => a + b, 0
+    ) / (dailyReturns.length || 1);
+
+    const variance = dailyReturns.reduce(
+      (sum, r) => sum + Math.pow(r - avgReturn, 2), 0
+    ) / (dailyReturns.length || 1);
+    const stdDev = Math.sqrt(variance);
+
+    const sharpe = stdDev > 0 
+      ? (avgReturn - RISK_FREE_DAILY) / stdDev 
+      : 0;
+
+    const downsideReturns = dailyReturns.filter(
+      r => r < RISK_FREE_DAILY
+    );
+    const downsideVariance = downsideReturns.reduce(
+      (sum, r) => sum + Math.pow(r - RISK_FREE_DAILY, 2), 0
+    ) / (downsideReturns.length || 1);
+    const downsideDev = Math.sqrt(downsideVariance);
+    const sortino = downsideDev > 0 
+      ? (avgReturn - RISK_FREE_DAILY) / downsideDev 
+      : 0;
+
+    const roundedSharpe = Math.round(sharpe * 100) / 100;
+    const roundedSortino = Math.round(sortino * 100) / 100;
+
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
       data: {
@@ -73,8 +106,8 @@ export class MetricsService {
         profitFactor,
         expectancy: isNaN(expectancy) ? 0 : expectancy,
         maxDrawdown,
-        sharpe: 0, // Placeholder
-        sortino: 0, // Placeholder
+        sharpe: roundedSharpe,
+        sortino: roundedSortino,
         avgRR
       }
     });

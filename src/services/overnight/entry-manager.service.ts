@@ -2,7 +2,7 @@ import { MarketStockData } from '../market.service';
 
 export interface ExclusionCheckResult {
   eligible: boolean;
-  reason?: string;
+  reason?: string | null;
 }
 
 export class EntryManagerService {
@@ -22,6 +22,10 @@ export class EntryManagerService {
       return { eligible: false, reason: 'No intraday data' };
     }
 
-    return { eligible: true };
+    if (!stock || !stock.high || !stock.low) {
+      return { eligible: false, reason: 'Insufficient market data' };
+    }
+
+    return { eligible: true, reason: null };
   }
 }

@@ -44,17 +44,27 @@ export interface OvernightIntradayMetrics {
 }
 
 export class OvernightService {
+  static getISTTime(date: Date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    }).formatToParts(date);
+    const hour = parseInt(
+      parts.find(p => p.type === 'hour')?.value || '0', 10
+    );
+    const minute = parseInt(
+      parts.find(p => p.type === 'minute')?.value || '0', 10
+    );
+    return { hour, minute, totalMinutes: hour * 60 + minute };
+  }
+
   /**
    * Helper to determine signal state based on time.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
-    const istParts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata', hour12: false,
-      hour: 'numeric', minute: 'numeric'
-    }).formatToParts(time);
-    const hours = parseInt(istParts.find(p => p.type === 'hour')?.value || '0', 10);
-    const minutes = parseInt(istParts.find(p => p.type === 'minute')?.value || '0', 10);
-    const totalMinutes = hours * 60 + minutes;
+    const { hour: hours, minute: minutes, totalMinutes } = this.getISTTime(time);
 
     const startMinutes = 15 * 60 + 15; // 3:15 PM
     const activeMinutes = 15 * 60 + 20; // 3:20 PM
@@ -154,9 +164,7 @@ export class OvernightService {
         return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
       }
     } else {
-      const hours = currentTime.getHours();
-      const minutes = currentTime.getMinutes();
-      const totalMinutes = hours * 60 + minutes;
+      const { hour: hours, minute: minutes, totalMinutes } = OvernightService.getISTTime(currentTime);
 
       const startMinutes = 9 * 60 + 15;
       let elapsedCandles = Math.floor((totalMinutes - startMinutes) / 5);
@@ -237,18 +245,40 @@ export class OvernightService {
   /**
    * Main scan task to discover Overnight setups.
    */
-  static async discover(direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', dateOverride?: Date): Promise<OvernightSignal[]> {
+  static async discover(
+    direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', 
+    dateOverride?: Date,
+    mockStocks?: any[]
+  ): Promise<OvernightSignal[]> {
     const currentTime = dateOverride || new Date();
-    const dateStr = currentTime.toISOString().split('T')[0];
-    const timeStr = currentTime.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+    
+    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const dateStr = dateFormatter.format(currentTime); // "YYYY-MM-DD"
+    
+    const timeFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const timeStr = timeFormatter.format(currentTime); // "HH:MM"
 
     const state = this.determineState(currentTime);
-    const universeStocks = MarketService.getUniverse('NSE_FNO');
+    const universeStocks = mockStocks 
+      ? mockStocks.map(s => ({ symbol: s.symbol })) 
+      : MarketService.getUniverse('NSE_FNO');
     const signalsToSave: Prisma.OvernightSignalCreateInput[] = [];
 
     for (const stock of universeStocks) {
       try {
-        const fullStock = await MarketService.getStockData(stock.symbol);
+        const fullStock = mockStocks
+          ? mockStocks.find(s => s.symbol === stock.symbol)
+          : await MarketService.getStockData(stock.symbol);
         if (!fullStock) continue;
 
         const todayCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.close });
@@ -260,13 +290,15 @@ export class OvernightService {
         if (direction === 'LONG' || direction === 'BOTH') {
           const elig = EntryManagerService.evaluateEligibility('LONG', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
-            const score = BtstRankingService.calculateScore({
-              volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-              tomorrowCprWidth: tomorrowCpr.width, tomorrowBc: tomorrowCpr.bc, todayTc: todayCpr.tc,
-              close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
-              vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
-              hasConfirmationCandles: intraday.hasIntraday
-            });
+            const score = (fullStock as any).longScoreOverride !== undefined
+              ? (fullStock as any).longScoreOverride
+              : BtstRankingService.calculateScore({
+                  volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                  tomorrowCprWidth: tomorrowCpr.width, tomorrowBc: tomorrowCpr.bc, todayTc: todayCpr.tc,
+                  close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
+                  vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
+                  hasConfirmationCandles: intraday.hasIntraday
+                });
             const cls = BtstRankingService.getClassification(score);
             const sl = Math.min(fullStock.low, tomorrowCpr.bc);
             const target = fullStock.ltp + Math.max((fullStock.ltp - sl) * 2.5, fullStock.ltp * 0.05);
@@ -279,13 +311,15 @@ export class OvernightService {
         if (direction === 'SHORT' || direction === 'BOTH') {
           const elig = EntryManagerService.evaluateEligibility('SHORT', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
-            const score = StbtRankingService.calculateScore({
-              volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-              tomorrowCprWidth: tomorrowCpr.width, tomorrowTc: tomorrowCpr.tc, todayBc: todayCpr.bc,
-              close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
-              vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
-              hasConfirmationCandles: intraday.hasIntraday
-            });
+            const score = (fullStock as any).shortScoreOverride !== undefined
+              ? (fullStock as any).shortScoreOverride
+              : StbtRankingService.calculateScore({
+                  volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                  tomorrowCprWidth: tomorrowCpr.width, tomorrowTc: tomorrowCpr.tc, todayBc: todayCpr.bc,
+                  close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
+                  vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
+                  hasConfirmationCandles: intraday.hasIntraday
+                });
             const cls = StbtRankingService.getClassification(score);
             const sl = Math.max(fullStock.high, tomorrowCpr.tc);
             const target = fullStock.ltp - Math.max((sl - fullStock.ltp) * 2.5, fullStock.ltp * 0.05);
@@ -299,17 +333,11 @@ export class OvernightService {
         let finalCls = 'IGNORE';
 
         if (longSig && shortSig) {
-          if (longSig.cls.includes('STRONG') && shortSig.cls.includes('STRONG')) {
-            const diff = Math.abs((longSig.score || 0) - (shortSig.score || 0));
-            if (diff < 10) {
-              finalCls = 'NEUTRAL_CONFLICT';
-              // Keep LONG by default for conflict record, but it's suppressed
-              finalDir = 'LONG';
-              finalSig = longSig;
-            } else {
-              if ((longSig.score || 0) > (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
-              else { finalDir = 'SHORT'; finalSig = shortSig; }
-            }
+          const diff = Math.abs((longSig.score || 0) - (shortSig.score || 0));
+          if (diff < 10) {
+            finalCls = 'NEUTRAL_CONFLICT';
+            finalDir = 'LONG';
+            finalSig = longSig;
           } else {
             if ((longSig.score || 0) > (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
             else { finalDir = 'SHORT'; finalSig = shortSig; }
@@ -321,7 +349,7 @@ export class OvernightService {
         }
 
         if (finalDir && finalSig) {
-          const gapMetrics = GapProbabilityService.calculateGapProbability(fullStock);
+          const gapMetrics = GapProbabilityService.calculateGapProbability(fullStock, finalDir);
           const conf = gapMetrics ? gapMetrics.gapConfidence : 50;
           const expGap = gapMetrics ? gapMetrics.expectedGap : 0;
           

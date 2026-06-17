@@ -98,15 +98,11 @@ export class BacktestService {
 
     await prisma.backtestRun.update({ where: { id: runId }, data: { status: 'RUNNING' } });
 
-    // Mock fetching universe
-    let symbols: string[] = [];
-    if (run.universe === 'NIFTY50') {
-      symbols = Array.from({length: 50}, (_, i) => `SYM${i+1}`); // Mock 50 symbols
-    } else if (run.universe === 'NSE_FNO') {
-      symbols = Array.from({length: 50}, (_, i) => `FNO${i+1}`); // Mock 50 F&O symbols
-    } else {
-      symbols = Array.from({length: 50}, (_, i) => `SYM${i+1}`); // Default fallback
-    }
+    // Fetch actual universe symbols using MarketService
+    const universeStocks = MarketService.getUniverse(
+      run.universe as 'NIFTY50' | 'NIFTY200' | 'NSE_FNO'
+    );
+    const symbols = universeStocks.map(s => s.symbol);
 
     const BATCH_SIZE = 50;
     const batches = Math.ceil(symbols.length / BATCH_SIZE);
