@@ -2415,7 +2415,8 @@ export default function ScannerClient() {
 
                 {drawerTab === 'signals' && (
                   <div className="space-y-3 animate-fade-in">
-                    <span className="text-[9px] text-text-tertiary upperca                    <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Active Signal Breakdown</span>
+                    <div className="flex flex-wrap gap-1.5">
                       {(drawerStock.signals || []).map(sig => (
                         <span
                           key={sig}
