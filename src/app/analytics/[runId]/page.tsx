@@ -44,10 +44,10 @@ export default function AnalyticsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Win Rate', value: `${metrics?.winRate}%` },
-          { label: 'Profit Factor', value: metrics?.profitFactor },
-          { label: 'Max Drawdown', value: `${metrics?.maxDrawdown}%` },
-          { label: 'Expectancy', value: metrics?.expectancy }
+          { label: 'Win Rate', value: metrics?.winRate !== undefined && metrics?.winRate !== null ? `${metrics.winRate}%` : '—' },
+          { label: 'Profit Factor', value: metrics?.profitFactor !== undefined && metrics?.profitFactor !== null ? metrics.profitFactor : '—' },
+          { label: 'Max Drawdown', value: metrics?.maxDrawdown !== undefined && metrics?.maxDrawdown !== null ? `${metrics.maxDrawdown}%` : '—' },
+          { label: 'Expectancy', value: metrics?.expectancy !== undefined && metrics?.expectancy !== null ? metrics.expectancy : '—' }
         ].map((kpi, i) => (
           <motion.div 
             key={kpi.label}
@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
             transition={{ delay: i * 0.1 }}
           >
             <span className="text-sm text-muted-foreground mb-1">{kpi.label}</span>
-            <span className="text-2xl font-bold text-foreground">{kpi.value ?? '—'}</span>
+            <span className="text-2xl font-bold text-foreground">{kpi.value}</span>
           </motion.div>
         ))}
       </div>

@@ -1,3 +1,5 @@
+import { CacheService } from './cache.service';
+
 export interface HistoricalCandle {
   date: string;
   open: number;
@@ -304,6 +306,10 @@ export class MarketService {
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
     const dataMode = process.env.MARKET_DATA_MODE || 'live';
+    const cacheKey = `stock_data_${symbol}_${market}_${dataMode}`;
+    const cached = await CacheService.get<MarketStockData>(cacheKey);
+    if (cached) return cached;
+
     const ticker = market === 'NSE' ? `${symbol}.NS` : `${symbol}.BO`;
 
     // Look up metadata — works for all 200+ F&O stocks
@@ -443,7 +449,7 @@ export class MarketService {
               // Fallback handled by initial vwap assignment
             }
 
-            return {
+            const resultData = {
               symbol,
               market,
               sector,
@@ -459,6 +465,8 @@ export class MarketService {
               vwap,
               candle15m
             };
+            await CacheService.set(cacheKey, resultData, 60);
+            return resultData;
           }
         }
 
@@ -530,7 +538,9 @@ export class MarketService {
       });
     }
 
-    return { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history };
+    const resultData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history };
+    await CacheService.set(cacheKey, resultData, 60);
+    return resultData;
   }
 }
 

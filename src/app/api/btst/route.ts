@@ -19,8 +19,19 @@ export async function GET(request: Request) {
     let totalShort = 0;
     let totalConflict = 0;
 
-    for (const stockMeta of stocks) {
-      const stock = await MarketService.getStockData(stockMeta.symbol);
+    const stockPromises = stocks.map(async (stockMeta) => {
+      try {
+        const stock = await MarketService.getStockData(stockMeta.symbol);
+        return { stockMeta, stock };
+      } catch (err) {
+        console.error(`Failed to fetch stock data for ${stockMeta.symbol}:`, err);
+        return { stockMeta, stock: null };
+      }
+    });
+
+    const stockResults = await Promise.all(stockPromises);
+
+    for (const { stock } of stockResults) {
       if (stock) {
         const result = BtstService.evaluateOvernight(stock);
         
