@@ -2617,17 +2617,29 @@ export default function ScannerClient() {
                   const calculatedEntry = direction === 'LONG' ? drawerStock.tc : drawerStock.bc;
                   
                   const calculatedSL = direction === 'LONG' 
-                    ? Math.min(calculatedEntry * 0.99, calculatedEntry * 0.995) 
-                    : Math.max(calculatedEntry * 1.01, calculatedEntry * 1.005);
+                    ? drawerStock.bc 
+                    : drawerStock.tc;
                   
-                  const calculatedTarget = direction === 'LONG'
-                    ? calculatedEntry + Math.abs(calculatedEntry - calculatedSL) * 2
-                    : calculatedEntry - Math.abs(calculatedEntry - calculatedSL) * 2;
+                  const riskCalc = Math.abs(calculatedEntry - calculatedSL);
+                  let calculatedTarget = 0;
+                  if (direction === 'LONG') {
+                    const rewardR1 = Math.abs((drawerStock.r1 || 0) - calculatedEntry);
+                    calculatedTarget = (riskCalc > 0 && rewardR1 / riskCalc >= 1.5) ? (drawerStock.r1 || 0) : (drawerStock.r2 || 0);
+                  } else {
+                    const rewardS1 = Math.abs(calculatedEntry - (drawerStock.s1 || 0));
+                    calculatedTarget = (riskCalc > 0 && rewardS1 / riskCalc >= 1.5) ? (drawerStock.s1 || 0) : (drawerStock.s2 || 0);
+                  }
                   
                   const entry = drawerStock.entry || calculatedEntry;
                   const sl = drawerStock.sl || calculatedSL;
                   const target = drawerStock.target || calculatedTarget;
-                  const rr = '1:2.0';
+                  
+                  let rr = drawerStock.rr;
+                  if (!rr) {
+                    const risk = Math.abs(entry - sl);
+                    const reward = Math.abs(target - entry);
+                    rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2.0';
+                  }
 
                   return (
                     <div className="space-y-4 animate-fade-in">
