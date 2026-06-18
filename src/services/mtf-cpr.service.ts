@@ -13,7 +13,7 @@ export interface MtfCprLevels {
 
 export class MtfCprService {
   static async getLevels(symbol: string): Promise<MtfCprLevels> {
-    const yfSymbol = symbol === 'NIFTY50' || symbol === 'NIFTY' ? '^NSEI' : \`\${symbol}.NS\`;
+    const yfSymbol = symbol === 'NIFTY50' || symbol === 'NIFTY' ? '^NSEI' : `${symbol}.NS`;
 
     // We fetch a bit of history to ensure we get the last completed week and month
     const endDate = new Date();

@@ -22,7 +22,7 @@ export class TelegramService {
       return;
     }
 
-    const url = \`https://api.telegram.org/bot\${token}/sendMessage\`;
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -57,10 +57,10 @@ export class TelegramService {
 
     const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' });
 
-    let text = \`🚨 <b>CPR PRO — BTST/STBT ALERT</b>\\n📅 \${dateStr} | ⏰ 15:20 IST\\n\\n\`;
+    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ 15:20 IST\n\n`;
 
-    text += \`🟢 <b>LONG SETUPS (\${longs.length})</b>\\n\`;
-    if (longs.length === 0) text += \`<i>None</i>\\n\`;
+    text += `🟢 <b>LONG SETUPS (${longs.length})</b>\n`;
+    if (longs.length === 0) text += `<i>None</i>\n`;
     longs.forEach(r => {
       const entry = r.tc.toFixed(2);
       const sl = r.bc.toFixed(2);
@@ -68,11 +68,11 @@ export class TelegramService {
       const target = (r.r1 && risk > 0 && Math.abs(r.r1 - r.tc) / risk >= 1.5) ? r.r1.toFixed(2) : (r.r2 ? r.r2.toFixed(2) : 'N/A');
       const rr = risk > 0 && target !== 'N/A' ? (Math.abs(parseFloat(target) - parseFloat(entry)) / risk).toFixed(2) : 'N/A';
       
-      text += \`• <b>\${r.symbol}</b> | Score: \${r.score}\\n  Entry: ₹\${entry} | SL: ₹\${sl} | Target: ₹\${target}\\n  RR: \${rr} | Signals: \${(r.signals || []).join(', ')}\\n\\n\`;
+      text += `• <b>${r.symbol}</b> | Score: ${r.score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
     });
 
-    text += \`🔴 <b>SHORT SETUPS (\${shorts.length})</b>\\n\`;
-    if (shorts.length === 0) text += \`<i>None</i>\\n\`;
+    text += `🔴 <b>SHORT SETUPS (${shorts.length})</b>\n`;
+    if (shorts.length === 0) text += `<i>None</i>\n`;
     shorts.forEach(r => {
       const entry = r.bc.toFixed(2);
       const sl = r.tc.toFixed(2);
@@ -80,11 +80,11 @@ export class TelegramService {
       const target = (r.s1 && risk > 0 && Math.abs(parseFloat(entry) - r.s1) / risk >= 1.5) ? r.s1.toFixed(2) : (r.s2 ? r.s2.toFixed(2) : 'N/A');
       const rr = risk > 0 && target !== 'N/A' ? (Math.abs(parseFloat(entry) - parseFloat(target)) / risk).toFixed(2) : 'N/A';
       
-      text += \`• <b>\${r.symbol}</b> | Score: \${r.score}\\n  Entry: ₹\${entry} | SL: ₹\${sl} | Target: ₹\${target}\\n  RR: \${rr}\\n\\n\`;
+      text += `• <b>${r.symbol}</b> | Score: ${r.score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr}\n\n`;
     });
 
-    text += \`⚠️ Conflicts: \${totalConflict} | Avoid: \${avoid}\\n\`;
-    text += \`📊 Strong Signal: \${strongSignalCount} | Breakout: \${breakoutCount}\\n\`;
+    text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;
+    text += `📊 Strong Signal: ${strongSignalCount} | Breakout: ${breakoutCount}\n`;
 
     await this.sendMessage(text);
   }
