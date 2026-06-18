@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const CPRInputSchema = z.object({
+  symbol: z.string().optional(),
   high: z.number({ message: 'High is required and must be a number' })
     .positive('High must be positive')
     .finite('High must be a finite number'),
