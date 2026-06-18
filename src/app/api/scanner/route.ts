@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
           results: formattedResults,
           insights: { strongBuy: 0, breakoutReady: 0, avoid: 0 },
           fromCache: true,
-          cachedAt: cached.timestamp
+          cachedAt: (cached as any).timestamp
         }, { status: 200 });
       }
     }
