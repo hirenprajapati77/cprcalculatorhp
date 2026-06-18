@@ -3,9 +3,9 @@ import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 
 export interface MtfCprLevels {
-  daily?: CPRResult & { width: number; classification: string };
-  weekly: CPRResult & { width: number; classification: string };
-  monthly: CPRResult & { width: number; classification: string };
+  daily?: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
+  weekly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
+  monthly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
   confluence: {
     strongSupport: number[];
     strongResistance: number[];
@@ -21,11 +21,11 @@ export class MtfCprService {
     
     // Weekly OHLC (last completed week)
     const weekQueryOptions = { period1: new Date(endDate.getTime() - 40 * 24 * 60 * 60 * 1000).toISOString(), interval: '1wk' as const };
-    const weekHistory = await yahooFinance.historical(yfSymbol, weekQueryOptions);
+    const weekHistory: any[] = await yahooFinance.historical(yfSymbol, weekQueryOptions); // eslint-disable-line @typescript-eslint/no-explicit-any
     
     // Monthly OHLC (last completed month)
     const monthQueryOptions = { period1: new Date(endDate.getTime() - 100 * 24 * 60 * 60 * 1000).toISOString(), interval: '1mo' as const };
-    const monthHistory = await yahooFinance.historical(yfSymbol, monthQueryOptions);
+    const monthHistory: any[] = await yahooFinance.historical(yfSymbol, monthQueryOptions); // eslint-disable-line @typescript-eslint/no-explicit-any
 
     if (weekHistory.length < 2 || monthHistory.length < 2) {
       throw new Error('Not enough MTF data');
@@ -53,8 +53,8 @@ export class MtfCprService {
     const mWidth = Math.abs(monthlyCPR.tc - monthlyCPR.bc) / monthlyCPR.pivot * 100;
     const mClass = mWidth <= 0.5 ? 'NARROW' : mWidth > 0.8 ? 'WIDE' : 'NORMAL';
 
-    const weekly = { ...weeklyCPR, width: wWidth, classification: wClass };
-    const monthly = { ...monthlyCPR, width: mWidth, classification: mClass };
+    const weekly = { ...weeklyCPR, width: wWidth, classification: wClass as "NARROW" | "NORMAL" | "WIDE" };
+    const monthly = { ...monthlyCPR, width: mWidth, classification: mClass as "NARROW" | "NORMAL" | "WIDE" };
 
     // Confluence logic: check if weekly and monthly pivots align closely
     const confluence: { strongSupport: number[], strongResistance: number[] } = { strongSupport: [], strongResistance: [] };

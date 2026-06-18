@@ -44,7 +44,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, mtfLevels })
                     <div>TC: {result.tc.toFixed(2)}</div>
                     <div className="text-accent-blue font-bold">PIV: {result.pivot.toFixed(2)}</div>
                     <div>BC: {result.bc.toFixed(2)}</div>
-                    <div className="text-text-tertiary mt-2">W: {result.widthPct?.toFixed(2) || '?'}% ({result.classification || '?'})</div>
+                    <div className="text-text-tertiary mt-2">W: {result.width?.toFixed(2) || '?'}% ({result.classification || '?'})</div>
                   </div>
                 </div>
                 

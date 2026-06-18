@@ -681,23 +681,7 @@ export default function ScannerClient() {
 
   // Auto Refresh Logic
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
-  useEffect(() => {
-    if (refreshInterval === 'Off') {
-      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-      return;
-    }
-    const msMap: Record<string, number> = { '5m': 300000, '15m': 900000, '30m': 1800000 };
-    const ms = msMap[refreshInterval] || 300000;
-    
-    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-    autoRefreshRef.current = setInterval(() => {
-      fetchScannerData(true);
-    }, ms);
-    
-    return () => {
-      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-    };
-  }, [refreshInterval, fetchScannerData]);
+  // Auto Refresh Logic is moved down
 
   const [countdown, setCountdown] = useState<number>(0);
 
@@ -1145,6 +1129,24 @@ export default function ScannerClient() {
   const fetchBtstData = useCallback(async () => {
     await fetchScannerData(true);
   }, [fetchScannerData]);
+
+  useEffect(() => {
+    if (refreshInterval === 'Off') {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+      return;
+    }
+    const msMap: Record<string, number> = { '5m': 300000, '15m': 900000, '30m': 1800000 };
+    const ms = msMap[refreshInterval] || 300000;
+    
+    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    autoRefreshRef.current = setInterval(() => {
+      fetchScannerData(true);
+    }, ms);
+    
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
+  }, [refreshInterval, fetchScannerData]);
 
   const hasFetchedRef = useRef(false);
 
