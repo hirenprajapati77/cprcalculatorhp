@@ -625,6 +625,26 @@ export default function ScannerClient() {
   const router = useRouter();
   const { showToast } = useToast();
 
+  // Window enforcement & cache states
+  const [executionWindowOpen, setExecutionWindowOpen] = useState<boolean>(true);
+  const [cachedResult, setCachedResult] = useState<boolean>(false);
+  const [scannedAt, setScannedAt] = useState<string>('');
+
+  const isWeekend = useMemo(() => {
+    return ['Saturday', 'Sunday'].includes(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'long'
+      }).format(new Date())
+    );
+  }, []);
+
+  useEffect(() => {
+    if (isWeekend) {
+      setScannerMode('CPR');
+    }
+  }, [isWeekend]);
+
   // Filters & Pagination State
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
@@ -672,8 +692,6 @@ export default function ScannerClient() {
   // Auto Refresh Mode
   const [refreshInterval, setRefreshInterval] = useState<string>('Off'); // Off, 5m, 15m, 30m
   const [countdown, setCountdown] = useState<number>(0);
-  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // KPI Bar Stats
   const [latency, setLatency] = useState<number>(0);
@@ -881,6 +899,10 @@ export default function ScannerClient() {
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
 
+        setExecutionWindowOpen(data.executionWindowOpen ?? true);
+        setCachedResult(data.cachedResult ?? false);
+        setScannedAt(data.scannedAt || '');
+
         // Filter by direction based on scannerMode
         const allResults: Array<{
           symbol: string;
@@ -1000,6 +1022,9 @@ export default function ScannerClient() {
 
       const data = await res.json();
       if (data.success) {
+        setExecutionWindowOpen(true);
+        setCachedResult(false);
+        setScannedAt('');
         if (data.insights) {
           setInsightCounts(data.insights);
         }
@@ -1106,40 +1131,43 @@ export default function ScannerClient() {
     }
   }, [universe, market, refreshInterval, fetchScannerData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
-  // Setup Auto-Refresh Countdown clock & trigger
+  const fetchBtstData = useCallback(async () => {
+    await fetchScannerData(true);
+  }, [fetchScannerData]);
+
+  const hasFetchedRef = useRef(false);
+
   useEffect(() => {
-    if (refreshTimerRef.current) {
-      clearInterval(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-
-    if (refreshInterval !== 'Off') {
-      const minutes = parseInt(refreshInterval, 10);
-      const totalSeconds = minutes * 60;
-      setCountdown(totalSeconds);
-
-      // 1. Every second countdown updates
-      countdownTimerRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            // Trigger refresh at 0
-            handleScanRefresh();
-            return totalSeconds;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
-      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    const getISTMinutes = () => {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+      }).formatToParts(new Date());
+      const h = parseInt(
+        parts.find(p => p.type === 'hour')?.value || '0', 10
+      );
+      const m = parseInt(
+        parts.find(p => p.type === 'minute')?.value || '0', 10
+      );
+      return { h, m, inWindow: h === 15 && m >= 20 && m <= 25 };
     };
-  }, [refreshInterval, handleScanRefresh]);
+
+    const checkAndRefresh = async () => {
+      const { inWindow } = getISTMinutes();
+      // Always fetch on mount to show cached or status
+      // But only auto-refresh during window
+      if (inWindow || !hasFetchedRef.current) {
+        await fetchBtstData();
+        hasFetchedRef.current = true;
+      }
+    };
+
+    checkAndRefresh(); // run on mount
+    const interval = setInterval(checkAndRefresh, 60000);
+    return () => clearInterval(interval);
+  }, [fetchBtstData]);
 
   useEffect(() => {
     fetchScannerData();
@@ -1441,6 +1469,36 @@ export default function ScannerClient() {
       avgConf: confSum / results.length
     };
   }, [results, scannerMode]);
+
+  // Countdown display calculation
+  const getCountdownDisplay = () => {
+    const partsForCountdown = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const hForCountdown = parseInt(partsForCountdown.find(p => p.type === 'hour')?.value || '0', 10);
+    const mForCountdown = parseInt(partsForCountdown.find(p => p.type === 'minute')?.value || '0', 10);
+
+    const istDateStrForCountdown = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long'
+    }).format(new Date());
+    const isWeekdayForCountdown = istDateStrForCountdown !== 'Saturday' && istDateStrForCountdown !== 'Sunday';
+
+    const totalMinForCountdown = hForCountdown * 60 + mForCountdown;
+    const targetMinForCountdown = 15 * 60 + 20; // 15:20
+
+    if (isWeekdayForCountdown && totalMinForCountdown < targetMinForCountdown) {
+      const minutesUntil = targetMinForCountdown - totalMinForCountdown;
+      return minutesUntil >= 60 
+        ? `Opens in ${Math.floor(minutesUntil / 60)}h ${minutesUntil % 60}m`
+        : `Opens in ${minutesUntil}m`;
+    }
+    return '';
+  };
+  const countdownDisplay = getCountdownDisplay();
 
   return (
     <div className="space-y-6 relative pb-20 terminal-grid">
@@ -1841,19 +1899,21 @@ export default function ScannerClient() {
         icon={<Radar size={14} className="text-accent-blue" />}
         headerAction={
           <div className="flex items-center gap-1">
-            <Button
-              onClick={() => {
-                if (scannerMode === 'CPR') setScannerMode('BTST');
-                else if (scannerMode === 'BTST') setScannerMode('STBT');
-                else if (scannerMode === 'STBT') setScannerMode('OVERNIGHT');
-                else setScannerMode('CPR');
-              }}
-              size="sm"
-              variant="secondary"
-              className={`text-[10px] h-7 font-bold ${scannerMode !== 'CPR' ? (scannerMode === 'BTST' ? 'bg-accent-green/20 text-accent-green border border-accent-green/50' : scannerMode === 'STBT' ? 'bg-accent-red/20 text-accent-red border border-accent-red/50' : 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50') : ''}`}
-            >
-              Mode: {scannerMode}
-            </Button>
+            {!isWeekend && (
+              <Button
+                onClick={() => {
+                  if (scannerMode === 'CPR') setScannerMode('BTST');
+                  else if (scannerMode === 'BTST') setScannerMode('STBT');
+                  else if (scannerMode === 'STBT') setScannerMode('OVERNIGHT');
+                  else setScannerMode('CPR');
+                }}
+                size="sm"
+                variant="secondary"
+                className={`text-[10px] h-7 font-bold ${scannerMode !== 'CPR' ? (scannerMode === 'BTST' ? 'bg-accent-green/20 text-accent-green border border-accent-green/50' : scannerMode === 'STBT' ? 'bg-accent-red/20 text-accent-red border border-accent-red/50' : 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50') : ''}`}
+              >
+                Mode: {scannerMode}
+              </Button>
+            )}
             <Button
               onClick={() => setShowHelp(true)}
               size="sm"
@@ -2129,151 +2189,211 @@ export default function ScannerClient() {
             </div>
           )}
 
-          {/* Results Table */}
-          <div className="overflow-x-auto border border-border-primary rounded bg-bg-secondary/20">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-24 font-mono">
-                <div className="h-8 w-8 rounded-full border-2 border-accent-blue border-t-transparent animate-spin mb-4" />
-                <span className="text-xs text-text-secondary animate-pulse">Running quantitative analysis...</span>
-              </div>
-            ) : results.length === 0 ? (
-              showWatchlistOnly ? (
-                <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
-                  <Star size={48} className="text-accent-amber/40 mb-3 animate-pulse" />
-                  <p className="text-xs text-text-primary font-bold">Watchlist Empty</p>
-                  <p className="text-[9px] text-text-secondary mt-1 max-w-[280px]">
-                    No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
-                  </p>
-                </div>
-              ) : scannerMode !== 'CPR' ? <BtstEmptyState /> : (
-                <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
-                  <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
-                  <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
-                  <p className="text-[9px] text-text-secondary mt-1 max-w-[280px]">
-                    No stocks currently match the filter pipeline. Adjust price, score, or signal criteria.
-                  </p>
-                </div>
-              )
-            ) : (
-              <table className="w-full text-left border-collapse font-mono text-xs select-none">
-                <thead>
-                  <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
-                    {visibleColumns.includes('checkbox') && <th className="p-2.5 w-8"></th>}
-                    {visibleColumns.includes('watchlist') && <th className="p-2.5 w-10"></th>}
-                    {visibleColumns.includes('symbol') && (
-                      <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('symbol')}>
-                        <div className="flex items-center gap-1">Symbol <ArrowUpDown size={11} /></div>
-                      </th>
-                    )}
-                    {visibleColumns.includes('ltp') && (
-                      <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('ltp')}>
-                        <div className="flex items-center gap-1">LTP & Price <ArrowUpDown size={11} /></div>
-                      </th>
-                    )}
-                    {visibleColumns.includes('distance') && <th className="p-2.5 max-md:hidden">Dist TC/BC %</th>}
-                    {visibleColumns.includes('width') && <th className="p-2.5 max-md:hidden">CPR Width %</th>}
-                    {visibleColumns.includes('setup') && <th className="p-2.5">Trade Setup (V3)</th>}
-                    {visibleColumns.includes('rr') && <th className="p-2.5 max-md:hidden">RR</th>}
-                    {visibleColumns.includes('signals') && <th className="p-2.5">Signals</th>}
-                    {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
-                    {visibleColumns.includes('score') && (
-                      <th className="p-2.5 cursor-pointer hover:text-text-primary w-28" onClick={() => handleSort('score')}>
-                        <div className="flex items-center gap-1">Score & Freq <ArrowUpDown size={11} /></div>
-                      </th>
-                    )}
-                    {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
-                    {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
-                    {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
-                    {visibleColumns.includes('confidence') && <th className="p-2.5">Gap Freq %</th>}
-                    {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
-                    <th className="p-2.5 text-right">Inspect</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-primary/50">
-                  {results.map((row) => {
-                    const isStarred = watchlist[row.symbol]?.starred;
-                    const isPinned = watchlist[row.symbol]?.pinned;
-                    const isNotified = watchlist[row.symbol]?.notify;
-                    const isSelected = compareSymbols.includes(row.symbol);
-                    const cellPadding = densityMode === 'compact' ? 'p-1.5' : 'p-3';
-
-                    return (
-                      <StockRow
-                        key={row.id}
-                        row={row}
-                        densityMode={densityMode}
-                        cellPadding={cellPadding}
-                        visibleColumns={visibleColumns}
-                        isSelected={isSelected}
-                        isStarred={isStarred}
-                        isPinned={isPinned}
-                        isNotified={isNotified}
-                        onToggleCompare={handleToggleCompareCheckbox}
-                        onToggleWatchlist={handleToggleWatchlistState}
-                        onOpenDrawer={handleOpenDrawer}
-                        onChartRedirect={(r) => {
-                          const cprRecord = {
-                            id: r.id,
-                            high: r.price * 1.015,
-                            low: r.price * 0.985,
-                            close: r.ltp,
-                            pivot: r.pivot,
-                            bc: r.bc,
-                            tc: r.tc,
-                            r1: r.r1,
-                            r2: r.r2,
-                            r3: r.r3,
-                            r4: r.r4,
-                            s1: r.s1,
-                            s2: r.s2,
-                            s3: r.s3,
-                            s4: r.s4,
-                            width: r.width,
-                            classification: r.classification,
-                            trend: r.score >= 50 ? 'Bullish' : 'Bearish',
-                            createdAt: new Date().toISOString(),
-                            ltp: r.ltp
-                          };
-                          sessionStorage.setItem('cpr_last_calculation', JSON.stringify(cprRecord));
-                          sessionStorage.setItem('cpr_last_saved', 'false');
-                          router.push('/calculate');
-                        }}
-                      />
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between font-mono text-[11px] text-text-secondary pt-3 border-t border-border-primary">
-              <div>
-                Showing Page <span className="font-bold text-text-primary">{page}</span> of{' '}
-                <span className="font-bold text-text-primary">{totalPages}</span> ({total} stocks found)
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  size="sm"
-                  variant="secondary"
-                  className="px-2 py-1"
-                >
-                  <ChevronLeft size={13} /> Prev
-                </Button>
-                <Button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  size="sm"
-                  variant="secondary"
-                  className="px-2 py-1"
-                >
-                  Next <ChevronRight size={13} />
-                </Button>
-              </div>
+          {/* Weekend Banner */}
+          {isWeekend && (
+            <div className="rounded-lg px-4 py-3 mb-4 flex items-center gap-3 bg-red-500/10 border border-red-500/30">
+              <span className="text-lg">🛑</span>
+              <p className="text-sm font-medium text-red-400 font-mono">
+                Markets closed. See you Monday at 15:20 IST.
+              </p>
             </div>
+          )}
+
+          {/* Window Status Banner */}
+          {scannerMode !== 'CPR' && !isWeekend && (
+            <>
+              {!executionWindowOpen && (
+                <div className={`
+                  rounded-lg px-4 py-3 mb-4 flex items-center gap-3 font-mono
+                  ${cachedResult 
+                    ? 'bg-amber-500/10 border border-amber-500/30' 
+                    : 'bg-blue-500/10 border border-blue-500/30'}
+                `}>
+                  <span className="text-lg">
+                    {cachedResult ? '🕐' : '⏳'}
+                  </span>
+                  <div>
+                    <p className={`text-sm font-medium ${
+                      cachedResult ? 'text-amber-400' : 'text-blue-400'
+                    }`}>
+                      {cachedResult
+                        ? `Showing cached scan from ${scannedAt}`
+                        : `BTST/STBT Scanner — Activates at 15:20 IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                      }
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {cachedResult
+                        ? 'Next live scan today at 15:20–15:25 IST'
+                        : 'Results will appear here automatically when window opens'
+                      }
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {executionWindowOpen && (
+                <div className="rounded-lg px-4 py-3 mb-4 flex 
+                  items-center gap-3 bg-green-500/10 
+                  border border-green-500/30 font-mono">
+                  <span className="animate-pulse text-green-400">●</span>
+                  <p className="text-sm font-medium text-green-400">
+                    LIVE SCAN ACTIVE — 15:20 IST Window Open
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Results Table & Pagination Container */}
+          {(executionWindowOpen || cachedResult) && (
+            <>
+              {/* Results Table */}
+              <div className="overflow-x-auto border border-border-primary rounded bg-bg-secondary/20">
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-24 font-mono">
+                    <div className="h-8 w-8 rounded-full border-2 border-accent-blue border-t-transparent animate-spin mb-4" />
+                    <span className="text-xs text-text-secondary animate-pulse">Running quantitative analysis...</span>
+                  </div>
+                ) : results.length === 0 ? (
+                  showWatchlistOnly ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
+                      <Star size={48} className="text-accent-amber/40 mb-3 animate-pulse" />
+                      <p className="text-xs text-text-primary font-bold">Watchlist Empty</p>
+                      <p className="text-[9px] text-text-secondary mt-1 max-w-[280px]">
+                        No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
+                      </p>
+                    </div>
+                  ) : scannerMode !== 'CPR' ? <BtstEmptyState /> : (
+                    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
+                      <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
+                      <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
+                      <p className="text-[9px] text-text-secondary mt-1 max-w-[280px]">
+                        No stocks currently match the filter pipeline. Adjust price, score, or signal criteria.
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <table className="w-full text-left border-collapse font-mono text-xs select-none">
+                    <thead>
+                      <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
+                        {visibleColumns.includes('checkbox') && <th className="p-2.5 w-8"></th>}
+                        {visibleColumns.includes('watchlist') && <th className="p-2.5 w-10"></th>}
+                        {visibleColumns.includes('symbol') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('symbol')}>
+                            <div className="flex items-center gap-1">Symbol <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('ltp') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('ltp')}>
+                            <div className="flex items-center gap-1">LTP & Price <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('distance') && <th className="p-2.5 max-md:hidden">Dist TC/BC %</th>}
+                        {visibleColumns.includes('width') && <th className="p-2.5 max-md:hidden">CPR Width %</th>}
+                        {visibleColumns.includes('setup') && <th className="p-2.5">Trade Setup (V3)</th>}
+                        {visibleColumns.includes('rr') && <th className="p-2.5 max-md:hidden">RR</th>}
+                        {visibleColumns.includes('signals') && <th className="p-2.5">Signals</th>}
+                        {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
+                        {visibleColumns.includes('score') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary w-28" onClick={() => handleSort('score')}>
+                            <div className="flex items-center gap-1">Score & Freq <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
+                        {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
+                        {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
+                        {visibleColumns.includes('confidence') && <th className="p-2.5">Gap Freq %</th>}
+                        {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
+                        <th className="p-2.5 text-right">Inspect</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-primary/50">
+                      {results.map((row) => {
+                        const isStarred = watchlist[row.symbol]?.starred;
+                        const isPinned = watchlist[row.symbol]?.pinned;
+                        const isNotified = watchlist[row.symbol]?.notify;
+                        const isSelected = compareSymbols.includes(row.symbol);
+                        const cellPadding = densityMode === 'compact' ? 'p-1.5' : 'p-3';
+
+                        return (
+                          <StockRow
+                            key={row.id}
+                            row={row}
+                            densityMode={densityMode}
+                            cellPadding={cellPadding}
+                            visibleColumns={visibleColumns}
+                            isSelected={isSelected}
+                            isStarred={isStarred}
+                            isPinned={isPinned}
+                            isNotified={isNotified}
+                            onToggleCompare={handleToggleCompareCheckbox}
+                            onToggleWatchlist={handleToggleWatchlistState}
+                            onOpenDrawer={handleOpenDrawer}
+                            onChartRedirect={(r) => {
+                              const cprRecord = {
+                                id: r.id,
+                                high: r.price * 1.015,
+                                low: r.price * 0.985,
+                                close: r.ltp,
+                                pivot: r.pivot,
+                                bc: r.bc,
+                                tc: r.tc,
+                                r1: r.r1,
+                                r2: r.r2,
+                                r3: r.r3,
+                                r4: r.r4,
+                                s1: r.s1,
+                                s2: r.s2,
+                                s3: r.s3,
+                                s4: r.s4,
+                                width: r.width,
+                                classification: r.classification,
+                                trend: r.score >= 50 ? 'Bullish' : 'Bearish',
+                                createdAt: new Date().toISOString(),
+                                ltp: r.ltp
+                              };
+                              sessionStorage.setItem('cpr_last_calculation', JSON.stringify(cprRecord));
+                              sessionStorage.setItem('cpr_last_saved', 'false');
+                              router.push('/calculate');
+                            }}
+                          />
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between font-mono text-[11px] text-text-secondary pt-3 border-t border-border-primary">
+                  <div>
+                    Showing Page <span className="font-bold text-text-primary">{page}</span> of{' '}
+                    <span className="font-bold text-text-primary">{totalPages}</span> ({total} stocks found)
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      size="sm"
+                      variant="secondary"
+                      className="px-2 py-1"
+                    >
+                      <ChevronLeft size={13} /> Prev
+                    </Button>
+                    <Button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      size="sm"
+                      variant="secondary"
+                      className="px-2 py-1"
+                    >
+                      Next <ChevronRight size={13} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </Card>

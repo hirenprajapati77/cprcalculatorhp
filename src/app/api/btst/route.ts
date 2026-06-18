@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server';
-import { MarketService } from '@/services/market.service';
-import { BtstService, BtstScoreResult } from '@/services/backtest/btst.service';
-import { GapProbabilityService } from '@/services/overnight/gap-probability.service';
-
-export interface BtstScoreResultEnriched extends BtstScoreResult {
-  expectedGap: number;
-  expectedMove: number;
-  gapConfidence: number;
-  exitStrategy: string;
-}
+import { BtstService } from '@/services/backtest/btst.service';
+import { CacheService } from '@/services/cache.service';
 
 export async function GET(request: Request) {
   try {
@@ -17,86 +9,62 @@ export async function GET(request: Request) {
 
     const executionWindowOpen = BtstService.isExecutionWindowOpen();
 
-    const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
-    const results: BtstScoreResultEnriched[] = [];
+    const today = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
+    const CACHE_KEY = `btst_last_scan_${today}`;
 
-    let strongSignal = 0;
-    let breakoutReady = 0;
-    let avoid = 0;
-    let totalLong = 0;
-    let totalShort = 0;
-    let totalConflict = 0;
-
-    const stockPromises = stocks.map(async (stockMeta) => {
-      try {
-        const stock = await MarketService.getStockData(stockMeta.symbol);
-        return { stockMeta, stock };
-      } catch (err) {
-        console.error(`Failed to fetch stock data for ${stockMeta.symbol}:`, err);
-        return { stockMeta, stock: null };
-      }
-    });
-
-    const stockResults = await Promise.all(stockPromises);
-
-    for (const { stock } of stockResults) {
-      if (stock) {
-        const result = BtstService.evaluateOvernight(stock);
-
-        // Compute gap probability based on direction
-        const direction = result.tag === 'SHORT' ? 'SHORT' : 'LONG';
-        const gapMetrics = GapProbabilityService.calculateGapProbability(stock, direction);
-
-        // Count metrics
-        const maxScore = Math.max(result.longScore, result.shortScore);
-
-        if (result.tag === 'NEUTRAL_CONFLICT') {
-          totalConflict++;
-          avoid++;
-        } else if (result.tag === 'WEAK') {
-          avoid++;
-        } else {
-          if (maxScore >= 90) {
-            strongSignal++;
-          } else if (maxScore >= 70) {
-            breakoutReady++;
-          } else if (maxScore < 40) {
-            avoid++;
-          }
-
-          if (result.tag === 'LONG') totalLong++;
-          if (result.tag === 'SHORT') totalShort++;
-        }
-
-        // Exclude WEAK
-        if (result.tag !== 'WEAK') {
-          results.push({
-            ...result,
-            expectedGap: gapMetrics.expectedGap,
-            expectedMove: parseFloat((gapMetrics.expectedGap * 2.0).toFixed(2)),
-            gapConfidence: gapMetrics.gapConfidence,
-            exitStrategy: 'EOD'
-          });
-        }
-      }
+    interface CachedBtstData {
+      scannedAt: string;
+      results: unknown[];
+      insights: unknown;
     }
 
-    // Sort results by max score
-    results.sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore));
+    if (!executionWindowOpen) {
+      const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
+      if (cached) {
+        return NextResponse.json({
+          success: true,
+          executionWindowOpen: false,
+          cachedResult: true,
+          scannedAt: cached.scannedAt,
+          message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:20 IST.`,
+          results: cached.results,
+          insights: cached.insights,
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        executionWindowOpen: false,
+        cachedResult: false,
+        message: 'BTST/STBT scanner runs only at 15:20–15:25 IST. Check back then.',
+        results: [],
+        insights: {
+          strongSignal: 0, breakoutReady: 0, avoid: 0,
+          totalLong: 0, totalShort: 0, totalConflict: 0,
+        }
+      });
+    }
+
+    // Window open — run scan then cache result
+    const scanResult = await BtstService.discover(universe);
+
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+    const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+    const scannedAt = `${timeStr} IST, ${dateStr}`;
+
+    const cacheData = {
+      scannedAt,
+      results: scanResult.results,
+      insights: scanResult.insights,
+    };
+
+    await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
 
     return NextResponse.json({
       success: true,
-      executionWindowOpen,
-      scannedAt: new Date().toISOString(),
-      results,
-      insights: {
-        strongSignal,
-        breakoutReady,
-        avoid,
-        totalLong,
-        totalShort,
-        totalConflict
-      }
+      executionWindowOpen: true,
+      cachedResult: false,
+      ...scanResult,
     });
 
   } catch (error) {

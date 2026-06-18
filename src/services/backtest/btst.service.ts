@@ -1,8 +1,9 @@
 // SIMPLE ENGINE: Used by /api/btst (Nifty50 quick scan)
 // Max score 100, no eligibility gates
-import { MarketStockData } from '../market.service';
+import { MarketStockData, MarketService } from '../market.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
+import { GapProbabilityService } from '../overnight/gap-probability.service';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -19,16 +20,37 @@ export interface BtstScoreResult {
   marketCap: number;
 }
 
+export interface BtstScoreResultEnriched extends BtstScoreResult {
+  expectedGap: number;
+  expectedMove: number;
+  gapConfidence: number;
+  exitStrategy: string;
+}
+
 export class BtstService {
   /**
    * Checks if the 15:20-15:25 IST window is open.
    */
   static isExecutionWindowOpen(): boolean {
-    if (process.env.BTST_BYPASS_WINDOW === 'true') {
+    const bypassAllowed = 
+      process.env.NODE_ENV !== 'production' &&
+      process.env.BTST_BYPASS_WINDOW === 'true';
+
+    if (bypassAllowed) {
       return true;
     }
 
     const now = new Date();
+    const istDateStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long'
+    }).format(now);
+    
+    const isWeekend = istDateStr === 'Saturday' 
+                   || istDateStr === 'Sunday';
+    
+    if (isWeekend) return false;
+
     // Get time in IST
     const istOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: 'numeric', minute: 'numeric' } as const;
     const parts = new Intl.DateTimeFormat('en-US', istOptions).formatToParts(now);
@@ -48,6 +70,90 @@ export class BtstService {
     const hour = istTime.getHours();
     const min = istTime.getMinutes();
     return hour === 15 && min >= 20 && min <= 25;
+  }
+
+  /**
+   * Scans the universe and returns BTST candidates and metrics.
+   */
+  static async discover(universe: string) {
+    const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
+    const results: BtstScoreResultEnriched[] = [];
+
+    let strongSignal = 0;
+    let breakoutReady = 0;
+    let avoid = 0;
+    let totalLong = 0;
+    let totalShort = 0;
+    let totalConflict = 0;
+
+    const stockPromises = stocks.map(async (stockMeta) => {
+      try {
+        const stock = await MarketService.getStockData(stockMeta.symbol);
+        return { stockMeta, stock };
+      } catch (err) {
+        console.error(`Failed to fetch stock data for ${stockMeta.symbol}:`, err);
+        return { stockMeta, stock: null };
+      }
+    });
+
+    const stockResults = await Promise.all(stockPromises);
+
+    for (const { stock } of stockResults) {
+      if (stock) {
+        const result = this.evaluateOvernight(stock);
+
+        // Compute gap probability based on direction
+        const direction = result.tag === 'SHORT' ? 'SHORT' : 'LONG';
+        const gapMetrics = GapProbabilityService.calculateGapProbability(stock, direction);
+
+        // Count metrics
+        const maxScore = Math.max(result.longScore, result.shortScore);
+
+        if (result.tag === 'NEUTRAL_CONFLICT') {
+          totalConflict++;
+          avoid++;
+        } else if (result.tag === 'WEAK') {
+          avoid++;
+        } else {
+          if (maxScore >= 90) {
+            strongSignal++;
+          } else if (maxScore >= 70) {
+            breakoutReady++;
+          } else if (maxScore < 40) {
+            avoid++;
+          }
+
+          if (result.tag === 'LONG') totalLong++;
+          if (result.tag === 'SHORT') totalShort++;
+        }
+
+        // Exclude WEAK
+        if (result.tag !== 'WEAK') {
+          results.push({
+            ...result,
+            expectedGap: gapMetrics.expectedGap,
+            expectedMove: parseFloat((gapMetrics.expectedGap * 2.0).toFixed(2)),
+            gapConfidence: gapMetrics.gapConfidence,
+            exitStrategy: 'EOD'
+          });
+        }
+      }
+    }
+
+    // Sort results by max score
+    results.sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore));
+
+    return {
+      results,
+      insights: {
+        strongSignal,
+        breakoutReady,
+        avoid,
+        totalLong,
+        totalShort,
+        totalConflict
+      }
+    };
   }
 
   /**

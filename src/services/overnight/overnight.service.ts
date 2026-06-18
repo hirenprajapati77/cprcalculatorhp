@@ -67,6 +67,23 @@ export class OvernightService {
    * Helper to determine signal state based on time.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
+    const bypassAllowed = 
+      process.env.NODE_ENV !== 'production' &&
+      process.env.BTST_BYPASS_WINDOW === 'true';
+
+    if (bypassAllowed) {
+      return 'ACTIVE';
+    }
+
+    const istDateStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long'
+    }).format(time);
+    const isWeekend = istDateStr === 'Saturday' || istDateStr === 'Sunday';
+    if (isWeekend) {
+      return 'FROZEN';
+    }
+
     const { totalMinutes } = this.getISTTime(time);
 
     const startMinutes = 15 * 60 + 15; // 3:15 PM
