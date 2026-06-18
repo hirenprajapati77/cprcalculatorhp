@@ -6,46 +6,25 @@ import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
 export default function ChartsGrid({ runId }: { runId: string }) {
-  const { data: rawSnapshots, isLoading } = useQuery({
-    queryKey: ['snapshots', runId],
+  const { data, isLoading } = useQuery({
+    queryKey: ['analytics', runId],
     queryFn: async () => {
       const res = await fetch(`/api/analytics?runId=${runId}`);
       if (!res.ok) throw new Error('Failed to fetch analytics');
-      return res.json() as Promise<Record<string, Array<{ period: string; metricValue: number }>>>;
+      return res.json() as Promise<{
+        equityCurve: Array<{ date: string; cumulativePnl: number }>;
+        monthlyPnl: Array<{ month: string; year: number; pnl: number; tradeCount: number }>;
+        drawdown: Array<{ date: string; drawdownPct: number; peakEquity: number }>;
+        signalBreakdown: Array<{ signal: string; wins: number; losses: number; winRate: number; avgPnl: number }>;
+        tradeDistribution: Array<{ bucket: string; count: number; minPnl: number; maxPnl: number }>;
+      }>;
     }
   });
-
-  const snapshots = React.useMemo(() => {
-    if (!rawSnapshots) return [];
-    
-    // Convert grouped format back to array for charts
-    // The API groups by metricType: { EQUITY: [{period, metricValue}], RETURN: [{period, metricValue}] }
-    const merged: Record<string, { period: string; value?: number; return?: number; dd?: number; sharpe?: number; expectancy?: number; signal?: string }> = {};
-    
-    Object.entries(rawSnapshots).forEach(([type, items]) => {
-      items.forEach(item => {
-        if (!merged[item.period]) merged[item.period] = { period: item.period };
-        
-        if (type === 'EQUITY') merged[item.period].value = item.metricValue;
-        if (type === 'RETURN') merged[item.period].return = item.metricValue;
-        if (type === 'DRAWDOWN') merged[item.period].dd = item.metricValue;
-        if (type === 'SHARPE') merged[item.period].sharpe = item.metricValue;
-        if (type === 'EXPECTANCY') merged[item.period].expectancy = item.metricValue;
-        
-        // Signal logic for pie chart
-        if (type === 'SIGNAL_BULLISH') merged[item.period].signal = 'Bullish';
-        else if (type === 'SIGNAL_BEARISH') merged[item.period].signal = 'Bearish';
-        else if (type === 'SIGNAL_BREAKOUT') merged[item.period].signal = 'Breakout';
-      });
-    });
-
-    return Object.values(merged).sort((a, b) => a.period.localeCompare(b.period));
-  }, [rawSnapshots]);
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-        {[1, 2, 3, 4, 5, 6].map(i => (
+        {[1, 2, 3, 4, 5].map(i => (
           <div key={i} className="border border-border bg-card rounded-xl p-4 h-80 flex flex-col">
             <div className="h-5 w-1/3 bg-white/10 rounded animate-pulse mb-4"></div>
             <div className="flex-1 bg-white/5 rounded animate-pulse"></div>
@@ -55,7 +34,7 @@ export default function ChartsGrid({ runId }: { runId: string }) {
     );
   }
 
-  if (!snapshots || snapshots.length === 0) {
+  if (!data || data.equityCurve.length === 0) {
     return (
       <div className="mt-8 text-center py-12 border border-border bg-card rounded-xl">
         <p className="text-muted-foreground">No chart data available for this run.</p>
@@ -63,100 +42,84 @@ export default function ChartsGrid({ runId }: { runId: string }) {
     );
   }
 
-  const signalData = [
-    { name: 'Bullish', value: snapshots.filter(s => s.signal === 'Bullish').length, color: '#10b981' },
-    { name: 'Bearish', value: snapshots.filter(s => s.signal === 'Bearish').length, color: '#ef4444' },
-    { name: 'Breakout', value: snapshots.filter(s => s.signal === 'Breakout').length, color: '#3b82f6' },
-  ].filter(d => d.value > 0);
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-      {/* Equity Curve */}
+      {/* 1. Equity Curve */}
       <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
         <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Equity Curve</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={snapshots}>
-            <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+          <LineChart data={data.equityCurve}>
+            <XAxis dataKey="date" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} width={70} />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} 
-              formatter={(value) => value != null ? [`₹${Number(value).toLocaleString('en-IN')}`, 'Equity'] : ['—', 'Equity']}
+              labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
+              formatter={(value) => value != null ? [`₹${Number(value).toLocaleString('en-IN')}`, 'Cumulative PnL'] : ['—', 'Cumulative PnL']}
             />
-            <Line type="monotone" dataKey="value" stroke="#06b6d4" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="cumulativePnl" stroke="#22c55e" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </motion.div>
 
-      {/* Monthly Return */}
+      {/* 2. Monthly PnL */}
       <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Monthly Return %</h3>
+        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Monthly PnL Heatmap</h3>
+        <div className="grid grid-cols-6 gap-2 h-full pb-8">
+          {data.monthlyPnl.map((item, idx) => (
+            <div key={idx} className="flex flex-col items-center justify-center rounded text-xs" style={{
+              backgroundColor: item.pnl > 0 ? `rgba(34, 197, 94, ${Math.min(1, Math.max(0.2, item.pnl / 10000))})` : `rgba(239, 68, 68, ${Math.min(1, Math.max(0.2, Math.abs(item.pnl) / 10000))})`
+            }}>
+              <span className="font-semibold text-white/90 mb-1">{item.month} '{String(item.year).slice(2)}</span>
+              <span className="text-white/80">₹{item.pnl.toLocaleString('en-IN')}</span>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* 3. Drawdown Chart */}
+      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Drawdown</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={snapshots}>
-            <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} cursor={{ fill: '#ffffff10' }} />
-            <Bar dataKey="return" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          <AreaChart data={data.drawdown}>
+            <XAxis dataKey="date" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toFixed(1)}%`} width={40} />
+            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })} formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Drawdown']} />
+            <Area type="monotone" dataKey="drawdownPct" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* 4. Win/Loss by Signal */}
+      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
+        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Win/Loss by Signal</h3>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data.signalBreakdown} layout="vertical" margin={{ left: 50 }}>
+            <XAxis type="number" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+            <YAxis dataKey="signal" type="category" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={100} />
+            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
+            <Bar dataKey="wins" name="Wins" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="losses" name="Losses" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </motion.div>
 
-      {/* Rolling Drawdown */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Rolling Drawdown</h3>
+      {/* 5. Trade Distribution */}
+      <motion.div className="border border-border bg-card rounded-xl p-4 h-80 lg:col-span-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
+        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Trade Distribution (PnL)</h3>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={snapshots}>
-            <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
-            <Area type="monotone" dataKey="dd" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </motion.div>
-
-      {/* Signal Distribution */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Signal Distribution</h3>
-        {signalData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={signalData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                {signalData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No signals generated</div>
-        )}
-      </motion.div>
-
-      {/* Rolling Sharpe */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Rolling Sharpe Ratio</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={snapshots}>
-            <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+          <BarChart data={data.tradeDistribution}>
+            <XAxis dataKey="bucket" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
-            <Line type="stepAfter" dataKey="sharpe" stroke="#a855f7" strokeWidth={2} dot={false} />
-          </LineChart>
+            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} cursor={{ fill: '#ffffff10' }} />
+            <Bar dataKey="count" name="Trade Count">
+              {data.tradeDistribution.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.minPnl >= 0 ? '#22c55e' : '#ef4444'} />
+              ))}
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </motion.div>
 
-      {/* Expectancy Curve */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Expectancy Curve</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={snapshots}>
-            <XAxis dataKey="period" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
-            <Area type="monotone" dataKey="expectancy" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </motion.div>
     </div>
   );
 }

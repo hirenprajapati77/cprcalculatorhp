@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Sliders, Play, Database, Cpu } from 'lucide-react';
+import { Settings, Save, Sliders, Play, Database, Cpu, Send } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
@@ -13,6 +13,9 @@ export default function SettingsPage() {
   const [minPrice, setMinPrice] = useState<number>(20);
   const [minVolume, setMinVolume] = useState<number>(50000);
   const [saving, setSaving] = useState<boolean>(false);
+  const [telegramToken, setTelegramToken] = useState<string>('');
+  const [telegramChatId, setTelegramChatId] = useState<string>('');
+  const [telegramTesting, setTelegramTesting] = useState<boolean>(false);
   const { showToast } = useToast();
 
   // Load settings from localStorage on mount
@@ -28,7 +31,29 @@ export default function SettingsPage() {
     setAutoRefresh(localRefresh);
     setMinPrice(localMinPrice);
     setMinVolume(localMinVol);
+    setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
+    setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
   }, []);
+
+  const handleTestTelegram = async () => {
+    setTelegramTesting(true);
+    try {
+      const res = await fetch('/api/alerts/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true })
+      });
+      if (res.ok) {
+        showToast('Test alert sent to Telegram!', 'success');
+      } else {
+        showToast('Failed to send test alert', 'error');
+      }
+    } catch {
+      showToast('Network error sending test alert', 'error');
+    } finally {
+      setTelegramTesting(false);
+    }
+  };
 
   // Save settings
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -41,6 +66,8 @@ export default function SettingsPage() {
       localStorage.setItem('cpr_settings_auto_refresh', autoRefresh);
       localStorage.setItem('cpr_settings_min_price', minPrice.toString());
       localStorage.setItem('cpr_settings_min_volume', minVolume.toString());
+      localStorage.setItem('cpr_settings_telegram_token', telegramToken);
+      localStorage.setItem('cpr_settings_telegram_chat_id', telegramChatId);
       
       showToast('Settings profiles updated successfully', 'success');
     } catch (err) {
@@ -176,6 +203,48 @@ export default function SettingsPage() {
               <p className="text-[9px] text-slate-500 mt-1">
                 Excludes illiquid counters with volume below this floor threshold.
               </p>
+            </div>
+          </div>
+        </Card>
+
+        
+        <Card title="Telegram Alerts Configuration" icon={<Send size={14} className="text-blue-500" />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+                Bot Token
+              </label>
+              <input
+                type="password"
+                value={telegramToken}
+                onChange={(e) => setTelegramToken(e.target.value)}
+                className="w-full bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                placeholder="123456789:ABCDefgh..."
+              />
+              <p className="text-[10px] text-text-tertiary mt-1">Requires server .env update to fully apply. This just stores preference.</p>
+            </div>
+            
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+                Chat ID
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={telegramChatId}
+                  onChange={(e) => setTelegramChatId(e.target.value)}
+                  className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                  placeholder="-10012345678"
+                />
+                <Button 
+                  type="button"
+                  onClick={handleTestTelegram}
+                  disabled={telegramTesting}
+                  className="bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-primary px-3 py-2 rounded text-xs"
+                >
+                  {telegramTesting ? 'Testing...' : 'Test Alert'}
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

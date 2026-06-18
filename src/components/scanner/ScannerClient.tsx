@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   Radar, 
   RefreshCw, 
@@ -691,6 +692,27 @@ export default function ScannerClient() {
 
   // Auto Refresh Mode
   const [refreshInterval, setRefreshInterval] = useState<string>('Off'); // Off, 5m, 15m, 30m
+
+  // Auto Refresh Logic
+  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (refreshInterval === 'Off') {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+      return;
+    }
+    const msMap: Record<string, number> = { '5m': 300000, '15m': 900000, '30m': 1800000 };
+    const ms = msMap[refreshInterval] || 300000;
+    
+    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    autoRefreshRef.current = setInterval(() => {
+      fetchScannerData(true);
+    }, ms);
+    
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
+  }, [refreshInterval, fetchScannerData]);
+
   const [countdown, setCountdown] = useState<number>(0);
 
   // KPI Bar Stats
@@ -725,7 +747,10 @@ export default function ScannerClient() {
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
-  const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes'>('overview');
+  const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes' | 'cprStats'>('overview');
+  const [drawerCprStats, setDrawerCprStats] = useState<any>(null);
+  const [drawerMtf, setDrawerMtf] = useState<any>(null);
+  const [isDrawerCprStatsLoading, setIsDrawerCprStatsLoading] = useState<boolean>(false);
   const [drawerHistory, setDrawerHistory] = useState<{
     date: string;
     score: number;
@@ -1215,6 +1240,8 @@ export default function ScannerClient() {
     
     // Clear old tab data
     setDrawerHistory([]);
+    setDrawerCprStats(null);
+    setDrawerMtf(null);
     setCompareStocks([]);
     setCompareError(null);
   };
@@ -1276,6 +1303,15 @@ export default function ScannerClient() {
         .finally(() => {
           setIsCompareLoading(false);
         });
+    }
+
+    if (drawerTab === 'cprStats') {
+      setIsDrawerCprStatsLoading(true);
+      fetch(`/api/cpr-stats?symbol=${drawerStock.symbol}&lookback=90`)
+        .then(res => res.json())
+        .then(data => setDrawerCprStats(data))
+        .catch(err => console.error(err))
+        .finally(() => setIsDrawerCprStatsLoading(false));
     }
 
     if (drawerTab === 'notes') {
@@ -2458,7 +2494,7 @@ export default function ScannerClient() {
 
               {/* V3 multi-tab header */}
               <div className="flex border-b border-border-primary bg-bg-primary/50 text-[10px] uppercase font-bold overflow-x-auto">
-                {(['overview', 'signals', 'tradeSetup', 'history', 'compare', 'notes'] as const).map(tab => (
+                {(['overview', 'signals', 'tradeSetup', 'history', 'compare', 'notes', 'cprStats'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setDrawerTab(tab)}
@@ -2468,7 +2504,7 @@ export default function ScannerClient() {
                         : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/20'
                     }`}
                   >
-                    {tab === 'tradeSetup' ? 'Trade Setup' : tab}
+                    {tab === 'tradeSetup' ? 'Trade Setup' : tab === 'cprStats' ? 'CPR Stats' : tab}
                   </button>
                 ))}
               </div>
@@ -2779,6 +2815,76 @@ export default function ScannerClient() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                
+                {drawerTab === 'cprStats' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">CPR Width Historical Stats (90 Days)</span>
+                    {isDrawerCprStatsLoading ? (
+                      <div className="text-center py-5 text-text-secondary text-xs">Loading CPR stats...</div>
+                    ) : !drawerCprStats ? (
+                      <div className="text-center py-5 text-text-tertiary text-xs">Data unavailable.</div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-bg-primary/40 border border-border-primary/80 rounded p-3 text-center">
+                          <div className="text-sm font-bold text-text-primary mb-1">
+                            {drawerCprStats.currentClassification} CPR TODAY
+                          </div>
+                          <div className="text-xs text-text-secondary">
+                            Width: <span className="text-accent-blue font-bold">{drawerCprStats.currentWidth.toFixed(3)}%</span>
+                            <span className="mx-2">|</span>
+                            Percentile: <span className="text-accent-blue font-bold">{drawerCprStats.historicalPercentile}</span> / 100
+                          </div>
+                          <div className="text-[10px] text-text-tertiary mt-2">
+                            A NARROW CPR leads to a trending day <span className="text-accent-green font-bold">{drawerCprStats.narrowTrendRate.toFixed(1)}%</span> of the time for {drawerStock.symbol}.
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="h-40 border border-border-primary/50 bg-bg-primary/20 rounded p-2 flex flex-col">
+                            <span className="text-[9px] text-center text-text-tertiary mb-2">CPR Type Distribution</span>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie 
+                                  data={[
+                                    { name: 'Narrow', value: drawerCprStats.narrowDays, color: '#3b82f6' },
+                                    { name: 'Normal', value: drawerCprStats.normalDays, color: '#8b5cf6' },
+                                    { name: 'Wide', value: drawerCprStats.wideDays, color: '#64748b' }
+                                  ]}
+                                  cx="50%" cy="50%" innerRadius={25} outerRadius={40} dataKey="value"
+                                >
+                                  {
+                                    [
+                                      { name: 'Narrow', value: drawerCprStats.narrowDays, color: '#3b82f6' },
+                                      { name: 'Normal', value: drawerCprStats.normalDays, color: '#8b5cf6' },
+                                      { name: 'Wide', value: drawerCprStats.wideDays, color: '#64748b' }
+                                    ].map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)
+                                  }
+                                </Pie>
+                                <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 10, padding: 4 }} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          <div className="h-40 border border-border-primary/50 bg-bg-primary/20 rounded p-2 flex flex-col">
+                            <span className="text-[9px] text-center text-text-tertiary mb-2">Trend Rate by CPR Type</span>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={[
+                                { name: 'Narrow', rate: drawerCprStats.narrowTrendRate },
+                                { name: 'Normal', rate: drawerCprStats.normalTrendRate },
+                                { name: 'Wide', rate: drawerCprStats.wideTrendRate }
+                              ]}>
+                                <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} axisLine={false} />
+                                <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 10, padding: 4 }} cursor={{ fill: '#ffffff10' }} formatter={(v) => `${Number(v).toFixed(1)}%`} />
+                                <Bar dataKey="rate" fill="#10b981" radius={[2, 2, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

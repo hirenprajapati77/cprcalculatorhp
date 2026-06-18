@@ -30,6 +30,41 @@ export async function GET(request: NextRequest) {
 
     const today = new Date().toISOString().split('T')[0];
 
+    const useCache = searchParams.get('useCache') === 'true';
+    if (useCache) {
+      const { CacheService } = await import('@/services/cache.service');
+      const cached = await CacheService.get('AUTO_SCAN_RESULT');
+      if (cached && cached.data) {
+        const formattedResults = cached.data.map((r: any) => ({
+          ...r,
+          market: 'NSE',
+          sector: 'Auto-Scan Cache',
+          volumeRatio: 1.0,
+          entry: r.tc,
+          sl: r.bc,
+          target: r.r1,
+          rr: 1.5,
+        }));
+
+        return NextResponse.json({
+          success: true,
+          page: 1,
+          limit: formattedResults.length,
+          total: formattedResults.length,
+          totalPages: 1,
+          universeCount: formattedResults.length,
+          totalScanned: formattedResults.length,
+          totalReturned: formattedResults.length,
+          filteredOut: 0,
+          results: formattedResults,
+          insights: { strongBuy: 0, breakoutReady: 0, avoid: 0 },
+          fromCache: true,
+          cachedAt: cached.timestamp
+        }, { status: 200 });
+      }
+    }
+
+
     // 1. Auto-initialize today's database records if empty
     try {
       const todayCount = await prisma.scannerResult.count({

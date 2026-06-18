@@ -50,6 +50,13 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     <Card title="inputs" icon={<Award size={14} className="text-accent-blue" />}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 font-mono">
         <Input
+          label="Symbol (Optional for MTF)"
+          placeholder="e.g. RELIANCE"
+          type="text"
+          {...register('symbol')}
+        />
+
+        <Input
           label="Previous High"
           placeholder="e.g. 25050"
           type="number"
