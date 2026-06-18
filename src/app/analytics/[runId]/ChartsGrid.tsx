@@ -3,7 +3,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
 
 export default function ChartsGrid({ runId }: { runId: string }) {
   const { data, isLoading } = useQuery({
@@ -69,7 +69,7 @@ export default function ChartsGrid({ runId }: { runId: string }) {
             <div key={idx} className="flex flex-col items-center justify-center rounded text-xs" style={{
               backgroundColor: item.pnl > 0 ? `rgba(34, 197, 94, ${Math.min(1, Math.max(0.2, item.pnl / 10000))})` : `rgba(239, 68, 68, ${Math.min(1, Math.max(0.2, Math.abs(item.pnl) / 10000))})`
             }}>
-              <span className="font-semibold text-white/90 mb-1">{item.month} '{String(item.year).slice(2)}</span>
+              <span className="font-semibold text-white/90 mb-1">{item.month} &apos;{String(item.year).slice(2)}</span>
               <span className="text-white/80">₹{item.pnl.toLocaleString('en-IN')}</span>
             </div>
           ))}

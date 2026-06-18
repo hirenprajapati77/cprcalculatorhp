@@ -52,8 +52,8 @@ export class CprStatsService {
       const widthPct = (Math.abs(cpr.tc - cpr.bc) / cpr.pivot) * 100;
       allWidths.push(widthPct);
 
-      const isNarrow = widthPct <= 0.5;
-      const isWide = widthPct > 0.8;
+      const isNarrow = widthPct < 0.3;
+      const isWide = widthPct >= 0.8;
 
       // Trend condition: absolute body size > 0.5% of open
       const bodyPct = (Math.abs(today.close - today.open) / today.open) * 100;

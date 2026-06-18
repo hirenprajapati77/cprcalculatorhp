@@ -1,16 +1,4 @@
-export interface BtstResult {
-  symbol: string;
-  score: number;
-  direction: 'LONG' | 'SHORT';
-  tc: number;
-  bc: number;
-  r1?: number;
-  s1?: number;
-  r2?: number;
-  s2?: number;
-  signals?: string[];
-  breakoutReady?: boolean;
-}
+import { BtstScoreResultEnriched } from '../backtest/btst.service';
 
 export class TelegramService {
   static async sendMessage(text: string): Promise<void> {
@@ -38,16 +26,16 @@ export class TelegramService {
     }
   }
 
-  static async sendBtstAlert(results: BtstResult[]): Promise<void> {
-    const longs = results.filter(r => r.direction === 'LONG' && r.score >= 70);
-    const shorts = results.filter(r => r.direction === 'SHORT' && r.score >= 70);
+  static async sendBtstAlert(results: BtstScoreResultEnriched[]): Promise<void> {
+    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 70);
+    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 70);
 
-    const strongSignalCount = results.filter(r => r.signals && r.signals.some(s => s.includes('STRONG'))).length;
-    const breakoutCount = results.filter(r => r.breakoutReady).length;
+    const strongSignalCount = results.filter(r => r.signals && r.signals.some(s => s.includes('STRONG') || s.includes('BREAKOUT') || s.includes('HIGHER_VALUE') || s.includes('LOWER_VALUE'))).length;
+    const breakoutCount = results.filter(r => r.signals && r.signals.includes('BREAKOUT')).length;
     
     // Total conflicts and avoids can be approximated or passed in
-    const totalConflict = results.filter(r => r.signals && r.signals.includes('CONFLICT')).length;
-    const avoid = results.filter(r => r.score < 30).length;
+    const totalConflict = results.filter(r => r.tag === 'NEUTRAL_CONFLICT').length;
+    const avoid = results.filter(r => Math.max(r.longScore, r.shortScore) < 30).length;
 
     // Only send if strongSignal > 0 OR breakoutReady > 2
     if (strongSignalCount === 0 && breakoutCount <= 2 && longs.length === 0 && shorts.length === 0) {
@@ -62,25 +50,25 @@ export class TelegramService {
     text += `🟢 <b>LONG SETUPS (${longs.length})</b>\n`;
     if (longs.length === 0) text += `<i>None</i>\n`;
     longs.forEach(r => {
-      const entry = r.tc.toFixed(2);
-      const sl = r.bc.toFixed(2);
-      const risk = Math.abs(r.tc - r.bc);
-      const target = (r.r1 && risk > 0 && Math.abs(r.r1 - r.tc) / risk >= 1.5) ? r.r1.toFixed(2) : (r.r2 ? r.r2.toFixed(2) : 'N/A');
-      const rr = risk > 0 && target !== 'N/A' ? (Math.abs(parseFloat(target) - parseFloat(entry)) / risk).toFixed(2) : 'N/A';
+      const entry = r.entry.toFixed(2);
+      const sl = r.sl.toFixed(2);
+      const target = r.target.toFixed(2);
+      const rr = r.rr;
+      const score = Math.max(r.longScore, r.shortScore);
       
-      text += `• <b>${r.symbol}</b> | Score: ${r.score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
+      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
     });
 
     text += `🔴 <b>SHORT SETUPS (${shorts.length})</b>\n`;
     if (shorts.length === 0) text += `<i>None</i>\n`;
     shorts.forEach(r => {
-      const entry = r.bc.toFixed(2);
-      const sl = r.tc.toFixed(2);
-      const risk = Math.abs(r.tc - r.bc);
-      const target = (r.s1 && risk > 0 && Math.abs(parseFloat(entry) - r.s1) / risk >= 1.5) ? r.s1.toFixed(2) : (r.s2 ? r.s2.toFixed(2) : 'N/A');
-      const rr = risk > 0 && target !== 'N/A' ? (Math.abs(parseFloat(entry) - parseFloat(target)) / risk).toFixed(2) : 'N/A';
+      const entry = r.entry.toFixed(2);
+      const sl = r.sl.toFixed(2);
+      const target = r.target.toFixed(2);
+      const rr = r.rr;
+      const score = Math.max(r.longScore, r.shortScore);
       
-      text += `• <b>${r.symbol}</b> | Score: ${r.score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr}\n\n`;
+      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
     });
 
     text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;

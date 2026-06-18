@@ -9,7 +9,7 @@ import { Target, Compass } from 'lucide-react';
 
 interface ResultsPanelProps {
   result: CPRResult | null;
-  mtfLevels?: any;
+  mtfLevels?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, mtfLevels }) => {

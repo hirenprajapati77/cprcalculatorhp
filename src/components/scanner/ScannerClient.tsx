@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   Radar, 
   RefreshCw, 
@@ -748,8 +748,8 @@ export default function ScannerClient() {
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes' | 'cprStats'>('overview');
-  const [drawerCprStats, setDrawerCprStats] = useState<any>(null);
-  const [drawerMtf, setDrawerMtf] = useState<any>(null);
+  const [drawerCprStats, setDrawerCprStats] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [drawerMtf, setDrawerMtf] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const [isDrawerCprStatsLoading, setIsDrawerCprStatsLoading] = useState<boolean>(false);
   const [drawerHistory, setDrawerHistory] = useState<{
     date: string;

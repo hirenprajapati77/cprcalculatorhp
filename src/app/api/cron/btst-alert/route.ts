@@ -33,14 +33,14 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Merge and deduplicate by symbol
-    const merged = [...nifty50, ...nseFno];
+    const merged = [...nifty50.results, ...nseFno.results];
     const unique = merged.filter((item, index, self) =>
       index === self.findIndex((t) => t.symbol === item.symbol)
     );
 
     // Filter to top 5 Long and top 5 Short just for the alert size limit to prevent huge msgs
-    const longs = unique.filter(u => u.direction === 'LONG').sort((a, b) => b.score - a.score).slice(0, 5);
-    const shorts = unique.filter(u => u.direction === 'SHORT').sort((a, b) => b.score - a.score).slice(0, 5);
+    const longs = unique.filter(u => u.tag === 'LONG').sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore)).slice(0, 5);
+    const shorts = unique.filter(u => u.tag === 'SHORT').sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore)).slice(0, 5);
 
     const alertPayload = [...longs, ...shorts];
 

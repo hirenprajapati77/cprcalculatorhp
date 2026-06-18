@@ -76,8 +76,8 @@ export async function GET(req: NextRequest) {
       signalMap[baseSignal].totalPnl += trade.pnl;
 
       // Trade Distribution
-      // Group PnL in buckets of 1000
-      const bucketSize = 1000;
+      // Group PnL in buckets of 500
+      const bucketSize = 500;
       const bucketKey = Math.floor(trade.pnl / bucketSize) * bucketSize;
       distributionMap[bucketKey] = (distributionMap[bucketKey] || 0) + 1;
     }
@@ -108,10 +108,10 @@ export async function GET(req: NextRequest) {
       .map(Number)
       .sort((a, b) => a - b)
       .map(bucket => ({
-        bucket: `${bucket} to ${bucket + 1000}`,
+        bucket: `${bucket} to ${bucket + 500}`,
         count: distributionMap[bucket],
         minPnl: bucket,
-        maxPnl: bucket + 1000
+        maxPnl: bucket + 500
       }));
 
     return NextResponse.json({

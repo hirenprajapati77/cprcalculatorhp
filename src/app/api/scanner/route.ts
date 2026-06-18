@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     if (useCache) {
       const { CacheService } = await import('@/services/cache.service');
       const cached = await CacheService.get('AUTO_SCAN_RESULT');
-      if (cached && cached.data) {
-        const formattedResults = cached.data.map((r: any) => ({
+      if (cached && (cached as any).data) { // eslint-disable-line @typescript-eslint/no-explicit-any
+        const formattedResults = (cached as any).data.map((r: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
           ...r,
           market: 'NSE',
           sector: 'Auto-Scan Cache',

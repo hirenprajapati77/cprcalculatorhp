@@ -1,10 +1,11 @@
 import yahooFinance from 'yahoo-finance2';
 import { calculateCPR } from '@/lib/cpr-engine';
+import { CPRResult } from '@/types/cpr.types';
 
 export interface MtfCprLevels {
-  daily?: any;
-  weekly: any;
-  monthly: any;
+  daily?: CPRResult & { width: number; classification: string };
+  weekly: CPRResult & { width: number; classification: string };
+  monthly: CPRResult & { width: number; classification: string };
   confluence: {
     strongSupport: number[];
     strongResistance: number[];
@@ -55,8 +56,17 @@ export class MtfCprService {
     const weekly = { ...weeklyCPR, width: wWidth, classification: wClass };
     const monthly = { ...monthlyCPR, width: mWidth, classification: mClass };
 
-    // Placeholder for confluence (will be calculated fully in UI if daily is known, or we can fetch daily here)
-    const confluence = { strongSupport: [], strongResistance: [] };
+    // Confluence logic: check if weekly and monthly pivots align closely
+    const confluence: { strongSupport: number[], strongResistance: number[] } = { strongSupport: [], strongResistance: [] };
+    
+    // Check if Weekly S1 and Monthly S1 are within 0.5%
+    if (Math.abs(weeklyCPR.s1 - monthlyCPR.s1) / monthlyCPR.s1 < 0.005) {
+      confluence.strongSupport.push(Math.round(weeklyCPR.s1));
+    }
+    // Check if Weekly R1 and Monthly R1 are within 0.5%
+    if (Math.abs(weeklyCPR.r1 - monthlyCPR.r1) / monthlyCPR.r1 < 0.005) {
+      confluence.strongResistance.push(Math.round(weeklyCPR.r1));
+    }
 
     return { weekly, monthly, confluence };
   }
