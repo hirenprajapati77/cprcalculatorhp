@@ -62,30 +62,16 @@ function useBtstState() {
   
   if (time < 1515) {
     state = 'PREMARKET';
-    message = 'Signals unlock at 15:20 IST';
+    message = 'Signals unlock at 15:15 IST';
     emptyMessage = 'BTST discovery has not started.';
     const target = new Date(now); target.setHours(15, 15, 0, 0);
     const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
     nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  } else if (time >= 1515 && time < 1520) {
-    state = 'DISCOVERING';
-    message = 'Collecting final market structure';
-    emptyMessage = 'BTST discovery has not started.';
-    const target = new Date(now); target.setHours(15, 20, 0, 0);
-    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
-    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  } else if (time >= 1520 && time < 1525) {
+  } else if (time >= 1515 && time <= 2359) {
     state = 'ACTIVE';
     message = 'Generating BTST candidates';
     emptyMessage = 'Scanning live candidates…';
-    const target = new Date(now); target.setHours(15, 25, 0, 0);
-    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
-    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  } else if (time >= 1525 && time < 1530) {
-    state = 'FROZEN';
-    message = 'Signal generation locked';
-    emptyMessage = 'No qualified BTST setups today.';
-    nextRefresh = 'Locked';
+    nextRefresh = 'Live until midnight';
   } else {
     state = 'MARKET_CLOSED';
     message = 'Market is closed';

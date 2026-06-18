@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Check IST time — only proceed if 15:18-15:25 IST
+  // Check IST time — only proceed if 15:15-23:59 IST
   const now = new Date();
   const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const hours = istTime.getHours();
@@ -22,8 +22,8 @@ export async function GET(req: NextRequest) {
   }
 
   const timeValue = hours * 100 + minutes;
-  if (timeValue < 1518 || timeValue > 1525) {
-    return NextResponse.json({ message: `Time ${hours}:${minutes} is outside alert window (15:18-15:25 IST)` });
+  if (timeValue < 1515 || timeValue > 2359) {
+    return NextResponse.json({ message: `Time ${hours}:${minutes} is outside alert window (15:15-23:59 IST)` });
   }
 
   try {
