@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { TradeEngineService } from './trade-engine.service';
 import { HistoricalProvider } from './historical.provider';
 import { MetricsService } from './metrics.service';
+import { calculateCPR } from '@/lib/cpr-engine';
 
 const prisma = new PrismaClient();
 
@@ -40,6 +41,7 @@ export class BacktestService {
     riskModel?: string;
     executionMode: string;
     metricsVersion?: number;
+    riskValue?: number;
   }) {
     const mode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
     
@@ -62,6 +64,7 @@ export class BacktestService {
         capital: config.capital,
         riskModel: config.riskModel || 'Risk%',
         executionMode: config.executionMode,
+        riskValue: config.riskValue !== undefined ? config.riskValue : 1.0,
         status: 'QUEUED',
         metricsVersion: config.metricsVersion || 1,
       }
@@ -125,42 +128,86 @@ export class BacktestService {
           const ohlc = await HistoricalProvider.getHistory(symbol, run.startDate, run.endDate);
           if (ohlc.length < 2) continue;
 
-          const entryPrice = ohlc[0].close;
-          
-          const directions = [];
-          if (run.executionMode === 'LONG_ONLY' || run.executionMode === 'COMBINED' || !run.executionMode.includes('SHORT')) {
-            directions.push('LONG');
-          }
-          if (run.executionMode === 'SHORT_ONLY' || run.executionMode === 'COMBINED') {
-            directions.push('SHORT');
-          }
+          for (let i = 1; i < ohlc.length; i++) {
+            const yesterday = ohlc[i - 1];
+            const today = ohlc[i];
 
-          for (const type of directions) {
-            const sl = type === 'LONG' ? entryPrice * 0.95 : entryPrice * 1.05;
-            const target = type === 'LONG' ? entryPrice * 1.10 : entryPrice * 0.90;
+            // Compute today's CPR from yesterday's OHLC
+            const cpr = calculateCPR({
+              high: yesterday.high,
+              low: yesterday.low,
+              close: yesterday.close,
+            });
 
+            // Determine bias: is today's open above TC?
+            const bias = today.open > cpr.tc ? 'BULLISH'
+                       : today.open < cpr.bc ? 'BEARISH'
+                       : 'RANGE';
+
+            if (bias === 'RANGE') continue; // skip range days
+
+            // CPR Width filter: only trade NARROW CPR
+            const widthPct = Math.abs(cpr.tc - cpr.bc) / cpr.pivot * 100;
+            if (widthPct > 0.5) continue; // skip NORMAL/WIDE
+
+            // Entry, SL, Target (mirrors live scanner logic)
+            let entryPrice: number, sl: number, target: number;
+            let direction: 'LONG' | 'SHORT';
+
+            if (bias === 'BULLISH') {
+              direction = 'LONG';
+              entryPrice = cpr.tc;
+              const dayLowSL = today.low;
+              const minSL = entryPrice * 0.995;
+              sl = Math.min(dayLowSL, minSL);
+              const risk = entryPrice - sl;
+              // Use R1 as target if RR >= 1.5, else R2
+              target = (cpr.r1 - entryPrice) / risk >= 1.5
+                ? cpr.r1 : cpr.r2;
+            } else {
+              direction = 'SHORT';
+              entryPrice = cpr.bc;
+              const dayHighSL = today.high;
+              const maxSL = entryPrice * 1.005;
+              sl = Math.max(dayHighSL, maxSL);
+              const risk = sl - entryPrice;
+              target = (entryPrice - cpr.s1) / risk >= 1.5
+                ? cpr.s1 : cpr.s2;
+            }
+
+            // Only run directions matching executionMode
+            if (run.executionMode === 'LONG_ONLY' && direction === 'SHORT') continue;
+            if (run.executionMode === 'SHORT_ONLY' && direction === 'LONG') continue;
+
+            // Run trade simulation from day i onwards
+            const tradeOhlc = ohlc.slice(i);
             const tradeResult = TradeEngineService.simulateTrade(
-              type as 'LONG' | 'SHORT',
+              direction,
               entryPrice,
               sl,
               target,
-              ohlc,
+              tradeOhlc,
               {
                 capital: run.capital,
                 riskModel: run.riskModel,
-                riskValue: 1, // 1% risk
-                executionMode: 'optimistic'
+                riskValue: run.riskValue ?? 1, // use config value
+                executionMode: 'conservative'  // always conservative
               }
             );
+
+            // Signal reflects actual CPR conditions
+            const signal = bias === 'BULLISH'
+              ? `NARROW_CPR BULLISH w=${widthPct.toFixed(3)}%`
+              : `NARROW_CPR BEARISH w=${widthPct.toFixed(3)}%`;
 
             const trade = await prisma.trade.create({
               data: {
                 backtestRunId: runId,
                 symbol,
-                type: type,
-                signal: type === 'LONG' ? 'BTST Breakout' : 'STBT Breakdown',
+                type: direction,
+                signal,
                 status: tradeResult.status,
-                entryDate: new Date(ohlc[0].date),
+                entryDate: new Date(today.date),
                 entryPrice,
                 entryReason: 'Scanner Trigger',
                 exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,

@@ -56,6 +56,59 @@ export class TradeEngineService {
       const candle = ohlcSeries[i];
       durationDays++;
 
+      // CHECK 1: Gap at open (must check before high/low)
+      if (type === 'LONG') {
+        if (candle.open <= sl) {
+          status = 'CLOSED_SL_GAP';
+          exitPrice = candle.open;
+          exitDate = candle.date;
+          exitReason = 'Gap Down below Stop Loss';
+          journalEvents.push({
+            event: 'SL_MOVE',
+            timestamp: new Date(candle.date),
+            details: `Stop loss executed due to gap at ${candle.open.toFixed(2)}`
+          });
+          break;
+        }
+        if (candle.open >= target) {
+          status = 'CLOSED_TARGET_GAP';
+          exitPrice = candle.open;
+          exitDate = candle.date;
+          exitReason = 'Gap Up above Target';
+          journalEvents.push({
+            event: 'TARGET',
+            timestamp: new Date(candle.date),
+            details: `Target reached due to gap at ${candle.open.toFixed(2)}`
+          });
+          break;
+        }
+      } else { // SHORT
+        if (candle.open >= sl) {
+          status = 'CLOSED_SL_GAP';
+          exitPrice = candle.open;
+          exitDate = candle.date;
+          exitReason = 'Gap Up above Stop Loss';
+          journalEvents.push({
+            event: 'SL_MOVE',
+            timestamp: new Date(candle.date),
+            details: `Stop loss executed due to gap at ${candle.open.toFixed(2)}`
+          });
+          break;
+        }
+        if (candle.open <= target) {
+          status = 'CLOSED_TARGET_GAP';
+          exitPrice = candle.open;
+          exitDate = candle.date;
+          exitReason = 'Gap Down below Target';
+          journalEvents.push({
+            event: 'TARGET',
+            timestamp: new Date(candle.date),
+            details: `Target reached due to gap at ${candle.open.toFixed(2)}`
+          });
+          break;
+        }
+      }
+
       const high = candle.high;
       const low = candle.low;
 

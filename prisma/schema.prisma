@@ -105,6 +105,7 @@ model BacktestRun {
   capital        Float
   riskModel      String
   executionMode  String
+  riskValue      Float    @default(1.0)
   status         String
   metricsVersion Int      @default(1)
   createdAt      DateTime @default(now())
