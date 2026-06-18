@@ -157,22 +157,52 @@ export class BacktestService {
             if (bias === 'BULLISH') {
               direction = 'LONG';
               entryPrice = cpr.tc;
+
+              // If today opened above TC (gap up), fill at open instead
+              if (today.open > cpr.tc) {
+                entryPrice = today.open;
+              } else if (today.high < cpr.tc) {
+                continue; // TC never reached today — skip trade
+              }
+
               const dayLowSL = today.low;
               const minSL = entryPrice * 0.995;
               sl = Math.min(dayLowSL, minSL);
               const risk = entryPrice - sl;
+
+              if (risk <= 0) continue; // skip degenerate setup
+
               // Use R1 as target if RR >= 1.5, else R2
               target = (cpr.r1 - entryPrice) / risk >= 1.5
                 ? cpr.r1 : cpr.r2;
+
+              if (target <= entryPrice) {
+                target = entryPrice + risk * 1.5; // fallback
+              }
             } else {
               direction = 'SHORT';
               entryPrice = cpr.bc;
+
+              // If today opened below BC (gap down), fill at open
+              if (today.open < cpr.bc) {
+                entryPrice = today.open;
+              } else if (today.low > cpr.bc) {
+                continue; // BC never reached — skip trade
+              }
+
               const dayHighSL = today.high;
               const maxSL = entryPrice * 1.005;
               sl = Math.max(dayHighSL, maxSL);
               const risk = sl - entryPrice;
+
+              if (risk <= 0) continue; // skip degenerate setup
+
               target = (entryPrice - cpr.s1) / risk >= 1.5
                 ? cpr.s1 : cpr.s2;
+
+              if (target >= entryPrice) {
+                target = entryPrice - risk * 1.5; // fallback
+              }
             }
 
             // Only run directions matching executionMode
