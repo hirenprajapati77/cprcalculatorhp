@@ -634,6 +634,16 @@ export default function ScannerClient() {
 
   // Filters & Pagination State
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cpr_settings_default_universe');
+    if (saved) {
+      if (saved === 'NSE_FNO') setUniverse('NIFTY_FNO');
+      else if (saved === 'NIFTY50') setUniverse('NIFTY50');
+      else if (saved === 'NIFTY200' || saved === 'NIFTY100') setUniverse('NIFTY200');
+      else if (saved === 'ALL_NSE') setUniverse('ALL');
+    }
+  }, []);
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
   const [scannerMode, setScannerMode] = useState<'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT'>('CPR');
@@ -1562,7 +1572,6 @@ export default function ScannerClient() {
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-accent-green animate-pulse" />
           <span className="font-bold text-accent-green uppercase tracking-wide">LIVE</span>
-          <span className="text-text-tertiary text-[9px]">Yahoo Finance</span>
         </div>
       </div>
 
