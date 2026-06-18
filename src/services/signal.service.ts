@@ -83,7 +83,7 @@ export class SignalService {
 
     // 3. Virgin CPR Check
     // If today's actual range (stock.low to stock.high) did not touch today's CPR range
-    const virginCPR = stock.low > Math.max(cprToday.tc, cprToday.bc) || stock.high < Math.min(cprToday.tc, cprToday.bc);
+    const virginCPR = todayCandle.low > Math.max(cprToday.tc, cprToday.bc) || todayCandle.high < Math.min(cprToday.tc, cprToday.bc);
     if (virginCPR) {
       signals.push('VIRGIN');
     }
