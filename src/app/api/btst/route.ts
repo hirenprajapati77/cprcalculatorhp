@@ -54,6 +54,9 @@ export async function GET(request: Request) {
       longScore: number;
       shortScore: number;
       tag: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
+      entry?: number;
+      sl?: number;
+      target?: number;
       optionSuggestion?: unknown;
     }
 
@@ -69,7 +72,10 @@ export async function GET(request: Request) {
         const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
         const enrichmentPromises = eligibleBtst.map(async (r) => {
           try {
-            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT', r.entry, r.sl, r.target);
+            const stockEntry = r.entry || r.ltp;
+            const stockSl = r.sl || (r.tag === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
+            const stockTarget = r.target || (r.tag === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
+            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT', stockEntry, stockSl, stockTarget);
             return { symbol: r.symbol, suggestion };
           } catch (e) {
             console.warn(`Failed to generate option suggestion for BTST ${r.symbol}:`, e);
