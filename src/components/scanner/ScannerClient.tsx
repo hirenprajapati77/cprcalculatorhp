@@ -193,13 +193,18 @@ interface ScannedStock {
     closeStrength?: number;
   };
   optionSuggestion?: {
-    symbol: string;
-    strike: number;
-    type: 'CE' | 'PE';
-    ltp: number;
-    strategy: 'ATM' | 'OTM' | 'ITM';
-    underlyingLtp: number;
-    formattedName: string;
+    symbol?: string;
+    strike?: number;
+    type?: 'CE' | 'PE';
+    ltp?: number;
+    strategy?: string;
+    underlyingLtp?: number;
+    formattedName?: string;
+    lotSize?: number;
+    cost?: number;
+    sl?: number;
+    target?: number;
+    error?: string;
   } | null;
 }
 
