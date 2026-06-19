@@ -142,7 +142,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'NESTLEIND   ', name: 'Nestle India                       ', sector: 'Consumer Goods           ', marketCap: 225000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'GODREJCP    ', name: 'Godrej Consumer Products           ', sector: 'Consumer Goods           ', marketCap: 110000, isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'DABUR       ', name: 'Dabur India                        ', sector: 'Consumer Goods           ', marketCap: 88000 , isNifty50: false, isNifty200: true , isFnO: true  },
-  { symbol: 'EMAMILTD    ', name: 'Emami                              ', sector: 'Consumer Goods           ', marketCap: 30000 , isNifty50: false, isNifty200: true , isFnO: true  },
+  { symbol: 'EMAMILTD    ', name: 'Emami                              ', sector: 'Consumer Goods           ', marketCap: 30000 , isNifty50: false, isNifty200: true , isFnO: false },
   { symbol: 'MARICO      ', name: 'Marico                             ', sector: 'Consumer Goods           ', marketCap: 65000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'COLPAL      ', name: 'Colgate Palmolive                  ', sector: 'Consumer Goods           ', marketCap: 55000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'TITAN       ', name: 'Titan Company                      ', sector: 'Consumer Goods           ', marketCap: 270000, isNifty50: true , isNifty200: true , isFnO: true  },
