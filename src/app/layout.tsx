@@ -50,6 +50,7 @@ export default function RootLayout({
     <html lang="en" className="dark scroll-smooth" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col bg-background text-foreground terminal-grid`}
+        suppressHydrationWarning
       >
         <Providers>
           <ToastProvider>
