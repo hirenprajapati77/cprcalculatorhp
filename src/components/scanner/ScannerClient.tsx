@@ -438,7 +438,7 @@ const StockRow = React.memo(({
                         <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
                           {row.optionSuggestion.formattedName ? row.optionSuggestion.formattedName.split(' ').slice(1).join(' ') : '—'}
                         </span>
-                        <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp)}</span>
+                        <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp || 0)}</span>
                       </div>
                       <span className="text-[7.5px] text-text-tertiary leading-none">Option Suggestion</span>
                     </>
@@ -2803,7 +2803,7 @@ export default function ScannerClient() {
                                 <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type} | Lot Size: {drawerStock.optionSuggestion.lotSize}</span>
                               </div>
                               <div className="text-right">
-                                <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp)}</span>
+                                <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp || 0)}</span>
                                 <span className="text-[9px] bg-accent-blue/20 text-accent-blue px-2 py-0.5 rounded font-bold uppercase">{drawerStock.optionSuggestion.strategy}</span>
                               </div>
                             </div>
