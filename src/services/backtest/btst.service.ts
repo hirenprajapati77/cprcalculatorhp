@@ -60,7 +60,7 @@ export class BtstService {
     if (hourPart && minutePart) {
       const istHour = parseInt(hourPart, 10);
       const istMin = parseInt(minutePart, 10);
-      return (istHour === 15 && istMin >= 15) || (istHour > 15);
+      return (istHour === 15 && istMin >= 10) || (istHour > 15);
     }
 
     // Fallback if formatting fails for some reason
@@ -69,7 +69,7 @@ export class BtstService {
     const istTime = new Date(utcTime + istOffset);
     const hour = istTime.getHours();
     const min = istTime.getMinutes();
-    return (hour === 15 && min >= 15) || (hour > 15);
+    return (hour === 15 && min >= 10) || (hour > 15);
   }
 
   /**

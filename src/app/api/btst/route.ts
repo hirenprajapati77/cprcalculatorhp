@@ -26,7 +26,7 @@ export async function GET(request: Request) {
           executionWindowOpen: false,
           cachedResult: true,
           scannedAt: cached.scannedAt,
-          message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:20 IST.`,
+          message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:10 IST.`,
           results: cached.results,
           insights: cached.insights,
         });
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         success: true,
         executionWindowOpen: false,
         cachedResult: false,
-        message: 'BTST/STBT scanner runs only at 15:20–15:25 IST. Check back then.',
+        message: 'BTST/STBT scanner runs only at 15:10–15:25 IST. Check back then.',
         results: [],
         insights: {
           strongSignal: 0, breakoutReady: 0, avoid: 0,

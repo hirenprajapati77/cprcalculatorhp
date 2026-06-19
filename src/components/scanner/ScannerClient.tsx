@@ -1555,7 +1555,7 @@ export default function ScannerClient() {
     const isWeekdayForCountdown = istDateStrForCountdown !== 'Saturday' && istDateStrForCountdown !== 'Sunday';
 
     const totalMinForCountdown = hForCountdown * 60 + mForCountdown;
-    const targetMinForCountdown = 15 * 60 + 20; // 15:20
+    const targetMinForCountdown = 15 * 60 + 10; // 15:10
 
     if (isWeekdayForCountdown && totalMinForCountdown < targetMinForCountdown) {
       const minutesUntil = targetMinForCountdown - totalMinForCountdown;
@@ -2293,12 +2293,12 @@ export default function ScannerClient() {
                     }`}>
                       {cachedResult
                         ? `Showing cached scan from ${scannedAt}`
-                        : `BTST/STBT Scanner — Activates at 15:20 IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                        : `BTST/STBT Scanner — Activates at 15:10 IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {cachedResult
-                        ? 'Next live scan today at 15:20–15:25 IST'
+                        ? 'Next live scan today at 15:10–15:25 IST'
                         : 'Results will appear here automatically when window opens'
                       }
                     </p>
@@ -2312,7 +2312,7 @@ export default function ScannerClient() {
                   border border-green-500/30 font-mono">
                   <span className="animate-pulse text-green-400">●</span>
                   <p className="text-sm font-medium text-green-400">
-                    LIVE SCAN ACTIVE — 15:20 IST Window Open
+                    LIVE SCAN ACTIVE — 15:10 IST Window Open{countdownDisplay ? ' (Bypass/Testing Mode)' : ''}
                   </p>
                 </div>
               )}
