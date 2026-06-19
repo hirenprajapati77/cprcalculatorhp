@@ -24,6 +24,8 @@ export interface MarketStockData {
   history?: HistoricalCandle[];
   vwap?: number;
   candle15m?: { open: number; high: number; low: number; close: number; volume: number } | null;
+  sma20Slope?: number;
+  sma50Slope?: number;
 }
 
 export interface LiveStatus {
@@ -394,6 +396,19 @@ export class MarketService {
               }
             }
 
+            const closes = history.map(c => c.close);
+            let sma20Slope = 0, sma50Slope = 0;
+            if (closes.length >= 25) {
+              const sma20 = closes.slice(-20).reduce((a,b)=>a+b,0)/20;
+              const sma20prev = closes.slice(-25,-5).reduce((a,b)=>a+b,0)/20;
+              sma20Slope = sma20 - sma20prev;
+            }
+            if (closes.length >= 55) {
+              const sma50 = closes.slice(-50).reduce((a,b)=>a+b,0)/50;
+              const sma50prev = closes.slice(-55,-5).reduce((a,b)=>a+b,0)/50;
+              sma50Slope = sma50 - sma50prev;
+            }
+
             // -- Fetch 15m intraday data for VWAP and candle15m --
             let vwap = (prevHigh + prevLow + prevClose) / 3;
             let candle15m = null;
@@ -463,7 +478,9 @@ export class MarketService {
               ltp,
               history,
               vwap,
-              candle15m
+              candle15m,
+              sma20Slope,
+              sma50Slope
             };
             await CacheService.set(cacheKey, resultData, 60);
             return resultData;
@@ -538,7 +555,7 @@ export class MarketService {
       });
     }
 
-    const resultData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history };
+    const resultData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history, sma20Slope: 0, sma50Slope: 0 };
     await CacheService.set(cacheKey, resultData, 60);
     return resultData;
   }

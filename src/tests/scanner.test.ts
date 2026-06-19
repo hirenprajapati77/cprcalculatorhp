@@ -40,8 +40,16 @@ test('Scanner Service Signals Evaluation', async (t) => {
       volume: 100000,
       avgVolume: 100000,
       marketCap: 450000,
-      ltp: 112, // today's min price is 110. 110 > TC 100.67 => VIRGIN CPR
+      ltp: 112,
       history: [
+        {
+          date: '2-days-ago',
+          open: 85,
+          high: 90,
+          low: 80,
+          close: 85,
+          volume: 100000,
+        },
         {
           date: 'yesterday',
           open: 100,
@@ -182,5 +190,169 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
 
     const score = RankingService.calculateScore(result);
     assert.strictEqual(score, 100);
+  });
+});
+
+test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'ASCSTOCK',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 100,
+      history: [
+        { date: '3-days-ago', open: 80, high: 82, low: 78, close: 80, volume: 100000 },
+        { date: '2-days-ago', open: 90, high: 92, low: 88, close: 90, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 110, high: 112, low: 108, close: 110, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('KGS_ASC_CPR'));
+    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
+  });
+
+  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'DESCSTOCK',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 100,
+      history: [
+        { date: '3-days-ago', open: 120, high: 122, low: 118, close: 120, volume: 100000 },
+        { date: '2-days-ago', open: 110, high: 112, low: 108, close: 110, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 90, high: 92, low: 88, close: 90, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('KGS_DESC_CPR'));
+    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
+  });
+
+  await t.test('KGS_INSIDE_CPR fires when today fully inside yesterday', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'INSIDECPR',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 100,
+      history: [
+        { date: '2-days-ago', open: 100, high: 110, low: 90, close: 105, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 103, low: 101, close: 101.5, volume: 100000 },
+        { date: todayStr, open: 100, high: 102, low: 98, close: 100, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('KGS_INSIDE_CPR'));
+    assert.ok(!scanResult.signals.includes('KGS_OUTSIDE_CPR'));
+  });
+
+  await t.test('KGS_OUTSIDE_CPR fires when today fully contains yesterday', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'OUTSIDECPR',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 100,
+      history: [
+        { date: '2-days-ago', open: 100, high: 103, low: 101, close: 101.5, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 110, low: 90, close: 105, volume: 100000 },
+        { date: todayStr, open: 100, high: 108, low: 92, close: 100, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('KGS_OUTSIDE_CPR'));
+    assert.ok(!scanResult.signals.includes('KGS_INSIDE_CPR'));
+  });
+
+  await t.test('KGS_RTP fires when SMA20/SMA50 slopes match sign', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'RTPSTOCK',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 100,
+      sma20Slope: 1.5,
+      sma50Slope: 0.8,
+      history: []
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('KGS_RTP'));
+  });
+
+  await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'INSIDEVAL',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 105,
+      low: 95,
+      close: 101,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 102,
+      history: [
+        {
+          date: 'yesterday',
+          open: 100,
+          high: 105,
+          low: 95,
+          close: 101,
+          volume: 100000,
+        },
+        {
+          date: todayStr,
+          open: 101,
+          high: 101,
+          low: 100,
+          close: 100.5,
+          volume: 100000,
+        }
+      ]
+    };
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('INSIDE_VALUE'));
   });
 });

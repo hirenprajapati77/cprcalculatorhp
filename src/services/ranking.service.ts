@@ -65,7 +65,37 @@ export class RankingService {
       score += 10;
     }
 
-    return Math.min(score, 100);
+    // 10. KGS CPR Theory Scoring Adjustments
+    if (signals.includes('KGS_ASC_CPR') && signals.includes('BULLISH')) {
+      score += 10;
+    }
+    if (signals.includes('KGS_DESC_CPR') && signals.includes('BEARISH')) {
+      score += 10;
+    }
+    // Conflict penalty — direction mismatch
+    if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) {
+      score -= 10;
+    }
+    if (signals.includes('KGS_DESC_CPR') && signals.includes('BULLISH')) {
+      score -= 10;
+    }
+
+    // KGS Inside CPR
+    if (signals.includes('KGS_INSIDE_CPR')) {
+      score += 20;
+    }
+
+    // KGS Outside CPR
+    if (signals.includes('KGS_OUTSIDE_CPR')) {
+      score -= 10;
+    }
+
+    // RTP Filter + Narrow CPR
+    if (signals.includes('NARROW') && signals.includes('KGS_RTP')) {
+      score += 15;
+    }
+
+    return Math.max(0, Math.min(score, 100));
   }
 
   /**

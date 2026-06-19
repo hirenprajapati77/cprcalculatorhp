@@ -2643,7 +2643,12 @@ export default function ScannerClient() {
                             HOT_ZONE: "Price within 0.5% of CPR band. High-reaction zone.",
                             VOLUME_SPIKE: "Volume > 2x average. Institutional activity.",
                             BULLISH: "Bias based on price vs yesterday TC/BC level.",
-                            BEARISH: "Bias based on price vs yesterday TC/BC level."
+                            BEARISH: "Bias based on price vs yesterday TC/BC level.",
+                            KGS_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
+                            KGS_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
+                            KGS_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
+                            KGS_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
+                            KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR."
                           };
                           const expl = explMap[sig];
                           if (!expl) return null;

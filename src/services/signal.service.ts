@@ -28,6 +28,8 @@ export class SignalService {
     const todayStr = new Date().toISOString().split('T')[0];
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
+    let dayBeforeYesterdayCandle = yesterdayCandle;
+    let threeDaysAgoCandle = yesterdayCandle;
 
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
@@ -42,7 +44,22 @@ export class SignalService {
       yesterdayCandle = isLastToday 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
+
+      dayBeforeYesterdayCandle = isLastToday
+        ? (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : yesterdayCandle)
+        : (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : yesterdayCandle);
+
+      threeDaysAgoCandle = isLastToday
+        ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : dayBeforeYesterdayCandle)
+        : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : dayBeforeYesterdayCandle);
     }
+
+    // Calculate Yesterday's CPR using day before yesterday's OHLC
+    const cprYesterday = calculateCPR({
+      high: dayBeforeYesterdayCandle.high,
+      low: dayBeforeYesterdayCandle.low,
+      close: dayBeforeYesterdayCandle.close,
+    });
 
     // 1. Calculate Today's CPR using yesterday's OHLC
     const cprToday = calculateCPR({
@@ -82,10 +99,63 @@ export class SignalService {
     if (overlappingValue) signals.push('OVERLAPPING_VALUE');
 
     // 3. Virgin CPR Check
-    // If today's actual range (stock.low to stock.high) did not touch today's CPR range
-    const virginCPR = todayCandle.low > Math.max(cprToday.tc, cprToday.bc) || todayCandle.high < Math.min(cprToday.tc, cprToday.bc);
+    // Check if YESTERDAY's CPR was virgin
+    // (price never touched it during yesterday's session)
+    const yesterdayTouchedCpr = 
+      yesterdayCandle.low <= cprYesterday.tc &&
+      yesterdayCandle.high >= cprYesterday.bc;
+    
+    // Virgin = yesterday's CPR untouched (not 
+    // some arbitrary older CPR)
+    const virginCPR = !yesterdayTouchedCpr;
     if (virginCPR) {
       signals.push('VIRGIN');
+    }
+
+    // Feature 1: Ascending/Descending CPR
+    if (stock.history && stock.history.length >= 4) {
+      const d1 = calculateCPR({ 
+        high: threeDaysAgoCandle.high,
+        low: threeDaysAgoCandle.low,
+        close: threeDaysAgoCandle.close
+      });
+      const d2 = cprYesterday;
+      const d3 = cprToday;
+
+      if (d3.tc > d2.tc && d2.tc > d1.tc) {
+        signals.push('KGS_ASC_CPR');
+      }
+      if (d3.tc < d2.tc && d2.tc < d1.tc) {
+        signals.push('KGS_DESC_CPR');
+      }
+    }
+
+    // Feature 2: KGS Inside CPR (distinct concept)
+    const isKgsInsideCPR = 
+      cprToday.tc < cprYesterday.tc &&
+      cprToday.bc > cprYesterday.bc;
+
+    if (isKgsInsideCPR) {
+      signals.push('KGS_INSIDE_CPR');
+    }
+
+    // Feature 3: KGS Outside CPR
+    const isKgsOutsideCPR =
+      cprToday.tc > cprYesterday.tc &&
+      cprToday.bc < cprYesterday.bc;
+
+    if (isKgsOutsideCPR) {
+      signals.push('KGS_OUTSIDE_CPR');
+    }
+
+    // Feature 4: RTP Filter (Running Trend Pattern)
+    const hasRTP = 
+      stock.sma20Slope !== undefined && stock.sma50Slope !== undefined &&
+      stock.sma20Slope !== 0 && stock.sma50Slope !== 0 &&
+      Math.sign(stock.sma20Slope) === Math.sign(stock.sma50Slope);
+    
+    if (hasRTP) {
+      signals.push('KGS_RTP');
     }
 
     // 4. Hot Zone (Confluence Zone)
