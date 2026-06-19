@@ -62,6 +62,62 @@ export async function GET(req: NextRequest) {
       // ACTIVE — run scan and cache
       const signals = await OvernightService.discover('BOTH');
 
+      interface OvernightResultItem {
+        symbol: string;
+        ltp: number;
+        overnightScore: number;
+        direction: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
+        optionSuggestion?: unknown;
+      }
+
+      const signalsList = signals as unknown as OvernightResultItem[];
+
+      // F&O Option Suggestion Enrichment Layer for Overnight (LONG/SHORT, score >= 70, FnO only)
+      try {
+        const { MarketService } = await import('@/services/market.service');
+        const fnoStocks = new Set(MarketService.getUniverse('NIFTY_FNO').map(s => s.symbol.trim()));
+
+        const eligibleOvernight = signalsList
+          .filter((r) => {
+            const cleanSym = r.symbol.split(':')[0].trim();
+            const score = r.overnightScore || 0;
+            return fnoStocks.has(cleanSym) && score >= 70 && (r.direction === 'LONG' || r.direction === 'SHORT');
+          })
+          .sort((a, b) => (b.overnightScore || 0) - (a.overnightScore || 0))
+          .slice(0, 10);
+
+        if (eligibleOvernight.length > 0) {
+          const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
+          const enrichmentPromises = eligibleOvernight.map(async (r) => {
+            const cleanSym = r.symbol.split(':')[0].trim();
+            try {
+              const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, r.ltp, r.direction as 'LONG' | 'SHORT');
+              return { symbol: r.symbol, suggestion };
+            } catch (e) {
+              console.warn(`Failed to generate option suggestion for Overnight ${r.symbol}:`, e);
+              return { symbol: r.symbol, suggestion: null };
+            }
+          });
+
+          const enrichedResults = await Promise.allSettled(enrichmentPromises);
+          const suggestionMap = new Map<string, unknown>();
+
+          for (const res of enrichedResults) {
+            if (res.status === 'fulfilled' && res.value && res.value.suggestion) {
+              suggestionMap.set(res.value.symbol, res.value.suggestion);
+            }
+          }
+
+          for (const r of signalsList) {
+            if (suggestionMap.has(r.symbol)) {
+              r.optionSuggestion = suggestionMap.get(r.symbol);
+            }
+          }
+        }
+      } catch (enrichErr) {
+        console.error('Error during option suggestion enrichment in Overnight route:', enrichErr);
+      }
+
       // Compute insights
       let strongSignal = 0;
       let breakoutReady = 0;

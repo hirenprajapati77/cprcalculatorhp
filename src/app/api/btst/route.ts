@@ -47,6 +47,54 @@ export async function GET(request: Request) {
     // Window open — run scan then cache result
     const scanResult = await BtstService.discover(universe);
 
+    interface BtstResultItem {
+      symbol: string;
+      ltp: number;
+      longScore: number;
+      shortScore: number;
+      tag: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
+      optionSuggestion?: unknown;
+    }
+
+    const resultsList = scanResult.results as BtstResultItem[];
+
+    // F&O Option Suggestion Enrichment Layer for BTST (LONG) & STBT (SHORT)
+    const eligibleBtst = resultsList
+      .filter((r) => (r.tag === 'LONG' || r.tag === 'SHORT') && Math.max(r.longScore, r.shortScore) >= 70)
+      .slice(0, 10);
+
+    if (eligibleBtst.length > 0) {
+      try {
+        const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
+        const enrichmentPromises = eligibleBtst.map(async (r) => {
+          try {
+            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT');
+            return { symbol: r.symbol, suggestion };
+          } catch (e) {
+            console.warn(`Failed to generate option suggestion for BTST ${r.symbol}:`, e);
+            return { symbol: r.symbol, suggestion: null };
+          }
+        });
+
+        const enrichedResults = await Promise.allSettled(enrichmentPromises);
+        const suggestionMap = new Map<string, unknown>();
+
+        for (const res of enrichedResults) {
+          if (res.status === 'fulfilled' && res.value && res.value.suggestion) {
+            suggestionMap.set(res.value.symbol, res.value.suggestion);
+          }
+        }
+
+        for (const r of resultsList) {
+          if (suggestionMap.has(r.symbol)) {
+            r.optionSuggestion = suggestionMap.get(r.symbol);
+          }
+        }
+      } catch (enrichErr) {
+        console.error('Error during option suggestion enrichment in BTST route:', enrichErr);
+      }
+    }
+
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
     const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });

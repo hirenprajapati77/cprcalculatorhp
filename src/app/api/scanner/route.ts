@@ -204,6 +204,45 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // F&O Option Suggestion Enrichment Layer (Top 10 Strong Buy by score)
+    const strongBuys = formattedResults
+      .filter(r => r.score >= 90)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+
+    if (strongBuys.length > 0) {
+      try {
+        const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
+        const enrichmentPromises = strongBuys.map(async (r) => {
+          const bias: 'BULLISH' | 'BEARISH' = r.signalSummary && r.signalSummary.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
+          try {
+            const suggestion = await OptionSuggestionService.suggestOption(r.symbol, r.ltp, bias);
+            return { symbol: r.symbol, suggestion };
+          } catch (e) {
+            console.warn(`Failed to generate option suggestion for ${r.symbol}:`, e);
+            return { symbol: r.symbol, suggestion: null };
+          }
+        });
+
+        const enrichedResults = await Promise.allSettled(enrichmentPromises);
+        const suggestionMap = new Map<string, unknown>();
+
+        for (const res of enrichedResults) {
+          if (res.status === 'fulfilled' && res.value && res.value.suggestion) {
+            suggestionMap.set(res.value.symbol, res.value.suggestion);
+          }
+        }
+
+        for (const r of formattedResults) {
+          if (suggestionMap.has(r.symbol)) {
+            (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+          }
+        }
+      } catch (enrichErr) {
+        console.error('Error during option suggestion enrichment in scanner route:', enrichErr);
+      }
+    }
+
     const universeCount = MarketService.getUniverseCount(universe);
 
     return NextResponse.json({

@@ -192,6 +192,15 @@ interface ScannedStock {
     conf15m?: number;
     closeStrength?: number;
   };
+  optionSuggestion?: {
+    symbol: string;
+    strike: number;
+    type: 'CE' | 'PE';
+    ltp: number;
+    strategy: 'ATM' | 'OTM' | 'ITM';
+    underlyingLtp: number;
+    formattedName: string;
+  } | null;
 }
 
 interface WatchlistItemState {
@@ -403,6 +412,17 @@ const StockRow = React.memo(({
                 <div className="flex justify-between gap-3 text-[9px] text-text-secondary">
                   <span>T: ₹{fmt(row.target)}</span>
                   <span>RR: {row.rr}</span>
+                </div>
+              )}
+              {row.optionSuggestion && (
+                <div className="mt-1.5 pt-1.5 border-t border-border-primary/30 flex flex-col gap-0.5">
+                  <div className="flex justify-between items-center gap-1.5 text-[9px]">
+                    <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
+                      {row.optionSuggestion.formattedName.split(' ').slice(1).join(' ')}
+                    </span>
+                    <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp)}</span>
+                  </div>
+                  <span className="text-[7.5px] text-text-tertiary leading-none">ATM Option Suggestion</span>
                 </div>
               )}
             </div>
@@ -2731,6 +2751,22 @@ export default function ScannerClient() {
                           </p>
                         )}
                       </div>
+
+                      {drawerStock.optionSuggestion && (
+                        <div className="bg-gradient-to-br from-accent-blue/15 to-accent-purple/15 border border-accent-blue/40 rounded p-4 space-y-2">
+                          <span className="font-bold text-[9px] text-accent-blue uppercase tracking-wider block">Suggested Option Trade (ATM)</span>
+                          <div className="flex justify-between items-center text-xs">
+                            <div>
+                              <span className="text-sm font-extrabold text-text-primary block">{drawerStock.optionSuggestion.formattedName}</span>
+                              <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp)}</span>
+                              <span className="text-[9px] bg-accent-blue/20 text-accent-blue px-2 py-0.5 rounded font-bold uppercase">{drawerStock.optionSuggestion.strategy}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="space-y-1 mt-2">
                         <span className="text-[9px] text-text-tertiary uppercase tracking-wider block mb-1">CPR Band Level Chart</span>
