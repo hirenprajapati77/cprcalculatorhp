@@ -17,6 +17,9 @@ export default function SettingsPage() {
   const [telegramChatId, setTelegramChatId] = useState<string>('');
   const [telegramTesting, setTelegramTesting] = useState<boolean>(false);
   const [bypassBtst, setBypassBtst] = useState<boolean>(false);
+  const [fyersConnected, setFyersConnected] = useState<boolean>(false);
+  const [fyersExpiry, setFyersExpiry] = useState<string>('');
+  const [fyersLoading, setFyersLoading] = useState<boolean>(true);
   const { showToast } = useToast();
 
   // Load settings from localStorage on mount
@@ -36,6 +39,43 @@ export default function SettingsPage() {
     setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
     setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
   }, []);
+
+  // Check Fyers connection status on mount
+  useEffect(() => {
+    async function checkFyers() {
+      try {
+        const res = await fetch('/api/broker/fyers/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setFyersConnected(true);
+            setFyersExpiry(new Date(data.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+          } else {
+            setFyersConnected(false);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check Fyers connection:', err);
+      } finally {
+        setFyersLoading(false);
+      }
+    }
+    checkFyers();
+  }, []);
+
+  // Handle connection callbacks
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fyersParam = params.get('fyers');
+    const msgParam = params.get('msg');
+    if (fyersParam === 'connected') {
+      showToast('Fyers account connected successfully!', 'success');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (fyersParam === 'error') {
+      showToast(`Fyers connection failed: ${msgParam || 'Unknown error'}`, 'error');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [showToast]);
 
   const handleTestTelegram = async () => {
     setTelegramTesting(true);
@@ -223,7 +263,39 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        
+        <Card title="Broker Integration" icon={<Cpu size={14} className="text-emerald-500" />}>
+          <div className="p-4 space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <span className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider mb-1">Fyers API Connection</span>
+                {fyersLoading ? (
+                  <span className="text-slate-500 animate-pulse">Checking status...</span>
+                ) : fyersConnected ? (
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    ✅ Connected (Expires: {fyersExpiry})
+                  </span>
+                ) : (
+                  <span className="text-rose-500 font-bold">
+                    🔴 Not connected
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/api/broker/fyers/login';
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase"
+              >
+                {fyersConnected ? 'Reconnect Fyers Account' : 'Connect Fyers Account'}
+              </Button>
+            </div>
+            <p className="text-[9px] text-slate-500 leading-normal">
+              Fyers API authentication token expires every 24 hours. Ensure you click to connect and authorize daily to enable real-time F&O option suggestions.
+            </p>
+          </div>
+        </Card>
+
         <Card title="Telegram Alerts Configuration" icon={<Send size={14} className="text-blue-500" />}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
             <div className="space-y-1.5">

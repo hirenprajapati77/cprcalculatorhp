@@ -47,3 +47,7 @@ dev.db
 *.sqlite
 *.sqlite-journal
 
+# fyers token
+fyers_token.txt
+
+

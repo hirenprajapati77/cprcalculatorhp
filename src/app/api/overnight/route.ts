@@ -91,11 +91,14 @@ export async function GET(req: NextRequest) {
           const enrichmentPromises = eligibleOvernight.map(async (r) => {
             const cleanSym = r.symbol.split(':')[0].trim();
             try {
-              const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, r.ltp, r.direction as 'LONG' | 'SHORT');
+              const stockEntry = r.entry || r.ltp;
+              const stockSl = r.stopLoss || (r.direction === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
+              const stockTarget = r.target || (r.direction === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
+              const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, r.ltp, r.direction as 'LONG' | 'SHORT', stockEntry, stockSl, stockTarget);
               return { symbol: r.symbol, suggestion };
             } catch (e) {
               console.warn(`Failed to generate option suggestion for Overnight ${r.symbol}:`, e);
-              return { symbol: r.symbol, suggestion: null };
+              return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
             }
           });
 

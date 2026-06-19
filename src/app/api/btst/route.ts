@@ -69,11 +69,11 @@ export async function GET(request: Request) {
         const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
         const enrichmentPromises = eligibleBtst.map(async (r) => {
           try {
-            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT');
+            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT', r.entry, r.sl, r.target);
             return { symbol: r.symbol, suggestion };
           } catch (e) {
             console.warn(`Failed to generate option suggestion for BTST ${r.symbol}:`, e);
-            return { symbol: r.symbol, suggestion: null };
+            return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
           }
         });
 

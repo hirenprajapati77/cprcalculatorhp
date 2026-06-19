@@ -250,3 +250,11 @@ model OvernightSignal {
 
   @@map("BtstSignal")
 }
+
+model BrokerToken {
+  id          Int      @id @default(autoincrement())
+  broker      String   @default("fyers")
+  accessToken String
+  expiresAt   DateTime
+  updatedAt   DateTime @updatedAt
+}

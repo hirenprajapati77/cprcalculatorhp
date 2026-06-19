@@ -416,13 +416,28 @@ const StockRow = React.memo(({
               )}
               {row.optionSuggestion && (
                 <div className="mt-1.5 pt-1.5 border-t border-border-primary/30 flex flex-col gap-0.5">
-                  <div className="flex justify-between items-center gap-1.5 text-[9px]">
-                    <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
-                      {row.optionSuggestion.formattedName.split(' ').slice(1).join(' ')}
-                    </span>
-                    <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp)}</span>
-                  </div>
-                  <span className="text-[7.5px] text-text-tertiary leading-none">ATM Option Suggestion</span>
+                  {row.optionSuggestion.error ? (
+                    <div className="text-rose-400 text-[8.5px] font-semibold leading-tight flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span className="truncate max-w-[120px]" title={row.optionSuggestion.error}>
+                        {row.optionSuggestion.error === 'TOKEN_EXPIRED' ? 'Fyers Disconnected' : 
+                         row.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No Option Chain' :
+                         row.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No Budget Match' :
+                         row.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'No Lot Size' :
+                         `Err: ${row.optionSuggestion.error}`}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center gap-1.5 text-[9px]">
+                        <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
+                          {row.optionSuggestion.formattedName ? row.optionSuggestion.formattedName.split(' ').slice(1).join(' ') : '—'}
+                        </span>
+                        <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp)}</span>
+                      </div>
+                      <span className="text-[7.5px] text-text-tertiary leading-none">Option Suggestion</span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -2764,17 +2779,30 @@ export default function ScannerClient() {
 
                       {drawerStock.optionSuggestion && (
                         <div className="bg-gradient-to-br from-accent-blue/15 to-accent-purple/15 border border-accent-blue/40 rounded p-4 space-y-2">
-                          <span className="font-bold text-[9px] text-accent-blue uppercase tracking-wider block">Suggested Option Trade (ATM)</span>
-                          <div className="flex justify-between items-center text-xs">
-                            <div>
-                              <span className="text-sm font-extrabold text-text-primary block">{drawerStock.optionSuggestion.formattedName}</span>
-                              <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type}</span>
+                          <span className="font-bold text-[9px] text-accent-blue uppercase tracking-wider block">Suggested Option Trade</span>
+                          {drawerStock.optionSuggestion.error ? (
+                            <div className="text-xs font-bold text-rose-400 p-1 flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span>
+                                {drawerStock.optionSuggestion.error === 'TOKEN_EXPIRED' ? 'Fyers token expired. Re-authenticate via Settings.' :
+                                 drawerStock.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No option chain data available for this symbol.' :
+                                 drawerStock.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No strike fits the ₹10,000–₹15,000 budget constraint.' :
+                                 drawerStock.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'Stock lot size is missing from symbol master.' :
+                                 `Failed to fetch suggestion: ${drawerStock.optionSuggestion.error}`}
+                              </span>
                             </div>
-                            <div className="text-right">
-                              <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp)}</span>
-                              <span className="text-[9px] bg-accent-blue/20 text-accent-blue px-2 py-0.5 rounded font-bold uppercase">{drawerStock.optionSuggestion.strategy}</span>
+                          ) : (
+                            <div className="flex justify-between items-center text-xs">
+                              <div>
+                                <span className="text-sm font-extrabold text-text-primary block">{drawerStock.optionSuggestion.formattedName}</span>
+                                <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type} | Lot Size: {drawerStock.optionSuggestion.lotSize}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp)}</span>
+                                <span className="text-[9px] bg-accent-blue/20 text-accent-blue px-2 py-0.5 rounded font-bold uppercase">{drawerStock.optionSuggestion.strategy}</span>
+                              </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       )}
 

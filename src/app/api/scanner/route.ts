@@ -216,11 +216,11 @@ export async function GET(request: NextRequest) {
         const enrichmentPromises = strongBuys.map(async (r) => {
           const bias: 'BULLISH' | 'BEARISH' = r.signalSummary && r.signalSummary.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
           try {
-            const suggestion = await OptionSuggestionService.suggestOption(r.symbol, r.ltp, bias);
+            const suggestion = await OptionSuggestionService.suggestOption(r.symbol, r.ltp, bias, r.entry, r.sl, r.target);
             return { symbol: r.symbol, suggestion };
           } catch (e) {
             console.warn(`Failed to generate option suggestion for ${r.symbol}:`, e);
-            return { symbol: r.symbol, suggestion: null };
+            return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
           }
         });
 

@@ -1,54 +1,72 @@
-import fs from 'fs';
-import path from 'path';
+import { prisma } from '@/lib/db';
 import crypto from 'crypto';
 
 export class FyersAuthService {
-  private static tokenFilePath = path.join(process.cwd(), 'fyers_token.txt');
-  private static accessToken: string | null = null;
-
   public static getCredentials() {
-    return {
-      appId: process.env.FYERS_APP_ID || 'XAST342P8T-100',
-      secretId: process.env.FYERS_SECRET_ID || 'Q5G3DG890Y',
-      redirectUrl: process.env.FYERS_REDIRECT_URL || 'https://stock-dashboard-9nvy.onrender.com/api/v1/fyers/callback',
-      authProxyUrl: (process.env.FYERS_AUTH_PROXY_URL || 'https://cold-dew-46bf.prahiren.workers.dev').replace(/\/$/, '')
-    };
+    const appId = process.env.FYERS_APP_ID;
+    const secretId = process.env.FYERS_SECRET_ID;
+    const redirectUrl = process.env.FYERS_REDIRECT_URL;
+    if (!appId || !secretId || !redirectUrl) {
+      throw new Error('Fyers credentials missing from environment variables');
+    }
+    return { appId, secretId, redirectUrl };
   }
 
-  public static loadToken(): boolean {
+  public static async getAccessToken(): Promise<string | null> {
     try {
-      if (fs.existsSync(this.tokenFilePath)) {
-        const token = fs.readFileSync(this.tokenFilePath, 'utf8').trim();
-        if (token && token.length > 20) {
-          this.accessToken = token;
-          return true;
-        }
+      const tokenRecord = await prisma.brokerToken.findFirst({
+        where: { broker: 'fyers' },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (tokenRecord && tokenRecord.expiresAt > new Date()) {
+        return tokenRecord.accessToken;
       }
     } catch (err) {
-      console.error('[FyersAuthService] Error loading token:', err);
+      console.error('[FyersAuthService] Error loading token from database:', err);
     }
-    return false;
+    return null;
   }
 
-  public static saveToken(token: string): void {
+  public static async getTokenDetails() {
     try {
-      this.accessToken = token;
-      fs.writeFileSync(this.tokenFilePath, token, 'utf8');
-      console.log('[FyersAuthService] Token saved successfully.');
+      const tokenRecord = await prisma.brokerToken.findFirst({
+        where: { broker: 'fyers' },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (tokenRecord && tokenRecord.expiresAt > new Date()) {
+        return tokenRecord;
+      }
     } catch (err) {
-      console.error('[FyersAuthService] Error saving token:', err);
+      console.error('[FyersAuthService] Error loading token details from database:', err);
+    }
+    return null;
+  }
+
+  public static async saveToken(token: string, expiresAt: Date): Promise<void> {
+    try {
+      await prisma.brokerToken.upsert({
+        where: { id: 1 },
+        update: {
+          accessToken: token,
+          expiresAt: expiresAt,
+          updatedAt: new Date()
+        },
+        create: {
+          id: 1,
+          broker: 'fyers',
+          accessToken: token,
+          expiresAt: expiresAt
+        }
+      });
+      console.log('[FyersAuthService] Token saved successfully in DB.');
+    } catch (err) {
+      console.error('[FyersAuthService] Error saving token to database:', err);
     }
   }
 
-  public static getAccessToken(): string | null {
-    if (!this.accessToken) {
-      this.loadToken();
-    }
-    return this.accessToken;
-  }
-
-  public static isLoggedIn(): boolean {
-    return !!this.getAccessToken();
+  public static async isLoggedIn(): Promise<boolean> {
+    const token = await this.getAccessToken();
+    return !!token;
   }
 
   public static getLoginUrl(customRedirectUrl?: string): string {
@@ -68,14 +86,13 @@ export class FyersAuthService {
       return { success: false, message: 'Missing auth code' };
     }
 
-    const { appId, secretId, redirectUrl, authProxyUrl } = this.getCredentials();
+    const { appId, secretId, redirectUrl } = this.getCredentials();
     const finalRedirect = customRedirectUrl || redirectUrl;
 
     try {
       const hashInput = `${appId}:${secretId}`;
       const appIdHash = crypto.createHash('sha256').update(hashInput).digest('hex');
 
-      // V3 payload matches the proxy expectation
       const payload = {
         grant_type: 'authorization_code',
         appIdHash: appIdHash,
@@ -83,56 +100,64 @@ export class FyersAuthService {
         redirect_uri: finalRedirect
       };
 
-      const attempts = [
-        {
-          url: `${authProxyUrl}/api/v3/validate-authcode`,
+      // 1. Attempt DIRECT call first
+      try {
+        console.log('[FyersAuthService] Attempting token generation DIRECTLY...');
+        const res = await fetch('https://api-t1.fyers.in/api/v3/validate-authcode', {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Fyers-AppId': appId
           },
           body: JSON.stringify(payload)
-        },
-        {
-          url: `https://api-t1.fyers.in/api/v3/validate-authcode`,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Fyers-AppId': appId
-          },
-          body: JSON.stringify(payload)
-        }
-      ];
+        });
 
-      let lastError = 'Exchange failed';
-      for (const attempt of attempts) {
-        try {
-          const res = await fetch(attempt.url, {
-            method: 'POST',
-            headers: attempt.headers,
-            body: attempt.body
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            if (data.s === 'ok') {
-              const token = data.access_token || data.data?.access_token;
-              if (token) {
-                this.saveToken(token);
-                return { success: true, message: 'Login successful' };
-              }
+        if (res.ok) {
+          const data = await res.json();
+          if (data.s === 'ok') {
+            const token = data.access_token || data.data?.access_token;
+            if (token) {
+              const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              await this.saveToken(token, expiresAt);
+              console.log('[FyersAuthService] Direct token exchange succeeded.');
+              return { success: true, message: 'Login successful (Direct)' };
             }
-            lastError = data.message || lastError;
-          } else {
-            const text = await res.text();
-            lastError = `HTTP ${res.status}: ${text.substring(0, 100)}`;
           }
-        } catch (e) {
-          lastError = e instanceof Error ? e.message : String(e);
         }
+      } catch (directErr) {
+        console.warn('[FyersAuthService] Direct token exchange failed, trying proxy fallback:', directErr);
       }
 
-      return { success: false, message: lastError };
+      // 2. Fallback to Cloudflare Worker Proxy
+      const authProxyUrl = process.env.FYERS_AUTH_PROXY_URL || 'https://cold-dew-46bf.prahiren.workers.dev';
+      console.log(`[FyersAuthService] Attempting token generation via PROXY (${authProxyUrl})...`);
+      const res = await fetch(`${authProxyUrl.replace(/\/$/, '')}/api/v3/validate-authcode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Fyers-AppId': appId
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.s === 'ok') {
+          const token = data.access_token || data.data?.access_token;
+          if (token) {
+            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            await this.saveToken(token, expiresAt);
+            console.log('[FyersAuthService] Proxy token exchange succeeded.');
+            return { success: true, message: 'Login successful (Proxy)' };
+          }
+        }
+        return { success: false, message: data.message || 'Proxy call returned non-ok status' };
+      } else {
+        const text = await res.text();
+        return { success: false, message: `Proxy HTTP ${res.status}: ${text.substring(0, 100)}` };
+      }
     } catch (err) {
       return { success: false, message: err instanceof Error ? err.message : 'Exception during token generation' };
     }

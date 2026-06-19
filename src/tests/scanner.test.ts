@@ -3,6 +3,9 @@ import assert from 'node:assert';
 import { ScannerService } from '../services/scanner.service';
 import { RankingService } from '../services/ranking.service';
 import { MarketStockData } from '../services/market.service';
+import { FyersAuthService } from '../services/fyers-auth.service';
+import { OptionChainService } from '../services/option-chain.service';
+import { OptionSuggestionService } from '../services/option-suggestion.service';
 
 test('Scanner Service Signals Evaluation', async (t) => {
   await t.test('evaluates NORMAL and BULLISH signals correctly', () => {
@@ -355,4 +358,68 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     const scanResult = ScannerService.scanStock(mockStock);
     assert.ok(scanResult.signals.includes('INSIDE_VALUE'));
   });
+});
+
+test('Option Suggestion Rebuild Tests', async (t) => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetOptionChain = OptionChainService.getOptionChain;
+
+  await t.test('error-on-missing-token', async () => {
+    FyersAuthService.getAccessToken = async () => null;
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+    assert.strictEqual(res.error, 'TOKEN_EXPIRED');
+  });
+
+  await t.test('no-fabricated-price-on-failure', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({ error: 'FETCH_FAILED' });
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+    assert.strictEqual(res.error, 'FETCH_FAILED');
+  });
+
+  await t.test('ITM strike selection correctness for CE vs PE & budget matching', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({
+      optionsChain: [
+        { symbol: 'NSE:SBIN26JUN790CE', strikePrice: 790, optionType: 'CE', ltp: 25 }, // Cost = 25 * 750 = 18750 (out of budget)
+        { symbol: 'NSE:SBIN26JUN800CE', strikePrice: 800, optionType: 'CE', ltp: 18 }, // Cost = 18 * 750 = 13500 (in budget!)
+        { symbol: 'NSE:SBIN26JUN810CE', strikePrice: 810, optionType: 'CE', ltp: 12 }, // Cost = 12 * 750 = 9000 (out of budget)
+      ],
+      expiryData: [],
+      method: 'direct'
+    });
+
+    const originalLoadLotSizes = (OptionSuggestionService as any).loadLotSizes;
+    (OptionSuggestionService as any).loadLotSizes = async () => new Map([['SBIN', 750]]);
+
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'CE', 800, 790, 820);
+    assert.strictEqual(res.strike, 800);
+    assert.strictEqual(res.cost, 13500);
+
+    (OptionSuggestionService as any).loadLotSizes = originalLoadLotSizes;
+  });
+
+  await t.test('honest no-match fallback', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({
+      optionsChain: [
+        { symbol: 'NSE:SBIN26JUN790CE', strikePrice: 790, optionType: 'CE', ltp: 100 }, // Cost = 100 * 750 = 75000
+        { symbol: 'NSE:SBIN26JUN800CE', strikePrice: 800, optionType: 'CE', ltp: 90 },  // Cost = 90 * 750 = 67500
+        { symbol: 'NSE:SBIN26JUN810CE', strikePrice: 810, optionType: 'CE', ltp: 80 },  // Cost = 80 * 750 = 60000
+      ],
+      expiryData: [],
+      method: 'direct'
+    });
+
+    const originalLoadLotSizes = (OptionSuggestionService as any).loadLotSizes;
+    (OptionSuggestionService as any).loadLotSizes = async () => new Map([['SBIN', 750]]);
+
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'CE', 800, 790, 820);
+    assert.strictEqual(res.error, 'NO_ITM_STRIKES_AVAILABLE');
+
+    (OptionSuggestionService as any).loadLotSizes = originalLoadLotSizes;
+  });
+
+  FyersAuthService.getAccessToken = originalGetAccessToken;
+  OptionChainService.getOptionChain = originalGetOptionChain;
 });
