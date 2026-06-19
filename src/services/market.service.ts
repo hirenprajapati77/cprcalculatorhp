@@ -253,7 +253,7 @@ const STOCK_UNIVERSE: {
   // ── New FnO additions (June 2026) ────────────────────────────────────────────
   { symbol: 'ABCAPITAL',   name: 'Aditya Birla Capital',         sector: 'Financial Services', marketCap: 45000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'ANGELONE',    name: 'Angel One',                    sector: 'Financial Services', marketCap: 18000,  isNifty50: false, isNifty200: false, isFnO: true  },
-  { symbol: 'BAJAJHFL',    name: 'Bajaj Housing Finance',        sector: 'Financial Services', marketCap: 55000,  isNifty50: false, isNifty200: true,  isFnO: true  },
+  { symbol: 'BAJAJHFL',    name: 'Bajaj Housing Finance',        sector: 'Financial Services', marketCap: 55000,  isNifty50: false, isNifty200: true,  isFnO: false },
   { symbol: 'BANKBARODA',  name: 'Bank of Baroda',               sector: 'Financial Services', marketCap: 58000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'DIXON',       name: 'Dixon Technologies',           sector: 'Capital Goods',      marketCap: 42000,  isNifty50: false, isNifty200: true,  isFnO: true  },
   { symbol: 'FACT',        name: 'FACT',                         sector: 'Materials',          marketCap: 12000,  isNifty50: false, isNifty200: false, isFnO: true  },
