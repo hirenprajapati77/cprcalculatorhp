@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Map universe stock symbols to database keys
     const universeStocks = MarketService.getUniverse(universe);
-    const baseSymbols = universeStocks.map(s => s.symbol);
+    const baseSymbols = universeStocks.map(s => s.symbol.trim());
     const dbSymbols = baseSymbols.map(s => market === 'NSE' ? s : `${s}:BSE`);
 
     // 3. Query MarketSnapshot for Sector and Market Cap filtering

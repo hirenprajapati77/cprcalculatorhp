@@ -321,16 +321,23 @@ export class MarketService {
    * Supports Auto, NSE_FNO, NIFTY50, NIFTY100, NIFTY200, ALL_NSE, WATCHLIST.
    */
   static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST') {
-    if (universe === 'NIFTY50')    return STOCK_UNIVERSE.filter(s => s.isNifty50);
-    if (universe === 'NIFTY100') {
-      return STOCK_UNIVERSE.filter(s => s.isNifty200)
+    let list = STOCK_UNIVERSE;
+    if (universe === 'NIFTY50')    list = STOCK_UNIVERSE.filter(s => s.isNifty50);
+    else if (universe === 'NIFTY100') {
+      list = STOCK_UNIVERSE.filter(s => s.isNifty200)
         .sort((a, b) => b.marketCap - a.marketCap)
         .slice(0, 100);
     }
-    if (universe === 'NIFTY200')   return STOCK_UNIVERSE.filter(s => s.isNifty200);
-    if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  return STOCK_UNIVERSE.filter(s => s.isFnO);
-    if (universe === 'WATCHLIST')  return []; // Managed in caller by checking Watchlist database model
-    return STOCK_UNIVERSE; // Auto / ALL_NSE / ALL
+    else if (universe === 'NIFTY200')   list = STOCK_UNIVERSE.filter(s => s.isNifty200);
+    else if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  list = STOCK_UNIVERSE.filter(s => s.isFnO);
+    else if (universe === 'WATCHLIST')  return []; // Managed in caller by checking Watchlist database model
+
+    return list.map(s => ({
+      ...s,
+      symbol: s.symbol.trim(),
+      name: s.name.trim(),
+      sector: s.sector.trim(),
+    }));
   }
 
   /**
