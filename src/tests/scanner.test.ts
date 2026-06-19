@@ -389,14 +389,14 @@ test('Option Suggestion Rebuild Tests', async (t) => {
       method: 'direct'
     });
 
-    const originalLoadLotSizes = (OptionSuggestionService as any).loadLotSizes;
-    (OptionSuggestionService as any).loadLotSizes = async () => new Map([['SBIN', 750]]);
+    const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
 
     const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'CE', 800, 790, 820);
     assert.strictEqual(res.strike, 800);
     assert.strictEqual(res.cost, 13500);
 
-    (OptionSuggestionService as any).loadLotSizes = originalLoadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
   });
 
   await t.test('honest no-match fallback', async () => {
@@ -411,13 +411,13 @@ test('Option Suggestion Rebuild Tests', async (t) => {
       method: 'direct'
     });
 
-    const originalLoadLotSizes = (OptionSuggestionService as any).loadLotSizes;
-    (OptionSuggestionService as any).loadLotSizes = async () => new Map([['SBIN', 750]]);
+    const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
 
     const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'CE', 800, 790, 820);
     assert.strictEqual(res.error, 'NO_ITM_STRIKES_AVAILABLE');
 
-    (OptionSuggestionService as any).loadLotSizes = originalLoadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
   });
 
   FyersAuthService.getAccessToken = originalGetAccessToken;

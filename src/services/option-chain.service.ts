@@ -86,7 +86,7 @@ export class OptionChainService {
           const data = await res.json();
           if (data.s === 'ok' && data.data?.optionsChain) {
             const result: OptionChainResult = {
-              optionsChain: data.data.optionsChain.map((o: any) => ({
+              optionsChain: data.data.optionsChain.map((o: { symbol: string; strikePrice: number; optionType: 'CE' | 'PE'; ltp: number; open_interest?: number; oi?: number }) => ({
                 symbol: o.symbol,
                 strikePrice: o.strikePrice,
                 optionType: o.optionType,
@@ -121,7 +121,7 @@ export class OptionChainService {
         const data = await res.json();
         if (data.s === 'ok' && data.data?.optionsChain) {
           const result: OptionChainResult = {
-            optionsChain: data.data.optionsChain.map((o: any) => ({
+            optionsChain: data.data.optionsChain.map((o: { symbol: string; strikePrice: number; optionType: 'CE' | 'PE'; ltp: number; open_interest?: number; oi?: number }) => ({
               symbol: o.symbol,
               strikePrice: o.strikePrice,
               optionType: o.optionType,
@@ -144,7 +144,7 @@ export class OptionChainService {
     }
   }
 
-  public static async fetchOptionQuote(optionSymbol: string, stockLtp: number, strike: number, type: 'CE' | 'PE'): Promise<number> {
+  public static async fetchOptionQuote(optionSymbol: string): Promise<number> {
     const match = optionSymbol.match(/NSE:([A-Z0-9_\-]+)\d{2}[A-Z]{3}/);
     if (!match) {
       throw new Error(`Invalid option symbol format: ${optionSymbol}`);
