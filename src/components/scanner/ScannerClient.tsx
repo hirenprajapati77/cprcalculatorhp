@@ -1494,7 +1494,7 @@ export default function ScannerClient() {
       };
 
       if (score >= 90) checkAndAddCell('Strong Buy');
-      if (signals.includes('BREAKOUT')) checkAndAddCell('Breakout');
+      if (score >= 70 && score < 90) checkAndAddCell('Breakout');
       if (signals.includes('BULLISH')) checkAndAddCell('Bullish');
       if (signals.includes('BEARISH')) checkAndAddCell('Bearish');
       if (score >= 40 && score < 70) checkAndAddCell('Watch');
@@ -1832,7 +1832,7 @@ export default function ScannerClient() {
                 <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary uppercase">
                   <th className="p-2.5 text-left w-36">Sector</th>
                   <th className="p-2.5">Strong Buy (&gt;=90)</th>
-                  <th className="p-2.5">Breakout</th>
+                  <th className="p-2.5">Breakout (70-89)</th>
                   <th className="p-2.5">Bullish</th>
                   <th className="p-2.5">Bearish</th>
                   <th className="p-2.5">Watch (40-69)</th>
