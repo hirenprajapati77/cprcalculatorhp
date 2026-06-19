@@ -67,6 +67,9 @@ export async function GET(req: NextRequest) {
         ltp: number;
         overnightScore: number;
         direction: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
+        entry?: number;
+        stopLoss?: number;
+        target?: number;
         optionSuggestion?: unknown;
       }
 
