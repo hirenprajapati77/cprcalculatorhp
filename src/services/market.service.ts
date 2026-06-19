@@ -347,16 +347,17 @@ export class MarketService {
    * Falls back to paper/mock data ONLY if MARKET_DATA_MODE is explicitly set to 'paper' or 'mock'.
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
+    const cleanSymbol = symbol.trim();
     const dataMode = process.env.MARKET_DATA_MODE || 'live';
-    const cacheKey = `stock_data_${symbol}_${market}_${dataMode}`;
+    const cacheKey = `stock_data_${cleanSymbol}_${market}_${dataMode}`;
     const cached = await CacheService.get<MarketStockData>(cacheKey);
     if (cached) return cached;
 
-    const ticker = market === 'NSE' ? `${symbol}.NS` : `${symbol}.BO`;
+    const ticker = market === 'NSE' ? `${cleanSymbol}.NS` : `${cleanSymbol}.BO`;
 
     // Look up metadata — works for all 200+ F&O stocks
-    const staticMeta = STOCK_UNIVERSE.find(s => s.symbol === symbol);
-    const sector = staticMeta?.sector || 'Other';
+    const staticMeta = STOCK_UNIVERSE.find(s => s.symbol.trim() === cleanSymbol);
+    const sector = (staticMeta?.sector || 'Other').trim();
     const marketCap = staticMeta?.marketCap || 50000;
 
     // ── LIVE MODE: Real-time Yahoo Finance Chart API ─────────────────────────
@@ -505,7 +506,7 @@ export class MarketService {
             }
 
             const resultData = {
-              symbol,
+              symbol: cleanSymbol,
               market,
               sector,
               open: prevOpen,
