@@ -73,9 +73,9 @@ export class OptionChainService {
       ? Math.max(0, stockLtp - strike) 
       : Math.max(0, strike - stockLtp);
     
-    // Add a time value estimation (e.g. 1.5% of stock price for ATM)
+    // Add a time value estimation (e.g. 0.8% of stock price for ATM)
     const atmDistanceRatio = Math.abs(stockLtp - strike) / stockLtp;
-    const timeValue = Math.max(1.0, stockLtp * 0.015 * Math.max(0, 1 - atmDistanceRatio * 5));
+    const timeValue = Math.max(1.0, stockLtp * 0.008 * Math.max(0, 1 - atmDistanceRatio * 5));
     
     return parseFloat((intrinsicValue + timeValue).toFixed(2));
   }
