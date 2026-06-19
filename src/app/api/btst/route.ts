@@ -6,8 +6,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const universe = searchParams.get('universe') || 'NIFTY50';
+    const bypassQuery = searchParams.get('bypass') === 'true';
 
-    const executionWindowOpen = BtstService.isExecutionWindowOpen();
+    const executionWindowOpen = BtstService.isExecutionWindowOpen(bypassQuery);
 
     const today = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
     const CACHE_KEY = `btst_last_scan_${today}`;

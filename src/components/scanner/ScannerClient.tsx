@@ -932,8 +932,9 @@ export default function ScannerClient() {
     const startFetchTime = Date.now();
     try {
       if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
+        const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
         // Live scoring engine — calls /api/btst which runs BtstService.evaluateOvernight on all NIFTY50 stocks in real-time
-        const res = await fetch('/api/btst?universe=NIFTY50');
+        const res = await fetch(`/api/btst?universe=NIFTY50${bypassVal ? '&bypass=true' : ''}`);
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
 

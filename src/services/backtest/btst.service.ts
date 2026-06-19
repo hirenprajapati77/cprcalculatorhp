@@ -29,12 +29,13 @@ export interface BtstScoreResultEnriched extends BtstScoreResult {
 
 export class BtstService {
   /**
-   * Checks if the 15:20-15:25 IST window is open.
+   * Checks if the 15:10-15:25 IST window is open.
    */
-  static isExecutionWindowOpen(): boolean {
+  static isExecutionWindowOpen(bypassQuery?: boolean): boolean {
     const bypassAllowed = 
-      process.env.NODE_ENV !== 'production' &&
-      process.env.BTST_BYPASS_WINDOW === 'true';
+      bypassQuery ||
+      (process.env.NODE_ENV !== 'production' &&
+      process.env.BTST_BYPASS_WINDOW === 'true');
 
     if (bypassAllowed) {
       return true;

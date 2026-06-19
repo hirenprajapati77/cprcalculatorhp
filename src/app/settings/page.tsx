@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [telegramToken, setTelegramToken] = useState<string>('');
   const [telegramChatId, setTelegramChatId] = useState<string>('');
   const [telegramTesting, setTelegramTesting] = useState<boolean>(false);
+  const [bypassBtst, setBypassBtst] = useState<boolean>(false);
   const { showToast } = useToast();
 
   // Load settings from localStorage on mount
@@ -31,6 +32,7 @@ export default function SettingsPage() {
     setAutoRefresh(localRefresh);
     setMinPrice(localMinPrice);
     setMinVolume(localMinVol);
+    setBypassBtst(localStorage.getItem('cpr_settings_bypass_btst') === 'true');
     setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
     setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
   }, []);
@@ -68,6 +70,7 @@ export default function SettingsPage() {
       localStorage.setItem('cpr_settings_min_volume', minVolume.toString());
       localStorage.setItem('cpr_settings_telegram_token', telegramToken);
       localStorage.setItem('cpr_settings_telegram_chat_id', telegramChatId);
+      localStorage.setItem('cpr_settings_bypass_btst', bypassBtst ? 'true' : 'false');
       
       showToast('Settings profiles updated successfully', 'success');
     } catch (err) {
@@ -162,6 +165,19 @@ export default function SettingsPage() {
               <p className="text-[9px] text-slate-500 mt-1">
                 Trigger interval for querying live feeds and updating cached discovery metrics.
               </p>
+            </div>
+
+            {/* Bypass BTST/STBT Time Lock */}
+            <div className="space-y-2 flex items-center pt-5">
+              <label className="flex items-center gap-2 cursor-pointer text-slate-400 font-semibold select-none">
+                <input
+                  type="checkbox"
+                  checked={bypassBtst}
+                  onChange={(e) => setBypassBtst(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-800 bg-slate-950 focus:ring-blue-500 accent-blue cursor-pointer"
+                />
+                <span>Bypass BTST Time Lock (Run Scan Anywhere/Anytime)</span>
+              </label>
             </div>
           </div>
         </Card>
