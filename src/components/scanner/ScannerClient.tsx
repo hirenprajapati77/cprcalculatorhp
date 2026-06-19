@@ -2192,6 +2192,15 @@ export default function ScannerClient() {
                       <option value="GAP_DOWN">Gap Down</option>
                       <option value="VOLUME_SPIKE">Volume Spike</option>
                       <option value="MOMENTUM">Momentum</option>
+                      <option value="INSIDE_VALUE">Inside Value</option>
+                      <option value="HIGHER_VALUE">Higher Value</option>
+                      <option value="LOWER_VALUE">Lower Value</option>
+                      <option value="HOT_ZONE">Hot Zone</option>
+                      <option value="KGS_INSIDE_CPR">KGS Inside CPR</option>
+                      <option value="KGS_OUTSIDE_CPR">KGS Outside CPR</option>
+                      <option value="KGS_ASC_CPR">KGS Ascending CPR</option>
+                      <option value="KGS_DESC_CPR">KGS Descending CPR</option>
+                      <option value="KGS_RTP">KGS RTP (Slope Match)</option>
                     </select>
                   </div>
 
