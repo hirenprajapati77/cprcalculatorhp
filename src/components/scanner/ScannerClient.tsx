@@ -197,11 +197,22 @@ interface ScannedStock {
     strike?: number;
     type?: 'CE' | 'PE';
     ltp?: number;
-    strategy?: string;
+    itmDepth?: number;
+    momentumScore?: number;
+    scoreBreakdown?: {
+      oiScore: number;
+      pcrContextScore: number;
+      volumeScore: number;
+      spreadScore: number;
+      itmDepthScore: number;
+    };
+    pcr?: number;
     underlyingLtp?: number;
     formattedName?: string;
     lotSize?: number;
     cost?: number;
+    oi?: number;
+    volume?: number;
     sl?: number;
     target?: number;
     error?: string;
@@ -440,7 +451,12 @@ const StockRow = React.memo(({
                         </span>
                         <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp || 0)}</span>
                       </div>
-                      <span className="text-[7.5px] text-text-tertiary leading-none">Option Suggestion</span>
+                      <div className={`text-[7.5px] font-bold leading-none ${
+                        (row.optionSuggestion.momentumScore ?? 0) >= 70 ? 'text-accent-green' :
+                        (row.optionSuggestion.momentumScore ?? 0) >= 40 ? 'text-accent-amber' : 'text-accent-red'
+                      }`}>
+                        Score: {row.optionSuggestion.momentumScore ?? 0}/100
+                      </div>
                     </>
                   )}
                 </div>
@@ -2290,7 +2306,9 @@ export default function ScannerClient() {
             <div className="rounded-lg px-4 py-3 mb-4 flex items-center gap-3 bg-red-500/10 border border-red-500/30">
               <span className="text-lg">🛑</span>
               <p className="text-sm font-medium text-red-400 font-mono">
-                Markets closed. See you Monday at 15:20 IST.
+                {scannerMode === 'CPR'
+                  ? 'Markets closed. See you Monday at 09:15 IST.'
+                  : 'Markets closed. See you Monday at 15:20 IST.'}
               </p>
             </div>
           )}
@@ -2791,21 +2809,69 @@ export default function ScannerClient() {
                               <span>
                                 {drawerStock.optionSuggestion.error === 'TOKEN_EXPIRED' ? 'Fyers token expired. Re-authenticate via Settings.' :
                                  drawerStock.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No option chain data available for this symbol.' :
-                                 drawerStock.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No strike fits the ₹10,000–₹15,000 budget constraint.' :
+                                 drawerStock.optionSuggestion.error === 'NO_VIABLE_STRIKES' ? 'No viable ITM strike found (chain may lack OI/volume data).' :
                                  drawerStock.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'Stock lot size is missing from symbol master.' :
                                  `Failed to fetch suggestion: ${drawerStock.optionSuggestion.error}`}
                               </span>
                             </div>
                           ) : (
-                            <div className="flex justify-between items-center text-xs">
-                              <div>
-                                <span className="text-sm font-extrabold text-text-primary block">{drawerStock.optionSuggestion.formattedName}</span>
-                                <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type} | Lot Size: {drawerStock.optionSuggestion.lotSize}</span>
+                            <div className="space-y-2">
+                              {/* Strike info */}
+                              <div className="flex justify-between items-center text-xs">
+                                <div>
+                                  <span className="text-sm font-extrabold text-text-primary block">{drawerStock.optionSuggestion.formattedName}</span>
+                                  <span className="text-[10px] text-text-tertiary">Strike: ₹{drawerStock.optionSuggestion.strike} | Type: {drawerStock.optionSuggestion.type} | Lot: {drawerStock.optionSuggestion.lotSize} | Lot Value: ₹{fmt(drawerStock.optionSuggestion.cost || 0)}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp || 0)}</span>
+                                  <span className="text-[9px] text-text-tertiary">ITM Depth: {drawerStock.optionSuggestion.itmDepth ?? '—'}</span>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="text-base font-extrabold text-accent-blue block">₹{fmt(drawerStock.optionSuggestion.ltp || 0)}</span>
-                                <span className="text-[9px] bg-accent-blue/20 text-accent-blue px-2 py-0.5 rounded font-bold uppercase">{drawerStock.optionSuggestion.strategy}</span>
-                              </div>
+                              {/* Momentum Score */}
+                              {drawerStock.optionSuggestion.momentumScore !== undefined && (
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-text-secondary">📊 Momentum Score</span>
+                                    <span className={`text-sm font-extrabold ${
+                                      (drawerStock.optionSuggestion.momentumScore ?? 0) >= 70 ? 'text-accent-green' :
+                                      (drawerStock.optionSuggestion.momentumScore ?? 0) >= 40 ? 'text-accent-amber' : 'text-accent-red'
+                                    }`}>{drawerStock.optionSuggestion.momentumScore}/100</span>
+                                  </div>
+                                  {/* Score breakdown */}
+                                  {drawerStock.optionSuggestion.scoreBreakdown && (
+                                    <div className="text-[9px] text-text-tertiary bg-bg-primary/40 rounded px-2 py-1 leading-relaxed">
+                                      OI: <span className="text-text-secondary font-bold">{drawerStock.optionSuggestion.scoreBreakdown.oiScore}/30</span>
+                                      {' | '}PCR Context: <span className="text-text-secondary font-bold">{drawerStock.optionSuggestion.scoreBreakdown.pcrContextScore}/20</span>
+                                      {' | '}Volume: <span className="text-text-secondary font-bold">{drawerStock.optionSuggestion.scoreBreakdown.volumeScore}/20</span>
+                                      {' | '}Spread: <span className="text-text-secondary font-bold">{drawerStock.optionSuggestion.scoreBreakdown.spreadScore}/20</span>
+                                      {' | '}ITM Depth: <span className="text-text-secondary font-bold">{drawerStock.optionSuggestion.scoreBreakdown.itmDepthScore}/10</span>
+                                    </div>
+                                  )}
+                                  {/* PCR context line */}
+                                  {drawerStock.optionSuggestion.pcr !== undefined && (
+                                    <div className="text-[9px] text-text-tertiary">
+                                      Chain PCR: <span className="font-bold text-text-secondary">{drawerStock.optionSuggestion.pcr.toFixed(2)}</span>
+                                      {' '}(<span className={`font-bold ${
+                                        drawerStock.optionSuggestion.pcr > 1.2 ? 'text-accent-green' :
+                                        drawerStock.optionSuggestion.pcr < 0.8 ? 'text-accent-red' : 'text-text-secondary'
+                                      }`}>
+                                        {drawerStock.optionSuggestion.pcr > 1.2 ? 'Bullish bias' : drawerStock.optionSuggestion.pcr < 0.8 ? 'Bearish bias' : 'Neutral'}
+                                      </span>)
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {/* SL / Target */}
+                              {(drawerStock.optionSuggestion.sl !== undefined || drawerStock.optionSuggestion.target !== undefined) && (
+                                <div className="flex gap-3 text-[10px] border-t border-border-primary/30 pt-1.5">
+                                  <span className="text-text-tertiary">SL: <span className="font-bold text-accent-red">₹{fmt(drawerStock.optionSuggestion.sl || 0)}</span></span>
+                                  <span className="text-text-tertiary">Target: <span className="font-bold text-accent-green">₹{fmt(drawerStock.optionSuggestion.target || 0)}</span></span>
+                                </div>
+                              )}
+                              {/* Disclaimer */}
+                              <p className="text-[8px] text-text-tertiary italic leading-snug border-t border-border-primary/30 pt-1.5">
+                                Momentum score uses same-day OI, volume, PCR &amp; spread. SL/Target are estimates based on 0.7 delta approximation. Verify live data before trading.
+                              </p>
                             </div>
                           )}
                         </div>

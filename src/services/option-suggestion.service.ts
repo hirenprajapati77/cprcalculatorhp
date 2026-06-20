@@ -6,14 +6,41 @@ export interface OptionSuggestion {
   strike?: number;
   type?: 'CE' | 'PE';
   ltp?: number;
-  strategy?: string;
+  itmDepth?: number;
+  momentumScore?: number;
+  scoreBreakdown?: {
+    oiScore: number;
+    pcrContextScore: number;
+    volumeScore: number;
+    spreadScore: number;
+    itmDepthScore: number;
+  };
+  pcr?: number;
   underlyingLtp?: number;
   formattedName?: string;
   lotSize?: number;
   cost?: number;
+  oi?: number;
+  volume?: number;
   sl?: number;
   target?: number;
   error?: string;
+}
+
+interface ItmCandidate {
+  option: OptionChainResult['optionsChain'][0];
+  itmDepth: 1 | 2 | 3;
+}
+
+interface ScoredCandidate extends ItmCandidate {
+  score: number;
+  scoreBreakdown: {
+    oiScore: number;
+    pcrContextScore: number;
+    volumeScore: number;
+    spreadScore: number;
+    itmDepthScore: number;
+  };
 }
 
 export class OptionSuggestionService {
@@ -54,7 +81,7 @@ export class OptionSuggestionService {
           }
         }
         const cacheObj = Object.fromEntries(lotSizesMap);
-        await CacheService.set(cacheKey, cacheObj, 86400); // 24 hour cache
+        await CacheService.set(cacheKey, cacheObj, 86400);
         console.log(`[OptionSuggestion] Cached ${lotSizesMap.size} symbols lot sizes.`);
       } else {
         console.error(`[OptionSuggestion] Failed to fetch NSE_FO.csv: HTTP ${res.status}`);
@@ -63,6 +90,88 @@ export class OptionSuggestionService {
       console.error('[OptionSuggestion] Error downloading/parsing lot sizes master:', err);
     }
     return lotSizesMap;
+  }
+
+  /**
+   * Compute PCR (Put-Call Ratio) across ALL strikes in the option chain.
+   * PCR = totalPutOI / totalCallOI
+   * PCR > 1.2 → bullish bias building (CE trades favoured)
+   * PCR < 0.8 → bearish bias building (PE trades favoured)
+   * 0.8–1.2   → neutral
+   */
+  private static computePCR(allOptions: OptionChainResult['optionsChain']): number {
+    const totalPutOI = allOptions
+      .filter(o => o.optionType === 'PE')
+      .reduce((sum, o) => sum + (o.open_interest || 0), 0);
+    const totalCallOI = allOptions
+      .filter(o => o.optionType === 'CE')
+      .reduce((sum, o) => sum + (o.open_interest || 0), 0);
+    return totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(4)) : 1.0;
+  }
+
+  /**
+   * Score a single ITM candidate using OI, PCR context, volume, bid-ask spread, and ITM depth.
+   * Max 100 points total.
+   */
+  private static scoreCandidate(
+    candidate: ItmCandidate,
+    allItmCandidates: ItmCandidate[],
+    pcr: number,
+    type: 'CE' | 'PE'
+  ): ScoredCandidate {
+    const opt = candidate.option;
+
+    // 1. OI Level Score (max 30): relative among ITM candidates
+    const maxOI = Math.max(...allItmCandidates.map(c => c.option.open_interest || 0));
+    const oiScore = maxOI > 0
+      ? Math.round(((opt.open_interest || 0) / maxOI) * 30)
+      : 0;
+
+    // 2. PCR Context Score (max 20): does chain PCR agree with the trade direction?
+    let pcrContextScore: number;
+    if (type === 'CE' && pcr > 1.2) {
+      pcrContextScore = 20; // bullish bias confirms CE entry
+    } else if (type === 'PE' && pcr < 0.8) {
+      pcrContextScore = 20; // bearish bias confirms PE entry
+    } else if (pcr >= 0.8 && pcr <= 1.2) {
+      pcrContextScore = 10; // neutral — partial credit
+    } else {
+      pcrContextScore = 0; // PCR contradicts direction
+    }
+
+    // 3. Volume Score (max 20): relative among ITM candidates
+    const maxVolume = Math.max(...allItmCandidates.map(c => c.option.volume || 0));
+    const volumeScore = maxVolume > 0
+      ? Math.round(((opt.volume || 0) / maxVolume) * 20)
+      : 0;
+
+    // 4. Spread Score (max 20): tighter spread = better execution quality
+    const bid = opt.bid || 0;
+    const ask = opt.ask || 0;
+    let spreadScore: number;
+    if (ask <= 0) {
+      spreadScore = 0; // missing data — penalise fully
+    } else {
+      const spreadPct = ((ask - bid) / ask) * 100;
+      spreadScore = spreadPct <= 1 ? 20
+        : spreadPct <= 2 ? 15
+        : spreadPct < 4.01 ? 10
+        : spreadPct < 8.01 ? 5
+        : 0;
+    }
+
+    // 5. ITM Depth Score (max 10): prefer 1st ITM (closest to spot)
+    const itmDepthScore = candidate.itmDepth === 1 ? 10
+      : candidate.itmDepth === 2 ? 6
+      : 3;
+
+    const score = oiScore + pcrContextScore + volumeScore + spreadScore + itmDepthScore;
+
+    return {
+      ...candidate,
+      score,
+      scoreBreakdown: { oiScore, pcrContextScore, volumeScore, spreadScore, itmDepthScore },
+    };
   }
 
   public static async buildSuggestion(
@@ -74,9 +183,9 @@ export class OptionSuggestionService {
     stockTarget: number
   ): Promise<OptionSuggestion> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
-    
+
     // 1. Fetch Option Chain
-    const chainRes = await OptionChainService.getOptionChain(cleanSym);
+    const chainRes = await OptionChainService.getOptionChain(cleanSym, ltp);
     if ('error' in chainRes) {
       return { error: chainRes.error };
     }
@@ -92,80 +201,65 @@ export class OptionSuggestionService {
       return { error: 'LOT_SIZE_UNAVAILABLE' };
     }
 
-    // 3. Filter and Sort Options by Strike
-    const options = chainRes.optionsChain
-      .filter((o) => o.optionType === type)
+    // 3. Filter valid options for this type (exclude equity row where strikePrice <= 0)
+    const validOptions = chainRes.optionsChain
+      .filter(o => o.optionType === type && o.strikePrice > 0)
       .sort((a, b) => a.strikePrice - b.strikePrice);
 
-    if (options.length === 0) {
+    if (validOptions.length === 0) {
       return { error: 'EMPTY_CHAIN' };
     }
 
-    // 4. Identify 3 Candidate Strikes (Slightly ITM, ATM, Slightly OTM)
-    // Find closest strike index to LTP
-    let atmIndex = 0;
-    let minDiff = Infinity;
-    for (let i = 0; i < options.length; i++) {
-      const diff = Math.abs(options[i].strikePrice - ltp);
-      if (diff < minDiff) {
-        minDiff = diff;
-        atmIndex = i;
-      }
-    }
+    // 4. Compute PCR from the full chain (all strikes, both types, excluding equity row)
+    const allValidOptions = chainRes.optionsChain.filter(o => o.strikePrice > 0);
+    const pcr = this.computePCR(allValidOptions);
+    console.log(`[OptionSuggestion] ${cleanSym} chain PCR: ${pcr} (${pcr > 1.2 ? 'Bullish bias' : pcr < 0.8 ? 'Bearish bias' : 'Neutral'})`);
 
-    const candidates: Array<{ option: typeof options[0]; strategy: string }> = [];
+    // 5. Build ITM candidate pool (up to 3 strikes)
+    //    CE ITM = strikes BELOW spot (sorted ascending → highest below spot = last before spot)
+    //    PE ITM = strikes ABOVE spot (sorted ascending → lowest above spot = first after spot)
+    const itmCandidates: ItmCandidate[] = [];
 
-    // Slightly ITM:
-    // CE ITM is strike < ltp (lower strike)
-    // PE ITM is strike > ltp (higher strike)
     if (type === 'CE') {
-      if (atmIndex > 0) candidates.push({ option: options[atmIndex - 1], strategy: 'ITM' }); // Strike below ATM
-      candidates.push({ option: options[atmIndex], strategy: 'ATM' });
-      if (atmIndex < options.length - 1) candidates.push({ option: options[atmIndex + 1], strategy: 'OTM' }); // Strike above ATM
+      // Strikes below LTP, sorted descending (closest first)
+      const itmStrikes = validOptions
+        .filter(o => o.strikePrice < ltp)
+        .sort((a, b) => b.strikePrice - a.strikePrice)
+        .slice(0, 3);
+      itmStrikes.forEach((opt, idx) => {
+        itmCandidates.push({ option: opt, itmDepth: (idx + 1) as 1 | 2 | 3 });
+      });
     } else {
-      if (atmIndex < options.length - 1) candidates.push({ option: options[atmIndex + 1], strategy: 'ITM' }); // Strike above ATM
-      candidates.push({ option: options[atmIndex], strategy: 'ATM' });
-      if (atmIndex > 0) candidates.push({ option: options[atmIndex - 1], strategy: 'OTM' }); // Strike below ATM
+      // Strikes above LTP, sorted ascending (closest first)
+      const itmStrikes = validOptions
+        .filter(o => o.strikePrice > ltp)
+        .sort((a, b) => a.strikePrice - b.strikePrice)
+        .slice(0, 3);
+      itmStrikes.forEach((opt, idx) => {
+        itmCandidates.push({ option: opt, itmDepth: (idx + 1) as 1 | 2 | 3 });
+      });
     }
 
-    // 5. Budget Matching (₹10,000 to ₹15,000)
-    let selected = candidates.find((c) => {
-      const cost = c.option.ltp * lotSize;
-      return cost >= 10000 && cost <= 15000;
-    });
-
-    // Fallback: If no candidate fits exactly, choose the one with cost closest to the budget range
-    if (!selected && candidates.length > 0) {
-      console.log(`[OptionSuggestion] No strike fits 10k-15k budget for ${cleanSym}. Checking closest...`);
-      let bestCandidate = candidates[0];
-      let minDistance = Infinity;
-
-      for (const c of candidates) {
-        const cost = c.option.ltp * lotSize;
-        let distance = 0;
-        if (cost < 10000) {
-          distance = 10000 - cost;
-        } else if (cost > 15000) {
-          distance = cost - 15000;
-        }
-        if (distance < minDistance) {
-          minDistance = distance;
-          bestCandidate = c;
-        }
-      }
-
-      // Check if closest option is within a reasonable buffer (e.g. ₹5,000 to ₹25,000)
-      const bestCost = bestCandidate.option.ltp * lotSize;
-      if (bestCost >= 5000 && bestCost <= 25000) {
-        selected = bestCandidate;
-      }
+    if (itmCandidates.length === 0) {
+      return { error: 'EMPTY_CHAIN' };
     }
 
-    if (!selected) {
-      return { error: 'NO_ITM_STRIKES_AVAILABLE' };
+    // 6. Score all ITM candidates
+    const scored: ScoredCandidate[] = itmCandidates
+      .map(c => this.scoreCandidate(c, itmCandidates, pcr, type))
+      .sort((a, b) => b.score - a.score);
+
+    console.log(`[OptionSuggestion] ${cleanSym} ${type} scored candidates:`, scored.map(c => ({
+      strike: c.option.strikePrice, depth: c.itmDepth, score: c.score, breakdown: c.scoreBreakdown
+    })));
+
+    // 7. Select highest-scoring candidate — no budget check
+    const selected = scored[0];
+    if (!selected || selected.score === 0) {
+      return { error: 'NO_VIABLE_STRIKES' };
     }
 
-    // 6. Estimate SL / Target using 0.7 Delta
+    // 8. Estimate SL / Target using 0.7 delta proxy
     const delta = 0.7;
     const stockMoveTarget = Math.max(0, type === 'CE' ? stockTarget - stockEntry : stockEntry - stockTarget);
     const stockMoveSl = Math.max(0, type === 'CE' ? stockEntry - stockSl : stockSl - stockEntry);
@@ -179,13 +273,18 @@ export class OptionSuggestionService {
       strike: selected.option.strikePrice,
       type,
       ltp: selected.option.ltp,
-      strategy: selected.strategy,
+      itmDepth: selected.itmDepth,
+      momentumScore: selected.score,
+      scoreBreakdown: selected.scoreBreakdown,
+      pcr,
       underlyingLtp: ltp,
       formattedName: `${cleanSym} ${selected.option.strikePrice} ${type}`,
       lotSize,
       cost,
+      oi: selected.option.open_interest ?? 0,
+      volume: selected.option.volume ?? 0,
       sl: optionSl,
-      target: optionTarget
+      target: optionTarget,
     };
   }
 
