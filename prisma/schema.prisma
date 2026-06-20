@@ -258,3 +258,11 @@ model BrokerToken {
   expiresAt   DateTime
   updatedAt   DateTime @updatedAt
 }
+
+model BreakoutAlertState {
+  id          Int       @id @default(autoincrement())
+  symbol      String    @unique
+  hadBreakout Boolean   @default(false)
+  lastAlerted DateTime?
+  updatedAt   DateTime  @updatedAt
+}

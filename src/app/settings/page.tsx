@@ -15,7 +15,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [telegramToken, setTelegramToken] = useState<string>('');
   const [telegramChatId, setTelegramChatId] = useState<string>('');
+  const [telegramGroupChatId, setTelegramGroupChatId] = useState<string>('');
   const [telegramTesting, setTelegramTesting] = useState<boolean>(false);
+  const [breakoutTesting, setBreakoutTesting] = useState<boolean>(false);
   const [bypassBtst, setBypassBtst] = useState<boolean>(false);
   const [fyersConnected, setFyersConnected] = useState<boolean>(false);
   const [fyersExpiry, setFyersExpiry] = useState<string>('');
@@ -38,6 +40,7 @@ export default function SettingsPage() {
     setBypassBtst(localStorage.getItem('cpr_settings_bypass_btst') === 'true');
     setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
     setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
+    setTelegramGroupChatId(localStorage.getItem('cpr_settings_telegram_group_chat_id') || '');
   }, []);
 
   // Check Fyers connection status on mount
@@ -97,6 +100,27 @@ export default function SettingsPage() {
     }
   };
 
+  const handleTestBreakoutAlert = async () => {
+    setBreakoutTesting(true);
+    try {
+      const res = await fetch('/api/alerts/telegram/test-breakout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true })
+      });
+      if (res.ok) {
+        showToast('Test breakout alert sent to Telegram group!', 'success');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast((data as { message?: string }).message || 'Failed to send test breakout alert', 'error');
+      }
+    } catch {
+      showToast('Network error sending test breakout alert', 'error');
+    } finally {
+      setBreakoutTesting(false);
+    }
+  };
+
   // Save settings
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,6 +134,7 @@ export default function SettingsPage() {
       localStorage.setItem('cpr_settings_min_volume', minVolume.toString());
       localStorage.setItem('cpr_settings_telegram_token', telegramToken);
       localStorage.setItem('cpr_settings_telegram_chat_id', telegramChatId);
+      localStorage.setItem('cpr_settings_telegram_group_chat_id', telegramGroupChatId);
       localStorage.setItem('cpr_settings_bypass_btst', bypassBtst ? 'true' : 'false');
       
       showToast('Settings profiles updated successfully', 'success');
@@ -333,6 +358,40 @@ export default function SettingsPage() {
                   {telegramTesting ? 'Testing...' : 'Test Alert'}
                 </Button>
               </div>
+            </div>
+
+            {/* Breakout Alert Group Chat ID */}
+            <div className="md:col-span-2 space-y-1.5 border-t border-slate-700/50 pt-4 mt-2">
+              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+                Breakout Alert Group Chat ID
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="telegram-group-chat-id"
+                  value={telegramGroupChatId}
+                  onChange={(e) => setTelegramGroupChatId(e.target.value)}
+                  className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                  placeholder="-100xxxxxxxxxx"
+                />
+                <Button
+                  type="button"
+                  id="test-breakout-alert-btn"
+                  onClick={handleTestBreakoutAlert}
+                  disabled={breakoutTesting}
+                  className="bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/40 px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
+                >
+                  {breakoutTesting ? 'Sending...' : '⚡ Test Breakout Alert'}
+                </Button>
+              </div>
+              <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">
+                Receives real-time alerts when CPR Scanner detects a NEW BREAKOUT signal (NARROW CPR + Volume Spike + Price &gt; TC).
+                Deduplication: alerts only on NEW occurrences, not repeated on every scan.
+                To get your group ID: add bot to group → send any message → visit
+                <code className="text-blue-400 mx-1 break-all">https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>
+                → copy <code className="text-blue-400">&apos;chat&apos;:&apos;id&apos;</code> value (starts with -100).
+                Set <code className="text-blue-400">TELEGRAM_GROUP_CHAT_ID</code> in server .env to activate.
+              </p>
             </div>
           </div>
         </Card>

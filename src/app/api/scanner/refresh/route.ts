@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
+import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
+import { TelegramService } from '@/services/alert/telegram.service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +18,27 @@ export async function POST(request: NextRequest) {
 
     // Run the scan synchronously for immediate client feedback
     const results = await ScannerController.runFullScan(universe, market);
+
+    // Fire-and-forget breakout alert — never blocks scan response
+    BreakoutWatcherService.detectNewBreakouts(
+      results.map(r => ({
+        symbol: r.symbol,
+        signals: Array.isArray(r.signals) ? r.signals : (r.signalSummary ? r.signalSummary.split(',') : []),
+        ltp: r.ltp,
+        entry: r.entry ?? r.tc ?? r.ltp,
+        sl: r.sl ?? r.bc ?? r.ltp * 0.99,
+        target: r.target ?? r.r1 ?? r.ltp * 1.02,
+        rr: r.rr ?? '1:1.5',
+        score: r.score ?? 0,
+        sector: r.sector ?? 'Other',
+      }))
+    ).then(newBreakouts => {
+      if (newBreakouts.length > 0) {
+        return TelegramService.sendBreakoutAlert(newBreakouts);
+      }
+    }).catch(err => {
+      console.error('[BreakoutWatcher] Manual scan alert pipeline failed:', err);
+    });
 
     return NextResponse.json({
       success: true,
