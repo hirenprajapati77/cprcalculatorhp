@@ -185,7 +185,7 @@ export class OptionSuggestionService {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
 
     // 1. Fetch Option Chain
-    const chainRes = await OptionChainService.getOptionChain(cleanSym, ltp);
+    const chainRes = await OptionChainService.getOptionChain(cleanSym);
     if ('error' in chainRes) {
       return { error: chainRes.error };
     }

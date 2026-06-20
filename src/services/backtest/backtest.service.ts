@@ -128,6 +128,8 @@ export class BacktestService {
           const ohlc = await HistoricalProvider.getHistory(symbol, run.startDate, run.endDate);
           if (ohlc.length < 2) continue;
 
+          let blockedUntilIndex = -1; // per-symbol cooldown tracker
+
           for (let i = 1; i < ohlc.length; i++) {
             const yesterday = ohlc[i - 1];
             const today = ohlc[i];
@@ -209,8 +211,12 @@ export class BacktestService {
             if (run.executionMode === 'LONG_ONLY' && direction === 'SHORT') continue;
             if (run.executionMode === 'SHORT_ONLY' && direction === 'LONG') continue;
 
-            // Run trade simulation from day i onwards
-            const tradeOhlc = ohlc.slice(i);
+            // Skip if a previous trade on this symbol is still within its holding window
+            if (i <= blockedUntilIndex) continue;
+
+            // Bound the holding window: 1-2 day CPR/BTST hold + 1 day buffer
+            const MAX_HOLDING_DAYS = (run as unknown as { maxHoldingDays?: number }).maxHoldingDays ?? 3;
+            const tradeOhlc = ohlc.slice(i, i + MAX_HOLDING_DAYS);
             const tradeResult = TradeEngineService.simulateTrade(
               direction,
               entryPrice,
@@ -270,6 +276,8 @@ export class BacktestService {
             }
 
             processedTrades++;
+            // Block new entries on this symbol until the holding window elapses
+            blockedUntilIndex = i + (tradeOhlc.length - 1);
           }
         } catch (e) {
           // Failure Rule: If one symbol fails, record failure and continue

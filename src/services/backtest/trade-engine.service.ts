@@ -165,15 +165,15 @@ export class TradeEngineService {
     }
 
     if (status === 'OPEN') {
-      status = 'CLOSED_EOD';
+      status = 'CLOSED_TIME_EXIT';
       exitPrice = ohlcSeries[ohlcSeries.length - 1].close;
       exitDate = ohlcSeries[ohlcSeries.length - 1].date;
-      exitReason = 'End of Backtest Period';
-      
+      exitReason = `Max holding period (${ohlcSeries.length} days) reached`;
+
       journalEvents.push({
         event: 'EXIT',
         timestamp: new Date(exitDate),
-        details: `Closed at EOD at ${exitPrice.toFixed(2)}`
+        details: `Closed at end of holding window (day ${ohlcSeries.length}) at ${exitPrice.toFixed(2)}`
       });
     }
 

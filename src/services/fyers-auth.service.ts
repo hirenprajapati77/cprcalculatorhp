@@ -1,5 +1,10 @@
-import { prisma } from '@/lib/db';
+import 'dotenv/config';
 import crypto from 'crypto';
+
+async function getPrisma() {
+  const { prisma } = await import('@/lib/db');
+  return prisma;
+}
 
 export class FyersAuthService {
   public static getCredentials() {
@@ -14,6 +19,7 @@ export class FyersAuthService {
 
   public static async getAccessToken(): Promise<string | null> {
     try {
+      const prisma = await getPrisma();
       const tokenRecord = await prisma.brokerToken.findFirst({
         where: { broker: 'fyers' },
         orderBy: { updatedAt: 'desc' }
@@ -29,6 +35,7 @@ export class FyersAuthService {
 
   public static async getTokenDetails() {
     try {
+      const prisma = await getPrisma();
       const tokenRecord = await prisma.brokerToken.findFirst({
         where: { broker: 'fyers' },
         orderBy: { updatedAt: 'desc' }
@@ -44,6 +51,7 @@ export class FyersAuthService {
 
   public static async saveToken(token: string, expiresAt: Date): Promise<void> {
     try {
+      const prisma = await getPrisma();
       await prisma.brokerToken.upsert({
         where: { id: 1 },
         update: {

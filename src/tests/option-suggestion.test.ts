@@ -26,29 +26,64 @@ function makeChain(overrides: Partial<{
   ];
 }
 
-// ─── Fix 0: Token / chain fallbacks (moved from scanner.test.ts) ─────────────
+// ─── Fix 1 verification: honest error paths, no fabricated data ──────────────
 
-test('Option Suggestion Service — Token & Chain Fallback Tests', async (t) => {
+test('Option Suggestion Service — Honest Error Paths (no fabricated data)', async (t) => {
   const originalGetAccessToken = FyersAuthService.getAccessToken;
   const originalGetOptionChain = OptionChainService.getOptionChain;
 
-  await t.test('missing token + price present → mock fallback, no error', async () => {
+  await t.test('TOKEN_EXPIRED: missing token returns error, no optionsChain, no fake data', async () => {
     FyersAuthService.getAccessToken = async () => null;
+    // Do NOT mock getOptionChain — let it call the real service which will return TOKEN_EXPIRED
+    // But since it would hit the DB/network, mock getOptionChain to simulate TOKEN_EXPIRED path
+    OptionChainService.getOptionChain = async () => ({ error: 'TOKEN_EXPIRED' });
     const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
-    assert.strictEqual(res.error, undefined, 'should succeed via mock chain fallback');
-    assert.ok(res.strike !== undefined, 'should have a strike');
+    assert.strictEqual(res.error, 'TOKEN_EXPIRED', 'should return TOKEN_EXPIRED error');
+    assert.strictEqual(res.strike, undefined, 'should have NO strike (no fabricated data)');
+    assert.strictEqual(res.ltp, undefined, 'should have NO ltp (no fabricated data)');
+    assert.ok(!('optionsChain' in res), 'should have no optionsChain array');
   });
 
-  await t.test('FETCH_FAILED → propagates error honestly', async () => {
+  await t.test('EMPTY_CHAIN: Fyers returns no data — explicit error, no fake fallback', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({ error: 'EMPTY_CHAIN' });
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+    assert.strictEqual(res.error, 'EMPTY_CHAIN', 'should return EMPTY_CHAIN error');
+    assert.strictEqual(res.strike, undefined, 'should have NO strike (no fabricated data)');
+    assert.ok(!('optionsChain' in res), 'should have no optionsChain array');
+  });
+
+  await t.test('FETCH_FAILED: propagates error honestly, no fabricated data', async () => {
     FyersAuthService.getAccessToken = async () => 'mock_token';
     OptionChainService.getOptionChain = async () => ({ error: 'FETCH_FAILED' });
     const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
-    assert.strictEqual(res.error, 'FETCH_FAILED');
+    assert.strictEqual(res.error, 'FETCH_FAILED', 'should return FETCH_FAILED error');
+    assert.strictEqual(res.strike, undefined, 'should have NO strike');
+  });
+
+  await t.test('Math.random never called during any error path', async () => {
+    let randomCallCount = 0;
+    const originalRandom = Math.random;
+    Math.random = () => { randomCallCount++; return originalRandom(); };
+
+    // Test all 3 error paths
+    OptionChainService.getOptionChain = async () => ({ error: 'TOKEN_EXPIRED' });
+    await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+
+    OptionChainService.getOptionChain = async () => ({ error: 'EMPTY_CHAIN' });
+    await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+
+    OptionChainService.getOptionChain = async () => ({ error: 'FETCH_EXCEPTION' });
+    await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 800, 790, 820);
+
+    Math.random = originalRandom;
+    assert.strictEqual(randomCallCount, 0, 'Math.random must never be called during error paths (no fabricated OI)');
   });
 
   FyersAuthService.getAccessToken = originalGetAccessToken;
   OptionChainService.getOptionChain = originalGetOptionChain;
 });
+
 
 // ─── OI Score scaling ────────────────────────────────────────────────────────
 
