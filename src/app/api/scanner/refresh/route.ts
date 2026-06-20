@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     BreakoutWatcherService.detectNewBreakouts(
       results.map(r => ({
         symbol: r.symbol,
-        signals: Array.isArray(r.signals) ? r.signals : (r.signalSummary ? r.signalSummary.split(',') : []),
+        signals: r.signals || [],
         ltp: r.ltp,
         entry: r.entry ?? r.tc ?? r.ltp,
         sl: r.sl ?? r.bc ?? r.ltp * 0.99,
