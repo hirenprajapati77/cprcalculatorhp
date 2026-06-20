@@ -2002,8 +2002,7 @@ export default function ScannerClient() {
         icon={<Radar size={14} className="text-accent-blue" />}
         headerAction={
           <div className="flex items-center gap-1">
-            {!isWeekend && (
-              <Button
+            <Button
                 onClick={() => {
                   if (scannerMode === 'CPR') setScannerMode('BTST');
                   else if (scannerMode === 'BTST') setScannerMode('STBT');
@@ -2016,7 +2015,6 @@ export default function ScannerClient() {
               >
                 Mode: {scannerMode}
               </Button>
-            )}
             <Button
               onClick={() => setShowHelp(true)}
               size="sm"
