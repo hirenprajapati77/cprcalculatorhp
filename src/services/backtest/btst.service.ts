@@ -173,6 +173,13 @@ export class BtstService {
     };
   }
 
+  // NOTE: This engine uses raw market data signals (VWAP, 15m candle, 
+  // CPR value relationship) appropriate for overnight BTST/STBT positions.
+  // Score scale is additive 0-100, separate from the intraday scanner's
+  // weighted composite scoring in ranking.service.ts.
+  // TODO: Phase H — replace with Advanced Engine (overnight.service.ts) 
+  // which uses btst-ranking.service.ts weighted system (max 130).
+  // Do not apply ranking.service.ts catA/B/C/D weights here.
   /**
    * Calculates the LONG BTST Score (Max 100).
    */
