@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { CPRInput, CalculationRecord } from '@/types/cpr.types';
 import { calculateCPR } from '@/lib/cpr-engine';
@@ -42,8 +43,12 @@ export class CalculationService {
         });
         record = { ...(created as CalculationRecord), persisted: true };
         break;
-      } catch (err: any) {
-        const isCollision = err.code === 'P2002' && err.meta?.target?.includes('shareToken');
+      } catch (err) {
+        const isCollision = 
+          err instanceof Prisma.PrismaClientKnownRequestError && 
+          err.code === 'P2002' && 
+          Array.isArray(err.meta?.target) && 
+          err.meta.target.includes('shareToken');
         if (isCollision && attempt < maxAttempts) {
           console.warn(`[CalculationService] Share token collision on attempt ${attempt}. Retrying...`);
           continue;

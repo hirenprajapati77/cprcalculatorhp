@@ -513,8 +513,8 @@ const StockRow = React.memo(({
             <div className="font-bold text-text-primary text-[13px] leading-none">{row.score}</div>
             <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}%</div>
             {densityMode === 'detailed' && <div className="mt-1">{
-              row.score >= 90 ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge> :
-              row.score >= 70 ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge> :
+              row.score >= 75 ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge> :
+              row.score >= 60 ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge> :
               row.score >= 40 ? <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge> :
               row.score >= 20 ? <Badge variant="gray">Ignore</Badge> :
               <Badge variant="red" className="shadow-[0_0_10px_rgba(239,68,68,0.15)]">Avoid</Badge>
@@ -760,6 +760,7 @@ export default function ScannerClient() {
 
   // Auto Refresh Logic
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
+  const activeRequestRef = useRef<number>(0);
   // Auto Refresh Logic is moved down
 
   const [countdown, setCountdown] = useState<number>(0);
@@ -871,7 +872,7 @@ export default function ScannerClient() {
 
   useEffect(() => {
     if (scannerMode !== 'CPR') {
-      setVisibleColumns(['symbol', 'direction', 'signalTime', 'score', 'gap', 'move', 'confidence', 'exit']);
+      setVisibleColumns(['checkbox', 'watchlist', 'symbol', 'ltp', 'setup', 'direction', 'signalTime', 'score', 'gap', 'move', 'confidence', 'exit']);
     } else {
       const savedColumns = localStorage.getItem('cpr_scanner_columns');
       if (savedColumns) {
@@ -965,14 +966,17 @@ export default function ScannerClient() {
   // Main Fetch Function
   const fetchScannerData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
+    const requestId = ++activeRequestRef.current;
     const startFetchTime = Date.now();
     try {
       if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
         const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
-        // Live scoring engine — calls /api/btst which runs BtstService.evaluateOvernight on all NIFTY50 stocks in real-time
-        const res = await fetch(`/api/btst?universe=NIFTY50${bypassVal ? '&bypass=true' : ''}`);
+        // Live scoring engine — calls /api/btst which runs BtstService.evaluateOvernight on stocks in real-time
+        const res = await fetch(`/api/btst?universe=${universe}${bypassVal ? '&bypass=true' : ''}`);
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
+
+        if (requestId !== activeRequestRef.current) return;
 
         setExecutionWindowOpen(data.executionWindowOpen ?? true);
         setCachedResult(data.cachedResult ?? false);
@@ -996,6 +1000,8 @@ export default function ScannerClient() {
           expectedMove: number;
           gapConfidence: number;
           exitStrategy: string;
+          scoreBreakdown?: ScannedStock['scoreBreakdown'];
+          optionSuggestion?: ScannedStock['optionSuggestion'];
         }> = data.results || [];
 
         const filtered = allResults.filter(r => {
@@ -1050,11 +1056,37 @@ export default function ScannerClient() {
             exitStrategy: sig.exitStrategy || 'EOD',
             rejectionReason: null,
             volumeRatio: 1,
+            ...(sig.scoreBreakdown !== undefined && { scoreBreakdown: sig.scoreBreakdown }),
+            ...(sig.optionSuggestion !== undefined && { optionSuggestion: sig.optionSuggestion }),
           };
           // Only set direction when it is defined (exactOptionalPropertyTypes safe)
           if (sig.tag === 'LONG') return { ...base, direction: 'LONG' as const };
           if (sig.tag === 'SHORT') return { ...base, direction: 'SHORT' as const };
           return base as ScannedStock;
+        });
+
+        // Apply watchlist Pinned priority layout & dynamic column sorting client-side
+        mapped.sort((a, b) => {
+          const pinA = watchlist[a.symbol]?.pinned ? 1 : 0;
+          const pinB = watchlist[b.symbol]?.pinned ? 1 : 0;
+          if (pinA !== pinB) return pinB - pinA; // pinned first
+          
+          let comparison = 0;
+          if (sortField === 'score') {
+            comparison = a.score - b.score;
+          } else if (sortField === 'symbol') {
+            comparison = a.symbol.localeCompare(b.symbol);
+          } else if (sortField === 'ltp') {
+            comparison = a.ltp - b.ltp;
+          } else if (sortField === 'gap') {
+            comparison = (a.expectedGap ?? 0) - (b.expectedGap ?? 0);
+          } else if (sortField === 'move') {
+            comparison = (a.expectedMove ?? 0) - (b.expectedMove ?? 0);
+          } else if (sortField === 'confidence') {
+            comparison = (a.confidence ?? 0) - (b.confidence ?? 0);
+          }
+          
+          return sortOrder === 'desc' ? -comparison : comparison;
         });
 
         // Update KPI insights
@@ -1097,6 +1129,8 @@ export default function ScannerClient() {
 
       const data = await res.json();
       if (data.success) {
+        if (requestId !== activeRequestRef.current) return;
+
         setExecutionWindowOpen(true);
         setCachedResult(false);
         setScannedAt('');
@@ -1153,9 +1187,13 @@ export default function ScannerClient() {
         setLastRefreshed(new Date().toLocaleTimeString());
       }
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
+      if (requestId === activeRequestRef.current) {
+        showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === activeRequestRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
 
@@ -1452,8 +1490,8 @@ export default function ScannerClient() {
 
   // Standardized V3 category labels and styling
   const getRatingBadge = (score: number) => {
-    if (score >= 90) return <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge>;
-    if (score >= 70) return <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge>;
+    if (score >= 75) return <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge>;
+    if (score >= 60) return <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge>;
     if (score >= 40) return <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge>;
     if (score >= 20) return <Badge variant="gray">Ignore</Badge>;
     return <Badge variant="red" className="shadow-[0_0_10px_rgba(239,68,68,0.15)]">Avoid</Badge>;
@@ -1461,8 +1499,8 @@ export default function ScannerClient() {
 
   // Standardized V3 color selectors
   const getRatingColorClass = (score: number) => {
-    if (score >= 90) return 'text-accent-purple border-accent-purple/30 bg-accent-purple/10';
-    if (score >= 70) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
+    if (score >= 75) return 'text-accent-purple border-accent-purple/30 bg-accent-purple/10';
+    if (score >= 60) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
     if (score >= 40) return 'text-accent-amber border-accent-amber/30 bg-accent-amber/10';
     if (score >= 20) return 'text-text-secondary border-border-tertiary bg-bg-tertiary';
     return 'text-accent-red border-accent-red/30 bg-accent-red/10';
@@ -1530,19 +1568,19 @@ export default function ScannerClient() {
         }
       };
 
-      if (score >= 90) checkAndAddCell('Strong Buy');
-      if (score >= 70 && score < 90) checkAndAddCell('Breakout');
+      if (score >= 75) checkAndAddCell('Strong Buy');
+      if (score >= 60 && score < 75) checkAndAddCell('Breakout');
       if (signals.includes('BULLISH')) checkAndAddCell('Bullish');
       if (signals.includes('BEARISH')) checkAndAddCell('Bearish');
-      if (score >= 40 && score < 70) checkAndAddCell('Watch');
+      if (score >= 40 && score < 60) checkAndAddCell('Watch');
     });
 
     return { grid, colTotals };
   }, [results]);
 
   // V2 Scanner Insights
-  const strongBuyCount = results.filter(r => r.score >= 90 && !r.rejectionReason).length || insightCounts.strongBuy;
-  const breakoutReadyCount = results.filter(r => r.score >= 70 && r.score < 90).length || insightCounts.breakoutReady;
+  const strongBuyCount = results.filter(r => r.score >= 75 && !r.rejectionReason).length || insightCounts.strongBuy;
+  const breakoutReadyCount = results.filter(r => r.score >= 60 && r.score < 75).length || insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
   // @ts-expect-error btstStatus is optional and sometimes added by the backend
   const avoidCount = results.filter(r => r.score < 40 || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
@@ -1868,8 +1906,8 @@ export default function ScannerClient() {
               <thead>
                 <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary uppercase">
                   <th className="p-2.5 text-left w-36">Sector</th>
-                  <th className="p-2.5">Strong Buy (&gt;=90)</th>
-                  <th className="p-2.5">Breakout (70-89)</th>
+                  <th className="p-2.5">Strong Buy (&gt;=75)</th>
+                  <th className="p-2.5">Breakout (60-74)</th>
                   <th className="p-2.5">Bullish</th>
                   <th className="p-2.5">Bearish</th>
                   <th className="p-2.5">Watch (40-69)</th>
@@ -2412,9 +2450,21 @@ export default function ScannerClient() {
                           </th>
                         )}
                         {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
-                        {visibleColumns.includes('gap') && <th className="p-2.5">Gap %</th>}
-                        {visibleColumns.includes('move') && <th className="p-2.5">Move %</th>}
-                        {visibleColumns.includes('confidence') && <th className="p-2.5">Gap Freq %</th>}
+                        {visibleColumns.includes('gap') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary w-24" onClick={() => handleSort('gap')}>
+                            <div className="flex items-center gap-1">Gap % <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('move') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary w-24" onClick={() => handleSort('move')}>
+                            <div className="flex items-center gap-1">Move % <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('confidence') && (
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary w-24" onClick={() => handleSort('confidence')}>
+                            <div className="flex items-center gap-1">Gap Freq % <ArrowUpDown size={11} /></div>
+                          </th>
+                        )}
                         {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
                         <th className="p-2.5 text-right">Inspect</th>
                       </tr>
@@ -2588,95 +2638,106 @@ export default function ScannerClient() {
               {/* Drawer Body Scroll */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 
-                {drawerTab === 'overview' && (
-                  <div className="space-y-4 animate-fade-in">
-                    <div className="bg-bg-primary/40 border border-border-primary/80 rounded p-4 space-y-3.5">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="text-base font-bold text-text-primary">{drawerStock.symbol}</h4>
-                          <p className="text-[10px] text-text-tertiary mt-0.5">{drawerStock.sector} | {drawerStock.market}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-lg font-bold text-text-primary block">₹{fmt(drawerStock.ltp)}</span>
-                          <span className="text-[10px] text-text-secondary mt-0.5">Mcap: ₹{drawerStock.marketCap.toLocaleString('en-IN')} Cr</span>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between border-t border-border-primary/50 pt-3 text-[11px]">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-text-secondary">Scoring Rank:</span>
-                          <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Gap Freq {drawerStock.confidence}%</span>
-                          {getRatingBadge(drawerStock.score)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2">
-                      <span className="font-bold text-text-primary block">CPR Property Classification</span>
-                      <p>
-                        {drawerStock.symbol} exhibits a <strong className="text-text-primary">{drawerStock.classification}</strong> Central Pivot Range (CPR) structure today. 
-                        {drawerStock.classification === 'NARROW' 
-                          ? ' A narrow CPR indicates contraction in volatility. Expect high-momentum breakouts or directional trend extension.'
-                          : drawerStock.classification === 'WIDE'
-                          ? ' A wide CPR suggests volatility expansion. High probability of rangebound mean-reversion sessions fading pivots.'
-                          : ' A normal CPR is typically neutral, showing normal continuation setups.'}
-                      </p>
-                    </div>
-
-                    {scannerMode !== 'CPR' && (
-                      <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2 mt-4">
-                        <span className="font-bold text-accent-purple flex items-center gap-1 uppercase">
-                          <Target size={12} /> BTST Score Explainability
-                        </span>
-                        
-                        <div className="grid grid-cols-2 gap-2 mt-2 border-t border-border-primary/50 pt-2">
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">VDU</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.vdu ?? '—'}</span>
+                {drawerTab === 'overview' && (() => {
+                  const activeSignals = drawerStock.signals || [];
+                  const breakdown = drawerStock.scoreBreakdown || {
+                    vdu: activeSignals.includes('VOLUME_SPIKE') ? 20 : 0,
+                    cprNarrow: (activeSignals.includes('NARROW_CPR') || activeSignals.includes('VIRGIN_CPR')) ? 15 : 0,
+                    higherValue: (activeSignals.includes('HIGHER_VALUE') || activeSignals.includes('LOWER_VALUE')) ? 20 : 0,
+                    vwap: (activeSignals.includes('ABOVE_VWAP') || activeSignals.includes('BELOW_VWAP')) ? 20 : 0,
+                    conf15m: activeSignals.includes('LIQUID') ? 10 : 0,
+                    closeStrength: (activeSignals.includes('CLOSING_STRENGTH') || activeSignals.includes('CLOSING_WEAKNESS')) ? 15 : 0,
+                  };
+                  return (
+                    <div className="space-y-4 animate-fade-in">
+                      <div className="bg-bg-primary/40 border border-border-primary/80 rounded p-4 space-y-3.5">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="text-base font-bold text-text-primary">{drawerStock.symbol}</h4>
+                            <p className="text-[10px] text-text-tertiary mt-0.5">{drawerStock.sector} | {drawerStock.market}</p>
                           </div>
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">CPR Narrow</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.cprNarrow ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">Higher Value</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.higherValue ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">VWAP</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.vwap ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">15m Confirmation</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.conf15m ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                            <span className="text-text-tertiary">Closing Strength</span>
-                            <span className="font-mono text-text-primary">{drawerStock.scoreBreakdown?.closeStrength ?? '—'}</span>
+                          <div className="text-right">
+                            <span className="text-lg font-bold text-text-primary block">₹{fmt(drawerStock.ltp)}</span>
+                            <span className="text-[10px] text-text-secondary mt-0.5">Mcap: ₹{drawerStock.marketCap.toLocaleString('en-IN')} Cr</span>
                           </div>
                         </div>
                         
-                        <div className="flex justify-between items-center mt-2 bg-bg-primary/50 p-2 rounded border border-border-primary">
-                          <span className="font-bold text-text-primary uppercase tracking-wider">Total Score</span>
-                          <span className="font-bold text-accent-purple text-sm">{drawerStock.score}</span>
+                        <div className="flex items-center justify-between border-t border-border-primary/50 pt-3 text-[11px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-text-secondary">Scoring Rank:</span>
+                            <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Gap Freq {drawerStock.confidence}%</span>
+                            {getRatingBadge(drawerStock.score)}
+                          </div>
                         </div>
+                      </div>
 
-                        {drawerStock.rejectionReason && (
-                          <div className="mt-3 p-2 border border-accent-red/30 bg-accent-red/10 rounded flex items-start gap-2">
-                            <AlertTriangle size={14} className="text-accent-red shrink-0 mt-0.5" />
-                            <div>
-                              <span className="block font-bold text-accent-red uppercase tracking-wide mb-1">Rejection Reason</span>
-                              <span className="text-accent-red/90">{drawerStock.rejectionReason}</span>
+                      <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2">
+                        <span className="font-bold text-text-primary block">CPR Property Classification</span>
+                        <p>
+                          {drawerStock.symbol} exhibits a <strong className="text-text-primary">{drawerStock.classification}</strong> Central Pivot Range (CPR) structure today. 
+                          {drawerStock.classification === 'NARROW' 
+                            ? ' A narrow CPR indicates contraction in volatility. Expect high-momentum breakouts or directional trend extension.'
+                            : drawerStock.classification === 'WIDE'
+                            ? ' A wide CPR suggests volatility expansion. High probability of rangebound mean-reversion sessions fading pivots.'
+                            : ' A normal CPR is typically neutral, showing normal continuation setups.'}
+                        </p>
+                      </div>
+
+                      {scannerMode !== 'CPR' && (
+                        <div className="border border-border-primary rounded p-3 text-[11px] leading-relaxed text-text-secondary space-y-2 mt-4">
+                          <span className="font-bold text-accent-purple flex items-center gap-1 uppercase">
+                            <Target size={12} /> BTST Score Explainability
+                          </span>
+                          
+                          <div className="grid grid-cols-2 gap-2 mt-2 border-t border-border-primary/50 pt-2">
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">VDU</span>
+                              <span className="font-mono text-text-primary">{breakdown.vdu ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">CPR Narrow</span>
+                              <span className="font-mono text-text-primary">{breakdown.cprNarrow ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">Higher Value</span>
+                              <span className="font-mono text-text-primary">{breakdown.higherValue ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">VWAP</span>
+                              <span className="font-mono text-text-primary">{breakdown.vwap ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">15m Confirmation</span>
+                              <span className="font-mono text-text-primary">{breakdown.conf15m ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between border-b border-border-primary/30 pb-1">
+                              <span className="text-text-tertiary">Closing Strength</span>
+                              <span className="font-mono text-text-primary">{breakdown.closeStrength ?? '—'}</span>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                          
+                          <div className="flex justify-between items-center mt-2 bg-bg-primary/50 p-2 rounded border border-border-primary">
+                            <span className="font-bold text-text-primary uppercase tracking-wider">Total Score</span>
+                            <span className="font-bold text-accent-purple text-sm">{drawerStock.score}</span>
+                          </div>
+
+                          {drawerStock.rejectionReason && (
+                            <div className="mt-3 p-2 border border-accent-red/30 bg-accent-red/10 rounded flex items-start gap-2">
+                              <AlertTriangle size={14} className="text-accent-red shrink-0 mt-0.5" />
+                              <div>
+                                <span className="block font-bold text-accent-red uppercase tracking-wide mb-1">Rejection Reason</span>
+                                <span className="text-accent-red/90">{drawerStock.rejectionReason}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {drawerTab === 'signals' && (
                   <div className="space-y-3 animate-fade-in">
@@ -2967,7 +3028,9 @@ export default function ScannerClient() {
                                 <td className="p-2 text-text-secondary">{h.date}</td>
                                 <td className="p-2 font-bold text-accent-blue">{h.score}</td>
                                 <td className="p-2 text-text-primary uppercase">{h.tag || 'N/A'}</td>
-                                <td className="p-2 text-text-secondary">{h.signalSummary || 'None'}</td>
+                                <td className="p-2 text-text-secondary max-w-[200px] truncate" title={h.signalSummary || 'None'}>
+                                  {h.signalSummary ? h.signalSummary.split(',').join(', ') : 'None'}
+                                </td>
                                 <td className="p-2 text-right text-text-secondary">{(h.width || h.cprWidth || 0).toFixed(3)}%</td>
                               </tr>
                             ))}
@@ -3179,7 +3242,7 @@ export default function ScannerClient() {
                 <h4 className="font-bold text-accent-blue">Scores and Confidence</h4>
                 <p>
                   Scores out of 100 represent the alignment of indicators. 
-                  A score <strong>≥ 90</strong> is considered a Strong Buy/Sell. 
+                  A score <strong>≥ 75</strong> is considered a Strong Buy/Sell. 
                   Confidence percentage reflects the mathematical probability of a successful gap based on historical performance of the setup.
                 </p>
               </div>

@@ -43,6 +43,18 @@ export class TradeEngineService {
       riskAmount = positionSize * riskPerShare;
     }
 
+    // Guard 1: Cap notional exposure to 1× capital (max 100% leverage).
+    // 2× still caused >700% drawdown; capping at 1× prevents equity going deeply negative.
+    const MAX_NOTIONAL = config.capital * 1;
+    const notional = positionSize * entryPrice;
+    if (notional > MAX_NOTIONAL) {
+      positionSize = MAX_NOTIONAL / entryPrice;
+    }
+    // Guard 2: Minimum 1 share; always use integer share count.
+    positionSize = Math.max(1, Math.floor(positionSize));
+    // Guard 3: Recalculate riskAmount after capping so P&L is consistent.
+    riskAmount = positionSize * riskPerShare;
+
     let durationDays = 0;
     const journalEvents = [];
 

@@ -26,6 +26,14 @@ export interface BtstScoreResult {
   sector: string;
   marketCap: number;
   tomorrowCPRProvisional?: boolean;
+  scoreBreakdown?: {
+    vdu?: number;
+    cprNarrow?: number;
+    higherValue?: number;
+    vwap?: number;
+    conf15m?: number;
+    closeStrength?: number;
+  };
 }
 
 export interface BtstScoreResultEnriched extends BtstScoreResult {
@@ -350,6 +358,24 @@ export class BtstService {
       target = entry - (sl - entry) * 2;
     }
 
+    const isLong = longScore >= shortScore;
+    const scoreBreakdown = {
+      vdu: volumeRatio >= 2.0 ? 20 : 0,
+      cprNarrow: (tomorrowCpr.classification === 'NARROW' || virginCPR) ? 15 : 0,
+      higherValue: isLong
+        ? (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc ? 20 : 0)
+        : (tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc ? 20 : 0),
+      vwap: isLong
+        ? (stock.vwap && stock.ltp > stock.vwap * 1.002 ? 20 : 0)
+        : (stock.vwap && stock.ltp < stock.vwap * 0.998 ? 20 : 0),
+      conf15m: stock.avgVolume >= 500000 ? 10 : 0,
+      closeStrength: stock.candle15m
+        ? (isLong
+            ? (stock.candle15m.close >= stock.candle15m.high * 0.995 ? 15 : 0)
+            : (stock.candle15m.close <= stock.candle15m.low * 1.005 ? 15 : 0))
+        : 0
+    };
+
     return {
       symbol: stock.symbol,
       ltp: stock.ltp,
@@ -363,7 +389,8 @@ export class BtstService {
       rr: '1:2.0',
       sector: stock.sector,
       marketCap: stock.marketCap,
-      tomorrowCPRProvisional: isMarketOpen() && !isLastToday
+      tomorrowCPRProvisional: isMarketOpen() && !isLastToday,
+      scoreBreakdown
     };
   }
 }

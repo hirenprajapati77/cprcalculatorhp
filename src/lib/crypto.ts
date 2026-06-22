@@ -40,7 +40,7 @@ export function decrypt(ciphertext: string): string {
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
   
-  let decrypted = decipher.update(encryptedText, undefined as any, 'utf8');
+  let decrypted = decipher.update(encryptedText).toString('utf8');
   decrypted += decipher.final('utf8');
   
   return decrypted;

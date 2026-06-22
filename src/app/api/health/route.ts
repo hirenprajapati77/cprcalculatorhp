@@ -40,7 +40,7 @@ export async function GET() {
       status: 'active'
     },
     redis: {
-      status: btQueue ? 'connected' : 'disconnected'
+      status: CacheService.isRedisConnected ? 'connected' : 'disconnected'
     },
     refresh: {
       isScannerRunning: false,

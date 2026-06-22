@@ -66,13 +66,20 @@ export class MetricsService {
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 999 : 0);
     const avgRR = totalTrades > 0 ? totalRR / totalTrades : 0;
-    const expectancy = (winRate / 100 * (grossProfit / winningTrades)) - ((1 - winRate / 100) * (grossLoss / (totalTrades - winningTrades || 1)));
+    const avgWin  = winningTrades > 0 ? grossProfit / winningTrades : 0;
+    const losingTrades = totalTrades - winningTrades;
+    const avgLoss = losingTrades > 0 ? grossLoss / losingTrades : 0;
+    const expectancy = (winRate / 100 * avgWin) - ((1 - winRate / 100) * avgLoss);
     
     const RISK_FREE_DAILY = 0.065 / 252;
     const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.exitPrice !== null && t.exitPrice !== undefined);
-    const dailyReturns = closedTrades.map(t => 
-      ((t.exitPrice as number) - t.entryPrice) / t.entryPrice
-    );
+    // NOTE: Approximation — using duration-adjusted trade returns normalized by holding period.
+    // A proper calendar equity curve would map each trade's daily P&L to actual calendar dates;
+    // that implementation is deferred as a known limitation.
+    const dailyReturns = closedTrades.map(t => {
+      const tradeReturn = ((t.exitPrice as number) - t.entryPrice) / t.entryPrice;
+      return tradeReturn / (t.durationDays || 1); // normalize by holding duration
+    });
 
     const avgReturn = dailyReturns.reduce(
       (a, b) => a + b, 0
@@ -83,8 +90,9 @@ export class MetricsService {
     ) / (dailyReturns.length || 1);
     const stdDev = Math.sqrt(variance);
 
+    // Annualize Sharpe: multiply by sqrt(252) (was missing)
     const sharpe = stdDev > 0 
-      ? (avgReturn - RISK_FREE_DAILY) / stdDev 
+      ? ((avgReturn - RISK_FREE_DAILY) / stdDev) * Math.sqrt(252)
       : 0;
 
     const downsideReturns = dailyReturns.filter(
@@ -94,8 +102,9 @@ export class MetricsService {
       (sum, r) => sum + Math.pow(r - RISK_FREE_DAILY, 2), 0
     ) / (downsideReturns.length || 1);
     const downsideDev = Math.sqrt(downsideVariance);
+    // Annualize Sortino: multiply by sqrt(252) (was missing)
     const sortino = downsideDev > 0 
-      ? (avgReturn - RISK_FREE_DAILY) / downsideDev 
+      ? ((avgReturn - RISK_FREE_DAILY) / downsideDev) * Math.sqrt(252)
       : 0;
 
     const roundedSharpe = Math.round(sharpe * 100) / 100;
@@ -107,7 +116,7 @@ export class MetricsService {
         backtestRunId: runId,
         winRate,
         profitFactor,
-        expectancy: isNaN(expectancy) ? 0 : expectancy,
+        expectancy, // zero-guards on avgWin/avgLoss above prevent NaN
         maxDrawdown,
         sharpe: roundedSharpe,
         sortino: roundedSortino,
