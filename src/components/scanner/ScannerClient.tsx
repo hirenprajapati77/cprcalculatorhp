@@ -1570,8 +1570,16 @@ export default function ScannerClient() {
 
       if (score >= 75) checkAndAddCell('Strong Buy');
       if (score >= 60 && score < 75) checkAndAddCell('Breakout');
-      if (signals.includes('BULLISH')) checkAndAddCell('Bullish');
-      if (signals.includes('BEARISH')) checkAndAddCell('Bearish');
+      if (
+        signals.includes('BULLISH') ||
+        signals.includes('ABOVE_VWAP') ||
+        signals.includes('HIGHER_VALUE')
+      ) checkAndAddCell('Bullish');
+      if (
+        signals.includes('BEARISH') ||
+        signals.includes('BELOW_VWAP') ||
+        signals.includes('LOWER_VALUE')
+      ) checkAndAddCell('Bearish');
       if (score >= 40 && score < 60) checkAndAddCell('Watch');
     });
 
