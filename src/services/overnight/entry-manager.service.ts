@@ -23,7 +23,33 @@ export class EntryManagerService {
     }
 
     if (!stock || !stock.high || !stock.low) {
+      console.log(`[EligibilityGate] ${stock?.symbol || 'UNKNOWN'} rejected: Insufficient market data`);
       return { eligible: false, reason: 'Insufficient market data' };
+    }
+
+    const volume = stock.volume || 0;
+    const avgVolume = stock.avgVolume || 0;
+    const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+
+    if (avgVolume < 100000) {
+      console.log(`[EligibilityGate] ${stock.symbol} rejected: avgVolume ${avgVolume} < 100000`);
+      return { eligible: false, reason: `avgVolume ${avgVolume} < 100000` };
+    }
+
+    if (volume < 100000) {
+      console.log(`[EligibilityGate] ${stock.symbol} rejected: volume ${volume} < 100000`);
+      return { eligible: false, reason: `volume ${volume} < 100000` };
+    }
+
+    if (volumeRatio < 1.2) {
+      console.log(`[EligibilityGate] ${stock.symbol} rejected: volumeRatio ${volumeRatio.toFixed(2)} < 1.2`);
+      return { eligible: false, reason: `volumeRatio ${volumeRatio.toFixed(2)} < 1.2` };
+    }
+
+    const intraVol = intradayVolume || 0;
+    if (intraVol < 5000) {
+      console.log(`[EligibilityGate] ${stock.symbol} rejected: intradayVolume ${intraVol} < 5000`);
+      return { eligible: false, reason: `intradayVolume ${intraVol} < 5000` };
     }
 
     return { eligible: true, reason: null };

@@ -2,6 +2,7 @@ import { calculateCPR } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
+import { isMarketOpen } from '@/lib/market-hours';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -24,6 +25,7 @@ export interface ScannerSignalResult extends MarketStockData {
   target: number;
   rr: string; // Risk-Reward ratio, e.g. "1:2.5"
   confidence: number; // Trade confidence percentage
+  tomorrowCPRProvisional?: boolean;
 }
 
 
@@ -37,9 +39,10 @@ export class ScannerService {
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
+    let isLastToday = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
-      const isLastToday = lastCandle.date === todayStr;
+      isLastToday = lastCandle.date === todayStr;
       
       todayCandle = isLastToday ? lastCandle : {
         high: stock.high,
@@ -205,8 +208,7 @@ export class ScannerService {
     }
 
     // 5. Confidence Score Calculation
-    let confidence = score;
-    confidence = Math.min(confidence, 98); // Max cap at 98%
+    const confidence = this.calculateConfidence(tempResult);
 
     return {
       ...stock,
@@ -230,7 +232,52 @@ export class ScannerService {
       target,
       rr,
       confidence,
+      tomorrowCPRProvisional: isMarketOpen() && !isLastToday,
     };
+  }
+
+  private static calculateConfidence(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
+    const { signals, volume, avgVolume, width } = result;
+    const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+
+    let confidence = 50; // base
+
+    // 1. Liquidity / Volume Ratio (Max 25)
+    if (volumeRatio >= 1.5) {
+      confidence += 25;
+    } else if (volumeRatio >= 1.2) {
+      confidence += 15;
+    } else if (volumeRatio >= 1.0) {
+      confidence += 10;
+    }
+
+    // 2. CPR Width / Volatility (Max 25)
+    if (width <= 0.25) {
+      confidence += 25;
+    } else if (width <= 0.5) {
+      confidence += 15;
+    } else if (width <= 1.0) {
+      confidence += 10;
+    } else {
+      confidence += 5;
+    }
+
+    // 3. Signal Quality Synergy (Max 20)
+    let synergy = 0;
+    if (signals.includes('KGS_INSIDE_CPR') || signals.includes('KGS_RTP')) synergy += 10;
+    if (signals.includes('VIRGIN')) synergy += 5;
+    if (signals.includes('NARROW') && signals.includes('BREAKOUT')) synergy += 5;
+    confidence += Math.min(20, synergy);
+
+    // 4. Conflict Penalties
+    let penalties = 0;
+    if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) penalties += 15;
+    if (signals.includes('KGS_DESC_CPR') && signals.includes('BULLISH')) penalties += 15;
+    if (signals.includes('KGS_OUTSIDE_CPR')) penalties += 15;
+
+    confidence -= penalties;
+
+    return Math.max(10, Math.min(confidence, 98));
   }
 }
 

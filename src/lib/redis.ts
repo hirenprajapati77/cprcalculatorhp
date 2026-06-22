@@ -79,6 +79,38 @@ export const cache = {
       }
     }
     memoryCache.clear();
+  },
+  async incr(key: string, ttlSeconds: number): Promise<number> {
+    if (redis && redis.status === 'ready') {
+      try {
+        const pipeline = redis.multi();
+        pipeline.incr(key);
+        pipeline.ttl(key);
+        const results = await pipeline.exec();
+        if (results && results[0] && results[0][1] !== undefined) {
+          const count = results[0][1] as number;
+          const ttl = results[1][1] as number;
+          if (ttl < 0) {
+            await redis.expire(key, ttlSeconds);
+          }
+          return count;
+        }
+      } catch (err) {
+        console.warn('Redis INCR failed, falling back to memory cache:', err);
+      }
+    }
+
+    // Memory fallback logic
+    const now = Date.now();
+    const cached = memoryCache.get(key);
+    if (!cached || now > cached.expiry) {
+      const countVal = 1;
+      memoryCache.set(key, { value: String(countVal), expiry: now + ttlSeconds * 1000 });
+      return countVal;
+    }
+    const countVal = parseInt(cached.value, 10) + 1;
+    memoryCache.set(key, { value: String(countVal), expiry: cached.expiry });
+    return countVal;
   }
 };
 

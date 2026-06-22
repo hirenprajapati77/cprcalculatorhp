@@ -8,7 +8,7 @@ function makeOhlc(dates: string[], basePrice = 100, trend: 'flat' | 'up' | 'down
   return dates.map((date, i) => {
     const drift = trend === 'up' ? i * 0.5 : trend === 'down' ? -i * 0.5 : 0;
     const p = basePrice + drift;
-    return { date, open: p, high: p + 1, low: p - 1, close: p };
+    return { date, open: p, high: p + 1, low: p - 1, close: p, volume: 1000 };
   });
 }
 
@@ -58,9 +58,9 @@ test('TradeEngine — CLOSED_TIME_EXIT at exact window boundary', async (t) => {
   await t.test('exits CLOSED_SL before window boundary if SL is hit', () => {
     // SL at 99, candle low goes to 98 — SL hit on day 1
     const ohlc = [
-      { date: '2024-01-02', open: 100, high: 101, low: 98, close: 99 },
-      { date: '2024-01-03', open: 99, high: 100, low: 98, close: 99 },
-      { date: '2024-01-04', open: 99, high: 100, low: 98, close: 99 },
+      { date: '2024-01-02', open: 100, high: 101, low: 98, close: 99, volume: 1000 },
+      { date: '2024-01-03', open: 99, high: 100, low: 98, close: 99, volume: 1000 },
+      { date: '2024-01-04', open: 99, high: 100, low: 98, close: 99, volume: 1000 },
     ];
     const result = TradeEngineService.simulateTrade('LONG', 100, 99, 108, ohlc, baseConfig);
 
@@ -71,9 +71,9 @@ test('TradeEngine — CLOSED_TIME_EXIT at exact window boundary', async (t) => {
   await t.test('exits CLOSED_TARGET before window boundary if Target is hit', () => {
     // Target at 105, candle high goes to 106 — target hit on day 2
     const ohlc = [
-      { date: '2024-01-02', open: 100, high: 102, low: 99, close: 101 }, // no hit
-      { date: '2024-01-03', open: 101, high: 106, low: 100, close: 104 }, // target hit
-      { date: '2024-01-04', open: 104, high: 107, low: 103, close: 106 }, // should not reach
+      { date: '2024-01-02', open: 100, high: 102, low: 99, close: 101, volume: 1000 }, // no hit
+      { date: '2024-01-03', open: 101, high: 106, low: 100, close: 104, volume: 1000 }, // target hit
+      { date: '2024-01-04', open: 104, high: 107, low: 103, close: 106, volume: 1000 }, // should not reach
     ];
     const result = TradeEngineService.simulateTrade('LONG', 100, 98, 105, ohlc, baseConfig);
 
@@ -83,9 +83,9 @@ test('TradeEngine — CLOSED_TIME_EXIT at exact window boundary', async (t) => {
 
   await t.test('CLOSED_TIME_EXIT — exit price is close of LAST candle in bounded window', () => {
     const ohlc = [
-      { date: '2024-01-02', open: 100, high: 101, low: 99, close: 100.5 },
-      { date: '2024-01-03', open: 100.5, high: 101.5, low: 99.5, close: 101 },
-      { date: '2024-01-04', open: 101, high: 102, low: 100, close: 101.8 }, // last candle
+      { date: '2024-01-02', open: 100, high: 101, low: 99, close: 100.5, volume: 1000 },
+      { date: '2024-01-03', open: 100.5, high: 101.5, low: 99.5, close: 101, volume: 1000 },
+      { date: '2024-01-04', open: 101, high: 102, low: 100, close: 101.8, volume: 1000 }, // last candle
     ];
     const result = TradeEngineService.simulateTrade('LONG', 100, 97, 110, ohlc, baseConfig);
 

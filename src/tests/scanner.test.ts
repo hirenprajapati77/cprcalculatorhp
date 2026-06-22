@@ -141,21 +141,25 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
 test('Ranking Service V2 Scoring & Classifications', async (t) => {
   await t.test('assigns correct classification labels based on score ranges', () => {
     assert.strictEqual(RankingService.getClassification(95), 'A+');
-    assert.strictEqual(RankingService.getClassification(90), 'A+');
+    assert.strictEqual(RankingService.getClassification(80), 'A+');
+    assert.strictEqual(RankingService.getClassification(75), 'A+');
     
-    assert.strictEqual(RankingService.getClassification(85), 'A');
     assert.strictEqual(RankingService.getClassification(70), 'A');
+    assert.strictEqual(RankingService.getClassification(60), 'A');
     
-    assert.strictEqual(RankingService.getClassification(65), 'B');
-    assert.strictEqual(RankingService.getClassification(50), 'B');
+    assert.strictEqual(RankingService.getClassification(55), 'B');
+    assert.strictEqual(RankingService.getClassification(40), 'B');
     
-    assert.strictEqual(RankingService.getClassification(40), 'Ignore');
     assert.strictEqual(RankingService.getClassification(35), 'Ignore');
     assert.strictEqual(RankingService.getClassification(10), 'Ignore');
   });
 
   await t.test('calculates correct score sum and caps at 100', () => {
-    // Compression (Narrow) (+25) + Higher Value (+20) + Breakout (+20) + Vol Ratio (+10) + Momentum (+10) + Liquidity (+10) + Hot Zone (+5) = 100
+    // Category A: NARROW (15) + HIGHER_VALUE (10) + BREAKOUT (10) + KGS_INSIDE_CPR (10) = 45 (capped at 45)
+    // Category B: Vol Ratio >= 1.5 (15) + Vol Ratio >= 1.2 (10) = 25
+    // Category C: MOMENTUM (10) + NORMAL & BULLISH (10) = 20
+    // Category D: HOT_ZONE (5) + NARROW & KGS_RTP (5) = 10
+    // Total = 100
     const result = {
       symbol: 'TEST1',
       market: 'NSE' as const,
@@ -181,7 +185,7 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
       s4: 95,
       width: 0,
       classification: 'NARROW' as const,
-      signals: ['NARROW', 'BREAKOUT', 'BULLISH', 'MOMENTUM', 'HIGHER_VALUE', 'HOT_ZONE'],
+      signals: ['NARROW', 'BREAKOUT', 'BULLISH', 'MOMENTUM', 'HIGHER_VALUE', 'HOT_ZONE', 'NORMAL', 'KGS_RTP', 'KGS_INSIDE_CPR', 'VIRGIN'],
       entry: 0,
       sl: 0,
       target: 0,

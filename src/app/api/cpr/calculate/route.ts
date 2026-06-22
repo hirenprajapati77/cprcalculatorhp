@@ -7,45 +7,24 @@ import { cache } from '@/lib/redis';
 const ipRequestCounts = new Map<string, { count: number; resetTime: number }>();
 
 async function checkRateLimit(request: NextRequest): Promise<boolean> {
-  const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+  let ip = request.headers.get('x-real-ip') || '';
+  if (!ip) {
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    if (forwardedFor) {
+      ip = forwardedFor.split(',')[0].trim();
+    }
+  }
+  if (!ip) {
+    ip = '127.0.0.1';
+  }
+
   const limit = Number(process.env.RATE_LIMIT_MAX) || 60;
   const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000;
-  
+  const ttlSeconds = Math.ceil(windowMs / 1000);
   const cacheKey = `rate_limit:${ip}`;
-  const now = Date.now();
 
-  try {
-    // 1. Try rate limit via Redis if active
-    const countStr = await cache.get(cacheKey);
-    if (countStr !== null) {
-      const count = parseInt(countStr, 10);
-      if (count >= limit) {
-        return false; // Limit exceeded
-      }
-      await cache.set(cacheKey, String(count + 1), Math.ceil((windowMs / 1000)));
-      return true;
-    } else {
-      await cache.set(cacheKey, '1', Math.ceil(windowMs / 1000));
-      return true;
-    }
-  } catch {
-    // 2. Memory fallback if Redis fails or isn't configured
-    const userLimit = ipRequestCounts.get(ip);
-    if (!userLimit || now > userLimit.resetTime) {
-      ipRequestCounts.set(ip, {
-        count: 1,
-        resetTime: now + windowMs,
-      });
-      return true;
-    }
-
-    if (userLimit.count >= limit) {
-      return false;
-    }
-
-    userLimit.count += 1;
-    return true;
-  }
+  const count = await cache.incr(cacheKey, ttlSeconds);
+  return count <= limit;
 }
 
 export async function POST(request: NextRequest) {

@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OvernightService } from '@/services/overnight/overnight.service';
 
 export async function POST(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get('x-cron-secret');
+
+  if (!cronSecret || authHeader !== cronSecret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const mockTime = searchParams.get('mockTime'); // Support testing different times
     const direction = (searchParams.get('direction') as 'LONG' | 'SHORT' | 'BOTH') || 'BOTH';
 
     let dateOverride: Date | undefined;
-    if (mockTime) {
+    if (mockTime && process.env.NODE_ENV !== 'production') {
       dateOverride = new Date(mockTime);
     }
 

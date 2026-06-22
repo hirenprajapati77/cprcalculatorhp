@@ -28,4 +28,5 @@ export interface CalculationRecord extends CPRInput, CPRResult {
   id: string;
   createdAt: Date;
   shareToken?: string | null;
+  persisted?: boolean;
 }

@@ -25,7 +25,13 @@ export class FyersAuthService {
         orderBy: { updatedAt: 'desc' }
       });
       if (tokenRecord && tokenRecord.expiresAt > new Date()) {
-        return tokenRecord.accessToken;
+        try {
+          const { decrypt } = await import('@/lib/crypto');
+          return decrypt(tokenRecord.accessToken);
+        } catch (decryptErr) {
+          console.error('[FyersAuthService] Failed to decrypt access token (possibly key rotated or missing):', decryptErr);
+          return null;
+        }
       }
     } catch (err) {
       console.error('[FyersAuthService] Error loading token from database:', err);
@@ -41,7 +47,16 @@ export class FyersAuthService {
         orderBy: { updatedAt: 'desc' }
       });
       if (tokenRecord && tokenRecord.expiresAt > new Date()) {
-        return tokenRecord;
+        try {
+          const { decrypt } = await import('@/lib/crypto');
+          return {
+            ...tokenRecord,
+            accessToken: decrypt(tokenRecord.accessToken)
+          };
+        } catch (decryptErr) {
+          console.error('[FyersAuthService] Failed to decrypt access token details (possibly key rotated or missing):', decryptErr);
+          return null;
+        }
       }
     } catch (err) {
       console.error('[FyersAuthService] Error loading token details from database:', err);
@@ -51,18 +66,20 @@ export class FyersAuthService {
 
   public static async saveToken(token: string, expiresAt: Date): Promise<void> {
     try {
+      const { encrypt } = await import('@/lib/crypto');
+      const encryptedToken = encrypt(token);
       const prisma = await getPrisma();
       await prisma.brokerToken.upsert({
         where: { id: 1 },
         update: {
-          accessToken: token,
+          accessToken: encryptedToken,
           expiresAt: expiresAt,
           updatedAt: new Date()
         },
         create: {
           id: 1,
           broker: 'fyers',
-          accessToken: token,
+          accessToken: encryptedToken,
           expiresAt: expiresAt
         }
       });
@@ -134,11 +151,16 @@ export class FyersAuthService {
           }
         }
       } catch (directErr) {
-        console.warn('[FyersAuthService] Direct token exchange failed, trying proxy fallback:', directErr);
+        console.warn('[FyersAuthService] Direct token exchange failed with error:', directErr);
       }
 
       // 2. Fallback to Cloudflare Worker Proxy
-      const authProxyUrl = process.env.FYERS_AUTH_PROXY_URL || 'https://cold-dew-46bf.prahiren.workers.dev';
+      const authProxyUrl = process.env.FYERS_AUTH_PROXY_URL;
+      if (!authProxyUrl) {
+        return { success: false, message: 'Direct Fyers token exchange failed and no trusted proxy is configured.' };
+      }
+
+      console.warn('[FyersAuthService] WARNING: Using external proxy for token exchange. Ensure this URL is a trusted, self-controlled endpoint.');
       console.log(`[FyersAuthService] Attempting token generation via PROXY (${authProxyUrl})...`);
       const res = await fetch(`${authProxyUrl.replace(/\/$/, '')}/api/v3/validate-authcode`, {
         method: 'POST',

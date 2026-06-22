@@ -11,46 +11,63 @@ export class CalculationService {
    */
   static async calculateAndSave(input: CPRInput): Promise<CalculationRecord> {
     const result = calculateCPR(input);
-    const shareToken = generateShareToken();
+    let record!: CalculationRecord;
+    let shareToken = '';
+    const maxAttempts = 3;
 
-    // Check if db is initialized and connected, otherwise run calculation purely
-    let record: CalculationRecord;
-    try {
-      const created = await prisma.calculation.create({
-        data: {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      shareToken = generateShareToken();
+      try {
+        const created = await prisma.calculation.create({
+          data: {
+            high: input.high,
+            low: input.low,
+            close: input.close,
+            pivot: result.pivot,
+            bc: result.bc,
+            tc: result.tc,
+            r1: result.r1,
+            r2: result.r2,
+            r3: result.r3,
+            r4: result.r4,
+            s1: result.s1,
+            s2: result.s2,
+            s3: result.s3,
+            s4: result.s4,
+            width: result.width,
+            classification: result.classification,
+            trend: result.trend,
+            shareToken,
+          },
+        });
+        record = { ...(created as CalculationRecord), persisted: true };
+        break;
+      } catch (err: any) {
+        const isCollision = err.code === 'P2002' && err.meta?.target?.includes('shareToken');
+        if (isCollision && attempt < maxAttempts) {
+          console.warn(`[CalculationService] Share token collision on attempt ${attempt}. Retrying...`);
+          continue;
+        }
+
+        const isProd = process.env.NODE_ENV === 'production';
+        if (isProd) {
+          console.error('[CalculationService] Database write failed in production:', err);
+        } else {
+          console.warn('Database write failed, returning unsaved calculation:', err);
+        }
+
+        record = {
+          id: `local_${Date.now()}`,
           high: input.high,
           low: input.low,
           close: input.close,
-          pivot: result.pivot,
-          bc: result.bc,
-          tc: result.tc,
-          r1: result.r1,
-          r2: result.r2,
-          r3: result.r3,
-          r4: result.r4,
-          s1: result.s1,
-          s2: result.s2,
-          s3: result.s3,
-          s4: result.s4,
-          width: result.width,
-          classification: result.classification,
-          trend: result.trend,
+          ...result,
           shareToken,
-        },
-      });
-      record = created as CalculationRecord;
-    } catch (err) {
-      // In case DB is not yet migrated/initialized, return an unsaved record
-      console.warn('Database write failed, returning unsaved calculation:', err);
-      record = {
-        id: `local_${Date.now()}`,
-        high: input.high,
-        low: input.low,
-        close: input.close,
-        ...result,
-        shareToken,
-        createdAt: new Date(),
-      };
+          createdAt: new Date(),
+          ...(isProd ? { persisted: false } : {})
+        };
+        break;
+      }
     }
 
     // Cache the calculation by shareToken for fast public lookups (7 days)

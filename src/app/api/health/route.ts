@@ -10,8 +10,17 @@ export async function GET() {
   const backtestMode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
   const btQueue = BacktestService.getQueue();
   
+  const isProd = process.env.NODE_ENV === 'production';
+  const historicalMode = process.env.HISTORICAL_MODE || 'mock';
+  const hasMisconfig = isProd && historicalMode !== 'live';
+
+  if (hasMisconfig) {
+    console.warn(`[LOUD WARNING] CRITICAL MISCONFIGURATION: Running in PRODUCTION but HISTORICAL_MODE is set to '${historicalMode}' instead of 'live'!`);
+  }
+  
   return NextResponse.json({
     status: 'healthy',
+    ...(hasMisconfig ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` } : {}),
     version: process.env.npm_package_version || '1.0.0',
     build: process.env.BUILD_TIMESTAMP || new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
@@ -27,7 +36,7 @@ export async function GET() {
     },
     retention: (await import('@/services/retention/retention.service')).RetentionService.getHealth(),
     historicalProvider: {
-      mode: process.env.HISTORICAL_MODE || 'mock',
+      mode: historicalMode,
       status: 'active'
     },
     redis: {

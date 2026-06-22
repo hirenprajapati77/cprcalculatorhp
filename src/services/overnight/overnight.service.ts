@@ -1,5 +1,12 @@
-// ADVANCED ENGINE: Used by /api/overnight (NSE FNO)
-// Max score 130, eligibility gates, DB persistence
+/**
+ * ADVANCED ENGINE — NOT YET CONNECTED TO UI OR CRON. Used only by /api/overnight and
+ * /refresh endpoints for manual/debugging use. Max score 130. Intended
+ * future replacement for the Simple Engine pending validation.
+ * 
+ * TODO: Phase H migration — validate Advanced Engine signals against
+ * Simple Engine on live market data before promoting to UI/cron.
+ * See project audit notes.
+ */
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { MarketService, MarketStockData } from '../market.service';
@@ -7,6 +14,7 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
+import { getISTTime } from '@/lib/market-hours';
 
 export interface MockOvernightStock extends MarketStockData {
   longScoreOverride?: number;
@@ -48,19 +56,8 @@ export interface OvernightIntradayMetrics {
 
 export class OvernightService {
   static getISTTime(date: Date = new Date()) {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: false
-    }).formatToParts(date);
-    const hour = parseInt(
-      parts.find(p => p.type === 'hour')?.value || '0', 10
-    );
-    const minute = parseInt(
-      parts.find(p => p.type === 'minute')?.value || '0', 10
-    );
-    return { hour, minute, totalMinutes: hour * 60 + minute };
+    const { hour, minute, totalMinutes } = getISTTime(date);
+    return { hour, minute, totalMinutes };
   }
 
   /**
@@ -75,11 +72,7 @@ export class OvernightService {
       return 'ACTIVE';
     }
 
-    const istDateStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      weekday: 'long'
-    }).format(time);
-    const isWeekend = istDateStr === 'Saturday' || istDateStr === 'Sunday';
+    const { isWeekend } = getISTTime(time);
     if (isWeekend) {
       return 'FROZEN';
     }

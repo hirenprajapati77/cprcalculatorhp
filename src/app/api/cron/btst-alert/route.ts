@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { BtstService } from '@/services/backtest/btst.service';
+import { getISTTime } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -11,19 +12,15 @@ export async function GET(req: NextRequest) {
   }
 
   // Check IST time — only proceed if 15:15-23:59 IST
-  const now = new Date();
-  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const hours = istTime.getHours();
-  const minutes = istTime.getMinutes();
-  const isWeekend = istTime.getDay() === 0 || istTime.getDay() === 6;
+  const { hour, minute, isWeekend } = getISTTime();
 
   if (isWeekend) {
     return NextResponse.json({ message: 'Market closed on weekends' });
   }
 
-  const timeValue = hours * 100 + minutes;
+  const timeValue = hour * 100 + minute;
   if (timeValue < 1515 || timeValue > 2359) {
-    return NextResponse.json({ message: `Time ${hours}:${minutes} is outside alert window (15:15-23:59 IST)` });
+    return NextResponse.json({ message: `Time ${hour}:${minute} is outside alert window (15:15-23:59 IST)` });
   }
 
   try {

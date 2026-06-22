@@ -1,9 +1,16 @@
-// SIMPLE ENGINE: Used by /api/btst (Nifty50 quick scan)
-// Max score 100, no eligibility gates
+/**
+ * SIMPLE ENGINE — AUTHORITATIVE. Currently used by /api/btst, ScannerClient UI tabs
+ * (BTST/STBT/OVERNIGHT), and the Telegram cron alert. Max score 100.
+ * 
+ * TODO: Phase H migration — validate Advanced Engine signals against
+ * Simple Engine on live market data before promoting to UI/cron.
+ * See project audit notes.
+ */
 import { MarketStockData, MarketService } from '../market.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
+import { isMarketOpen } from '@/lib/market-hours';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -18,6 +25,7 @@ export interface BtstScoreResult {
   rr: string;
   sector: string;
   marketCap: number;
+  tomorrowCPRProvisional?: boolean;
 }
 
 export interface BtstScoreResultEnriched extends BtstScoreResult {
@@ -278,9 +286,10 @@ export class BtstService {
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
+    let isLastToday = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
-      const isLastToday = lastCandle.date === todayStr;
+      isLastToday = lastCandle.date === todayStr;
       
       todayCandle = isLastToday ? lastCandle : {
         high: stock.high,
@@ -353,7 +362,8 @@ export class BtstService {
       target,
       rr: '1:2.0',
       sector: stock.sector,
-      marketCap: stock.marketCap
+      marketCap: stock.marketCap,
+      tomorrowCPRProvisional: isMarketOpen() && !isLastToday
     };
   }
 }
