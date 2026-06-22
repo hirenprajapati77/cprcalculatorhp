@@ -234,10 +234,9 @@ export class BacktestService {
             if (i <= blockedUntilIndex) continue;
 
             // Bound the holding window: 1-2 day CPR/BTST hold + 1 day buffer
-            // Hold 3 days for R2 targets (further away, needs more time to be reached);
-            // 2 days for R1 or fallback — CPR is short-term, don't overstay.
+            // CPR is short-term, don't overstay.
             // maxHoldingDays not in BacktestRun schema.
-            const MAX_HOLDING_DAYS = targetType === 'R2' ? 3 : 2;
+            const MAX_HOLDING_DAYS = 2;
             const tradeOhlc = ohlc.slice(i, i + MAX_HOLDING_DAYS);
             const tradeResult = TradeEngineService.simulateTrade(
               direction,
