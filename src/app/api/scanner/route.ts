@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
     let avoidCount = 0;
 
     for (const r of fullStats) {
-      if (r.score >= 90) strongBuyCount++;
+      if (r.score >= 75) strongBuyCount++;
       if (r.signalSummary.includes('BREAKOUT') && r.signalSummary.includes('NARROW')) breakoutReadyCount++;
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
     }
@@ -206,7 +206,7 @@ export async function GET(request: NextRequest) {
 
     // F&O Option Suggestion Enrichment Layer (Top 10 Strong Buy by score)
     const strongBuys = formattedResults
-      .filter(r => r.score >= 90)
+      .filter(r => r.score >= 75)
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
 
