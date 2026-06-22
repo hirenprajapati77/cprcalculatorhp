@@ -1848,7 +1848,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Strong Signal</span>
-              <p className="text-[9px] opacity-70">Score ≥ 90</p>
+              <p className="text-[9px] opacity-70">Score ≥ 75</p>
               <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
             </div>
             <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
@@ -1859,7 +1859,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Breakout Ready</span>
-              <p className="text-[9px] opacity-70">Score 70-89</p>
+              <p className="text-[9px] opacity-70">Score 60-74</p>
               <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
             </div>
             <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
@@ -1910,7 +1910,7 @@ export default function ScannerClient() {
                   <th className="p-2.5">Breakout (60-74)</th>
                   <th className="p-2.5">Bullish</th>
                   <th className="p-2.5">Bearish</th>
-                  <th className="p-2.5">Watch (40-69)</th>
+                  <th className="p-2.5">Watch (40-59)</th>
                   <th className="p-2.5 bg-bg-primary text-text-primary">Total</th>
                 </tr>
               </thead>
