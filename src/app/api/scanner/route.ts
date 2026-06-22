@@ -5,6 +5,39 @@ import { MarketService } from '@/services/market.service';
 
 export const dynamic = 'force-dynamic';
 
+async function enrichWithOptionSuggestions(
+  results: Array<{ symbol: string; ltp: number; signalSummary?: string | null; entry?: number | null; sl?: number | null; target?: number | null; score: number }>
+): Promise<Map<string, unknown>> {
+  const suggestionMap = new Map<string, unknown>();
+  try {
+    const { OptionSuggestionService } = await import(
+      '@/services/option-suggestion.service'
+    );
+    const enrichmentPromises = results.map(async (r) => {
+      const bias: 'BULLISH' | 'BEARISH' = 
+        r.signalSummary?.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
+      try {
+        const suggestion = await OptionSuggestionService.suggestOption(
+          r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0
+        );
+        return { symbol: r.symbol, suggestion };
+      } catch (e) {
+        console.warn(`[OptionSuggestion] Failed for ${r.symbol}:`, e);
+        return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
+      }
+    });
+    const settled = await Promise.allSettled(enrichmentPromises);
+    for (const res of settled) {
+      if (res.status === 'fulfilled' && res.value?.suggestion) {
+        suggestionMap.set(res.value.symbol, res.value.suggestion);
+      }
+    }
+  } catch (err) {
+    console.error('[OptionSuggestion] Enrichment failed:', err);
+  }
+  return suggestionMap;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -45,6 +78,17 @@ export async function GET(request: NextRequest) {
           target: r.r1,
           rr: 1.5,
         }));
+
+        const topForOptions = formattedResults
+          .filter((r: any) => r.score >= 75)
+          .sort((a: any, b: any) => b.score - a.score)
+          .slice(0, 10);
+        const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+        for (const r of formattedResults) {
+          if (suggestionMap.has(r.symbol)) {
+            (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+          }
+        }
 
         return NextResponse.json({
           success: true,
@@ -155,7 +199,7 @@ export async function GET(request: NextRequest) {
     // 5. Query Database
     const offset = isAll ? undefined : (page - 1) * limit!;
     
-    const [results, total, fullStats] = await Promise.all([
+    const [results, total, fullStats, topForOptions] = await Promise.all([
       prisma.scannerResult.findMany({
         where,
         orderBy: {
@@ -168,6 +212,20 @@ export async function GET(request: NextRequest) {
       prisma.scannerResult.findMany({
         where,
         select: { score: true, signalSummary: true }
+      }),
+      prisma.scannerResult.findMany({
+        where: { ...where, score: { gte: 75 } },
+        orderBy: { score: 'desc' },
+        take: 10,
+        select: { 
+          symbol: true, 
+          ltp: true, 
+          signalSummary: true, 
+          entry: true, 
+          sl: true, 
+          target: true,
+          score: true
+        }
       })
     ]);
 
@@ -204,42 +262,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // F&O Option Suggestion Enrichment Layer (Top 10 Strong Buy by score)
-    const strongBuys = formattedResults
-      .filter(r => r.score >= 75)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
-
-    if (strongBuys.length > 0) {
-      try {
-        const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
-        const enrichmentPromises = strongBuys.map(async (r) => {
-          const bias: 'BULLISH' | 'BEARISH' = r.signalSummary && r.signalSummary.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
-          try {
-            const suggestion = await OptionSuggestionService.suggestOption(r.symbol, r.ltp, bias, r.entry, r.sl, r.target);
-            return { symbol: r.symbol, suggestion };
-          } catch (e) {
-            console.warn(`Failed to generate option suggestion for ${r.symbol}:`, e);
-            return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
-          }
-        });
-
-        const enrichedResults = await Promise.allSettled(enrichmentPromises);
-        const suggestionMap = new Map<string, unknown>();
-
-        for (const res of enrichedResults) {
-          if (res.status === 'fulfilled' && res.value && res.value.suggestion) {
-            suggestionMap.set(res.value.symbol, res.value.suggestion);
-          }
-        }
-
-        for (const r of formattedResults) {
-          if (suggestionMap.has(r.symbol)) {
-            (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
-          }
-        }
-      } catch (enrichErr) {
-        console.error('Error during option suggestion enrichment in scanner route:', enrichErr);
+    const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+    for (const r of formattedResults) {
+      if (suggestionMap.has(r.symbol)) {
+        (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
       }
     }
 
