@@ -242,24 +242,26 @@ export class ScannerService {
 
     let confidence = 50; // base
 
-    // 1. Liquidity / Volume Ratio (Max 25)
+    // 1. Liquidity / Volume Ratio (Max 20)
     if (volumeRatio >= 1.5) {
-      confidence += 25;
+      confidence += 20;
     } else if (volumeRatio >= 1.2) {
-      confidence += 15;
+      confidence += 12;
     } else if (volumeRatio >= 1.0) {
-      confidence += 10;
+      confidence += 6;
     }
 
-    // 2. CPR Width / Volatility (Max 25)
-    if (width <= 0.25) {
-      confidence += 25;
+    // 2. CPR Width / Volatility (Max 20)
+    if (width <= 0.1) {
+      confidence += 20;
+    } else if (width <= 0.25) {
+      confidence += 12;
     } else if (width <= 0.5) {
-      confidence += 15;
+      confidence += 8;
     } else if (width <= 1.0) {
-      confidence += 10;
+      confidence += 4;
     } else {
-      confidence += 5;
+      confidence += 0;
     }
 
     // 3. Signal Quality Synergy (Max 20)

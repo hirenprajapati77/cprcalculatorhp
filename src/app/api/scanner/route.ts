@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
+import { isMarketOpen } from '@/lib/market-hours';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,7 @@ export async function GET(request: NextRequest) {
     const maxScore = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!, 10) : undefined;
     const minWidth = searchParams.get('minWidth') ? parseFloat(searchParams.get('minWidth')!) : undefined;
     const maxWidth = searchParams.get('maxWidth') ? parseFloat(searchParams.get('maxWidth')!) : undefined;
+    const search = searchParams.get('search')?.trim() || '';
 
     const today = new Date().toISOString().split('T')[0];
 
@@ -79,14 +81,16 @@ export async function GET(request: NextRequest) {
           rr: 1.5,
         }));
 
-        const topForOptions = formattedResults
-          .filter((r: any) => r.score >= 75)
-          .sort((a: any, b: any) => b.score - a.score)
-          .slice(0, 10);
-        const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
-        for (const r of formattedResults) {
-          if (suggestionMap.has(r.symbol)) {
-            (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+        if (isMarketOpen()) {
+          const topForOptions = formattedResults
+            .filter((r: any) => r.score >= 75) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .sort((a: any, b: any) => b.score - a.score) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .slice(0, 10);
+          const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+          for (const r of formattedResults) {
+            if (suggestionMap.has(r.symbol)) {
+              (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+            }
           }
         }
 
@@ -154,6 +158,10 @@ export async function GET(request: NextRequest) {
     });
     
     const finalDbSymbols = matchingSnapshots.map(s => s.symbol);
+    
+    const searchedSymbols = search 
+      ? finalDbSymbols.filter(s => s.split(':')[0].toLowerCase().includes(search.toLowerCase()))
+      : finalDbSymbols;
 
     // 4. Build ScannerResult Query Conditions
     const where: {
@@ -164,7 +172,7 @@ export async function GET(request: NextRequest) {
       score?: { gte?: number; lte?: number };
       width?: { gte?: number; lte?: number };
     } = {
-      symbol: { in: finalDbSymbols },
+      symbol: { in: searchedSymbols },
       date: today,
     };
 
@@ -199,7 +207,7 @@ export async function GET(request: NextRequest) {
     // 5. Query Database
     const offset = isAll ? undefined : (page - 1) * limit!;
     
-    const [results, total, fullStats, topForOptions] = await Promise.all([
+    const [results, total, fullStats] = await Promise.all([
       prisma.scannerResult.findMany({
         where,
         orderBy: {
@@ -212,20 +220,6 @@ export async function GET(request: NextRequest) {
       prisma.scannerResult.findMany({
         where,
         select: { score: true, signalSummary: true }
-      }),
-      prisma.scannerResult.findMany({
-        where: { ...where, score: { gte: 75 } },
-        orderBy: { score: 'desc' },
-        take: 10,
-        select: { 
-          symbol: true, 
-          ltp: true, 
-          signalSummary: true, 
-          entry: true, 
-          sl: true, 
-          target: true,
-          score: true
-        }
       })
     ]);
 
@@ -262,10 +256,26 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
-    for (const r of formattedResults) {
-      if (suggestionMap.has(r.symbol)) {
-        (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+    if (isMarketOpen()) {
+      const topForOptions = await prisma.scannerResult.findMany({
+        where: { ...where, score: { gte: 75 } },
+        orderBy: { score: 'desc' },
+        take: 10,
+        select: { 
+          symbol: true, 
+          ltp: true, 
+          signalSummary: true, 
+          entry: true, 
+          sl: true, 
+          target: true,
+          score: true
+        }
+      });
+      const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+      for (const r of formattedResults) {
+        if (suggestionMap.has(r.symbol)) {
+          (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
+        }
       }
     }
 

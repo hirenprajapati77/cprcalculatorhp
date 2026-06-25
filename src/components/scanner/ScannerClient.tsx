@@ -248,6 +248,7 @@ const SECTORS_LIST = [
   'Metals',
   'Services',
   'Capital Goods',
+  'Other',
 ];
 
 const SECTOR_ALIASES: Record<string, string[]> = {
@@ -842,6 +843,7 @@ export default function ScannerClient() {
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
+      setPage(1);
     }, 300);
     return () => clearTimeout(handler);
   }, [searchQuery]);
@@ -1123,6 +1125,9 @@ export default function ScannerClient() {
         ...(minWidth && { minWidth }),
         ...(maxWidth && { maxWidth }),
       });
+      if (debouncedSearchQuery.trim()) {
+        queryParams.set('search', debouncedSearchQuery.trim());
+      }
 
       const res = await fetch(`/api/scanner?${queryParams.toString()}`);
       if (!res.ok) throw new Error('Failed to retrieve scanning coordinates');
@@ -1142,21 +1147,6 @@ export default function ScannerClient() {
         // Client-side watchlist only filter
         if (showWatchlistOnly) {
           items = items.filter(r => watchlist[r.symbol]?.starred);
-        }
-
-        // Client-side text search filter (symbol and sector aliases)
-        if (debouncedSearchQuery.trim() !== '') {
-          const query = debouncedSearchQuery.toLowerCase().trim();
-          items = items.filter(r => {
-            const matchesSymbol = r.symbol.toLowerCase().includes(query);
-            const matchesSector = r.sector.toLowerCase().includes(query);
-            
-            // Check sector aliases
-            const aliases = SECTOR_ALIASES[r.sector] || [];
-            const matchesAlias = aliases.some(alias => alias.includes(query) || query.includes(alias));
-            
-            return matchesSymbol || matchesSector || matchesAlias;
-          });
         }
 
         // Apply watchlist Pinned priority layout logic & dynamic column sorting
@@ -1180,8 +1170,8 @@ export default function ScannerClient() {
         });
 
         setResults(items);
-        setTotal(showWatchlistOnly || debouncedSearchQuery ? items.length : data.total);
-        setTotalPages(showWatchlistOnly || debouncedSearchQuery ? Math.ceil(items.length / limit) : data.totalPages);
+        setTotal(showWatchlistOnly ? items.length : data.total);
+        setTotalPages(showWatchlistOnly ? Math.ceil(items.length / limit) : data.totalPages);
         if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
         setLastRefreshed(new Date().toLocaleTimeString());
@@ -1529,7 +1519,7 @@ export default function ScannerClient() {
     });
 
     results.forEach(item => {
-      const sec = item.sector;
+      const sec = SECTORS_LIST.includes(item.sector) ? item.sector : 'Other';
       if (!grid[sec]) return;
 
       const signals = item.signals;
@@ -1573,12 +1563,12 @@ export default function ScannerClient() {
       if (
         signals.includes('BULLISH') ||
         signals.includes('ABOVE_VWAP') ||
-        signals.includes('HIGHER_VALUE')
+        (scannerMode !== 'CPR' && signals.includes('HIGHER_VALUE'))
       ) checkAndAddCell('Bullish');
       if (
         signals.includes('BEARISH') ||
         signals.includes('BELOW_VWAP') ||
-        signals.includes('LOWER_VALUE')
+        (scannerMode !== 'CPR' && signals.includes('LOWER_VALUE'))
       ) checkAndAddCell('Bearish');
       if (score >= 40 && score < 60) checkAndAddCell('Watch');
     });
