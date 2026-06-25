@@ -707,29 +707,39 @@ export default function ScannerClient() {
   }, [isWeekend]);
 
   // Filters & Pagination State
-  const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY50');
+  const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY_FNO');
 
   useEffect(() => {
     // 1. Default Universe
-    const savedUniv = localStorage.getItem('cpr_settings_default_universe');
-    if (savedUniv) {
-      if (savedUniv === 'NSE_FNO') setUniverse('NIFTY_FNO');
-      else if (savedUniv === 'NIFTY50') setUniverse('NIFTY50');
-      else if (savedUniv === 'NIFTY200' || savedUniv === 'NIFTY100') setUniverse('NIFTY200');
-      else if (savedUniv === 'ALL_NSE') setUniverse('ALL');
-    }
+    const savedUniv = localStorage.getItem('cpr_settings_default_universe') || 'NSE_FNO';
+    if (savedUniv === 'NSE_FNO') setUniverse('NIFTY_FNO');
+    else if (savedUniv === 'NIFTY50') setUniverse('NIFTY50');
+    else if (savedUniv === 'NIFTY200' || savedUniv === 'NIFTY100') setUniverse('NIFTY200');
+    else if (savedUniv === 'ALL_NSE') setUniverse('ALL');
 
     // 2. Auto-Refresh Interval
-    const savedRefresh = localStorage.getItem('cpr_settings_auto_refresh');
-    if (savedRefresh) {
-      setRefreshInterval(savedRefresh);
-    }
+    const savedRefresh = localStorage.getItem('cpr_settings_auto_refresh') || '15m';
+    setRefreshInterval(savedRefresh);
 
     // 3. Min Price
-    const savedMinPrice = localStorage.getItem('cpr_settings_min_price');
-    if (savedMinPrice) {
-      setMinPrice(savedMinPrice);
-    }
+    const savedMinPrice = localStorage.getItem('cpr_settings_min_price') || '20';
+    setMinPrice(savedMinPrice);
+
+    // Other Default Filters (Max Price, Scores, Width)
+    const savedMaxPrice = localStorage.getItem('cpr_settings_max_price');
+    if (savedMaxPrice) setMaxPrice(savedMaxPrice);
+
+    const savedMinScore = localStorage.getItem('cpr_settings_min_score');
+    if (savedMinScore) setMinScore(savedMinScore);
+
+    const savedMaxScore = localStorage.getItem('cpr_settings_max_score');
+    if (savedMaxScore) setMaxScore(savedMaxScore);
+
+    const savedMinWidth = localStorage.getItem('cpr_settings_min_width');
+    if (savedMinWidth) setMinWidth(savedMinWidth);
+
+    const savedMaxWidth = localStorage.getItem('cpr_settings_max_width');
+    if (savedMaxWidth) setMaxWidth(savedMaxWidth);
   }, []);
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
@@ -744,7 +754,7 @@ export default function ScannerClient() {
   // V2/V3 Advanced Filters
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [marketCapCategory, setMarketCapCategory] = useState<string>('ALL');
-  const [minPrice, setMinPrice] = useState<string>('');
+  const [minPrice, setMinPrice] = useState<string>('20');
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [minScore, setMinScore] = useState<string>('');
   const [maxScore, setMaxScore] = useState<string>('');
