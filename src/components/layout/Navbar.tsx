@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   Activity,
   History,
+  BookOpen,
   Columns,
   Info,
   HelpCircle,
@@ -42,6 +43,7 @@ const NAV_GROUPS = [
     label: 'More',
     links: [
       { href: '/history', label: 'History', icon: <History size={13} />, badge: null },
+      { href: '/journal', label: 'Journal', icon: <BookOpen size={13} />, badge: null },
       { href: '/settings', label: 'Settings', icon: <Settings size={13} />, badge: null },
       { href: '/about', label: 'About', icon: <Info size={13} />, badge: null },
       { href: '/faq', label: 'FAQ', icon: <HelpCircle size={13} />, badge: null },

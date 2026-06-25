@@ -56,25 +56,41 @@ function useBtstState() {
   const time = hours * 100 + minutes;
 
   let state = 'PREMARKET';
-  let message = 'Signals unlock at 15:20 IST';
+  let message = 'BTST discovery activates at 15:10 IST';
   let emptyMessage = 'BTST discovery has not started.';
   let nextRefresh = '';
-  
-  if (time < 1515) {
+
+  const istDateStr = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'long'
+  }).format(now);
+  const isWeekend = istDateStr === 'Saturday' || istDateStr === 'Sunday';
+
+  if (isWeekend) {
+    state = 'MARKET_CLOSED';
+    message = 'Market is closed';
+    emptyMessage = 'No qualified BTST setups today.';
+    nextRefresh = 'Locked';
+  } else if (time < 915) {
     state = 'PREMARKET';
-    message = 'Signals unlock at 15:15 IST';
+    message = 'BTST discovery activates at 15:10 IST';
     emptyMessage = 'BTST discovery has not started.';
-    const target = new Date(now); target.setHours(15, 15, 0, 0);
-    const diff = Math.max(0, Math.floor((target.getTime() - now.getTime()) / 1000));
-    nextRefresh = `${Math.floor(diff / 60)}m ${diff % 60}s`;
-  } else if (time >= 1515 && time <= 2359) {
+    const diffMinutes = (15 * 60 + 10) - (hours * 60 + minutes);
+    nextRefresh = `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m`;
+  } else if (time >= 915 && time < 1510) {
+    state = 'INTRADAY';
+    message = 'BTST discovery activates at 15:10 IST';
+    emptyMessage = 'BTST discovery has not started.';
+    const diffMinutes = (15 * 60 + 10) - (hours * 60 + minutes);
+    nextRefresh = `Opens in ${diffMinutes}m`;
+  } else if (time >= 1510 && time < 1525) {
     state = 'ACTIVE';
     message = 'Generating BTST candidates';
     emptyMessage = 'Scanning live candidates…';
-    nextRefresh = 'Live until midnight';
+    nextRefresh = 'Live until 15:25';
   } else {
-    state = 'MARKET_CLOSED';
-    message = 'Market is closed';
+    state = 'FROZEN';
+    message = 'Scan results frozen for today';
     emptyMessage = 'No qualified BTST setups today.';
     nextRefresh = 'Locked';
   }
@@ -111,6 +127,7 @@ const BtstStateBanner = () => {
   const getColors = () => {
     switch (state) {
       case 'PREMARKET': return 'bg-bg-secondary text-text-secondary border-border-primary';
+      case 'INTRADAY': return 'bg-bg-secondary text-text-secondary border-border-primary/50';
       case 'DISCOVERING': return 'bg-accent-amber/10 text-accent-amber border-accent-amber/30';
       case 'ACTIVE': return 'bg-accent-blue/10 text-accent-blue border-accent-blue/30';
       case 'FROZEN': return 'bg-accent-purple/10 text-accent-purple border-accent-purple/30';
@@ -122,7 +139,7 @@ const BtstStateBanner = () => {
     <div className={`flex items-center justify-between p-3 rounded-lg border font-mono text-[11px] mb-4 ${getColors()}`}>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          {state === 'ACTIVE' && <span className="h-2 w-2 rounded-full bg-accent-blue animate-pulse" />}
+          {(state === 'ACTIVE' || state === 'INTRADAY') && <span className={`h-2 w-2 rounded-full ${state === 'ACTIVE' ? 'bg-accent-green animate-pulse' : 'bg-accent-blue'} `} />}
           <span className="font-bold tracking-wider">{state}</span>
         </div>
         <span className="hidden sm:inline">{message}</span>
@@ -817,6 +834,24 @@ export default function ScannerClient() {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [isNotesSaving, setIsNotesSaving] = useState<boolean>(false);
   const [showSavedIndicator, setShowSavedIndicator] = useState<boolean>(false);
+
+  const getTelemetryState = () => {
+    const parts = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    }).formatToParts(new Date());
+    const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+    const t = h * 100 + m;
+    
+    if (t < 915) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
+    if (t >= 915 && t < 1510) return { label: 'INTRADAY', color: 'bg-accent-blue' };
+    if (t >= 1510 && t < 1525) return { label: 'ACTIVE', color: 'bg-accent-green animate-pulse' };
+    return { label: 'FROZEN', color: 'bg-accent-purple' };
+  };
+  const telState = getTelemetryState();
 
   // List of all column definitions for Show/Hide Checklist
   const COLUMN_DEFS = [
@@ -2305,13 +2340,9 @@ export default function ScannerClient() {
                 <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
                   <span className="text-text-tertiary">Discovery State:</span>
                   <div className="flex items-center gap-1">
-                    <span className={`h-2 w-2 rounded-full ${
-                      new Date().getHours() * 100 + new Date().getMinutes() < 1515 ? 'bg-accent-amber' : 
-                      new Date().getHours() * 100 + new Date().getMinutes() < 1525 ? 'bg-accent-green animate-pulse' : 'bg-accent-red'
-                    }`} />
+                    <span className={`h-2 w-2 rounded-full ${telState.color}`} />
                     <span className="font-bold text-text-primary uppercase">
-                      {new Date().getHours() * 100 + new Date().getMinutes() < 1515 ? 'PREMARKET' : 
-                       new Date().getHours() * 100 + new Date().getMinutes() < 1525 ? 'ACTIVE' : 'FROZEN'}
+                      {telState.label}
                     </span>
                   </div>
                 </div>

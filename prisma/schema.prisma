@@ -266,3 +266,37 @@ model BreakoutAlertState {
   lastAlerted DateTime?
   updatedAt   DateTime  @updatedAt
 }
+
+model TradeJournal {
+  id             String    @id @default(cuid())
+  tradeDate      DateTime  // stored as midnight IST for the signal date
+  signalType     String    // 'CPR' | 'BTST' | 'STBT'
+  symbol         String
+  optionContract String    // e.g. '1920 CE' | '2400 PE'
+  optionStrike   Int
+  optionType     String    // 'CE' | 'PE'
+  entryCmp       Float     // option CMP at signal time (~3:15-3:25 PM)
+  entryTime      DateTime  // exact signal capture time
+
+  // Next day snapshots (null until cron fills them)
+  cmp916         Float?    // 9:16 AM next day
+  cmp930         Float?    // 9:30 AM next day
+  cmp945         Float?    // 9:45 AM next day
+  cmp1000        Float?    // 10:00 AM next day (auto-close)
+
+  // Trade result
+  exitCmp        Float?    // actual exit price (manual or 10:00 AM auto)
+  exitTime       DateTime?
+  pnl            Float?    // exitCmp - entryCmp
+  pnlPct         Float?    // (exitCmp - entryCmp) / entryCmp * 100
+
+  // Signal context (stored for analysis)
+  score          Int
+  confidence     Float
+  signalSummary  String    // CSV of signals at time of logging
+
+  // Deduplication: one entry per symbol+date+signalType
+  @@unique([symbol, tradeDate, signalType])
+  @@index([tradeDate])
+  @@index([signalType])
+}
