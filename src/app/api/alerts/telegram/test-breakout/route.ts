@@ -4,15 +4,17 @@ import { TelegramService } from '@/services/alert/telegram.service';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { test, groupChatId } = body;
+    const { test, groupChatId, token } = body;
 
     if (!test) {
       return NextResponse.json({ success: false, message: 'Invalid payload' }, { status: 400 });
     }
 
     const chatId = groupChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
-    if (!chatId) {
-      return NextResponse.json({ success: false, message: 'TELEGRAM_GROUP_CHAT_ID not configured on server' }, { status: 400 });
+    const resolvedToken = token || process.env.TELEGRAM_BOT_TOKEN;
+    
+    if (!chatId || !resolvedToken) {
+      return NextResponse.json({ success: false, message: 'Bot Token or Chat ID not configured' }, { status: 400 });
     }
 
     // Send a sample breakout alert with dummy data
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
         score: 95,
         sector: 'Banking'
       }
-    ], groupChatId);
+    ], groupChatId, token);
 
     return NextResponse.json({ success: true, message: 'Test breakout alert sent to group', chatId });
   } catch (error: unknown) {
