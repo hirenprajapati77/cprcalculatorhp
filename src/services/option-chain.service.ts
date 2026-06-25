@@ -74,7 +74,7 @@ export class OptionChainService {
 
     const isIndex = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].some(idx => cleanSym.includes(idx));
     const suffix = isIndex ? 'INDEX' : 'EQ';
-    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=NSE:${cleanSym}-${suffix}&strikecount=30`;
+    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(`NSE:${cleanSym}-${suffix}`)}&strikecount=30`;
 
     try {
       // 1. Attempt DIRECT call first

@@ -268,6 +268,19 @@ export class OptionSuggestionService {
     const optionSl = parseFloat(Math.max(0.05, selected.option.ltp - stockMoveSl * delta).toFixed(2));
     const cost = parseFloat((selected.option.ltp * lotSize).toFixed(2));
 
+    let expiryStr = '';
+    const prefix = `NSE:${cleanSym}`;
+    if (selected.option.symbol.startsWith(prefix)) {
+      const remainder = selected.option.symbol.substring(prefix.length);
+      const suffixStr = `${selected.option.strikePrice}${type}`;
+      if (remainder.endsWith(suffixStr)) {
+        expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
+      }
+    }
+    const finalFormattedName = expiryStr 
+      ? `${cleanSym} ${expiryStr} ${selected.option.strikePrice} ${type}` 
+      : `${cleanSym} ${selected.option.strikePrice} ${type}`;
+
     return {
       symbol: selected.option.symbol,
       strike: selected.option.strikePrice,
@@ -278,7 +291,7 @@ export class OptionSuggestionService {
       scoreBreakdown: selected.scoreBreakdown,
       pcr,
       underlyingLtp: ltp,
-      formattedName: `${cleanSym} ${selected.option.strikePrice} ${type}`,
+      formattedName: finalFormattedName,
       lotSize,
       cost,
       oi: selected.option.open_interest ?? 0,
