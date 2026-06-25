@@ -11,10 +11,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { hour, minute, isWeekend } = getISTTime();
+  const { hour, minute, isTradingDay } = getISTTime();
 
-  if (isWeekend) {
-    return NextResponse.json({ message: 'Market closed on weekends' });
+  if (!isTradingDay) {
+    return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
   // Only run during 15:25–15:35 IST window (cron fires at 15:25)
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
         optionStrike:   suggestion.strike,
         optionType:     'CE',
         score:          signal.longScore,
-        confidence:     0,  // BtstScoreResult has no confidence field
+        confidence:     signal.gapConfidence || 0,
         signalSummary:  signal.signals.join(','),
       });
 
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
         optionStrike:   suggestion.strike,
         optionType:     'PE',
         score:          signal.shortScore,
-        confidence:     0,  // BtstScoreResult has no confidence field
+        confidence:     signal.gapConfidence || 0,
         signalSummary:  signal.signals.join(','),
       });
 

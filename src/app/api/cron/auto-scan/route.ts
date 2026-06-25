@@ -3,6 +3,7 @@ import { ScannerController } from '@/services/scanner-controller';
 import { CacheService } from '@/services/cache.service';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
+import { getISTTime } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -16,16 +17,11 @@ export async function GET(req: NextRequest) {
   const universe = searchParams.get('universe') || 'NIFTY_FNO';
 
   // Check IST time
-  const now = new Date();
-  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const hours = istTime.getHours();
-  const minutes = istTime.getMinutes();
-  const isWeekend = istTime.getDay() === 0 || istTime.getDay() === 6;
-  const timeValue = hours * 100 + minutes;
+  const { isTradingDay, totalMinutes } = getISTTime();
 
-  // Between 9:15 and 15:30 IST only (Market Hours)
-  if (isWeekend || timeValue < 915 || timeValue > 1530) {
-    return NextResponse.json({ message: 'Market closed, skipping auto-scan' });
+  // Only run between 09:15 and 15:30 IST on trading days
+  if (!isTradingDay || totalMinutes < 555 || totalMinutes > 930) {
+    return NextResponse.json({ message: 'Market closed' });
   }
 
   try {

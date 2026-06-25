@@ -11,10 +11,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { hour, minute, isWeekend } = getISTTime();
+  const { hour, minute, isTradingDay } = getISTTime();
 
-  if (isWeekend) {
-    return NextResponse.json({ message: 'Market closed on weekends' });
+  if (!isTradingDay) {
+    return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
   // Only run during 15:15–15:29 IST window (cron fires at 15:20)

@@ -1,4 +1,5 @@
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
+import { OptionSuggestion } from '../option-suggestion.service';
 
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<void> {
@@ -26,7 +27,7 @@ export class TelegramService {
     }
   }
 
-  static async sendBtstAlert(results: BtstScoreResultEnriched[]): Promise<void> {
+  static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion })[]): Promise<void> {
     const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 70);
     const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 70);
 
@@ -54,7 +55,10 @@ export class TelegramService {
       const target = r.target.toFixed(2);
       const rr = r.rr;
       const score = Math.max(r.longScore, r.shortScore);
-      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
+      const optionStr = r.optionSuggestion && r.optionSuggestion.formattedName 
+        ? `\n  🎯 Option: <b>${r.optionSuggestion.formattedName}</b>` 
+        : '';
+      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}${optionStr}\n\n`;
     });
 
     text += `🔴 <b>SHORT SETUPS (${shorts.length})</b>\n`;
@@ -65,7 +69,10 @@ export class TelegramService {
       const target = r.target.toFixed(2);
       const rr = r.rr;
       const score = Math.max(r.longScore, r.shortScore);
-      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}\n\n`;
+      const optionStr = r.optionSuggestion && r.optionSuggestion.formattedName 
+        ? `\n  🎯 Option: <b>${r.optionSuggestion.formattedName}</b>` 
+        : '';
+      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}${optionStr}\n\n`;
     });
 
     text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;

@@ -100,8 +100,10 @@ export class OptionChainService {
               
               if (currentExpiryStr) {
                 const today = new Date();
-                const todayStr1 = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'); // "25-Jun-2026"
-                const todayStr2 = today.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'); // "25-06-2026"
+                const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
+                const todayStr1 = today.toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-'); // "25-Jun-2026"
+                const optionsGB2: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' };
+                const todayStr2 = today.toLocaleDateString('en-GB', optionsGB2).replace(/\//g, '-'); // "25-06-2026"
                 const todayStr3 = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // "2026-06-25"
                 
                 const isTodayExpiry = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase() || 
