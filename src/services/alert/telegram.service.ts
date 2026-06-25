@@ -85,11 +85,12 @@ export class TelegramService {
       rr: string;
       score: number;
       sector: string;
-    }>
+    }>,
+    overrideChatId?: string
   ): Promise<void> {
     if (!stocks.length) return;
 
-    const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
+    const chatId = overrideChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
     if (!chatId) {
       console.warn('[Telegram] TELEGRAM_GROUP_CHAT_ID not set, skipping breakout alert');
       return;
