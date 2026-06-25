@@ -1,8 +1,8 @@
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 
 export class TelegramService {
-  static async sendMessage(text: string, chatId?: string): Promise<void> {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+  static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<void> {
+    const token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
     const resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
 
     if (!token || !resolvedChatId) {
@@ -86,7 +86,8 @@ export class TelegramService {
       score: number;
       sector: string;
     }>,
-    overrideChatId?: string
+    overrideChatId?: string,
+    overrideToken?: string
   ): Promise<void> {
     if (!stocks.length) return;
 
@@ -117,6 +118,6 @@ export class TelegramService {
       `${lines}\n\n` +
       `⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.`;
 
-    await this.sendMessage(message, chatId);
+    await this.sendMessage(message, chatId, overrideToken);
   }
 }
