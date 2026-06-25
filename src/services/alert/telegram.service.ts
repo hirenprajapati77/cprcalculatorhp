@@ -27,7 +27,7 @@ export class TelegramService {
     }
   }
 
-  static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion })[]): Promise<void> {
+  static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<void> {
     const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 70);
     const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 70);
 
