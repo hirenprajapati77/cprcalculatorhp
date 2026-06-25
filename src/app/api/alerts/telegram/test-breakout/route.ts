@@ -4,13 +4,13 @@ import { TelegramService } from '@/services/alert/telegram.service';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { test } = body;
+    const { test, groupChatId } = body;
 
     if (!test) {
       return NextResponse.json({ success: false, message: 'Invalid payload' }, { status: 400 });
     }
 
-    const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
+    const chatId = groupChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
     if (!chatId) {
       return NextResponse.json({ success: false, message: 'TELEGRAM_GROUP_CHAT_ID not configured on server' }, { status: 400 });
     }
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         score: 95,
         sector: 'Banking'
       }
-    ]);
+    ], groupChatId);
 
     return NextResponse.json({ success: true, message: 'Test breakout alert sent to group', chatId });
   } catch (error: unknown) {

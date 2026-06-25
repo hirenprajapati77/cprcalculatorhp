@@ -106,7 +106,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/alerts/telegram/test-breakout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true })
+        body: JSON.stringify({ test: true, groupChatId: telegramGroupChatId })
       });
       if (res.ok) {
         showToast('Test breakout alert sent to Telegram group!', 'success');
