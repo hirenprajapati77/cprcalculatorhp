@@ -1619,7 +1619,7 @@ export default function ScannerClient() {
     });
 
     return { grid, colTotals };
-  }, [results]);
+  }, [results, scannerMode]);
 
   // V2 Scanner Insights
   const strongBuyCount = results.filter(r => r.score >= 75 && !r.rejectionReason).length || insightCounts.strongBuy;

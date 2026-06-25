@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { BtstService } from '@/services/backtest/btst.service';
+import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { getISTTime } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
@@ -12,10 +13,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Check IST time — only proceed if 15:15-23:59 IST
-  const { hour, minute, isWeekend } = getISTTime();
+  const { hour, minute, isTradingDay } = getISTTime();
 
-  if (isWeekend) {
-    return NextResponse.json({ message: 'Market closed on weekends' });
+  if (!isTradingDay) {
+    return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
   const timeValue = hour * 100 + minute;
@@ -39,7 +40,17 @@ export async function GET(req: NextRequest) {
     const longs = unique.filter(u => u.tag === 'LONG').sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore)).slice(0, 5);
     const shorts = unique.filter(u => u.tag === 'SHORT').sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore)).slice(0, 5);
 
-    const alertPayload = [...longs, ...shorts];
+    const enrichedLongs = await Promise.all(longs.map(async (r) => {
+      const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, 'LONG', r.entry, r.sl, r.target);
+      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
+    }));
+
+    const enrichedShorts = await Promise.all(shorts.map(async (r) => {
+      const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, 'SHORT', r.entry, r.sl, r.target);
+      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
+    }));
+
+    const alertPayload = [...enrichedLongs, ...enrichedShorts];
 
     await TelegramService.sendBtstAlert(alertPayload);
 

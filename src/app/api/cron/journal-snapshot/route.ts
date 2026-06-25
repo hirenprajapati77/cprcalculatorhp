@@ -9,10 +9,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { hour, minute, isWeekend } = getISTTime();
+  const { hour, minute, isTradingDay } = getISTTime();
 
-  if (isWeekend) {
-    return NextResponse.json({ message: 'Market closed on weekends' });
+  if (!isTradingDay) {
+    return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
   // Determine which snapshot slot based on current IST time
