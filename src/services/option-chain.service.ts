@@ -88,9 +88,52 @@ export class OptionChainService {
         });
 
         if (res.ok) {
-          const data = await res.json();
+          let data = await res.json();
           const isOk = data.s === 'ok' || data.status === 'ok' || data.code === 200 || (data.data?.optionsChain && data.data.optionsChain.length > 0);
+
           if (isOk && data.data?.optionsChain && data.data.optionsChain.length > 0) {
+            
+            // --- ROLLOVER LOGIC: IF CURRENT EXPIRY IS TODAY, FETCH NEXT EXPIRY ---
+            if (data.data.expiryData && data.data.expiryData.length > 1) {
+              const currentExpiryObj = data.data.expiryData[0];
+              const currentExpiryStr = typeof currentExpiryObj === 'string' ? currentExpiryObj : (currentExpiryObj.date || currentExpiryObj.expiryDate || currentExpiryObj.expiry);
+              
+              if (currentExpiryStr) {
+                const today = new Date();
+                const todayStr1 = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-'); // "25-Jun-2026"
+                const todayStr2 = today.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'); // "25-06-2026"
+                const todayStr3 = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // "2026-06-25"
+                
+                const isTodayExpiry = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase() || 
+                                      currentExpiryStr === todayStr2 || 
+                                      currentExpiryStr === todayStr3;
+                
+                if (isTodayExpiry) {
+                  const nextExpiryObj = data.data.expiryData[1];
+                  const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj.date || nextExpiryObj.expiryDate || nextExpiryObj.expiry);
+                  
+                  if (nextExpiryStr) {
+                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is today. Fetching NEXT expiry: ${nextExpiryStr} for ${cleanSym}`);
+                    const nextUrl = `${directUrl}&ex=${nextExpiryStr}`;
+                    const resNext = await fetch(nextUrl, {
+                      headers: {
+                        'Authorization': `${appId}:${token}`,
+                        'Accept': 'application/json'
+                      }
+                    });
+                    
+                    if (resNext.ok) {
+                      const dataNext = await resNext.json();
+                      if ((dataNext.s === 'ok' || dataNext.status === 'ok' || dataNext.code === 200) && dataNext.data?.optionsChain) {
+                         data = dataNext; // Use next expiry data
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            // ---------------------------------------------------------------------
+
             const result: OptionChainResult = {
               optionsChain: data.data.optionsChain.map((o: { symbol: string; strikePrice?: number; strike_price?: number; optionType?: 'CE' | 'PE'; option_type?: 'CE' | 'PE'; ltp: number; open_interest?: number; oi?: number; volume?: number; vol_traded_today?: number; bid?: number; ask?: number }) => ({
                 symbol: o.symbol,
