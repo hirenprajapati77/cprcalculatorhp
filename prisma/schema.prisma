@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -63,6 +63,7 @@ model ScannerResult {
 
   @@unique([symbol, date])
   @@index([date])
+  @@index([date, score])
   @@index([score])
   @@index([createdAt])
   @@index([symbol])
@@ -118,6 +119,8 @@ model BacktestRun {
   metrics     BacktestMetrics?
   snapshots   BacktestMetricSnapshot[]
   checkpoints BacktestCheckpoint[]
+
+  @@index([status, createdAt])
 }
 
 model BacktestCheckpoint {
@@ -166,6 +169,8 @@ model Trade {
   journal Journal[]
 
   @@index([backtestRunId])
+  @@index([backtestRunId, status])
+  @@index([backtestRunId, pnl])
   @@index([symbol])
 }
 
@@ -250,6 +255,7 @@ model OvernightSignal {
   @@index([direction])
   @@index([classification])
   @@index([signalDate])
+  @@index([signalDate, direction])
 
   @@map("BtstSignal")
 }
