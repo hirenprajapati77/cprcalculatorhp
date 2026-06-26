@@ -135,6 +135,13 @@ export class BacktestService {
             const yesterday = ohlc[i - 1];
             const today = ohlc[i];
 
+            let avgVolume = 0;
+            if (i >= 20) {
+              let sum = 0;
+              for (let j = i - 20; j < i; j++) sum += ohlc[j].volume;
+              avgVolume = sum / 20;
+            }
+
             // Compute today's CPR from yesterday's OHLC
             const cpr = calculateCPR({
               high: yesterday.high,
@@ -205,7 +212,11 @@ export class BacktestService {
               } else {
                 // Non-gap intraday touch of BC — require EOD close confirmation:
                 // close < BC (day held below BC) AND close < open (bearish body, not wick rejection)
-                if (today.close >= cpr.bc || today.close >= today.open) continue;
+                if (
+                  today.close >= cpr.bc || 
+                  today.close >= today.open ||
+                  (i >= 20 && today.volume < avgVolume * 1.2)
+                ) continue;
                 entryPrice *= (1 - SLIPPAGE_PCT);
               }
 
