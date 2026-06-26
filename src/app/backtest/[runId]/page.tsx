@@ -2,15 +2,51 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BarChart2, List, FileText, Database } from 'lucide-react';
+import { ArrowLeft, BarChart2, List, FileText, Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 
 export default function RunDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const runId = params?.runId as string;
+  
   const [activeTab, setActiveTab] = useState('summary');
+  const [tradePage, setTradePage] = useState(1);
+  const tradeLimit = 50;
+
+  // 1. Fetch Summary & Metrics
+  const { data: runData, isLoading: isLoadingRun } = useQuery({
+    queryKey: ['backtestRun', runId],
+    queryFn: async () => {
+      const res = await fetch(`/api/backtest?runId=${runId}`);
+      if (!res.ok) throw new Error('Failed to fetch run data');
+      return res.json();
+    }
+  });
+
+  // 2. Fetch Paginated Trades
+  const { data: tradesData, isLoading: isLoadingTrades } = useQuery({
+    queryKey: ['backtestTrades', runId, tradePage],
+    queryFn: async () => {
+      const res = await fetch(`/api/backtest/${runId}/trades?page=${tradePage}&limit=${tradeLimit}`);
+      if (!res.ok) throw new Error('Failed to fetch trades');
+      return res.json();
+    },
+    enabled: activeTab === 'trades' // only fetch if tab is active
+  });
+
+  // 3. Fetch Snapshots
+  const { data: snapshotsData, isLoading: isLoadingSnapshots } = useQuery({
+    queryKey: ['backtestSnapshots', runId],
+    queryFn: async () => {
+      const res = await fetch(`/api/backtest/${runId}/snapshots`);
+      if (!res.ok) throw new Error('Failed to fetch snapshots');
+      return res.json();
+    },
+    enabled: activeTab === 'snapshots'
+  });
 
   const tabs = [
     { id: 'summary', label: 'Summary', icon: FileText },
@@ -66,41 +102,151 @@ export default function RunDetailsPage() {
         >
           {activeTab === 'summary' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-cyan-400">Execution Summary</h3>
-              <p className="text-muted-foreground">Configuration, Universe, and status will load here via React Query.</p>
-              <Link href={`/analytics/${runId}`} className="inline-flex items-center gap-2 bg-cyan-500/20 text-cyan-400 px-4 py-2 rounded-md hover:bg-cyan-500/30 transition">
-                <BarChart2 className="w-4 h-4" /> View Full Analytics
-              </Link>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-cyan-400">Execution Summary</h3>
+                <Link href={`/analytics/${runId}`} className="inline-flex items-center gap-2 bg-cyan-500/20 text-cyan-400 px-4 py-2 rounded-md hover:bg-cyan-500/30 transition">
+                  <BarChart2 className="w-4 h-4" /> View Full Analytics
+                </Link>
+              </div>
+              {isLoadingRun ? (
+                <p className="text-muted-foreground">Loading summary...</p>
+              ) : runData ? (
+                <div className="grid grid-cols-2 gap-4 bg-black/20 p-4 rounded-lg border border-border/50 text-sm">
+                  <div><span className="text-muted-foreground">Universe:</span> <span className="font-medium">{runData.universe}</span></div>
+                  <div><span className="text-muted-foreground">Capital:</span> <span className="font-medium">₹{runData.capital}</span></div>
+                  <div><span className="text-muted-foreground">Start Date:</span> <span className="font-medium">{new Date(runData.startDate).toLocaleDateString()}</span></div>
+                  <div><span className="text-muted-foreground">End Date:</span> <span className="font-medium">{new Date(runData.endDate).toLocaleDateString()}</span></div>
+                  <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{runData.status}</span></div>
+                  <div><span className="text-muted-foreground">Execution:</span> <span className="font-medium">{runData.executionMode}</span></div>
+                  <div><span className="text-muted-foreground">Risk Model:</span> <span className="font-medium">{runData.riskModel} ({runData.riskValue}%)</span></div>
+                </div>
+              ) : (
+                <p className="text-red-400">Failed to load run data.</p>
+              )}
             </div>
           )}
 
           {activeTab === 'trades' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-cyan-400">Trade Ledger</h3>
-              <p className="text-muted-foreground">Virtual list of trades with links to Execution Replay.</p>
-              {/* Mock Trade Row */}
-              <div className="p-3 border border-border/50 rounded flex justify-between items-center bg-white/5">
-                <div>
-                  <span className="font-bold">LONG</span> <span className="text-muted-foreground">SYM1</span>
+              {isLoadingTrades ? (
+                <p className="text-muted-foreground">Loading trades...</p>
+              ) : tradesData?.trades ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead className="text-xs text-muted-foreground bg-black/40 border-b border-border/50">
+                      <tr>
+                        <th className="px-4 py-3">Symbol</th>
+                        <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Signal</th>
+                        <th className="px-4 py-3">Entry Date</th>
+                        <th className="px-4 py-3">Entry ₹</th>
+                        <th className="px-4 py-3">Exit Date</th>
+                        <th className="px-4 py-3">Exit ₹</th>
+                        <th className="px-4 py-3">P&L</th>
+                        <th className="px-4 py-3">P&L%</th>
+                        <th className="px-4 py-3">Duration</th>
+                        <th className="px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tradesData.trades.map((trade: any) => (
+                        <tr key={trade.id} className="border-b border-border/20 hover:bg-white/5">
+                          <td className="px-4 py-2 font-medium">{trade.symbol}</td>
+                          <td className="px-4 py-2">{trade.type}</td>
+                          <td className="px-4 py-2 truncate max-w-[150px]" title={trade.signal}>{trade.signal}</td>
+                          <td className="px-4 py-2">{new Date(trade.entryDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-2">{trade.entryPrice?.toFixed(2) || '-'}</td>
+                          <td className="px-4 py-2">{trade.exitDate ? new Date(trade.exitDate).toLocaleDateString() : '-'}</td>
+                          <td className="px-4 py-2">{trade.exitPrice?.toFixed(2) || '-'}</td>
+                          <td className={`px-4 py-2 font-medium ${trade.pnl > 0 ? 'text-green-400' : trade.pnl < 0 ? 'text-red-400' : ''}`}>
+                            {trade.pnl != null ? (trade.pnl > 0 ? '+' : '') + trade.pnl.toFixed(2) : '-'}
+                          </td>
+                          <td className={`px-4 py-2 ${trade.pnlPercent > 0 ? 'text-green-400' : trade.pnlPercent < 0 ? 'text-red-400' : ''}`}>
+                            {trade.pnlPercent != null ? trade.pnlPercent.toFixed(2) + '%' : '-'}
+                          </td>
+                          <td className="px-4 py-2">{trade.durationDays}d</td>
+                          <td className="px-4 py-2">{trade.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {/* Pagination */}
+                  <div className="flex justify-between items-center mt-4 text-sm text-muted-foreground">
+                    <div>
+                      Showing page {tradesData.page} of {tradesData.totalPages || 1} ({tradesData.total} total trades)
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        disabled={tradePage === 1}
+                        onClick={() => setTradePage(p => Math.max(1, p - 1))}
+                        className="p-1 rounded bg-black/20 hover:bg-white/10 disabled:opacity-50"
+                      >
+                        <ChevronLeft className="w-5 h-5" />
+                      </button>
+                      <button 
+                        disabled={tradePage >= (tradesData.totalPages || 1)}
+                        onClick={() => setTradePage(p => p + 1)}
+                        className="p-1 rounded bg-black/20 hover:bg-white/10 disabled:opacity-50"
+                      >
+                        <ChevronRight className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <Link href="/replay/mock-trade-123" className="text-sm text-cyan-400 hover:underline">Replay Trade</Link>
-              </div>
+              ) : (
+                <p className="text-muted-foreground">No trades found.</p>
+              )}
             </div>
           )}
 
           {activeTab === 'metrics' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-cyan-400">Raw Metrics Payload</h3>
-              <pre className="p-4 bg-black/50 rounded-md text-xs text-muted-foreground overflow-auto">
-                {JSON.stringify({ winRate: 55, profitFactor: 1.5 }, null, 2)}
-              </pre>
+              {isLoadingRun ? (
+                <p className="text-muted-foreground">Loading metrics...</p>
+              ) : runData?.metrics ? (
+                <pre className="p-4 bg-black/50 rounded-md text-xs text-muted-foreground overflow-auto">
+                  {JSON.stringify(runData.metrics, null, 2)}
+                </pre>
+              ) : (
+                <p className="text-muted-foreground">No metrics generated yet.</p>
+              )}
             </div>
           )}
 
           {activeTab === 'snapshots' && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-cyan-400">Periodic Snapshots</h3>
-              <p className="text-muted-foreground">Monthly PnL distributions.</p>
+              {isLoadingSnapshots ? (
+                <p className="text-muted-foreground">Loading snapshots...</p>
+              ) : snapshotsData && snapshotsData.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse max-w-md">
+                    <thead className="text-xs text-muted-foreground bg-black/40 border-b border-border/50">
+                      <tr>
+                        <th className="px-4 py-3">Period</th>
+                        <th className="px-4 py-3">Metric Type</th>
+                        <th className="px-4 py-3 text-right">Value (PnL)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshotsData.map((snap: any) => (
+                        <tr key={snap.id} className="border-b border-border/20 hover:bg-white/5">
+                          <td className="px-4 py-2 font-medium">{snap.period}</td>
+                          <td className="px-4 py-2 text-muted-foreground">{snap.metricType}</td>
+                          <td className={`px-4 py-2 text-right font-medium ${snap.metricValue > 0 ? 'text-green-400' : snap.metricValue < 0 ? 'text-red-400' : ''}`}>
+                            {snap.metricValue != null ? (snap.metricValue > 0 ? '+' : '') + snap.metricValue.toFixed(2) : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">No snapshot data available.</p>
+              )}
             </div>
           )}
         </motion.div>

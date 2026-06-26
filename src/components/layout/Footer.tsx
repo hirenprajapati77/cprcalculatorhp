@@ -15,7 +15,7 @@ export const Footer: React.FC = () => {
           <span className="text-border-tertiary">|</span>
           <span className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-accent-green" />
-            Database: LocalFallback
+            Database: PostgreSQL
           </span>
           <span className="text-border-tertiary">|</span>
           <span>Feed: Realtime</span>
