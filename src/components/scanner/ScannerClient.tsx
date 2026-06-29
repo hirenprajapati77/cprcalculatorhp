@@ -30,7 +30,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
-import { fmt } from '@/utils/format';
+import { fmt, formatIST } from '@/utils/format';
 
 function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinutes: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -1149,7 +1149,7 @@ export default function ScannerClient() {
         setTotal(mapped.length);
         setTotalPages(1);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(new Date().toLocaleTimeString());
+        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
         return;
       }
 
@@ -1219,7 +1219,7 @@ export default function ScannerClient() {
         setTotalPages(showWatchlistOnly ? Math.ceil(items.length / limit) : data.totalPages);
         if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(new Date().toLocaleTimeString());
+        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
       }
     } catch (err) {
       if (requestId === activeRequestRef.current) {
@@ -1260,7 +1260,7 @@ export default function ScannerClient() {
       if (!res.ok) throw new Error('Recalculation failed');
       const data = await res.json();
       if (data.success) {
-        setLastRefreshed(new Date().toLocaleTimeString());
+        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
         setLatency(Date.now() - startFetchTime);
         showToast(`Scan complete! Calculated ${data.count} opportunity targets.`, 'success');
         fetchScannerData(true); // silent background load
@@ -1508,7 +1508,7 @@ export default function ScannerClient() {
 
   // Load past history run
   const handleLoadPastScan = (log: HistoryLog) => {
-    showToast(`Loading scan run from ${new Date(log.createdAt).toLocaleTimeString()}`, 'info');
+    showToast(`Loading scan run from ${formatIST(log.createdAt, { timeOnly: true })}`, 'info');
     if (log.filters.universe) setUniverse(log.filters.universe as 'NIFTY50' | 'NIFTY200' | 'ALL');
     if (log.filters.market) setMarket(log.filters.market as 'NSE' | 'BSE');
     setShowLogsList(false);
@@ -1836,7 +1836,7 @@ export default function ScannerClient() {
                     <div>Execution time: {log.durationMs}ms</div>
                     <div className="text-[10px] text-text-tertiary truncate">Top tickers: {log.topSymbols}</div>
                     <div className="text-[9px] text-text-tertiary border-t border-border-primary/50 pt-1 mt-1">
-                      {new Date(log.createdAt).toLocaleString('en-IN')}
+                      {formatIST(log.createdAt, { includeTime: true })}
                     </div>
                   </div>
                 </div>

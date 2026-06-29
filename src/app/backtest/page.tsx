@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { formatIST } from '@/utils/format';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Play, Settings2, Activity, ExternalLink } from 'lucide-react';
@@ -197,7 +198,7 @@ export default function BacktestPage() {
                       <td className="py-3 px-4 font-mono">{r.metrics?.winRate !== undefined ? `${r.metrics.winRate.toFixed(1)}%` : '—'}</td>
                       <td className="py-3 px-4 font-mono">{r.metrics?.profitFactor !== undefined ? r.metrics.profitFactor.toFixed(2) : '—'}</td>
                       <td className="py-3 px-4 font-mono">{r.metrics?.sharpe !== undefined ? r.metrics.sharpe.toFixed(2) : '—'}</td>
-                      <td className="py-3 px-4 font-mono text-sm">{new Date(r.createdAt).toLocaleDateString()}</td>
+                      <td className="py-3 px-4 font-mono text-sm">{formatIST(r.createdAt, { dateOnly: true })}</td>
                       <td className="py-3 px-4 flex gap-2">
                         <Link href={`/analytics/${r.id}`} className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-sm">
                           <Activity className="w-4 h-4" /> Analytics

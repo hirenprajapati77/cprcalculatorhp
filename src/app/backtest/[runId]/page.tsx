@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ArrowLeft, BarChart2, List, FileText, Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { formatIST } from '@/utils/format';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 
@@ -114,8 +115,8 @@ export default function RunDetailsPage() {
                 <div className="grid grid-cols-2 gap-4 bg-black/20 p-4 rounded-lg border border-border/50 text-sm">
                   <div><span className="text-muted-foreground">Universe:</span> <span className="font-medium">{runData.universe}</span></div>
                   <div><span className="text-muted-foreground">Capital:</span> <span className="font-medium">₹{runData.capital}</span></div>
-                  <div><span className="text-muted-foreground">Start Date:</span> <span className="font-medium">{new Date(runData.startDate).toLocaleDateString()}</span></div>
-                  <div><span className="text-muted-foreground">End Date:</span> <span className="font-medium">{new Date(runData.endDate).toLocaleDateString()}</span></div>
+                  <div><span className="text-muted-foreground">Start Date:</span> <span className="font-medium">{formatIST(runData.startDate, { dateOnly: true })}</span></div>
+                  <div><span className="text-muted-foreground">End Date:</span> <span className="font-medium">{formatIST(runData.endDate, { dateOnly: true })}</span></div>
                   <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{runData.status}</span></div>
                   <div><span className="text-muted-foreground">Execution:</span> <span className="font-medium">{runData.executionMode}</span></div>
                   <div><span className="text-muted-foreground">Risk Model:</span> <span className="font-medium">{runData.riskModel} ({runData.riskValue}%)</span></div>
@@ -156,9 +157,9 @@ export default function RunDetailsPage() {
                           <td className="px-4 py-2 font-medium">{trade.symbol}</td>
                           <td className="px-4 py-2">{trade.type}</td>
                           <td className="px-4 py-2 truncate max-w-[150px]" title={trade.signal}>{trade.signal}</td>
-                          <td className="px-4 py-2">{new Date(trade.entryDate).toLocaleDateString()}</td>
+                          <td className="px-4 py-2">{formatIST(trade.entryDate, { dateOnly: true })}</td>
                           <td className="px-4 py-2">{trade.entryPrice?.toFixed(2) || '-'}</td>
-                          <td className="px-4 py-2">{trade.exitDate ? new Date(trade.exitDate).toLocaleDateString() : '-'}</td>
+                          <td className="px-4 py-2">{trade.exitDate ? formatIST(trade.exitDate, { dateOnly: true }) : '-'}</td>
                           <td className="px-4 py-2">{trade.exitPrice?.toFixed(2) || '-'}</td>
                           <td className={`px-4 py-2 font-medium ${trade.pnl > 0 ? 'text-green-400' : trade.pnl < 0 ? 'text-red-400' : ''}`}>
                             {trade.pnl != null ? (trade.pnl > 0 ? '+' : '') + trade.pnl.toFixed(2) : '-'}
