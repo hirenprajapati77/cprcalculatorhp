@@ -109,6 +109,7 @@ export class BacktestService {
 
     const BATCH_SIZE = 50;
     const batches = Math.ceil(symbols.length / BATCH_SIZE);
+    let successCount = 0;
 
     for (let batchNum = 1; batchNum <= batches; batchNum++) {
       // Check idempotency: If checkpoint exists, skip this batch
@@ -126,6 +127,13 @@ export class BacktestService {
         try {
           // Mock signals and historical data
           const ohlc = await HistoricalProvider.getHistory(symbol, run.startDate, run.endDate);
+          
+          // Rate limit protection: 300ms between Yahoo Finance 
+          // requests to prevent IP-level 429 on large universes
+          await new Promise(r => setTimeout(r, 300));
+          
+          successCount++; // Track successfully fetched symbols
+
           if (ohlc.length < 2) continue;
 
           const SLIPPAGE_PCT = 0.0005; // 0.05% per side = 0.1% round-trip (NSE realistic cost)
@@ -321,6 +329,18 @@ export class BacktestService {
           elapsedMs: Date.now() - startTime
         }
       });
+    }
+
+    const totalSymbols = symbols.length;
+    console.log(
+      `[Backtest] Data coverage: ${successCount}/${totalSymbols} ` +
+      `stocks fetched (${Math.round(successCount/totalSymbols*100)}%)`
+    );
+    if (successCount / totalSymbols < 0.8) {
+      console.warn(
+        '[Backtest] WARNING: Low data coverage (<80%). ' +
+        'Results may not be statistically reliable.'
+      );
     }
 
     // Post processing metrics
