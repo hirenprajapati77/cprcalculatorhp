@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const bypassWindow = searchParams.get('bypassWindow') === 'true';
+  const bypassWindow = process.env.NODE_ENV !== 'production' && 
+                       searchParams.get('bypassWindow') === 'true';
 
   const { hour, minute, isTradingDay } = getISTTime();
 
