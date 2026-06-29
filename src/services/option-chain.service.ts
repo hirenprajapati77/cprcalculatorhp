@@ -100,17 +100,32 @@ export class OptionChainService {
               
               if (currentExpiryStr) {
                 const today = new Date();
-                const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
-                const todayStr1 = today.toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-'); // "25-Jun-2026"
-                const optionsGB2: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' };
-                const todayStr2 = today.toLocaleDateString('en-GB', optionsGB2).replace(/\//g, '-'); // "25-06-2026"
-                const todayStr3 = today.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // "2026-06-25"
+                today.setHours(0, 0, 0, 0);
                 
-                const isTodayExpiry = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase() || 
-                                      currentExpiryStr === todayStr2 || 
-                                      currentExpiryStr === todayStr3;
+                let isExpiredOrToday = false;
+                let parsedExpiryDate: Date | null = null;
                 
-                if (isTodayExpiry) {
+                if (currentExpiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                  parsedExpiryDate = new Date(currentExpiryStr);
+                } else if (currentExpiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                  const [d, m, y] = currentExpiryStr.split('-');
+                  parsedExpiryDate = new Date(`${y}-${m}-${d}`);
+                } else {
+                  const d = new Date(currentExpiryStr);
+                  if (!isNaN(d.getTime())) parsedExpiryDate = d;
+                }
+                
+                if (parsedExpiryDate && !isNaN(parsedExpiryDate.getTime())) {
+                  parsedExpiryDate.setHours(0, 0, 0, 0);
+                  isExpiredOrToday = parsedExpiryDate.getTime() <= today.getTime();
+                } else {
+                  // Fallback string matching just in case
+                  const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
+                  const todayStr1 = today.toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-');
+                  isExpiredOrToday = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase();
+                }
+                
+                if (isExpiredOrToday) {
                   const nextExpiryObj = data.data.expiryData[1];
                   const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj.date || nextExpiryObj.expiryDate || nextExpiryObj.expiry);
                   
