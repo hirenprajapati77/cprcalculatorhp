@@ -150,6 +150,7 @@ export default function RunDetailsPage() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {tradesData.trades.map((trade: any) => (
                         <tr key={trade.id} className="border-b border-border/20 hover:bg-white/5">
                           <td className="px-4 py-2 font-medium">{trade.symbol}</td>
@@ -232,6 +233,7 @@ export default function RunDetailsPage() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                       {snapshotsData.map((snap: any) => (
                         <tr key={snap.id} className="border-b border-border/20 hover:bg-white/5">
                           <td className="px-4 py-2 font-medium">{snap.period}</td>
