@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { formatIST } from '@/utils/format';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
@@ -49,11 +50,11 @@ export default function ChartsGrid({ runId }: { runId: string }) {
         <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Equity Curve</h3>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data.equityCurve}>
-            <XAxis dataKey="date" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+            <XAxis dataKey="date" tickFormatter={(v) => formatIST(v)} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
             <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} width={70} />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} 
-              labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
+              labelFormatter={(v) => formatIST(v, { dateOnly: true })}
               formatter={(value) => value != null ? [`₹${Number(value).toLocaleString('en-IN')}`, 'Cumulative PnL'] : ['—', 'Cumulative PnL']}
             />
             <Line type="monotone" dataKey="cumulativePnl" stroke="#22c55e" strokeWidth={2} dot={false} />
@@ -81,9 +82,9 @@ export default function ChartsGrid({ runId }: { runId: string }) {
         <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Drawdown</h3>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data.drawdown}>
-            <XAxis dataKey="date" tickFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toFixed(1)}%`} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} labelFormatter={(v) => new Date(v).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })} formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Drawdown']} />
+             <XAxis dataKey="date" tickFormatter={(v) => formatIST(v)} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+             <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toFixed(1)}%`} width={40} />
+             <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} labelFormatter={(v) => formatIST(v, { dateOnly: true })} formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Drawdown']} />
             <Area type="monotone" dataKey="drawdownPct" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
           </AreaChart>
         </ResponsiveContainer>

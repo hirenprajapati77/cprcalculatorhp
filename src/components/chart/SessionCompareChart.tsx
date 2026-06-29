@@ -46,12 +46,14 @@ export const SessionCompareChart: React.FC<SessionCompareChartProps> = ({ record
       BC: r.bc,
       R1: r.r1,
       S1: r.s1,
-      date: new Date(r.createdAt).toLocaleString('en-IN', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      date: (() => {
+        const ist = new Date(new Date(r.createdAt).getTime() + 330 * 60 * 1000);
+        const day = String(ist.getUTCDate()).padStart(2, '0');
+        const month = String(ist.getUTCMonth() + 1).padStart(2, '0');
+        const hr = String(ist.getUTCHours()).padStart(2, '0');
+        const min = String(ist.getUTCMinutes()).padStart(2, '0');
+        return `${day}/${month} ${hr}:${min}`;
+      })(),
     }));
 
   // Find min S1 and max R1 across the dataset to frame the graph properly

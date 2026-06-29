@@ -82,11 +82,19 @@ export class TradeJournalService {
     optionType: 'CE' | 'PE'
   ): Promise<number | null> {
     try {
-      const optionSymbol = OptionChainService.buildOptionSymbol(
-        symbol, strike, optionType
+      const { OptionChainService } = await import('@/services/option-chain.service');
+      const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
+      const chainRes = await OptionChainService.getOptionChain(cleanSym);
+      if ('error' in chainRes) {
+        throw new Error(`Failed to fetch option chain: ${chainRes.error}`);
+      }
+      const option = chainRes.optionsChain.find(
+        o => o.strikePrice === strike && o.optionType === optionType
       );
-      const ltp = await OptionChainService.fetchOptionQuote(optionSymbol);
-      return ltp > 0 ? ltp : null;
+      if (!option) {
+        throw new Error(`Option not found in chain for strike ${strike} and type ${optionType}`);
+      }
+      return option.ltp > 0 ? option.ltp : null;
     } catch (err) {
       console.error(
         `[TradeJournal] fetchOptionCmp failed for ` +

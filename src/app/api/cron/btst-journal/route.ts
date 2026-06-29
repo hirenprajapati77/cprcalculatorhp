@@ -11,15 +11,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { searchParams } = new URL(req.url);
+  const bypassWindow = searchParams.get('bypassWindow') === 'true';
+
   const { hour, minute, isTradingDay } = getISTTime();
 
-  if (!isTradingDay) {
+  if (!isTradingDay && !bypassWindow) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
   // Only run during 15:25–15:35 IST window (cron fires at 15:25)
   const timeValue = hour * 100 + minute;
-  if (timeValue < 1525 || timeValue > 1535) {
+  if ((timeValue < 1525 || timeValue > 1535) && !bypassWindow) {
     return NextResponse.json({
       message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')}`
     });

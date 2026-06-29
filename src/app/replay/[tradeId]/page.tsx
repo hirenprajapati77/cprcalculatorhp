@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { formatIST } from '@/utils/format';
 import { useParams } from 'next/navigation';
 import { createChart, CandlestickSeries } from 'lightweight-charts';
 import { Play, Pause, FastForward, StepForward, RotateCcw } from 'lucide-react';
@@ -143,7 +144,7 @@ export default function ReplayPage() {
           <ul className="space-y-3">
             {replayData?.events?.map((ev: { timestamp: string; event: string; details?: string }, idx: number) => (
               <li key={idx} className="flex gap-3 text-sm">
-                <span className="text-muted-foreground">{new Date(ev.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                <span className="text-muted-foreground">{formatIST(ev.timestamp, { shortTime: true })}</span>
                 <span className={ev.event === 'FILLED' ? 'text-cyan-400' : ''}>{ev.event}: {ev.details || ''}</span>
               </li>
             ))}

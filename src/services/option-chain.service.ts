@@ -80,7 +80,7 @@ export class OptionChainService {
       // 1. Attempt DIRECT call first
       try {
         console.log(`[OptionChain] Attempting direct fetch for ${cleanSym}...`);
-        const res = await fetch(directUrl, {
+        const res = await OptionChainService.fetchWithRetry(directUrl, {
           headers: {
             'Authorization': `${appId}:${token}`,
             'Accept': 'application/json'
@@ -117,7 +117,9 @@ export class OptionChainService {
                 
                 if (parsedExpiryDate && !isNaN(parsedExpiryDate.getTime())) {
                   parsedExpiryDate.setHours(0, 0, 0, 0);
-                  isExpiredOrToday = parsedExpiryDate.getTime() <= today.getTime();
+                  const diffTime = parsedExpiryDate.getTime() - today.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  isExpiredOrToday = diffDays <= 1;
                 } else {
                   // Fallback string matching just in case
                   const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
@@ -129,12 +131,13 @@ export class OptionChainService {
                 
                 if (isExpiredOrToday) {
                   const nextExpiryObj = data.data.expiryData[1];
+                  const nextExpiryTimestamp = typeof nextExpiryObj === 'string' ? null : nextExpiryObj?.expiry;
                   const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj?.date || nextExpiryObj?.expiryDate || nextExpiryObj?.expiry);
                   
-                  if (nextExpiryStr) {
-                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry: ${nextExpiryStr} for ${cleanSym}`);
-                    const nextUrl = `${directUrl}&ex=${nextExpiryStr}`;
-                    const resNext = await fetch(nextUrl, {
+                  if (nextExpiryTimestamp) {
+                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry timestamp: ${nextExpiryTimestamp} (${nextExpiryStr}) for ${cleanSym}`);
+                    const nextUrl = `${directUrl}&timestamp=${nextExpiryTimestamp}`;
+                    const resNext = await OptionChainService.fetchWithRetry(nextUrl, {
                       headers: {
                         'Authorization': `${appId}:${token}`,
                         'Accept': 'application/json'
@@ -245,5 +248,26 @@ export class OptionChainService {
       throw new Error(`Option symbol not found in option chain: ${optionSymbol}`);
     }
     return option.ltp;
+  }
+
+  private static async fetchWithRetry(url: string, options?: RequestInit, retries = 3, delay = 150): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, options);
+        if (res.status === 429) {
+          console.warn(`[OptionChain] Hit 429 Rate Limit for ${url}. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
+        }
+        return res;
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        console.warn(`[OptionChain] Fetch error for ${url}. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`, err);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+    return fetch(url, options);
   }
 }
