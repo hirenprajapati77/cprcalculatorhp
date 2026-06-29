@@ -150,8 +150,7 @@ export default function RunDetailsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {tradesData.trades.map((trade: any) => (
+                      {tradesData.trades.map((trade: { id: string, symbol: string, type: string, signal: string, entryDate: string, entryPrice: number, exitDate: string, exitPrice: number, pnl: number, pnlPercent: number, durationDays: number, status: string }) => (
                         <tr key={trade.id} className="border-b border-border/20 hover:bg-white/5">
                           <td className="px-4 py-2 font-medium">{trade.symbol}</td>
                           <td className="px-4 py-2">{trade.type}</td>
@@ -233,8 +232,7 @@ export default function RunDetailsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {snapshotsData.map((snap: any) => (
+                      {snapshotsData.map((snap: { id: string, period: string, metricType: string, metricValue: number }) => (
                         <tr key={snap.id} className="border-b border-border/20 hover:bg-white/5">
                           <td className="px-4 py-2 font-medium">{snap.period}</td>
                           <td className="px-4 py-2 text-muted-foreground">{snap.metricType}</td>
