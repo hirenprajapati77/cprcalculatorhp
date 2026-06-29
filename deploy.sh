@@ -18,7 +18,7 @@ scp -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChe
 echo "5. Extracting and deploying on VM..."
 ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "cd /home/ubuntu/cpr-calculator-platform && \
   tar -xzf deploy_bundle.tar.gz && \
-  cp -r .next/standalone/* . && \
+  cp -a .next/standalone/. . && \
   npm ci --omit=dev && \
   npx prisma@6.19.3 db push --accept-data-loss && \
   pm2 reload cpr-platform"
