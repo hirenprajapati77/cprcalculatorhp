@@ -20,7 +20,7 @@ ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChe
   tar -xzf deploy_bundle.tar.gz && \
   cp -r .next/standalone/* . && \
   npm ci --omit=dev && \
-  npx prisma migrate deploy && \
+  npx prisma db push --accept-data-loss && \
   pm2 reload cpr-platform"
 
 echo "Deployment complete!"
