@@ -119,7 +119,7 @@ export class OptionChainService {
                   parsedExpiryDate.setHours(0, 0, 0, 0);
                   const diffTime = parsedExpiryDate.getTime() - today.getTime();
                   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                  isExpiredOrToday = diffDays <= 1;
+                  isExpiredOrToday = diffDays <= 0;
                 } else {
                   // Fallback string matching just in case
                   const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
