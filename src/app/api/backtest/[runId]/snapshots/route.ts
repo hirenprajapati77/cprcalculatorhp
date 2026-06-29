@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-export async function GET(req: NextRequest, { params }: { params: { runId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   try {
+    const { runId } = await params;
     const snapshots = await prisma.backtestMetricSnapshot.findMany({
-      where: { backtestRunId: params.runId },
+      where: { backtestRunId: runId },
       orderBy: { period: 'asc' }
     });
     return NextResponse.json(snapshots);

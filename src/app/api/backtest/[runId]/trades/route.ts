@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-export async function GET(req: NextRequest, { params }: { params: { runId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get('page') || '1', 10);
   const limit = parseInt(searchParams.get('limit') || '50', 10);
   const skip = (page - 1) * limit;
 
   try {
+    const { runId } = await params;
     const [trades, total] = await Promise.all([
       prisma.trade.findMany({
-        where: { backtestRunId: params.runId },
+        where: { backtestRunId: runId },
         skip,
         take: limit,
         orderBy: { entryDate: 'asc' },
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: { runId: strin
           pnl: true, pnlPercent: true, durationDays: true, rr: true
         }
       }),
-      prisma.trade.count({ where: { backtestRunId: params.runId } })
+      prisma.trade.count({ where: { backtestRunId: runId } })
     ]);
 
     return NextResponse.json({
