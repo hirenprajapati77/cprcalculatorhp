@@ -125,12 +125,14 @@ export class OptionChainService {
                   isExpiredOrToday = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase();
                 }
                 
+                console.log(`[OptionChain] Rollover check for ${cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${today}, isExpiredOrToday: ${isExpiredOrToday}`);
+                
                 if (isExpiredOrToday) {
                   const nextExpiryObj = data.data.expiryData[1];
-                  const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj.date || nextExpiryObj.expiryDate || nextExpiryObj.expiry);
+                  const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj?.date || nextExpiryObj?.expiryDate || nextExpiryObj?.expiry);
                   
                   if (nextExpiryStr) {
-                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is today. Fetching NEXT expiry: ${nextExpiryStr} for ${cleanSym}`);
+                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry: ${nextExpiryStr} for ${cleanSym}`);
                     const nextUrl = `${directUrl}&ex=${nextExpiryStr}`;
                     const resNext = await fetch(nextUrl, {
                       headers: {
@@ -141,10 +143,18 @@ export class OptionChainService {
                     
                     if (resNext.ok) {
                       const dataNext = await resNext.json();
+                      console.log(`[OptionChain] Next expiry response status: ${dataNext.s}, message: ${dataNext.message}`);
                       if ((dataNext.s === 'ok' || dataNext.status === 'ok' || dataNext.code === 200) && dataNext.data?.optionsChain) {
                          data = dataNext; // Use next expiry data
+                         console.log(`[OptionChain] Successfully rolled over ${cleanSym} to ${nextExpiryStr}`);
+                      } else {
+                         console.warn(`[OptionChain] Rollover failed. Fyers error: ${JSON.stringify(dataNext)}`);
                       }
+                    } else {
+                      console.warn(`[OptionChain] Rollover HTTP failed with status ${resNext.status}`);
                     }
+                  } else {
+                    console.warn(`[OptionChain] Could not find next expiry string in expiryData:`, data.data.expiryData);
                   }
                 }
               }
