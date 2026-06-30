@@ -15,12 +15,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
+  const bypassWindow = req.nextUrl.searchParams.get('bypassWindow') === 'true';
+
   // Determine which snapshot slot based on current IST time
   let slot: '916' | '930' | '945' | '1000' | null = null;
-  if      (hour === 9  && minute >= 16 && minute < 20) slot = '916';
-  else if (hour === 9  && minute >= 30 && minute < 34) slot = '930';
-  else if (hour === 9  && minute >= 45 && minute < 49) slot = '945';
-  else if (hour === 10 && minute >= 0  && minute < 4 ) slot = '1000';
+  if (bypassWindow) {
+    // Manual backfill: pick nearest slot based on current time
+    if (hour < 9 || (hour === 9 && minute < 23)) slot = '916';
+    else if (hour === 9 && minute < 38) slot = '930';
+    else if (hour === 9 && minute < 53) slot = '945';
+    else slot = '1000';
+  } else {
+    // existing exact window logic
+    if      (hour === 9  && minute >= 16 && minute < 20) slot = '916';
+    else if (hour === 9  && minute >= 30 && minute < 34) slot = '930';
+    else if (hour === 9  && minute >= 45 && minute < 49) slot = '945';
+    else if (hour === 10 && minute >= 0  && minute < 4 ) slot = '1000';
+  }
 
   if (!slot) {
     return NextResponse.json({
