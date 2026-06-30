@@ -207,7 +207,7 @@ export class OptionSuggestionService {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       for (const exObj of chainRes.expiryData) {
-        const exStr = typeof exObj === 'string' ? exObj : (exObj.date || exObj.expiryDate || exObj.expiry);
+        const exStr = typeof exObj === 'string' ? exObj : ((exObj as any).date || (exObj as any).expiryDate || (exObj as any).expiry);
         if (!exStr) continue;
         let parsedDate: Date | null = null;
         if (exStr.match(/^\d{4}-\d{2}-\d{2}$/)) parsedDate = new Date(exStr);
