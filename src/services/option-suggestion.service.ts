@@ -201,9 +201,39 @@ export class OptionSuggestionService {
       return { error: 'LOT_SIZE_UNAVAILABLE' };
     }
 
-    // 3. Filter valid options for this type (exclude equity row where strikePrice <= 0)
+    // 3. Find the target expiry (next valid monthly expiry)
+    let targetExpiryStr = '';
+    if (chainRes.expiryData && chainRes.expiryData.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (const exObj of chainRes.expiryData) {
+        const exStr = typeof exObj === 'string' ? exObj : (exObj.date || exObj.expiryDate || exObj.expiry);
+        if (!exStr) continue;
+        let parsedDate: Date | null = null;
+        if (exStr.match(/^\d{4}-\d{2}-\d{2}$/)) parsedDate = new Date(exStr);
+        else if (exStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+          const [d, m, y] = exStr.split('-');
+          parsedDate = new Date(`${y}-${m}-${d}`);
+        } else {
+          const d = new Date(exStr);
+          if (!isNaN(d.getTime())) parsedDate = d;
+        }
+        if (parsedDate && !isNaN(parsedDate.getTime())) {
+          parsedDate.setHours(0, 0, 0, 0);
+          if (parsedDate.getTime() > today.getTime()) {
+            const yy = parsedDate.getFullYear().toString().slice(2);
+            const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+            const mmm = months[parsedDate.getMonth()];
+            targetExpiryStr = `${yy}${mmm}`;
+            break;
+          }
+        }
+      }
+    }
+
+    // 4. Filter valid options for this type (exclude equity row where strikePrice <= 0) and MUST match target expiry
     const validOptions = chainRes.optionsChain
-      .filter(o => o.optionType === type && o.strikePrice > 0)
+      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
       .sort((a, b) => a.strikePrice - b.strikePrice);
 
     if (validOptions.length === 0) {
