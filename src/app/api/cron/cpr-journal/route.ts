@@ -68,10 +68,12 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
+
       await TradeJournalService.logSignal({
         signalType:     'CPR',
         symbol:         signal.symbol,
-        optionContract: `${suggestion.strike} CE`,
+        optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'CE',
         score:          signal.score,

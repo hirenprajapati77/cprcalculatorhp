@@ -68,10 +68,12 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
+
       await TradeJournalService.logSignal({
         signalType:     'BTST',
         symbol:         signal.symbol,
-        optionContract: `${suggestion.strike} CE`,
+        optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'CE',
         score:          signal.longScore,
@@ -102,10 +104,12 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} PE`;
+
       await TradeJournalService.logSignal({
         signalType:     'STBT',
         symbol:         signal.symbol,
-        optionContract: `${suggestion.strike} PE`,
+        optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'PE',
         score:          signal.shortScore,
