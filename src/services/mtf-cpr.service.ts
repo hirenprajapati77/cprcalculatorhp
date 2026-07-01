@@ -3,7 +3,6 @@ import { calculateCPR, classifyCprWidth } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 
 export interface MtfCprLevels {
-  daily?: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
   weekly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
   monthly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
   confluence: {
