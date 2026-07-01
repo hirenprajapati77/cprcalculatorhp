@@ -34,8 +34,7 @@ export function calculateCPR(input: CPRInput): CPRResult {
 
   const width = ((tcFinal - bcFinal) / pivot) * 100;
 
-  const classification: CPRClassification =
-    width < 0.3 ? 'NARROW' : width < 0.8 ? 'NORMAL' : 'WIDE';
+  const classification: CPRClassification = classifyCprWidth(width);
 
   const trend: CPRTrend =
     classification === 'NARROW' ? 'Trending' :
