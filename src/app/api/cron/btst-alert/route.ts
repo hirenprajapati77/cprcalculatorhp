@@ -52,9 +52,15 @@ export async function GET(req: NextRequest) {
 
     const alertPayload = [...enrichedLongs, ...enrichedShorts];
 
-    await TelegramService.sendBtstAlert(alertPayload);
+    const result = await TelegramService.sendBtstAlert(alertPayload);
 
-    return NextResponse.json({ sent: true, count: alertPayload.length });
+    return NextResponse.json({ 
+      sent: result.sent,
+      reason: result.reason,
+      count: alertPayload.length,
+      longs: enrichedLongs.length,
+      shorts: enrichedShorts.length
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
