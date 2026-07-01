@@ -188,7 +188,7 @@ export class BtstService {
     todayCpr: CPRResult,
     tomorrowCpr: CPRResult,
     volumeRatio: number,
-    virginCPR: boolean
+    sessionVirgin: boolean
   ): { score: number; signals: string[] } {
     let score = 0;
     const signals: string[] = [];
@@ -223,11 +223,12 @@ export class BtstService {
       }
     }
 
-    // +15 CPR Width: classification === 'NARROW' OR virginCPR === true
-    if (tomorrowCpr.classification === 'NARROW' || virginCPR) {
+    if (tomorrowCpr.classification === 'NARROW' || sessionVirgin) {
       score += 15;
       if (tomorrowCpr.classification === 'NARROW') signals.push('NARROW_CPR');
-      if (virginCPR) signals.push('VIRGIN_CPR');
+      // VIRGIN_TODAY = today's live session hasn't touched today's CPR band.
+      // Distinct from scanner's VIRGIN = yesterday's CPR was retrospectively untouched.
+      if (sessionVirgin) signals.push('VIRGIN_TODAY');
     }
 
     // +10 Liquidity: avgVolume >= 500000
@@ -247,7 +248,7 @@ export class BtstService {
     todayCpr: CPRResult,
     tomorrowCpr: CPRResult,
     volumeRatio: number,
-    virginCPR: boolean
+    sessionVirgin: boolean
   ): { score: number; signals: string[] } {
     let score = 0;
     const signals: string[] = [];
@@ -280,11 +281,10 @@ export class BtstService {
       }
     }
 
-    // +15 CPR Width: NARROW or VIRGIN
-    if (tomorrowCpr.classification === 'NARROW' || virginCPR) {
+    if (tomorrowCpr.classification === 'NARROW' || sessionVirgin) {
       score += 15;
       if (tomorrowCpr.classification === 'NARROW') signals.push('NARROW_CPR');
-      if (virginCPR) signals.push('VIRGIN_CPR');
+      if (sessionVirgin) signals.push('VIRGIN_TODAY');
     }
 
     // +10 Liquidity: avgVolume >= 500000
@@ -329,12 +329,14 @@ export class BtstService {
       close: todayCandle.close,
     });
 
-    const virginCPR = isCprVirgin(stock.high, stock.low, todayCpr.tc, todayCpr.bc);
+    // sessionVirgin: today's live price action hasn't touched today's CPR band.
+    // Distinct from signal.service.ts's VIRGIN (yesterday's CPR was untouched — retrospective).
+    const sessionVirgin = isCprVirgin(stock.high, stock.low, todayCpr.tc, todayCpr.bc);
     
     const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
-    const longCalc = this.calculateLongScore(stock, todayCpr, tomorrowCpr, volumeRatio, virginCPR);
-    const shortCalc = this.calculateShortScore(stock, todayCpr, tomorrowCpr, volumeRatio, virginCPR);
+    const longCalc = this.calculateLongScore(stock, todayCpr, tomorrowCpr, volumeRatio, sessionVirgin);
+    const shortCalc = this.calculateShortScore(stock, todayCpr, tomorrowCpr, volumeRatio, sessionVirgin);
 
     const longScore = longCalc.score;
     const shortScore = shortCalc.score;
@@ -368,7 +370,7 @@ export class BtstService {
     const isLong = longScore >= shortScore;
     const scoreBreakdown = {
       vdu: volumeRatio >= 2.0 ? 20 : 0,
-      cprNarrow: (tomorrowCpr.classification === 'NARROW' || virginCPR) ? 15 : 0,
+      cprNarrow: (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? 15 : 0,
       higherValue: isLong
         ? (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc ? 20 : 0)
         : (tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc ? 20 : 0),

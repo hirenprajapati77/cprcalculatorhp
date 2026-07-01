@@ -206,7 +206,7 @@ interface ScannedStock {
     cprNarrow?: number;
     higherValue?: number;
     vwap?: number;
-    conf15m?: number;
+    liquidity?: number;
     closeStrength?: number;
   };
   optionSuggestion?: {
@@ -2681,10 +2681,10 @@ export default function ScannerClient() {
                   const activeSignals = drawerStock.signals || [];
                   const breakdown = drawerStock.scoreBreakdown || {
                     vdu: activeSignals.includes('VOLUME_SPIKE') ? 20 : 0,
-                    cprNarrow: (activeSignals.includes('NARROW_CPR') || activeSignals.includes('VIRGIN_CPR')) ? 15 : 0,
+                    cprNarrow: (activeSignals.includes('NARROW_CPR') || activeSignals.includes('VIRGIN_TODAY')) ? 15 : 0,
                     higherValue: (activeSignals.includes('HIGHER_VALUE') || activeSignals.includes('LOWER_VALUE')) ? 20 : 0,
                     vwap: (activeSignals.includes('ABOVE_VWAP') || activeSignals.includes('BELOW_VWAP')) ? 20 : 0,
-                    conf15m: activeSignals.includes('LIQUID') ? 10 : 0,
+                    liquidity: activeSignals.includes('LIQUID') ? 10 : 0,
                     closeStrength: (activeSignals.includes('CLOSING_STRENGTH') || activeSignals.includes('CLOSING_WEAKNESS')) ? 15 : 0,
                   };
                   return (
@@ -2749,8 +2749,8 @@ export default function ScannerClient() {
                               <span className="font-mono text-text-primary">{breakdown.vwap ?? '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
-                              <span className="text-text-tertiary">15m Confirmation</span>
-                              <span className="font-mono text-text-primary">{breakdown.conf15m ?? '—'}</span>
+                              <span className="text-text-tertiary">Liquidity</span>
+                              <span className="font-mono text-text-primary">{breakdown.liquidity ?? '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">Closing Strength</span>
