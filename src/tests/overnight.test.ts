@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstRankingService } from '../services/overnight/btst-ranking.service';
 import { StbtRankingService } from '../services/overnight/stbt-ranking.service';
+import { OvernightRiskService } from '../services/overnight/overnight-risk.service';
 
 describe('Overnight Engine Tests', () => {
   test('LONG setup (BTST Scoring Logic)', () => {
@@ -45,4 +46,14 @@ describe('Overnight Engine Tests', () => {
     assert.ok(score !== null);
     assert.ok(score >= 80, `Expected score >= 80, got ${score}`);
   });
+
+  test('indexCorrelationEstimate is null — not derived from symbol string', () => {
+    const base = { symbol: 'RELIANCE', market: 'NSE' as const, sector: 'Energy', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 900000, marketCap: 1680000, ltp: 101 };
+    const r1 = OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'RELIANCE' });
+    const r2 = OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'INFY' });
+    // Both must be null — not different hash-based numbers
+    assert.strictEqual(r1.indexCorrelationEstimate, null, 'RELIANCE should return null');
+    assert.strictEqual(r2.indexCorrelationEstimate, null, 'INFY should return null');
+  });
 });
+

@@ -4,7 +4,9 @@ export interface OvernightRiskMetrics {
   gapRisk: number;         // Average gap percentage (absolute value)
   atr: number;             // Average True Range (value)
   sectorRisk: number;      // Risk score/multiplier based on sector (0.5 to 2.0)
-  indexCorrelation: number;// Beta proxy (0.5 to 1.5)
+  // TODO: Real index correlation requires rolling covariance of stock daily returns vs NIFTY.
+  // NIFTY history is not yet fetched — this field is a placeholder and must NOT be shown to users.
+  indexCorrelationEstimate: number | null;
   volatility: number;      // Volatility (standard deviation of daily changes)
   shortSqueezeProb: number; // Probability of short squeeze (0 to 100)
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -56,10 +58,10 @@ export class OvernightRiskService {
     }
 
     // 4. Index Correlation (Beta proxy)
-    // Deterministic simulation based on symbol name/sector if real calculation is missing
-    let indexCorrelation = 1.0;
-    const charSum = stock.symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    indexCorrelation = 0.7 + ((charSum % 10) / 10) * 0.8; // 0.7 to 1.5
+    // TODO: Replace with real rolling covariance vs NIFTY when NIFTY history is available.
+    // Previously this hashed the symbol string (charCode sum) which is NOT a real correlation.
+    // Set to null until real data is wired in — do NOT display this field to users.
+    const indexCorrelationEstimate: number | null = null;
 
     // 5. Volatility (Standard deviation of daily return percentage changes)
     let volatility = 1.5; // default 1.5%
@@ -99,10 +101,11 @@ export class OvernightRiskService {
       gapRisk,
       atr,
       sectorRisk,
-      indexCorrelation,
+      indexCorrelationEstimate,
       volatility,
       shortSqueezeProb,
       riskLevel
     };
   }
 }
+
