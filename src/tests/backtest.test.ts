@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { TradeEngineService } from '../services/backtest/trade-engine.service';
+import { BacktestService } from '../services/backtest/backtest.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,3 +267,53 @@ test('Metrics Service — Signal Bucketing', async (t) => {
     assert.strictEqual(metrics.maxDrawdown, 10, `Expected drawdown to be 10%, got ${metrics.maxDrawdown}%`);
   });
 });
+
+test('BacktestService — evaluateTrigger Breakout Trigger Tests', async (t) => {
+  // Setup day is index 0
+  const baseOhlc = [
+    { date: '2026-06-01', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Setup Day (i=0)
+    { date: '2026-06-02', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Day i+1 (no fill)
+    { date: '2026-06-03', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Day i+2
+    { date: '2026-06-04', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Day i+3
+    { date: '2026-06-05', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Day i+4
+    { date: '2026-06-08', open: 100, high: 102, low: 98, close: 100, volume: 1000 }, // Day i+5
+    { date: '2026-06-09', open: 100, high: 102, low: 98, close: 100, volume: 1000 }  // Out of trigger window
+  ];
+
+  await t.test('triggers on day i+2 via gap-open (gap-fill case)', () => {
+    // entry = 105. Day i+2 gaps open to 110.
+    const ohlc = baseOhlc.map((d, index) => {
+      if (index === 2) {
+        return { ...d, open: 110, high: 112, low: 109, close: 110 };
+      }
+      return d;
+    });
+
+    const result = BacktestService.evaluateTrigger('BULLISH', 105, ohlc, 0, 5);
+    assert.ok(result !== null);
+    assert.strictEqual(result.triggeredIndex, 2);
+    assert.strictEqual(result.triggeredPrice, 110, 'Should trigger at open price because it gapped past entry');
+  });
+
+  await t.test('triggers on day i+3 via intraday touch (normal-fill case)', () => {
+    // entry = 105. Day i+3 open is 100, but high goes to 107.
+    const ohlc = baseOhlc.map((d, index) => {
+      if (index === 3) {
+        return { ...d, open: 100, high: 107, low: 98, close: 101 };
+      }
+      return d;
+    });
+
+    const result = BacktestService.evaluateTrigger('BULLISH', 105, ohlc, 0, 5);
+    assert.ok(result !== null);
+    assert.strictEqual(result.triggeredIndex, 3);
+    assert.strictEqual(result.triggeredPrice, 105, 'Should trigger exactly at entry price level for intraday touch');
+  });
+
+  await t.test('never triggers within trigger window (NEVER_TRIGGERED case)', () => {
+    // entry = 105. No day goes above high of 102.
+    const result = BacktestService.evaluateTrigger('BULLISH', 105, baseOhlc, 0, 5);
+    assert.strictEqual(result, null, 'Should return null when entry level is never reached within trigger window');
+  });
+});
+

@@ -112,6 +112,7 @@ model BacktestRun {
   executionMode  String
   riskValue      Float    @default(1.0)
   status         String
+  strategyMode   String   @default("LEGACY_NARROW_CPR")
   metricsVersion Int      @default(1)
   createdAt      DateTime @default(now())
   deletedAt      DateTime?
@@ -145,6 +146,7 @@ model Trade {
   type          String
   signal        String
   status        String
+  strategyMode  String @default("LEGACY_NARROW_CPR")
 
   entryDate   DateTime
   entryPrice  Float
@@ -160,12 +162,16 @@ model Trade {
   slippage         Float
   executionDelayMs Int
 
-  rr           Float?
-  durationDays Int?
-  positionSize Float
-  pnl          Float?
-  pnlPercent   Float?
-  cprWidth     Float?
+  rr               Float?
+  durationDays     Int?
+  positionSize     Float
+  pnl              Float?
+  pnlPercent       Float?
+  cprWidth         Float?
+  score            Float?
+  confidence       Float?
+  signalsJson      String?
+  triggerDelayDays Int?
 
   run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
   journal Journal[]

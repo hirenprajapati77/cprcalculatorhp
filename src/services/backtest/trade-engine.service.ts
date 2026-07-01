@@ -1,5 +1,7 @@
 import { OHLC } from './historical.provider';
 
+export const SLIPPAGE_PCT = 0.0005; // 0.05% per side = 0.1% round-trip (NSE realistic cost)
+
 export interface BacktestTradeConfig {
   capital: number;
   riskModel: string; // "Fixed" | "Risk%" | "Capital%"
