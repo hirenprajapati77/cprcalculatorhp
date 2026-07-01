@@ -1,6 +1,8 @@
 import { OHLC } from './historical.provider';
 
-export const SLIPPAGE_PCT = 0.0005; // 0.05% per side = 0.1% round-trip (NSE realistic cost)
+// TODO: 0.05% per side is a placeholder estimate for liquid NSE large-caps.
+// Small-cap or low-volume names will require dynamic spread-based calibration in production.
+export const SLIPPAGE_PCT = 0.0005;
 
 export interface BacktestTradeConfig {
   capital: number;
