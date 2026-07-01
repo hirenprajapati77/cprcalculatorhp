@@ -202,4 +202,46 @@ test('Metrics Service — Signal Bucketing', async (t) => {
     assert.strictEqual(stats.total, 2, 'Bucket should contain both trades');
     assert.strictEqual(stats.win, 1, 'Bucket should correctly count 1 winner');
   });
+
+  await t.test('excludes breakeven trades (pnl === 0) from losingTrades denominator', () => {
+    // 3 trades: 1 win (+500), 1 breakeven (0), 1 loss (-200)
+    const trades = [
+      {
+        pnl: 500,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_TARGET',
+        exitPrice: 105,
+        entryPrice: 100,
+        rr: 2,
+        durationDays: 1
+      },
+      {
+        pnl: 0,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_TIME_EXIT',
+        exitPrice: 100,
+        entryPrice: 100,
+        rr: 0,
+        durationDays: 3
+      },
+      {
+        pnl: -200,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_SL',
+        exitPrice: 98,
+        entryPrice: 100,
+        rr: -1,
+        durationDays: 1
+      }
+    ];
+
+    const { metrics } = MetricsService.computeMetricsFromTrades(trades, 100000);
+
+    // winRate should be 1 / 3 = 33.333% (approx 33.3)
+    assert.ok(Math.abs(metrics.winRate - 33.33) < 0.1, `Expected winRate ~33.33%, got ${metrics.winRate}%`);
+
+    // expectancy should be (1/3 * 500) - (1/3 * 200) = 100 (which is exactly net PnL 300 / 3)
+    // If avgLoss was diluted to 100, expectancy would be 133.33. If avgLoss is correct (200), expectancy is 100.
+    assert.ok(Math.abs(metrics.expectancy - 100) < 0.01, `Expected expectancy to be 100, got ${metrics.expectancy}`);
+  });
 });
