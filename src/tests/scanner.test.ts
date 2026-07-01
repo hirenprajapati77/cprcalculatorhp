@@ -361,3 +361,48 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
   });
 });
 
+test('SMA Slope — non-overlapping windows produce meaningful slope', async (t) => {
+  // Mirror the fixed logic from market.service.ts sma20/sma50 slope calculation
+  function computeSmaSlopes(closes: number[]) {
+    let sma20Slope = 0, sma50Slope = 0;
+    if (closes.length >= 40) {
+      const sma20     = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+      const sma20prev = closes.slice(-40, -20).reduce((a, b) => a + b, 0) / 20;
+      sma20Slope = sma20 - sma20prev;
+    }
+    if (closes.length >= 100) {
+      const sma50     = closes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+      const sma50prev = closes.slice(-100, -50).reduce((a, b) => a + b, 0) / 50;
+      sma50Slope = sma50 - sma50prev;
+    }
+    return { sma20Slope, sma50Slope };
+  }
+
+  await t.test('rising price series produces sma20Slope > 10 with 40 closes', () => {
+    const closes = Array.from({ length: 40 }, (_, i) => 100 + i);
+    const { sma20Slope } = computeSmaSlopes(closes);
+    assert.ok(sma20Slope > 0, `Expected sma20Slope > 0, got ${sma20Slope}`);
+    // Non-overlapping windows differ by 20 bars — slope should be substantial
+    assert.ok(sma20Slope >= 10, `Expected sma20Slope >= 10, got ${sma20Slope}`);
+  });
+
+  await t.test('falling price series produces negative sma20Slope', () => {
+    const closes = Array.from({ length: 40 }, (_, i) => 139 - i);
+    const { sma20Slope } = computeSmaSlopes(closes);
+    assert.ok(sma20Slope < 0, `Expected sma20Slope < 0, got ${sma20Slope}`);
+  });
+
+  await t.test('insufficient history (< 40 bars) returns sma20Slope = 0', () => {
+    const closes = Array.from({ length: 25 }, (_, i) => 100 + i);
+    const { sma20Slope } = computeSmaSlopes(closes);
+    assert.strictEqual(sma20Slope, 0, 'Should return 0 when history < 40 bars');
+  });
+
+  await t.test('flat price series produces sma20Slope = 0', () => {
+    const closes = Array.from({ length: 40 }, () => 100);
+    const { sma20Slope } = computeSmaSlopes(closes);
+    assert.strictEqual(sma20Slope, 0, 'Flat series should produce slope of 0');
+  });
+});
+
+
