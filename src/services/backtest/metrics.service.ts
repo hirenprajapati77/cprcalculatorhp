@@ -28,6 +28,7 @@ export class MetricsService {
 
     let totalTrades = 0;
     let winningTrades = 0;
+    let losingTrades = 0;
     let grossProfit = 0;
     let grossLoss = 0;
     let totalRR = 0;
@@ -55,7 +56,8 @@ export class MetricsService {
       if (pnl > 0) {
         winningTrades++;
         grossProfit += pnl;
-      } else {
+      } else if (pnl < 0) {
+        losingTrades++;
         grossLoss += Math.abs(pnl);
       }
 
@@ -74,12 +76,12 @@ export class MetricsService {
     }
 
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+    const lossRate = totalTrades > 0 ? (losingTrades / totalTrades) * 100 : 0;
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 999 : 0);
     const avgRR = totalTrades > 0 ? totalRR / totalTrades : 0;
     const avgWin  = winningTrades > 0 ? grossProfit / winningTrades : 0;
-    const losingTrades = totalTrades - winningTrades;
     const avgLoss = losingTrades > 0 ? grossLoss / losingTrades : 0;
-    const expectancy = (winRate / 100 * avgWin) - ((1 - winRate / 100) * avgLoss);
+    const expectancy = (winRate / 100 * avgWin) - (lossRate / 100 * avgLoss);
     
     const RISK_FREE_DAILY = 0.065 / 252;
     const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.exitPrice !== null && t.exitPrice !== undefined);
