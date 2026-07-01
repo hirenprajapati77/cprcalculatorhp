@@ -159,3 +159,47 @@ test('Backtest — no overlapping same-symbol trades within holding window', asy
     }
   });
 });
+
+import { MetricsService } from '../services/backtest/metrics.service';
+
+test('Metrics Service — Signal Bucketing', async (t) => {
+  await t.test('groups trades with the same stable signal key into a single signalSuccess bucket', () => {
+    // Two trades, same NARROW_CPR_BULLISH signal, different widths (simulated via cprWidth).
+    // Prior to fix, trade.signal embedded the width, causing n=1 buckets.
+    const trades = [
+      {
+        pnl: 500,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_TARGET',
+        exitPrice: 110,
+        entryPrice: 100,
+        rr: 2,
+        cprWidth: 0.25,
+        exitDate: '2024-01-02T10:00:00Z',
+        durationDays: 1
+      },
+      {
+        pnl: -200,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_SL',
+        exitPrice: 98,
+        entryPrice: 100,
+        rr: -1,
+        cprWidth: 0.15,
+        exitDate: '2024-01-03T10:00:00Z',
+        durationDays: 1
+      }
+    ];
+
+    const { signalSuccess } = MetricsService.computeMetricsFromTrades(trades, 100000);
+
+    // Should only have 1 bucket key: NARROW_CPR_BULLISH
+    const keys = Object.keys(signalSuccess);
+    assert.strictEqual(keys.length, 1, 'Trades should group into exactly one signal bucket');
+    assert.strictEqual(keys[0], 'NARROW_CPR_BULLISH');
+    
+    const stats = signalSuccess['NARROW_CPR_BULLISH'];
+    assert.strictEqual(stats.total, 2, 'Bucket should contain both trades');
+    assert.strictEqual(stats.win, 1, 'Bucket should correctly count 1 winner');
+  });
+});

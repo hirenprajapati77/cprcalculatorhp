@@ -16,6 +16,16 @@ export class MetricsService {
 
     if (trades.length === 0) return null;
 
+    const { metrics, monthlyPnL, signalSuccess } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
+    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess);
+  }
+
+  /**
+   * Pure function to compute metrics from a list of trades.
+   * Extracted for unit testing signal bucketing and math.
+   */
+  static computeMetricsFromTrades(trades: any[], initialCapital: number) {
+
     let totalTrades = 0;
     let winningTrades = 0;
     let grossProfit = 0;
@@ -23,7 +33,7 @@ export class MetricsService {
     let totalRR = 0;
     
     // For Drawdown calculation
-    let equity = run ? run.capital : 100000;
+    let equity = initialCapital;
     let peak = equity;
     let maxDrawdown = 0;
 
@@ -110,17 +120,25 @@ export class MetricsService {
     const roundedSharpe = Math.round(sharpe * 100) / 100;
     const roundedSortino = Math.round(sortino * 100) / 100;
 
+    const metricsData = {
+      winRate,
+      profitFactor,
+      expectancy,
+      maxDrawdown,
+      sharpe: roundedSharpe,
+      sortino: roundedSortino,
+      avgRR
+    };
+
+    return { metrics: metricsData, monthlyPnL, signalSuccess };
+  }
+
+  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any) {
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
       data: {
         backtestRunId: runId,
-        winRate,
-        profitFactor,
-        expectancy, // zero-guards on avgWin/avgLoss above prevent NaN
-        maxDrawdown,
-        sharpe: roundedSharpe,
-        sortino: roundedSortino,
-        avgRR
+        ...metricsData
       }
     });
 
@@ -129,21 +147,21 @@ export class MetricsService {
       await prisma.backtestMetricSnapshot.create({
         data: {
           backtestRunId: runId,
-          period: month,
+          period: month as string,
           metricType: 'MONTH',
-          metricKey: month,
-          metricValue: pnl
+          metricKey: month as string,
+          metricValue: pnl as number
         }
       });
     }
 
-    for (const [signal, stats] of Object.entries(signalSuccess)) {
+    for (const [signal, stats] of Object.entries(signalSuccess) as any) {
       await prisma.backtestMetricSnapshot.create({
         data: {
           backtestRunId: runId,
           period: 'ALL',
           metricType: 'SIGNAL_WINRATE',
-          metricKey: signal,
+          metricKey: signal as string,
           metricValue: stats.total > 0 ? (stats.win / stats.total) * 100 : 0
         }
       });

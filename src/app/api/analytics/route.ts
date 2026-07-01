@@ -67,7 +67,8 @@ export async function GET(req: NextRequest) {
       monthlyPnlMap[monthYear].tradeCount += 1;
 
       // Signal Breakdown
-      const baseSignal = trade.signal.split(' w=')[0]; // Simplify "NARROW_CPR BULLISH w=0.24%"
+      // Safe to use directly since backtest now stores a stable key (e.g. NARROW_CPR_BULLISH)
+      const baseSignal = trade.signal;
       if (!signalMap[baseSignal]) {
         signalMap[baseSignal] = { wins: 0, losses: 0, totalPnl: 0 };
       }
