@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { RankingService } from '../ranking.service';
 
 const prisma = new PrismaClient();
 
@@ -16,8 +17,8 @@ export class MetricsService {
 
     if (trades.length === 0) return null;
 
-    const { metrics, monthlyPnL, signalSuccess } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
-    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess);
+    const { metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
+    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData);
   }
 
   /**
@@ -41,8 +42,26 @@ export class MetricsService {
     const monthlyPnL: Record<string, number> = {};
     const signalSuccess: Record<string, { win: number; total: number }> = {};
 
+    // Signal tag & score band stats aggregators
+    const signalStats: Record<string, { win: number; total: number; totalRR: number; grossProfit: number; grossLoss: number; winningTrades: number; losingTrades: number }> = {};
+    const scoreBandStats: Record<string, { win: number; total: number; totalRR: number; grossProfit: number; grossLoss: number; winningTrades: number; losingTrades: number }> = {};
+
+    // Fill rate stats
+    let totalSetups = 0;
+    let triggeredSetups = 0;
+    let neverTriggeredSetups = 0;
+
     for (const trade of trades) {
-      if (trade.status === 'OPEN') continue;
+      if (trade.strategyMode === 'SCANNER_DRIVEN') {
+        totalSetups++;
+        if (trade.status === 'NEVER_TRIGGERED') {
+          neverTriggeredSetups++;
+        } else {
+          triggeredSetups++;
+        }
+      }
+
+      if (trade.status === 'OPEN' || trade.status === 'NEVER_TRIGGERED') continue;
 
       totalTrades++;
       const pnl = trade.pnl || 0;
@@ -73,6 +92,55 @@ export class MetricsService {
       }
       signalSuccess[trade.signal].total++;
       if (pnl > 0) signalSuccess[trade.signal].win++;
+
+      // Tag-specific validation
+      const tags: string[] = [];
+      if (trade.signalsJson) {
+        try {
+          tags.push(...JSON.parse(trade.signalsJson));
+        } catch {
+          tags.push(trade.signal);
+        }
+      } else {
+        tags.push(trade.signal);
+      }
+
+      for (const tag of tags) {
+        if (!signalStats[tag]) {
+          signalStats[tag] = { win: 0, total: 0, totalRR: 0, grossProfit: 0, grossLoss: 0, winningTrades: 0, losingTrades: 0 };
+        }
+        const s = signalStats[tag];
+        s.total++;
+        s.totalRR += trade.rr || 0;
+        if (pnl > 0) {
+          s.win++;
+          s.winningTrades++;
+          s.grossProfit += pnl;
+        } else if (pnl < 0) {
+          s.losingTrades++;
+          s.grossLoss += Math.abs(pnl);
+        }
+      }
+
+      // Score-band validation
+      const scoreBand = trade.score !== null && trade.score !== undefined
+        ? RankingService.getClassification(trade.score)
+        : 'Unknown';
+
+      if (!scoreBandStats[scoreBand]) {
+        scoreBandStats[scoreBand] = { win: 0, total: 0, totalRR: 0, grossProfit: 0, grossLoss: 0, winningTrades: 0, losingTrades: 0 };
+      }
+      const sb = scoreBandStats[scoreBand];
+      sb.total++;
+      sb.totalRR += trade.rr || 0;
+      if (pnl > 0) {
+        sb.win++;
+        sb.winningTrades++;
+        sb.grossProfit += pnl;
+      } else if (pnl < 0) {
+        sb.losingTrades++;
+        sb.grossLoss += Math.abs(pnl);
+      }
     }
 
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
@@ -84,10 +152,7 @@ export class MetricsService {
     const expectancy = (winRate / 100 * avgWin) - (lossRate / 100 * avgLoss);
     
     const RISK_FREE_DAILY = 0.065 / 252;
-    const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.exitPrice !== null && t.exitPrice !== undefined);
-    // NOTE: Approximation — using duration-adjusted trade returns normalized by holding period.
-    // A proper calendar equity curve would map each trade's daily P&L to actual calendar dates;
-    // that implementation is deferred as a known limitation.
+    const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED' && t.exitPrice !== null && t.exitPrice !== undefined);
     const dailyReturns = closedTrades.map(t => {
       const tradeReturn = ((t.exitPrice as number) - t.entryPrice) / t.entryPrice;
       return tradeReturn / (t.durationDays || 1); // normalize by holding duration
@@ -100,22 +165,19 @@ export class MetricsService {
     const variance = dailyReturns.reduce(
       (sum, r) => sum + Math.pow(r - avgReturn, 2), 0
     ) / (dailyReturns.length || 1);
-    const stdDev = Math.sqrt(variance);
 
-    // Annualize Sharpe: multiply by sqrt(252) (was missing)
-    const sharpe = stdDev > 0 
+    const stdDev = Math.sqrt(variance);
+    const sharpe = stdDev > 0
       ? ((avgReturn - RISK_FREE_DAILY) / stdDev) * Math.sqrt(252)
       : 0;
 
-    const downsideReturns = dailyReturns.filter(
-      r => r < RISK_FREE_DAILY
-    );
+    // Sortino calculation (downside deviation only)
+    const downsideReturns = dailyReturns.map(r => Math.min(0, r - RISK_FREE_DAILY));
     const downsideVariance = downsideReturns.reduce(
-      (sum, r) => sum + Math.pow(r - RISK_FREE_DAILY, 2), 0
+      (sum, r) => sum + Math.pow(r, 2), 0
     ) / (downsideReturns.length || 1);
     const downsideDev = Math.sqrt(downsideVariance);
-    // Annualize Sortino: multiply by sqrt(252) (was missing)
-    const sortino = downsideDev > 0 
+    const sortino = downsideDev > 0
       ? ((avgReturn - RISK_FREE_DAILY) / downsideDev) * Math.sqrt(252)
       : 0;
 
@@ -132,10 +194,42 @@ export class MetricsService {
       avgRR
     };
 
-    return { metrics: metricsData, monthlyPnL, signalSuccess };
+    // Calculate final stats for tags and score bands
+    const signalAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number }> = {};
+    for (const [tag, s] of Object.entries(signalStats)) {
+      const wr = s.total > 0 ? (s.win / s.total) * 100 : 0;
+      const lr = s.total > 0 ? (s.losingTrades / s.total) * 100 : 0;
+      const ar = s.total > 0 ? s.totalRR / s.total : 0;
+      const aw = s.winningTrades > 0 ? s.grossProfit / s.winningTrades : 0;
+      const al = s.losingTrades > 0 ? s.grossLoss / s.losingTrades : 0;
+      const exp = (wr / 100 * aw) - (lr / 100 * al);
+      signalAnalysis[tag] = { winRate: wr, avgRR: ar, expectancy: exp, total: s.total };
+    }
+
+    const scoreBandAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number }> = {};
+    for (const [sbName, sb] of Object.entries(scoreBandStats)) {
+      const wr = sb.total > 0 ? (sb.win / sb.total) * 100 : 0;
+      const lr = sb.total > 0 ? (sb.losingTrades / sb.total) * 100 : 0;
+      const ar = sb.total > 0 ? sb.totalRR / sb.total : 0;
+      const aw = sb.winningTrades > 0 ? sb.grossProfit / sb.winningTrades : 0;
+      const al = sb.losingTrades > 0 ? sb.grossLoss / sb.losingTrades : 0;
+      const exp = (wr / 100 * aw) - (lr / 100 * al);
+      scoreBandAnalysis[sbName] = { winRate: wr, avgRR: ar, expectancy: exp, total: sb.total };
+    }
+
+    const fillRateData = { totalSetups, triggeredSetups, neverTriggeredSetups };
+
+    return { 
+      metrics: metricsData, 
+      monthlyPnL, 
+      signalSuccess, 
+      signalAnalysis, 
+      scoreBandAnalysis, 
+      fillRateData 
+    };
   }
 
-  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any) {
+  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any) {
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
       data: {
@@ -144,7 +238,7 @@ export class MetricsService {
       }
     });
 
-    // Create Snapshots
+    // Create Snapshots for Months
     for (const [month, pnl] of Object.entries(monthlyPnL)) {
       await prisma.backtestMetricSnapshot.create({
         data: {
@@ -157,6 +251,7 @@ export class MetricsService {
       });
     }
 
+    // Create Snapshots for Signals (Legacy)
     for (const [signal, stats] of Object.entries(signalSuccess) as any) {
       await prisma.backtestMetricSnapshot.create({
         data: {
@@ -165,6 +260,109 @@ export class MetricsService {
           metricType: 'SIGNAL_WINRATE',
           metricKey: signal as string,
           metricValue: stats.total > 0 ? (stats.win / stats.total) * 100 : 0
+        }
+      });
+    }
+
+    // Create Snapshots for SCANNER_DRIVEN advanced tag validation
+    if (signalAnalysis) {
+      for (const [tag, stats] of Object.entries(signalAnalysis) as any) {
+        // Win rate
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCANNER_SIGNAL_WINRATE',
+            metricKey: tag,
+            metricValue: stats.winRate
+          }
+        });
+        // Avg RR
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCANNER_SIGNAL_AVGRR',
+            metricKey: tag,
+            metricValue: stats.avgRR
+          }
+        });
+        // Expectancy
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCANNER_SIGNAL_EXPECTANCY',
+            metricKey: tag,
+            metricValue: stats.expectancy
+          }
+        });
+      }
+    }
+
+    // Create Snapshots for SCANNER_DRIVEN advanced score band validation
+    if (scoreBandAnalysis) {
+      for (const [sbName, stats] of Object.entries(scoreBandAnalysis) as any) {
+        // Win rate
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCORE_BAND_WINRATE',
+            metricKey: sbName,
+            metricValue: stats.winRate
+          }
+        });
+        // Avg RR
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCORE_BAND_AVGRR',
+            metricKey: sbName,
+            metricValue: stats.avgRR
+          }
+        });
+        // Expectancy
+        await prisma.backtestMetricSnapshot.create({
+          data: {
+            backtestRunId: runId,
+            period: 'ALL',
+            metricType: 'SCORE_BAND_EXPECTANCY',
+            metricKey: sbName,
+            metricValue: stats.expectancy
+          }
+        });
+      }
+    }
+
+    // Create Snapshots for Fill Rate (Setup count, Trigger count, Never Triggered count)
+    if (fillRateData) {
+      await prisma.backtestMetricSnapshot.create({
+        data: {
+          backtestRunId: runId,
+          period: 'ALL',
+          metricType: 'FILL_RATE_TOTAL_SETUPS',
+          metricKey: 'TOTAL_SETUPS',
+          metricValue: fillRateData.totalSetups
+        }
+      });
+      await prisma.backtestMetricSnapshot.create({
+        data: {
+          backtestRunId: runId,
+          period: 'ALL',
+          metricType: 'FILL_RATE_TRIGGERED',
+          metricKey: 'TRIGGERED_SETUPS',
+          metricValue: fillRateData.triggeredSetups
+        }
+      });
+      await prisma.backtestMetricSnapshot.create({
+        data: {
+          backtestRunId: runId,
+          period: 'ALL',
+          metricType: 'FILL_RATE_NEVER_TRIGGERED',
+          metricKey: 'NEVER_TRIGGERED_SETUPS',
+          metricValue: fillRateData.neverTriggeredSetups
         }
       });
     }
