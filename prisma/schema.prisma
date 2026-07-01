@@ -165,6 +165,7 @@ model Trade {
   positionSize Float
   pnl          Float?
   pnlPercent   Float?
+  cprWidth     Float?
 
   run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
   journal Journal[]

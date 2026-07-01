@@ -262,8 +262,8 @@ export class BacktestService {
 
             // Signal reflects actual CPR conditions
             const signal = bias === 'BULLISH'
-              ? `NARROW_CPR BULLISH w=${widthPct.toFixed(3)}%`
-              : `NARROW_CPR BEARISH w=${widthPct.toFixed(3)}%`;
+              ? 'NARROW_CPR_BULLISH'
+              : 'NARROW_CPR_BEARISH';
 
             // Fees: STT + brokerage estimate (0.03% of notional per side)
             const exitPriceForFees = tradeResult.exitPrice ?? entryPrice;
@@ -271,6 +271,7 @@ export class BacktestService {
             const netPnl = tradeResult.pnl - fees;
 
             const trade = await prisma.trade.create({
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               data: {
                 backtestRunId: runId,
                 symbol,
@@ -293,8 +294,9 @@ export class BacktestService {
                 durationDays: tradeResult.durationDays,
                 positionSize: tradeResult.positionSize,
                 pnl: netPnl,
-                pnlPercent: netPnl / run.capital * 100
-              }
+                pnlPercent: netPnl / run.capital * 100,
+                cprWidth: widthPct
+              } as any
             });
 
             if (tradeResult.journalEvents.length > 0) {
