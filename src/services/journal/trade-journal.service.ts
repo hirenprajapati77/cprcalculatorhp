@@ -219,6 +219,7 @@ export class TradeJournalService {
     ]);
 
     const closed  = allEntries.filter(e => e.pnl !== null);
+    // Strictly positive PnL = winner; breakeven (pnl === 0) is not a win
     const winners = closed.filter(e => (e.pnl ?? 0) > 0);
 
     const byType = {
@@ -235,12 +236,15 @@ export class TradeJournalService {
           )
         : 0;
 
+    // Minimum 5 trades required before crowning a bestSignalType
+    const MIN_SAMPLE = 5;
     const bestType = (['CPR', 'BTST', 'STBT'] as const).reduce(
       (best, t) => {
+        if (byType[t].length < MIN_SAMPLE) return best;
         const wr = winRateByType(byType[t]);
-        return wr > best.winRate ? { type: t, winRate: wr } : best;
+        return wr > best.winRate ? { type: t as 'CPR' | 'BTST' | 'STBT' | null, winRate: wr } : best;
       },
-      { type: 'CPR' as 'CPR' | 'BTST' | 'STBT', winRate: 0 }
+      { type: null as 'CPR' | 'BTST' | 'STBT' | null, winRate: 0 }
     );
 
     return {

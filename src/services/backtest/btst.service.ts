@@ -7,7 +7,7 @@
  * See project audit notes.
  */
 import { MarketStockData, MarketService } from '../market.service';
-import { calculateCPR } from '@/lib/cpr-engine';
+import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
 import { isMarketOpen } from '@/lib/market-hours';
@@ -329,7 +329,7 @@ export class BtstService {
       close: todayCandle.close,
     });
 
-    const virginCPR = stock.low > Math.max(todayCpr.tc, todayCpr.bc) || stock.high < Math.min(todayCpr.tc, todayCpr.bc);
+    const virginCPR = isCprVirgin(stock.high, stock.low, todayCpr.tc, todayCpr.bc);
     
     const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
@@ -375,7 +375,7 @@ export class BtstService {
       vwap: isLong
         ? (stock.vwap && stock.ltp > stock.vwap * 1.002 ? 20 : 0)
         : (stock.vwap && stock.ltp < stock.vwap * 0.998 ? 20 : 0),
-      conf15m: stock.avgVolume >= 500000 ? 10 : 0,
+      liquidity: stock.avgVolume >= 500000 ? 10 : 0,  // was conf15m (misnomer)
       closeStrength: stock.candle15m
         ? (isLong
             ? (stock.candle15m.close >= stock.candle15m.high * 0.995 ? 15 : 0)

@@ -1,4 +1,4 @@
-import { calculateCPR } from '@/lib/cpr-engine';
+import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
 
 export interface SignalResult {
@@ -107,7 +107,12 @@ export class SignalService {
     
     // Virgin = yesterday's CPR untouched (not 
     // some arbitrary older CPR)
-    const virginCPR = !yesterdayTouchedCpr;
+    const virginCPR = isCprVirgin(
+      yesterdayCandle.high,
+      yesterdayCandle.low,
+      cprYesterday.tc,
+      cprYesterday.bc
+    );
     if (virginCPR) {
       signals.push('VIRGIN');
     }
@@ -159,8 +164,8 @@ export class SignalService {
     }
 
     // 4. Hot Zone (Confluence Zone)
-    // Defined if CPR is Narrow AND previous close or LTP is within 0.15% of CPR Pivot
-    const closeDistance = Math.abs(stock.close - pivot) / pivot;
+    // Defined if CPR is Narrow AND current LTP is within 0.15% of CPR Pivot
+    const closeDistance = Math.abs(stock.ltp - pivot) / pivot;
     const hotZone = cprToday.classification === 'NARROW' && closeDistance <= 0.0015;
     if (hotZone) {
       signals.push('HOT_ZONE');

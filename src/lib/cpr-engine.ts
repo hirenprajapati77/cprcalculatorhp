@@ -59,3 +59,27 @@ export function calculateCPR(input: CPRInput): CPRResult {
   };
 }
 export default calculateCPR;
+
+/**
+ * Shared helper: returns true when the session (sessionLow..sessionHigh)
+ * never touched the CPR band (cprBc..cprTc).
+ * Use with:
+ *   - signal.service.ts: (yesterdayCandle.high, yesterdayCandle.low, cprYesterday.tc, cprYesterday.bc)
+ *   - btst.service.ts: (stock.high, stock.low, todayCpr.tc, todayCpr.bc)
+ */
+export function isCprVirgin(
+  sessionHigh: number,
+  sessionLow: number,
+  cprTc: number,
+  cprBc: number
+): boolean {
+  return sessionLow > Math.max(cprTc, cprBc) || sessionHigh < Math.min(cprTc, cprBc);
+}
+
+/**
+ * Shared CPR width classification — single source of truth.
+ * NARROW < 0.3%, NORMAL < 0.8%, WIDE >= 0.8%
+ */
+export function classifyCprWidth(widthPct: number): 'NARROW' | 'NORMAL' | 'WIDE' {
+  return widthPct < 0.3 ? 'NARROW' : widthPct < 0.8 ? 'NORMAL' : 'WIDE';
+}
