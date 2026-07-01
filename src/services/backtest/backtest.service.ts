@@ -271,7 +271,6 @@ export class BacktestService {
             const netPnl = tradeResult.pnl - fees;
 
             const trade = await prisma.trade.create({
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               data: {
                 backtestRunId: runId,
                 symbol,
@@ -296,7 +295,7 @@ export class BacktestService {
                 pnl: netPnl,
                 pnlPercent: netPnl / run.capital * 100,
                 cprWidth: widthPct
-              } as any
+              }
             });
 
             if (tradeResult.journalEvents.length > 0) {
