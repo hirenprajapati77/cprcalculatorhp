@@ -4,16 +4,20 @@ export class RankingService {
   /**
    * Calculates a score out of 100 for a stock based on active signals.
    *
-   * Weights:
-   * - Compression (Narrow CPR): +25
-   * - Higher Value (or Inside Value): +20
-   * - Breakout: +20
-   * - Volume (Volume Spike): +10
-   * - Momentum: +10
-   * - Liquidity (High Market Cap / Volume Ratio): +10
-   * - Hot Zone: +5
+   * Category A — CPR Structure (max 45):
+   *   NARROW: +15, HIGHER_VALUE/INSIDE_VALUE: +10, BREAKOUT/BUILD: +10,
+   *   KGS_INSIDE_CPR: +10, VIRGIN: +5, ASC+BULLISH or DESC+BEARISH: +5
    *
-   * The total score is normalized between 0-100.
+   * Category B — Volume & Liquidity (max 25):
+   *   VOLUME_SPIKE or ratio >= 1.5: +15, ratio >= 1.2: +10
+   *
+   * Category C — Momentum & Trend (max 20):
+   *   MOMENTUM: +10, NORMAL + directional: +10
+   *
+   * Category D — Hot Zone & RTP (max 10):
+   *   HOT_ZONE: +5, NARROW + KGS_RTP: +5
+   *
+   * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, KGS_OUTSIDE_CPR
    */
   static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
     const { signals, volume, avgVolume, marketCap } = result;

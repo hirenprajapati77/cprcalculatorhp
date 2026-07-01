@@ -34,7 +34,9 @@ export class GapProbabilityService {
     );
 
     const gapCount = relevantGaps.length;
-    const totalCandles = history.length || 1;
+    // Denominator is candlesWithGap.length (history.length - 1),
+    // not history.length — that would inflate the denominator by 1.
+    const totalCandles = candlesWithGap.length || 1;
     const gapProbability = gapCount / totalCandles;
 
     // Expected gap = average of relevant gaps

@@ -48,10 +48,11 @@ export class MtfCprService {
     });
 
     const wWidth = Math.abs(weeklyCPR.tc - weeklyCPR.bc) / weeklyCPR.pivot * 100;
-    const wClass = wWidth <= 0.5 ? 'NARROW' : wWidth > 0.8 ? 'WIDE' : 'NORMAL';
+    // Thresholds match cpr-engine.ts: NARROW < 0.3%, WIDE >= 0.8%
+    const wClass = wWidth < 0.3 ? 'NARROW' : wWidth < 0.8 ? 'NORMAL' : 'WIDE';
 
     const mWidth = Math.abs(monthlyCPR.tc - monthlyCPR.bc) / monthlyCPR.pivot * 100;
-    const mClass = mWidth <= 0.5 ? 'NARROW' : mWidth > 0.8 ? 'WIDE' : 'NORMAL';
+    const mClass = mWidth < 0.3 ? 'NARROW' : mWidth < 0.8 ? 'NORMAL' : 'WIDE';
 
     const weekly = { ...weeklyCPR, width: wWidth, classification: wClass as "NARROW" | "NORMAL" | "WIDE" };
     const monthly = { ...monthlyCPR, width: mWidth, classification: mClass as "NARROW" | "NORMAL" | "WIDE" };
