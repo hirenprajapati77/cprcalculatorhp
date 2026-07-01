@@ -27,9 +27,9 @@ export class TelegramService {
     }
   }
 
-  static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<void> {
-    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 70);
-    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 70);
+  static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<{ sent: boolean; reason?: string }> {
+    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 60);
+    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 60);
 
     const strongSignalCount = results.filter(r => r.signals && r.signals.some(s => s.includes('STRONG') || s.includes('BREAKOUT') || s.includes('HIGHER_VALUE') || s.includes('LOWER_VALUE'))).length;
     const breakoutCount = results.filter(r => r.signals && r.signals.includes('BREAKOUT')).length;
@@ -37,13 +37,19 @@ export class TelegramService {
     const totalConflict = results.filter(r => r.tag === 'NEUTRAL_CONFLICT').length;
     const avoid = results.filter(r => Math.max(r.longScore, r.shortScore) < 30).length;
 
+    const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' });
+
     // Only send if strongSignal > 0 OR breakoutReady > 2
     if (strongSignalCount === 0 && breakoutCount <= 2 && longs.length === 0 && shorts.length === 0) {
-      console.log('[Telegram] No strong setups found. Skipping BTST alert.');
-      return;
+      await this.sendMessage(
+        `📊 <b>CPR PRO — BTST/STBT SCAN</b>\n` +
+        `📅 ${dateStr}\n\n` +
+        `<i>No qualifying setups found today (score < 60).\n` +
+        `Scanner ran successfully.</i>`
+      );
+      return { sent: false, reason: 'no setups' };
     }
 
-    const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' });
 
     let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ 15:20 IST\n\n`;
 
@@ -80,6 +86,7 @@ export class TelegramService {
 
     // Uses default TELEGRAM_CHAT_ID (no chatId arg = personal BTST alert — unchanged)
     await this.sendMessage(text);
+    return { sent: true };
   }
 
   static async sendBreakoutAlert(
