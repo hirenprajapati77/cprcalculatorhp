@@ -471,14 +471,16 @@ export class MarketService {
 
             const closes = history.map(c => c.close);
             let sma20Slope = 0, sma50Slope = 0;
-            if (closes.length >= 25) {
+            // Non-overlapping prior windows: sma20prev uses days -40 to -20 (no shared bars with sma20)
+            if (closes.length >= 40) {
               const sma20 = closes.slice(-20).reduce((a,b)=>a+b,0)/20;
-              const sma20prev = closes.slice(-25,-5).reduce((a,b)=>a+b,0)/20;
+              const sma20prev = closes.slice(-40,-20).reduce((a,b)=>a+b,0)/20;
               sma20Slope = sma20 - sma20prev;
             }
-            if (closes.length >= 55) {
+            // Non-overlapping prior windows: sma50prev uses days -100 to -50 (no shared bars with sma50)
+            if (closes.length >= 100) {
               const sma50 = closes.slice(-50).reduce((a,b)=>a+b,0)/50;
-              const sma50prev = closes.slice(-55,-5).reduce((a,b)=>a+b,0)/50;
+              const sma50prev = closes.slice(-100,-50).reduce((a,b)=>a+b,0)/50;
               sma50Slope = sma50 - sma50prev;
             }
 
