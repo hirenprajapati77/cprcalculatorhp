@@ -244,4 +244,25 @@ test('Metrics Service — Signal Bucketing', async (t) => {
     // If avgLoss was diluted to 100, expectancy would be 133.33. If avgLoss is correct (200), expectancy is 100.
     assert.ok(Math.abs(metrics.expectancy - 100) < 0.01, `Expected expectancy to be 100, got ${metrics.expectancy}`);
   });
+
+  await t.test('computes drawdown relative to initialCapital parameter', () => {
+    // Single loss trade of -25000
+    const trades = [
+      {
+        pnl: -25000,
+        signal: 'NARROW_CPR_BULLISH',
+        status: 'CLOSED_SL',
+        exitPrice: 90,
+        entryPrice: 100,
+        rr: -1,
+        durationDays: 1
+      }
+    ];
+
+    // Compute metrics with capital = 250000. Expected drawdown = 25000 / 250000 * 100 = 10%.
+    // If it fallback/hardcoded to 100000, drawdown would be 25000 / 100000 * 100 = 25%.
+    const { metrics } = MetricsService.computeMetricsFromTrades(trades, 250000);
+
+    assert.strictEqual(metrics.maxDrawdown, 10, `Expected drawdown to be 10%, got ${metrics.maxDrawdown}%`);
+  });
 });
