@@ -192,9 +192,9 @@ export class SignalService {
     }
 
     // 8. Gap Up / Gap Down
-    if (stock.open > stock.high) {
+    if (stock.open > yesterdayCandle.high) {
       signals.push('GAP_UP');
-    } else if (stock.open < stock.low) {
+    } else if (stock.open < yesterdayCandle.low) {
       signals.push('GAP_DOWN');
     }
 

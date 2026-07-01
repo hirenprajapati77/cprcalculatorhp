@@ -34,9 +34,9 @@ test('Scanner Service Signals Evaluation', async (t) => {
       market: 'NSE',
       sector: 'Financial Services',
       open: 110, // open > yesterday high of 105 (GAP UP)
-      high: 105,
-      low: 95,
-      close: 101, // P = 100.33, BC = 100, TC = 100.67
+      high: 112, // MUST be >= open
+      low: 109,  // MUST be <= open
+      close: 112, // P = 111, BC = 110, TC = 112
       volume: 100000,
       avgVolume: 100000,
       marketCap: 450000,
@@ -55,14 +55,14 @@ test('Scanner Service Signals Evaluation', async (t) => {
           open: 100,
           high: 105,
           low: 95,
-          close: 101,
+          close: 101, // P = 100.33, BC = 100, TC = 100.67
           volume: 100000,
         },
         {
           date: todayStr,
           open: 110,
           high: 112,
-          low: 110,
+          low: 109,
           close: 112,
           volume: 100000,
         }
