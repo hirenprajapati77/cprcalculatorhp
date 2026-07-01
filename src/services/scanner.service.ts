@@ -33,9 +33,9 @@ export class ScannerService {
   /**
    * Evaluates all CPR levels, price-action signals, entry targets, and SL parameters.
    */
-  static scanStock(stock: MarketStockData): ScannerSignalResult {
+  static scanStock(stock: MarketStockData, asOfDate?: string): ScannerSignalResult {
     // Differentiate yesterday's and today's daily candles robustly
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = asOfDate || new Date().toISOString().split('T')[0];
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
@@ -75,7 +75,7 @@ export class ScannerService {
     const _volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
     // 2. Fetch Advanced Signals
-    const signalData = SignalService.getSignals(stock);
+    const signalData = SignalService.getSignals(stock, asOfDate);
     const signals = signalData.signals;
 
     // 3. Calculate Quant Score & Classification (uses cprToday values)

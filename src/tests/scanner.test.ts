@@ -405,4 +405,89 @@ test('SMA Slope — non-overlapping windows produce meaningful slope', async (t)
   });
 });
 
+test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t) => {
+  const mockStock = {
+    symbol: 'TESTASOF',
+    market: 'NSE' as const,
+    sector: 'Technology',
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 1000000,
+    avgVolume: 900000,
+    marketCap: 100000000,
+    ltp: 100,
+    history: [
+      {
+        date: '2026-06-01',
+        open: 100,
+        high: 102,
+        low: 98,
+        close: 100,
+        volume: 100000
+      },
+      {
+        // Day 2: low 90, close 95
+        date: '2026-06-02',
+        open: 100,
+        high: 102,
+        low: 90,
+        close: 95,
+        volume: 100000
+      },
+      {
+        // Day 3: massive gap up relative to Day 2 low/close
+        date: '2026-06-03',
+        open: 110,
+        high: 115,
+        low: 108,
+        close: 112,
+        volume: 120000
+      }
+    ]
+  };
+
+  await t.test('scanStock(stock, "2026-06-03") forwards asOfDate, triggers SignalService-only GAP_UP signal', () => {
+    const res = ScannerService.scanStock({
+      ...mockStock,
+      open: 110,
+      high: 115,
+      low: 108,
+      close: 112,
+      ltp: 112
+    }, '2026-06-03');
+
+    // GAP_UP is computed ONLY by SignalService.getSignals()
+    assert.ok(res.signals.includes('GAP_UP'), 'Should include GAP_UP signal when asOfDate aligns to Day 3');
+  });
+
+  await t.test('scanStock(stock, "2026-06-02") does not trigger GAP_UP', () => {
+    const res = ScannerService.scanStock({
+      ...mockStock,
+      open: 100,
+      high: 102,
+      low: 90,
+      close: 95,
+      ltp: 95
+    }, '2026-06-02');
+
+    assert.ok(!res.signals.includes('GAP_UP'), 'Should not include GAP_UP when asOfDate is Day 2');
+  });
+
+  await t.test('scanStock(stock) with no asOfDate defaults to real system date (no GAP_UP)', () => {
+    const res = ScannerService.scanStock({
+      ...mockStock,
+      open: 110,
+      high: 115,
+      low: 108,
+      close: 112,
+      ltp: 112
+    });
+
+    assert.ok(!res.signals.includes('GAP_UP'), 'Should default to system time and not match historical dates');
+  });
+});
+
+
 

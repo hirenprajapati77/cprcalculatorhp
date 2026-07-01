@@ -20,12 +20,12 @@ export class SignalService {
   /**
    * Computes CPR-based PivotBoss and F&O price-action signals.
    */
-  static getSignals(stock: MarketStockData): SignalResult {
+  static getSignals(stock: MarketStockData, asOfDate?: string): SignalResult {
     const signals: string[] = [];
     const ltp = stock.ltp;
     
     // Differentiate yesterday's and today's daily candles robustly
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = asOfDate || new Date().toISOString().split('T')[0];
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
     let dayBeforeYesterdayCandle = yesterdayCandle;
