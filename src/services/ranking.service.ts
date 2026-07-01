@@ -8,7 +8,7 @@ export class RankingService {
    *   NARROW: +15, HIGHER_VALUE/INSIDE_VALUE: +10, BREAKOUT/BUILD: +10,
    *   KGS_INSIDE_CPR: +10, VIRGIN: +5, ASC+BULLISH or DESC+BEARISH: +5
    *
-   * Category B — Volume & Liquidity (max 25):
+   * Category B — Volume & Liquidity (max 25, Volume Ratio only):
    *   VOLUME_SPIKE or ratio >= 1.5: +15, ratio >= 1.2: +10
    *
    * Category C — Momentum & Trend (max 20):
@@ -20,7 +20,7 @@ export class RankingService {
    * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, KGS_OUTSIDE_CPR
    */
   static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
-    const { signals, volume, avgVolume, marketCap } = result;
+    const { signals, volume, avgVolume } = result;
     const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
 
     // Category A: CPR Structure (Max 45)
