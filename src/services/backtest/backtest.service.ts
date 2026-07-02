@@ -207,8 +207,8 @@ export class BacktestService {
                   ? triggeredPrice * (1 + SLIPPAGE_PCT)
                   : triggeredPrice * (1 - SLIPPAGE_PCT);
 
-                const MAX_HOLDING_DAYS = 2;
-                const tradeOhlc = ohlc.slice(triggeredIndex, Math.min(triggeredIndex + MAX_HOLDING_DAYS, ohlc.length));
+                const SAFETY_VALVE_DAYS = 20; // Computational safety valve to prevent out-of-dataset overflow, not a trading rule.
+                const tradeOhlc = ohlc.slice(triggeredIndex, Math.min(triggeredIndex + SAFETY_VALVE_DAYS, ohlc.length));
 
                 const tradeResult = TradeEngineService.simulateTrade(
                   direction,
