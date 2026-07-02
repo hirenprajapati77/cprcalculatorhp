@@ -155,8 +155,10 @@ export class BacktestService {
 
               // 1. Build MarketStockData snapshot for "end of day i"
               const historySlice = ohlc.slice(0, i + 1);
-              const trailing5 = ohlc.slice(Math.max(0, i - 4), i + 1);
-              const avgVolume = trailing5.reduce((sum, d) => sum + d.volume, 0) / trailing5.length;
+              const validHistory = ohlc.slice(0, i); // history excluding setup day (today) to match live market service
+              const avgVolume = validHistory.length > 0
+                ? validHistory.reduce((sum, d) => sum + d.volume, 0) / validHistory.length
+                : today.volume;
 
               const stock: MarketStockData = {
                 symbol,
