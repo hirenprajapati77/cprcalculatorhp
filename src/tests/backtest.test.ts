@@ -317,3 +317,49 @@ test('BacktestService — evaluateTrigger Breakout Trigger Tests', async (t) => 
   });
 });
 
+test('TradeEngineService — SCANNER_DRIVEN holding period and safety valve', async (t) => {
+  const ohlc = [
+    { date: '2026-06-01', open: 100, high: 102, low: 98, close: 100, volume: 1000 },  // Day 1 (Entry day, close 100)
+    { date: '2026-06-02', open: 100, high: 102, low: 98, close: 101, volume: 1000 },  // Day 2 (close 101)
+    { date: '2026-06-03', open: 101, high: 103, low: 99, close: 102, volume: 1000 },  // Day 3 (close 102 - legacy exits here)
+    { date: '2026-06-04', open: 102, high: 104, low: 100, close: 103, volume: 1000 }, // Day 4 (close 103)
+    { date: '2026-06-05', open: 103, high: 105, low: 101, close: 104, volume: 1000 }, // Day 5 (close 104)
+    { date: '2026-06-08', open: 104, high: 112, low: 102, close: 110, volume: 1000 }, // Day 6 (hits target 110!)
+    { date: '2026-06-09', open: 110, high: 112, low: 109, close: 111, volume: 1000 }  // Day 7
+  ];
+
+  await t.test('legacy 2-day cap force-closes trade on time', () => {
+    // Legacy mode slice is length 2
+    const tradeResult = TradeEngineService.simulateTrade(
+      'LONG',
+      100,  // entryPrice
+      95,   // stopLoss
+      110,  // target
+      ohlc.slice(0, 2), // legacy 2 days slice
+      { capital: 100000, riskModel: 'Risk%', riskValue: 1.0, executionMode: 'conservative' }
+    );
+
+    assert.strictEqual(tradeResult.status, 'CLOSED_TIME_EXIT');
+    assert.strictEqual(tradeResult.exitReason, 'Max holding period (2 days) reached');
+    assert.strictEqual(tradeResult.exitPrice, 101); // exit at close of day 2
+  });
+
+  await t.test('scanner-driven 20-day safety valve allows target hit on day 6', () => {
+    // Scanner-driven mode slice is up to 20 days
+    const tradeResult = TradeEngineService.simulateTrade(
+      'LONG',
+      100,  // entryPrice
+      95,   // stopLoss
+      110,  // target
+      ohlc.slice(0, 7), // 7 days of data available (fits in 20-day safety valve)
+      { capital: 100000, riskModel: 'Risk%', riskValue: 1.0, executionMode: 'conservative' }
+    );
+
+    assert.strictEqual(tradeResult.status, 'CLOSED_TARGET');
+    assert.strictEqual(tradeResult.exitReason, 'Target Hit');
+    assert.strictEqual(tradeResult.exitPrice, 110);
+    assert.strictEqual(tradeResult.durationDays, 6); // entered day 0, exited day 5 (6th element, inclusive day-count = 6)
+  });
+});
+
+
