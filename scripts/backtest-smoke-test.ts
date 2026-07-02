@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 // ============================================================================
 export const SYMBOLS = [
   'RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 
-  'BHARTIARTL', 'SBIN', 'ITC', 'LTIM', 'HINDUNILVR', 
+  'BHARTIARTL', 'SBIN', 'ITC', 'HINDUNILVR', 
   'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA'
 ];
 export const START_DATE = '2024-01-01';
