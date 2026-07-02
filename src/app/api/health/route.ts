@@ -21,12 +21,13 @@ export async function GET() {
   // Database Connection Health Check
   try {
     await prisma.$queryRaw`SELECT 1`;
-  } catch (dbError: any) {
+  } catch (dbError) {
+    const errorMsg = dbError instanceof Error ? dbError.message : String(dbError);
     console.error('[Health Check Error] Database is unreachable:', dbError);
     return NextResponse.json({
       status: 'unhealthy',
       error: 'Database connection failed',
-      details: dbError.message || dbError,
+      details: errorMsg,
       environment: process.env.NODE_ENV || 'development',
       version: process.env.npm_package_version || '1.0.0',
       uptime: process.uptime()
