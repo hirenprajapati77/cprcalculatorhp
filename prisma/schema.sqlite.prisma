@@ -1,0 +1,321 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Calculation {
+  id             String   @id @default(cuid())
+  high           Float
+  low            Float
+  close          Float
+  pivot          Float
+  bc             Float
+  tc             Float
+  r1             Float
+  r2             Float
+  r3             Float
+  r4             Float
+  s1             Float
+  s2             Float
+  s3             Float
+  s4             Float
+  width          Float
+  classification String // NARROW | NORMAL | WIDE
+  trend          String
+  shareToken     String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([shareToken])
+}
+
+model ScannerResult {
+  id             String   @id @default(cuid())
+  symbol         String
+  date           String // YYYY-MM-DD
+  ltp            Float // Last Traded Price
+  volume         Float
+  pivot          Float
+  bc             Float
+  tc             Float
+  r1             Float
+  r2             Float
+  r3             Float
+  r4             Float
+  s1             Float
+  s2             Float
+  s3             Float
+  s4             Float
+  width          Float
+  classification String // NARROW | NORMAL | WIDE
+  score          Int // Combined signal score (0-100)
+  confidence     Int      @default(50)
+  signalSummary  String // Active signals comma-separated
+  entry          Float    @default(0)
+  sl             Float    @default(0)
+  target         Float    @default(0)
+  rr             String   @default("1:2.0")
+  createdAt      DateTime @default(now())
+
+  @@unique([symbol, date])
+  @@index([date])
+  @@index([date, score])
+  @@index([score])
+  @@index([createdAt])
+  @@index([symbol])
+}
+
+model MarketSnapshot {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  price     Float // Open price
+  volume    Float // Daily volume
+  avgVolume Float // 5-day average volume
+  marketCap Float // Market cap in INR Crores
+  sector    String
+  updatedAt DateTime @updatedAt
+}
+
+model ScanHistory {
+  id          String   @id @default(cuid())
+  filtersJson String // JSON string of filters
+  resultCount Int
+  durationMs  Int
+  topSymbols  String // Comma-separated or JSON list of top symbols (max 20)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  starred   Boolean  @default(false)
+  pinned    Boolean  @default(false)
+  notify    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model BacktestRun {
+  id             String   @id @default(cuid())
+  name           String
+  universe       String
+  startDate      DateTime
+  endDate        DateTime
+  capital        Float
+  riskModel      String
+  executionMode  String
+  riskValue      Float    @default(1.0)
+  status         String
+  strategyMode   String   @default("LEGACY_NARROW_CPR")
+  metricsVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  deletedAt      DateTime?
+
+  trades      Trade[]
+  metrics     BacktestMetrics?
+  snapshots   BacktestMetricSnapshot[]
+  checkpoints BacktestCheckpoint[]
+
+  @@index([status, createdAt])
+}
+
+model BacktestCheckpoint {
+  id               String   @id @default(cuid())
+  runId            String
+  batchNumber      Int
+  processedSymbols Int
+  processedTrades  Int
+  elapsedMs        Int
+  createdAt        DateTime @default(now())
+
+  run BacktestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, batchNumber])
+}
+
+model Trade {
+  id            String @id @default(cuid())
+  backtestRunId String
+  symbol        String
+  type          String
+  signal        String
+  status        String
+  strategyMode  String @default("LEGACY_NARROW_CPR")
+
+  entryDate   DateTime
+  entryPrice  Float
+  entryReason String
+  exitDate    DateTime?
+  exitPrice   Float?
+  exitReason  String?
+
+  stopLoss         Float
+  target           Float
+  riskAmount       Float
+  fees             Float
+  slippage         Float
+  executionDelayMs Int
+
+  rr               Float?
+  durationDays     Int?
+  positionSize     Float
+  pnl              Float?
+  pnlPercent       Float?
+  cprWidth         Float?
+  score            Float?
+  confidence       Float?
+  signalsJson      String?
+  triggerDelayDays Int?
+
+  run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+  journal Journal[]
+
+  @@index([backtestRunId])
+  @@index([backtestRunId, status])
+  @@index([backtestRunId, pnl])
+  @@index([symbol])
+}
+
+model Journal {
+  id        String   @id @default(cuid())
+  tradeId   String
+  timestamp DateTime
+  event     String
+  details   String?
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+}
+
+model BacktestMetrics {
+  id            String   @id @default(cuid())
+  backtestRunId String   @unique
+  winRate       Float
+  profitFactor  Float
+  expectancy    Float
+  maxDrawdown   Float
+  sharpe        Float
+  sortino       Float
+  avgRR         Float
+  createdAt     DateTime @default(now())
+
+  run BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+}
+
+model BacktestMetricSnapshot {
+  id            String   @id @default(cuid())
+  backtestRunId String
+  period        String
+  metricType    String
+  metricKey     String
+  metricValue   Float
+  createdAt     DateTime @default(now())
+
+  run BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
+
+  @@index([backtestRunId, metricType])
+}
+
+model OvernightSignal {
+  id              String   @id @default(cuid())
+
+  symbol          String
+  signalDate      String
+  signalTime      String
+
+  direction       String @default("LONG")
+
+  entry           Float?
+  stopLoss        Float?
+  target          Float?
+
+  overnightScore  Int?
+
+  expectedGap     Float?
+  expectedMove    Float?
+
+  confidence      Int?
+
+  exitStrategy    String?
+
+  actualExit      Float?
+  actualReturn    Float?
+
+  executed        Boolean @default(false)
+
+  classification  String
+
+  freezeTime      DateTime?
+
+  rejectionReason String?
+
+  createdAt       DateTime @default(now())
+
+  @@unique([symbol, signalDate, signalTime])
+
+  @@index([direction])
+  @@index([classification])
+  @@index([signalDate])
+  @@index([signalDate, direction])
+
+  @@map("BtstSignal")
+}
+
+model BrokerToken {
+  id          Int      @id @default(autoincrement())
+  broker      String   @default("fyers")
+  accessToken String
+  expiresAt   DateTime
+  updatedAt   DateTime @updatedAt
+}
+
+model BreakoutAlertState {
+  id          Int       @id @default(autoincrement())
+  symbol      String    @unique
+  hadBreakout Boolean   @default(false)
+  lastAlerted DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+model TradeJournal {
+  id             String    @id @default(cuid())
+  tradeDate      DateTime  // stored as midnight IST for the signal date
+  signalType     String    // 'CPR' | 'BTST' | 'STBT'
+  symbol         String
+  optionContract String    // e.g. '1920 CE' | '2400 PE'
+  optionStrike   Int
+  optionType     String    // 'CE' | 'PE'
+  entryCmp       Float     // option CMP at signal time (~3:15-3:25 PM)
+  entryTime      DateTime  // exact signal capture time
+
+  // Next day snapshots (null until cron fills them)
+  cmp916         Float?    // 9:16 AM next day
+  cmp930         Float?    // 9:30 AM next day
+  cmp945         Float?    // 9:45 AM next day
+  cmp1000        Float?    // 10:00 AM next day (auto-close)
+
+  // Trade result
+  exitCmp        Float?    // actual exit price (manual or 10:00 AM auto)
+  exitTime       DateTime?
+  pnl            Float?    // exitCmp - entryCmp
+  pnlPct         Float?    // (exitCmp - entryCmp) / entryCmp * 100
+
+  // Signal context (stored for analysis)
+  score          Int
+  confidence     Float
+  signalSummary  String    // CSV of signals at time of logging
+  scoreV2        Int?
+  v2Breakdown    String?   // JSON string of breakdown and raw metrics for v2
+
+  // Deduplication: one entry per symbol+date+signalType
+  @@unique([symbol, tradeDate, signalType])
+  @@index([tradeDate])
+  @@index([signalType])
+}
