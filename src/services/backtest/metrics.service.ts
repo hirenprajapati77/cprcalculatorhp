@@ -1,4 +1,4 @@
-import { PrismaClient, Trade } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { RankingService } from '../ranking.service';
 
 const prisma = new PrismaClient();
