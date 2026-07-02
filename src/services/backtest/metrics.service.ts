@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Trade } from '@prisma/client';
 import { RankingService } from '../ranking.service';
 
 const prisma = new PrismaClient();
@@ -25,6 +25,7 @@ export class MetricsService {
    * Pure function to compute metrics from a list of trades.
    * Extracted for unit testing signal bucketing and math.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static computeMetricsFromTrades(trades: any[], initialCapital: number) {
 
     let totalTrades = 0;
@@ -231,6 +232,7 @@ export class MetricsService {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any) {
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
@@ -254,6 +256,7 @@ export class MetricsService {
     }
 
     // Create Snapshots for Signals (Legacy)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const [signal, stats] of Object.entries(signalSuccess) as any) {
       await prisma.backtestMetricSnapshot.create({
         data: {
@@ -268,6 +271,7 @@ export class MetricsService {
 
     // Create Snapshots for SCANNER_DRIVEN advanced tag validation
     if (signalAnalysis) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const [tag, stats] of Object.entries(signalAnalysis) as any) {
         // Win rate
         await prisma.backtestMetricSnapshot.create({
@@ -304,6 +308,7 @@ export class MetricsService {
 
     // Create Snapshots for SCANNER_DRIVEN advanced score band validation
     if (scoreBandAnalysis) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const [sbName, stats] of Object.entries(scoreBandAnalysis) as any) {
         // Win rate
         await prisma.backtestMetricSnapshot.create({
