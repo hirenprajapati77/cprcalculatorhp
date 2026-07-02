@@ -6,6 +6,7 @@ import { HistoricalProvider } from './historical.provider';
 import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
+import { BtstService } from './btst.service';
 
 const prisma = new PrismaClient();
 
@@ -141,6 +142,7 @@ export class BacktestService {
 
           let blockedUntilIndex = -1; // per-symbol cooldown tracker
           const isScannerDriven = run.strategyMode === 'SCANNER_DRIVEN';
+          const isBtstDriven = run.strategyMode === 'BTST_STBT_DRIVEN';
 
           for (let i = 1; i < ohlc.length; i++) {
             // Skip if a previous trade/setup is still active or seeking a trigger
@@ -313,6 +315,140 @@ export class BacktestService {
                 processedTrades++;
                 blockedUntilIndex = i + 5;
               }
+            } else if (isBtstDriven) {
+              // ── BTST_STBT_DRIVEN ────────────────────────────────────────────────────
+              // Entry: today's close (day i). Exit: next day only (EOD forced).
+              // VWAP(20pt) + closeStrength(15pt) are absent from snapshot → score out of 65.
+
+              // Need day i+1 to exist for exit simulation
+              if (i + 1 >= ohlc.length) continue;
+
+              // Build MarketStockData snapshot — no vwap/candle15m (zeros those components)
+              const historySlice = ohlc.slice(0, i + 1);
+              const validHistory = ohlc.slice(0, i);
+              const avgVol = validHistory.length > 0
+                ? validHistory.reduce((sum, d) => sum + d.volume, 0) / validHistory.length
+                : today.volume;
+
+              const btstStock: MarketStockData = {
+                symbol,
+                market: 'NSE',
+                sector: 'Unknown',
+                open: today.open,
+                high: today.high,
+                low: today.low,
+                close: today.close,
+                volume: today.volume,
+                avgVolume: avgVol,
+                marketCap: 0,
+                ltp: today.close,
+                history: historySlice,
+                // vwap and candle15m intentionally omitted:
+                // scoreBreakdown.vwap(20pt) and closeStrength(15pt) self-zero
+                // when these fields are absent. Max backtest score = 65/100.
+              };
+
+              const btstResult = BtstService.evaluateOvernight(btstStock, today.date);
+
+              // Skip WEAK/NEUTRAL_CONFLICT — mirrors live Telegram alert filter
+              if (btstResult.tag === 'WEAK' || btstResult.tag === 'NEUTRAL_CONFLICT') continue;
+
+              const btstDirection = btstResult.tag === 'LONG' ? 'LONG' : 'SHORT';
+              if (run.executionMode === 'LONG_ONLY' && btstDirection === 'SHORT') continue;
+              if (run.executionMode === 'SHORT_ONLY' && btstDirection === 'LONG') continue;
+
+              // Entry = today's close with slippage (confirmed BTST mechanic — no trigger search)
+              const btstEntry = btstDirection === 'LONG'
+                ? today.close * (1 + SLIPPAGE_PCT)
+                : today.close * (1 - SLIPPAGE_PCT);
+
+              const btstSl = btstResult.sl;
+              const btstTarget = btstResult.target;
+
+              // Skip degenerate setups
+              if (btstSl <= 0) continue;
+              if (btstDirection === 'LONG' && btstTarget <= btstEntry) continue;
+              if (btstDirection === 'SHORT' && btstTarget >= btstEntry) continue;
+
+              // EOD exit: single-day window → CLOSED_TIME_EXIT at day[i+1].close if
+              // neither SL nor target is hit intraday. No new simulateTrade overload needed.
+              const btstTradeOhlc = ohlc.slice(i + 1, i + 2);
+              const btstTradeResult = TradeEngineService.simulateTrade(
+                btstDirection,
+                btstEntry,
+                btstSl,
+                btstTarget,
+                btstTradeOhlc,
+                {
+                  capital: run.capital,
+                  riskModel: run.riskModel,
+                  riskValue: run.riskValue ?? 1,
+                  executionMode: 'conservative',
+                }
+              );
+
+              const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
+              const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+              const btstNetPnl = btstTradeResult.pnl - btstFees;
+              const btstScore = btstDirection === 'LONG' ? btstResult.longScore : btstResult.shortScore;
+
+              // Store scoreBreakdown alongside signals so future analysis can check
+              // whether vwap/closeStrength correlate with outcomes once intraday data arrives.
+              const btstSignalsPayload = JSON.stringify({
+                signals: btstResult.signals,
+                scoreBreakdown: btstResult.scoreBreakdown,
+                longScore: btstResult.longScore,
+                shortScore: btstResult.shortScore,
+                tag: btstResult.tag,
+                _backtestNote: 'vwap(20pt)+closeStrength(15pt) excluded — no intraday data; max score=65'
+              });
+
+              const btstTrade = await prisma.trade.create({
+                data: {
+                  backtestRunId: runId,
+                  symbol,
+                  type: btstDirection,
+                  signal: `BTST_${btstResult.tag}`,
+                  status: btstTradeResult.status,
+                  strategyMode: 'BTST_STBT_DRIVEN',
+                  entryDate: new Date(today.date),
+                  entryPrice: btstEntry,
+                  entryReason: `BTST EOD entry (${btstResult.tag}, score ${btstScore}/65)`,
+                  exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
+                  exitPrice: btstTradeResult.exitPrice,
+                  exitReason: btstTradeResult.exitReason,
+                  stopLoss: btstSl,
+                  target: btstTarget,
+                  riskAmount: btstTradeResult.riskAmount,
+                  fees: btstFees,
+                  slippage: SLIPPAGE_PCT * 2 * 100,
+                  executionDelayMs: 0,
+                  rr: btstTradeResult.rr,
+                  durationDays: btstTradeResult.durationDays,
+                  positionSize: btstTradeResult.positionSize,
+                  pnl: btstNetPnl,
+                  pnlPercent: btstNetPnl / run.capital * 100,
+                  score: btstScore,
+                  signalsJson: btstSignalsPayload,
+                  triggerDelayDays: 0, // BTST always enters at same-day close
+                }
+              });
+
+              if (btstTradeResult.journalEvents.length > 0) {
+                const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
+                await prisma.journal.createMany({
+                  data: limitedEvents.map(e => ({
+                    tradeId: btstTrade.id,
+                    timestamp: e.timestamp,
+                    event: e.event,
+                    details: e.details
+                  }))
+                });
+              }
+
+              processedTrades++;
+              blockedUntilIndex = i + 1; // Hold for 1 day — block next day from new setup
+
             } else {
               // Compute today's CPR from yesterday's OHLC
               const cpr = calculateCPR({

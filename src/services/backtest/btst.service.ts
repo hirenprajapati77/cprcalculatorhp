@@ -296,8 +296,8 @@ export class BtstService {
     return { score, signals: Array.from(new Set(signals)) };
   }
 
-  static evaluateOvernight(stock: MarketStockData): BtstScoreResult {
-    const todayStr = new Date().toISOString().split('T')[0];
+  static evaluateOvernight(stock: MarketStockData, asOfDate?: string): BtstScoreResult {
+    const todayStr = asOfDate ?? new Date().toISOString().split('T')[0];
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
