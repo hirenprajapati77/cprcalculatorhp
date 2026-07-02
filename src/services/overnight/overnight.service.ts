@@ -305,7 +305,7 @@ export class OvernightService {
         // -- Evaluate LONG --
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
-          const elig = EntryManagerService.evaluateEligibility('LONG', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
+          const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
             const score = mockStock.longScoreOverride !== undefined
               ? mockStock.longScoreOverride
@@ -326,7 +326,7 @@ export class OvernightService {
         // -- Evaluate SHORT --
         let shortSig: OvernightSignalCalc | null = null;
         if (direction === 'SHORT' || direction === 'BOTH') {
-          const elig = EntryManagerService.evaluateEligibility('SHORT', fullStock, tomorrowCpr, todayCpr, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
+          const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
           if (elig.eligible) {
             const score = mockStock.shortScoreOverride !== undefined
               ? mockStock.shortScoreOverride
