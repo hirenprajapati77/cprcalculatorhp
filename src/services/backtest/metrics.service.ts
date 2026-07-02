@@ -194,8 +194,10 @@ export class MetricsService {
       avgRR
     };
 
+    const MIN_SAMPLE = 15;
+
     // Calculate final stats for tags and score bands
-    const signalAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number }> = {};
+    const signalAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number; reliable: boolean }> = {};
     for (const [tag, s] of Object.entries(signalStats)) {
       const wr = s.total > 0 ? (s.win / s.total) * 100 : 0;
       const lr = s.total > 0 ? (s.losingTrades / s.total) * 100 : 0;
@@ -203,10 +205,10 @@ export class MetricsService {
       const aw = s.winningTrades > 0 ? s.grossProfit / s.winningTrades : 0;
       const al = s.losingTrades > 0 ? s.grossLoss / s.losingTrades : 0;
       const exp = (wr / 100 * aw) - (lr / 100 * al);
-      signalAnalysis[tag] = { winRate: wr, avgRR: ar, expectancy: exp, total: s.total };
+      signalAnalysis[tag] = { winRate: wr, avgRR: ar, expectancy: exp, total: s.total, reliable: s.total >= MIN_SAMPLE };
     }
 
-    const scoreBandAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number }> = {};
+    const scoreBandAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number; reliable: boolean }> = {};
     for (const [sbName, sb] of Object.entries(scoreBandStats)) {
       const wr = sb.total > 0 ? (sb.win / sb.total) * 100 : 0;
       const lr = sb.total > 0 ? (sb.losingTrades / sb.total) * 100 : 0;
@@ -214,7 +216,7 @@ export class MetricsService {
       const aw = sb.winningTrades > 0 ? sb.grossProfit / sb.winningTrades : 0;
       const al = sb.losingTrades > 0 ? sb.grossLoss / sb.losingTrades : 0;
       const exp = (wr / 100 * aw) - (lr / 100 * al);
-      scoreBandAnalysis[sbName] = { winRate: wr, avgRR: ar, expectancy: exp, total: sb.total };
+      scoreBandAnalysis[sbName] = { winRate: wr, avgRR: ar, expectancy: exp, total: sb.total, reliable: sb.total >= MIN_SAMPLE };
     }
 
     const fillRateData = { totalSetups, triggeredSetups, neverTriggeredSetups };
