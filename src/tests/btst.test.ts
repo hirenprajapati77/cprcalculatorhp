@@ -106,4 +106,74 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(result.tag, 'WEAK');
     assert.ok(Math.max(result.longScore, result.shortScore) < 30);
   });
+
+  // ─── Task H: asOfDate override tests ───────────────────────────────────────
+  // The fixture history has dates 2023-01-01 and 2023-01-02.
+  // When asOfDate = '2023-01-02', the last candle IS today → isLastToday = true
+  //   → todayCandle = history[-1], yesterdayCandle = history[-2].
+  // When asOfDate = '2023-01-03' (one day ahead), the last candle is NOT today
+  //   → isLastToday = false → todayCandle comes from stock fields (ltp/high/low)
+  //   → different CPR calculation → different scores.
+  // No asOfDate at all must produce the same result as calling with today's real date.
+
+  test('asOfDate override changes candle selection vs. different date', () => {
+    const stock = {
+      ...baseStock,
+      high: 110,
+      low: 105,
+      ltp: 108,
+      volume: 1500000,
+      vwap: 105,
+      candle15m: { open: 107, high: 108, low: 107, close: 107.9, volume: 50000 },
+    };
+
+    // With asOfDate matching the last history candle: isLastToday = true
+    const resultAsLastDay = BtstService.evaluateOvernight(stock, '2023-01-02');
+    // With asOfDate one day later: isLastToday = false → different todayCandle
+    const resultAsNextDay = BtstService.evaluateOvernight(stock, '2023-01-03');
+
+    // Scores or tag must differ because todayCandle differs between the two calls
+    const sameResult =
+      resultAsLastDay.longScore === resultAsNextDay.longScore &&
+      resultAsLastDay.shortScore === resultAsNextDay.shortScore;
+    assert.strictEqual(sameResult, false, 'Expected different results for different asOfDate values');
+  });
+
+  test('asOfDate override is deterministic: same date always produces same output', () => {
+    const stock = {
+      ...baseStock,
+      high: 110,
+      low: 105,
+      ltp: 108,
+      volume: 1500000,
+      vwap: 105,
+      candle15m: { open: 107, high: 108, low: 107, close: 107.9, volume: 50000 },
+    };
+
+    const r1 = BtstService.evaluateOvernight(stock, '2023-01-02');
+    const r2 = BtstService.evaluateOvernight(stock, '2023-01-02');
+    assert.strictEqual(r1.tag, r2.tag);
+    assert.strictEqual(r1.longScore, r2.longScore);
+    assert.strictEqual(r1.shortScore, r2.shortScore);
+  });
+
+  test('no asOfDate produces same result as calling with real today date', () => {
+    // In backtest mode this fixture's dates are always in the past so
+    // isLastToday will be false either way; both paths use the live stock fields.
+    const stock = {
+      ...baseStock,
+      high: 110,
+      low: 105,
+      ltp: 108,
+      volume: 1500000,
+      vwap: 105,
+      candle15m: { open: 107, high: 108, low: 107, close: 107.9, volume: 50000 },
+    };
+    const todayStr = new Date().toISOString().split('T')[0];
+    const withOverride = BtstService.evaluateOvernight(stock, todayStr);
+    const withoutOverride = BtstService.evaluateOvernight(stock);
+    assert.strictEqual(withOverride.tag, withoutOverride.tag);
+    assert.strictEqual(withOverride.longScore, withoutOverride.longScore);
+    assert.strictEqual(withOverride.shortScore, withoutOverride.shortScore);
+  });
 });
