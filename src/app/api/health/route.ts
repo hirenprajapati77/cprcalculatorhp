@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
 import { BacktestService } from '@/services/backtest/backtest.service';
+import { prisma } from '@/lib/db';
 
 export async function GET() {
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
   
   const backtestMode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
-  const btQueue = BacktestService.getQueue();
   
   const isProd = process.env.NODE_ENV === 'production';
   const historicalMode = process.env.HISTORICAL_MODE || 'mock';
@@ -16,6 +16,21 @@ export async function GET() {
 
   if (hasMisconfig) {
     console.warn(`[LOUD WARNING] CRITICAL MISCONFIGURATION: Running in PRODUCTION but HISTORICAL_MODE is set to '${historicalMode}' instead of 'live'!`);
+  }
+
+  // Database Connection Health Check
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (dbError: any) {
+    console.error('[Health Check Error] Database is unreachable:', dbError);
+    return NextResponse.json({
+      status: 'unhealthy',
+      error: 'Database connection failed',
+      details: dbError.message || dbError,
+      environment: process.env.NODE_ENV || 'development',
+      version: process.env.npm_package_version || '1.0.0',
+      uptime: process.uptime()
+    }, { status: 503 });
   }
   
   return NextResponse.json({
