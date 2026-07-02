@@ -3,6 +3,8 @@ export interface BtstScoringInputs {
   avgVolume: number;
   tomorrowCprWidth: number;
   tomorrowBc: number;
+  tomorrowTc: number;   // needed for aligned higherValue condition
+  todayBc: number;      // needed for aligned higherValue condition
   todayTc: number;
   close: number;
   high: number;
@@ -41,8 +43,9 @@ export class BtstRankingService {
       score += 30;
     }
 
-    // Rule 3: Higher Value (Tomorrow BC > Today TC)
-    if (inputs.tomorrowBc > inputs.todayTc) {
+    // Rule 3: Higher Value — tomorrowCpr BC and TC both above todayCpr BC and TC
+    // (aligned with Simple Engine: partial overlap is OK, both edges must move up)
+    if (inputs.tomorrowBc > inputs.todayBc && inputs.tomorrowTc > inputs.todayTc) {
       score += 20;
     }
 

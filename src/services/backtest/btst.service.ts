@@ -22,6 +22,7 @@ export interface BtstScoreResult {
   entry: number;
   sl: number;
   target: number;
+  dipEntry: number;      // CPR-level dip-buy (LONG: tomorrowBC) / dip-sell (SHORT: tomorrowTC)
   rr: string;
   sector: string;
   marketCap: number;
@@ -31,7 +32,7 @@ export interface BtstScoreResult {
     cprNarrow?: number;
     higherValue?: number;
     vwap?: number;
-    conf15m?: number;
+    liquidity?: number;   // was conf15m (misnomer — was always avgVolume gate, not 15m candle)
     closeStrength?: number;
   };
 }
@@ -346,6 +347,8 @@ export class BtstService {
     const entry = stock.ltp;
     let sl = 0;
     let target = 0;
+    let dipEntry = 0;
+    let rrStr = '1:2.0';
 
     const maxScore = Math.max(longScore, shortScore);
 
@@ -358,13 +361,37 @@ export class BtstService {
     } else if (longScore - shortScore >= 20) {
       tag = 'LONG';
       finalSignals = longCalc.signals;
-      sl = stock.low;
-      target = entry + (entry - sl) * 2;
+
+      // SL: tighter of today's low vs tomorrow's BC (structural CPR support for next day)
+      sl = Math.min(stock.low, tomorrowCpr.bc);
+      dipEntry = tomorrowCpr.bc; // Dip-buy level: enter if next-day open dips to BC
+
+      // CPR-aware target: prefer R2 (≥1.5R), fall back to R1, then synthetic 2R
+      const risk = entry - sl;
+      if (risk > 0) {
+        const r2Rr = (tomorrowCpr.r2 - entry) / risk;
+        const r1Rr = (tomorrowCpr.r1 - entry) / risk;
+        if (r2Rr >= 1.5)      { target = tomorrowCpr.r2; rrStr = `1:${r2Rr.toFixed(1)}`; }
+        else if (r1Rr >= 1.5) { target = tomorrowCpr.r1; rrStr = `1:${r1Rr.toFixed(1)}`; }
+        else                  { target = entry + risk * 2.0; rrStr = '1:2.0'; }
+      }
     } else {
       tag = 'SHORT';
       finalSignals = shortCalc.signals;
-      sl = stock.high;
-      target = entry - (sl - entry) * 2;
+
+      // SL: wider of today's high vs tomorrow's TC (structural CPR resistance for next day)
+      sl = Math.max(stock.high, tomorrowCpr.tc);
+      dipEntry = tomorrowCpr.tc; // Dip-sell level: short if next-day opens and bounces to TC
+
+      // CPR-aware target: prefer S2 (≥1.5R), fall back to S1, then synthetic 2R
+      const risk = sl - entry;
+      if (risk > 0) {
+        const s2Rr = (entry - tomorrowCpr.s2) / risk;
+        const s1Rr = (entry - tomorrowCpr.s1) / risk;
+        if (s2Rr >= 1.5)      { target = tomorrowCpr.s2; rrStr = `1:${s2Rr.toFixed(1)}`; }
+        else if (s1Rr >= 1.5) { target = tomorrowCpr.s1; rrStr = `1:${s1Rr.toFixed(1)}`; }
+        else                  { target = entry - risk * 2.0; rrStr = '1:2.0'; }
+      }
     }
 
     const isLong = longScore >= shortScore;
@@ -377,7 +404,7 @@ export class BtstService {
       vwap: isLong
         ? (stock.vwap && stock.ltp > stock.vwap * 1.002 ? 20 : 0)
         : (stock.vwap && stock.ltp < stock.vwap * 0.998 ? 20 : 0),
-      liquidity: stock.avgVolume >= 500000 ? 10 : 0,  // was conf15m (misnomer)
+      liquidity: stock.avgVolume >= 500000 ? 10 : 0,
       closeStrength: stock.candle15m
         ? (isLong
             ? (stock.candle15m.close >= stock.candle15m.high * 0.995 ? 15 : 0)
@@ -395,7 +422,8 @@ export class BtstService {
       entry,
       sl,
       target,
-      rr: '1:2.0',
+      dipEntry,
+      rr: rrStr,
       sector: stock.sector,
       marketCap: stock.marketCap,
       tomorrowCPRProvisional: isMarketOpen() && !isLastToday,

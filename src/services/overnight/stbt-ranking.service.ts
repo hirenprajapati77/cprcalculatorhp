@@ -3,7 +3,9 @@ export interface StbtScoringInputs {
   avgVolume: number;
   tomorrowCprWidth: number;
   tomorrowTc: number;
+  tomorrowBc: number;   // needed for aligned lowerValue condition
   todayBc: number;
+  todayTc: number;      // needed for aligned lowerValue condition
   close: number;
   high: number;
   low: number;
@@ -36,8 +38,9 @@ export class StbtRankingService {
       score += 25;
     }
 
-    // Rule 2: Lower Value (Tomorrow TC < Today BC) [mirrors BTST Rule 3: +20]
-    if (inputs.tomorrowTc < inputs.todayBc) {
+    // Rule 2: Lower Value — tomorrowCpr BC and TC both below todayCpr BC and TC
+    // (aligned with Simple Engine: partial overlap is OK, both edges must move down)
+    if (inputs.tomorrowBc < inputs.todayBc && inputs.tomorrowTc < inputs.todayTc) {
       score += 20;
     }
 

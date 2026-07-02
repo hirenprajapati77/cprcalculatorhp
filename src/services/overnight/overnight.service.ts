@@ -311,7 +311,9 @@ export class OvernightService {
               ? mockStock.longScoreOverride
               : BtstRankingService.calculateScore({
                   volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                  tomorrowCprWidth: tomorrowCpr.width, tomorrowBc: tomorrowCpr.bc, todayTc: todayCpr.tc,
+                  tomorrowCprWidth: tomorrowCpr.width,
+                  tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
+                  todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                   close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
                   vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
                   hasConfirmationCandles: intraday.hasIntraday
@@ -332,7 +334,9 @@ export class OvernightService {
               ? mockStock.shortScoreOverride
               : StbtRankingService.calculateScore({
                   volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                  tomorrowCprWidth: tomorrowCpr.width, tomorrowTc: tomorrowCpr.tc, todayBc: todayCpr.bc,
+                  tomorrowCprWidth: tomorrowCpr.width,
+                  tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
+                  todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                   close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
                   vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
                   hasConfirmationCandles: intraday.hasIntraday

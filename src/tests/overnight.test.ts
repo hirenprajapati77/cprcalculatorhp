@@ -11,6 +11,8 @@ describe('Overnight Engine Tests', () => {
       avgVolume: 800000,
       tomorrowCprWidth: 0.2,
       tomorrowBc: 101,
+      tomorrowTc: 101.5,  // added: needed for aligned higherValue check
+      todayBc: 99.5,      // added: needed for aligned higherValue check
       todayTc: 100,
       close: 102,
       high: 103,
@@ -32,7 +34,9 @@ describe('Overnight Engine Tests', () => {
       avgVolume: 800000,
       tomorrowCprWidth: 0.2,
       tomorrowTc: 99,
+      tomorrowBc: 98.5,   // added: needed for aligned lowerValue check
       todayBc: 100,
+      todayTc: 100.5,     // added: needed for aligned lowerValue check
       close: 98,
       high: 101,
       low: 97,
