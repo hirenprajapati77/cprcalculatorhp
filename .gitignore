@@ -50,4 +50,7 @@ dev.db
 # fyers token
 fyers_token.txt
 
+# build artifacts
+deploy_bundle.tar.gz
+
 
