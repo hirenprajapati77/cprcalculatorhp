@@ -348,7 +348,12 @@ export class BacktestService {
                 // when these fields are absent. Max backtest score = 65/100.
               };
 
-              const btstResult = BtstService.evaluateOvernight(btstStock, today.date);
+              const variant = (process.env.BTST_VARIANT as 'baseline' | 'cpr_aware') || 'baseline';
+              const btstResult = BtstService.evaluateOvernight(btstStock, today.date, variant);
+
+              if (Math.random() < 0.005) {
+                console.log(`[DEBUG BTST] ${symbol} ${today.date} -> tag: ${btstResult.tag}, L: ${btstResult.longScore}, S: ${btstResult.shortScore}, SL: ${btstResult.sl}, TGT: ${btstResult.target}, Entry: ${btstStock.close}`);
+              }
 
               // Skip WEAK/NEUTRAL_CONFLICT — mirrors live Telegram alert filter
               if (btstResult.tag === 'WEAK' || btstResult.tag === 'NEUTRAL_CONFLICT') continue;
@@ -390,7 +395,7 @@ export class BacktestService {
               const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
               const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
               const btstNetPnl = btstTradeResult.pnl - btstFees;
-              const btstScore = btstDirection === 'LONG' ? btstResult.longScore : btstResult.shortScore;
+              const btstScore = btstResult.tag === 'LONG' ? btstResult.longScore : btstResult.shortScore;
 
               // Store scoreBreakdown alongside signals so future analysis can check
               // whether vwap/closeStrength correlate with outcomes once intraday data arrives.

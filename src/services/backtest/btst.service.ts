@@ -401,10 +401,10 @@ export class BtstService {
     
     let vduPoints = volumeRatio >= 2.0 ? 20 : 0;
     let cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? 15 : 0;
-    let hvPoints = isLong
+    const hvPoints = isLong
       ? (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc ? 20 : 0)
       : (tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc ? 20 : 0);
-    let liqPoints = stock.avgVolume >= 500000 ? 10 : 0;
+    const liqPoints = stock.avgVolume >= 500000 ? 10 : 0;
 
     if (strategyVariant === 'no_vdu_weighted') {
       vduPoints = 0;
@@ -427,11 +427,6 @@ export class BtstService {
       liquidity: liqPoints
     };
 
-    let finalScoreToReturn = maxScore;
-    if (strategyVariant === 'no_vdu_weighted') {
-      finalScoreToReturn = (tag === 'LONG' || tag === 'SHORT') ? 
-        scoreBreakdown.cprNarrow + scoreBreakdown.higherValue + scoreBreakdown.liquidity : maxScore;
-    }
 
     return {
       symbol: stock.symbol,
