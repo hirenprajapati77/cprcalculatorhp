@@ -50,11 +50,15 @@ async function main() {
 
   // Override MarketService.getUniverse to use only the configured symbols
   const originalGetUniverse = MarketService.getUniverse;
-  MarketService.getUniverse = async function() {
+  MarketService.getUniverse = function() {
     return SYMBOLS.map(sym => ({
       symbol: sym,
       name: `${sym} Industries`,
-      sector: 'General'
+      sector: 'General',
+      marketCap: 1000000,
+      isNifty50: true,
+      isNifty200: true,
+      isFnO: true
     }));
   };
 
