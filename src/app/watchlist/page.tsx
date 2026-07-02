@@ -35,8 +35,14 @@ export default function WatchlistPage() {
       // 1. Fetch symbols from database
       const resList = await fetch('/api/watchlist');
       if (!resList.ok) throw new Error('Failed to fetch watchlist');
-      const dataList = await resList.json();
-      const dbList: WatchlistItem[] = dataList.watchlist;
+      const dict = await resList.json();
+      
+      const dbList: WatchlistItem[] = Object.entries(dict).map(([symbol, flags]: [string, any], index) => ({
+        id: String(index),
+        symbol,
+        pinned: flags.pinned || false,
+        notify: flags.notify || false,
+      }));
 
       if (dbList.length === 0) {
         setWatchlist([]);
