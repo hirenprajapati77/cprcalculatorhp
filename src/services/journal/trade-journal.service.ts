@@ -17,6 +17,9 @@ export class TradeJournalService {
     score: number;
     confidence: number;
     signalSummary: string;
+    // Shadow Mode: BTST v2 parallel scoring
+    scoreV2?: number;
+    v2Breakdown?: string; // JSON string of v2 feature breakdown
   }): Promise<void> {
     try {
       // Fetch live option LTP via option chain (same path as scanner)
@@ -59,6 +62,9 @@ export class TradeJournalService {
           score: params.score,
           confidence: params.confidence,
           signalSummary: params.signalSummary,
+          // Shadow Mode: persist v2 scoring in parallel
+          scoreV2: params.scoreV2 ?? null,
+          v2Breakdown: params.v2Breakdown ?? null,
         },
       });
 
