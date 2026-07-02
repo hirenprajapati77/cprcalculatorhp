@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
-import { BacktestService } from '@/services/backtest/backtest.service';
 import { prisma } from '@/lib/db';
 
 export async function GET() {
