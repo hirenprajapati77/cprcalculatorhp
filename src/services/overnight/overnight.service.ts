@@ -8,6 +8,7 @@
  * See project audit notes.
  */
 import { OvernightSignal, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
@@ -263,8 +264,7 @@ export class OvernightService {
     dateOverride?: Date,
     mockStocks?: MockOvernightStock[]
   ): Promise<OvernightSignal[]> {
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+
     const currentTime = dateOverride || new Date();
     
     const dateFormatter = new Intl.DateTimeFormat('en-CA', {

@@ -7,8 +7,7 @@ import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
 import { BtstService } from './btst.service';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/db';
 
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',

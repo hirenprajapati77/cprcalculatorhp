@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { HistoricalProvider } from './historical.provider';
 
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/db';
+import { HistoricalProvider } from './historical.provider';
 
 export class ReplayService {
   /**

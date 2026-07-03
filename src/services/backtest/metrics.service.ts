@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { RankingService } from '../ranking.service';
-
-const prisma = new PrismaClient();
 
 export class MetricsService {
   /**

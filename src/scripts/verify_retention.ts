@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { RetentionService } from '../services/retention/retention.service';
-
-const prisma = new PrismaClient();
 
 async function run() {
   console.log('--- PHASE 5.1 RETENTION VALIDATION ---');
