@@ -23,8 +23,7 @@ export class TradeJournalService {
     v2Breakdown?: Record<string, unknown>;
   }): Promise<void> {
     try {
-      // Fetch live option LTP via option chain (same path as scanner)
-      const entryCmp = await TradeJournalService.fetchOptionCmp(
+      let entryCmp = await TradeJournalService.fetchOptionCmp(
         params.symbol,
         params.optionStrike,
         params.optionType

@@ -104,6 +104,9 @@ export class BacktestService {
 
     await prisma.backtestRun.update({ where: { id: runId }, data: { status: 'RUNNING' } });
 
+    // Track tag distribution pre-filtering
+    const tagDistribution = { LONG: 0, SHORT: 0, NEUTRAL_CONFLICT: 0, WEAK: 0 };
+
     // Fetch actual universe symbols using MarketService
     const universeStocks = MarketService.getUniverse(
       run.universe as 'NIFTY50' | 'NIFTY200' | 'NSE_FNO'
@@ -347,8 +350,11 @@ export class BacktestService {
                 // when these fields are absent. Max backtest score = 65/100.
               };
 
-              const variant = (process.env.BTST_VARIANT as 'baseline' | 'cpr_aware') || 'baseline';
+              const variant = run.name.includes('NO_VDU_WEIGHTED') ? 'no_vdu_weighted' : 
+                             (run.name.includes('CPR_AWARE') ? 'cpr_aware' : 'baseline');
               const btstResult = BtstService.evaluateOvernight(btstStock, today.date, variant);
+
+              tagDistribution[btstResult.tag]++;
 
               if (Math.random() < 0.005) {
                 console.log(`[DEBUG BTST] ${symbol} ${today.date} -> tag: ${btstResult.tag}, L: ${btstResult.longScore}, S: ${btstResult.shortScore}, SL: ${btstResult.sl}, TGT: ${btstResult.target}, Entry: ${btstStock.close}`);
@@ -637,6 +643,14 @@ export class BacktestService {
       `[Backtest] Data coverage: ${successCount}/${totalSymbols} ` +
       `stocks fetched (${Math.round(successCount/totalSymbols*100)}%)`
     );
+
+    console.log(`\n--- ${run.name} PRE-FILTER TAG DISTRIBUTION ---`);
+    console.log(`LONG: ${tagDistribution.LONG}`);
+    console.log(`SHORT: ${tagDistribution.SHORT}`);
+    console.log(`NEUTRAL_CONFLICT: ${tagDistribution.NEUTRAL_CONFLICT}`);
+    console.log(`WEAK: ${tagDistribution.WEAK}`);
+    console.log(`-----------------------------------------------`);
+
     if (successCount / totalSymbols < 0.8) {
       console.warn(
         '[Backtest] WARNING: Low data coverage (<80%). ' +

@@ -345,9 +345,15 @@ export class MarketService {
    * Returns stock universe metadata based on the selected universe.
    * Supports Auto, NSE_FNO, NIFTY50, NIFTY100, NIFTY200, ALL_NSE, WATCHLIST.
    */
-  static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST') {
+  static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' | string) {
+    if (universe === 'WATCHLIST') return []; // Managed in caller by checking Watchlist database model
+
     let list = STOCK_UNIVERSE;
-    if (universe === 'NIFTY50')    list = STOCK_UNIVERSE.filter(s => s.isNifty50);
+    if (universe.includes(',')) {
+      const symbols = universe.split(',').map(s => s.trim().toUpperCase());
+      list = STOCK_UNIVERSE.filter(s => symbols.includes(s.symbol.trim()));
+    }
+    else if (universe === 'NIFTY50')    list = STOCK_UNIVERSE.filter(s => s.isNifty50);
     else if (universe === 'NIFTY100') {
       list = STOCK_UNIVERSE.filter(s => s.isNifty200)
         .sort((a, b) => b.marketCap - a.marketCap)

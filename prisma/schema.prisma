@@ -312,7 +312,7 @@ model TradeJournal {
   confidence     Float
   signalSummary  String    // CSV of signals at time of logging
   scoreV2        Int?
-  v2Breakdown    String?   // JSON string of breakdown and raw metrics for v2
+  v2Breakdown    Json?     // JSON of breakdown and raw metrics for v2
 
   // Deduplication: one entry per symbol+date+signalType
   @@unique([symbol, tradeDate, signalType])
