@@ -24,7 +24,7 @@ ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChe
   cp -r .next/static .next/standalone/.next/ && \
   cp -r public .next/standalone/ && \
   npm ci --omit=dev && \
-  npx prisma@6.19.3 db push --accept-data-loss && \
+  npx prisma@6.19.3 db push && \
   pm2 reload cpr-platform --update-env"
 
 echo "Deployment complete!"
