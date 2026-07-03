@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { MarketService } from '@/services/market.service';
 import { OvernightRiskService } from '@/services/overnight/overnight-risk.service';
-
-const prisma = new PrismaClient();
 
 export async function GET(
   req: NextRequest,

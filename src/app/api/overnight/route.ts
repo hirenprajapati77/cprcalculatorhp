@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
-
-const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { OptionChainService } from '@/services/option-chain.service';
 
@@ -19,7 +20,7 @@ export class TradeJournalService {
     signalSummary: string;
     // Shadow Mode: BTST v2 parallel scoring
     scoreV2?: number;
-    v2Breakdown?: string; // JSON string of v2 feature breakdown
+    v2Breakdown?: Record<string, unknown>;
   }): Promise<void> {
     try {
       // Fetch live option LTP via option chain (same path as scanner)
@@ -49,7 +50,13 @@ export class TradeJournalService {
             signalType: params.signalType,
           },
         },
-        update: {},  // do not overwrite existing entry
+        update: {
+          // V1 entry/option data never overwritten — only v2 shadow fields update
+          ...(params.scoreV2 !== undefined ? { scoreV2: params.scoreV2 } : {}),
+          ...(params.v2Breakdown !== undefined
+            ? { v2Breakdown: params.v2Breakdown as Prisma.InputJsonValue }
+            : {}),
+        },
         create: {
           tradeDate,
           signalType: params.signalType,
@@ -64,7 +71,9 @@ export class TradeJournalService {
           signalSummary: params.signalSummary,
           // Shadow Mode: persist v2 scoring in parallel
           scoreV2: params.scoreV2 ?? null,
-          v2Breakdown: params.v2Breakdown ?? null,
+          v2Breakdown: params.v2Breakdown !== undefined
+            ? params.v2Breakdown as Prisma.InputJsonValue
+            : Prisma.JsonNull,
         },
       });
 

@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Shadow: compute v2 score in parallel (does not affect production)
-      let v2Fields: { scoreV2: number; v2Breakdown: string } | Record<string, never> = {};
+      let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
@@ -78,13 +78,13 @@ export async function GET(req: NextRequest) {
           const v2Result = BtstService.evaluateOvernightV2(stockData, 0);
           v2Fields = {
             scoreV2: v2Result.finalScore,
-            v2Breakdown: JSON.stringify({
-              hardGates: v2Result.hardGates,
+            v2Breakdown: {
+              hardGates:      v2Result.hardGates,
               scoreBreakdown: v2Result.scoreBreakdown,
-              rawMetrics: v2Result.rawMetrics,
+              rawMetrics:     v2Result.rawMetrics,
               classification: v2Result.classification,
-              direction: v2Result.direction,
-            }),
+              direction:      v2Result.direction,
+            },
           };
         }
       } catch (v2Err) {
@@ -129,20 +129,20 @@ export async function GET(req: NextRequest) {
       }
 
       // Shadow: compute v2 score in parallel (does not affect production)
-      let v2Fields: { scoreV2: number; v2Breakdown: string } | Record<string, never> = {};
+      let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
           const v2Result = BtstService.evaluateOvernightV2(stockData, 0);
           v2Fields = {
             scoreV2: v2Result.finalScore,
-            v2Breakdown: JSON.stringify({
-              hardGates: v2Result.hardGates,
+            v2Breakdown: {
+              hardGates:      v2Result.hardGates,
               scoreBreakdown: v2Result.scoreBreakdown,
-              rawMetrics: v2Result.rawMetrics,
+              rawMetrics:     v2Result.rawMetrics,
               classification: v2Result.classification,
-              direction: v2Result.direction,
-            }),
+              direction:      v2Result.direction,
+            },
           };
         }
       } catch (v2Err) {
