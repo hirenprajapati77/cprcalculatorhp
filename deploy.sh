@@ -3,10 +3,10 @@
 
 echo "1. Installing dependencies & generating Prisma client locally..."
 npm ci
-npx prisma generate
+DATABASE_URL="postgresql://dummy" npx prisma generate
 
 echo "2. Building locally..."
-npm run build
+DATABASE_URL="postgresql://dummy" npm run build
 
 echo "3. Compressing build bundle (standalone, static, public, prisma)..."
 # Compress only the required files for Next.js standalone mode

@@ -23,7 +23,7 @@ export class TradeJournalService {
     v2Breakdown?: Record<string, unknown>;
   }): Promise<void> {
     try {
-      let entryCmp = await TradeJournalService.fetchOptionCmp(
+      const entryCmp = await TradeJournalService.fetchOptionCmp(
         params.symbol,
         params.optionStrike,
         params.optionType
