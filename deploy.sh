@@ -15,18 +15,23 @@ tar -czf deploy_bundle.tar.gz .next/standalone .next/static public prisma packag
 echo "4. Uploading to Oracle VM..."
 scp -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no deploy_bundle.tar.gz ubuntu@129.159.230.41:/home/ubuntu/cpr-calculator-platform/deploy_bundle.tar.gz
 
-echo "5. Extracting and deploying on VM..."
-ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "cd /home/ubuntu/cpr-calculator-platform && \
-  tar -xzf deploy_bundle.tar.gz && \
-  rm -f .next/standalone/.env* && \
-  cp -a .next/standalone/. . && \
-  cp .env .next/standalone/.env && \
-  cp -r .next/static .next/standalone/.next/ && \
-  cp -r public .next/standalone/ && \
-  rm -rf node_modules && \
-  npm ci --omit=dev && \
-  npx prisma@6.19.3 db push --schema=prisma/schema.postgresql.prisma && \
-  npx prisma@6.19.3 generate --schema=prisma/schema.postgresql.prisma && \
-  pm2 reload cpr-platform --update-env"
+cat << 'EOF' > remote_deploy.sh
+cd /home/ubuntu/cpr-calculator-platform
+tar -xzf deploy_bundle.tar.gz
+rm -f .next/standalone/.env*
+cp -a .next/standalone/. .
+cp .env .next/standalone/.env
+cp -r .next/static .next/standalone/.next/
+cp -r public .next/standalone/
+pm2 stop cpr-platform || true
+mv node_modules node_modules_old_$(date +%s) || true
+npm ci --omit=dev
+npx prisma@6.19.3 db push --schema=prisma/schema.postgresql.prisma
+npx prisma@6.19.3 generate --schema=prisma/schema.postgresql.prisma
+pm2 restart cpr-platform --update-env
+EOF
+
+scp -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no remote_deploy.sh ubuntu@129.159.230.41:/home/ubuntu/cpr-calculator-platform/remote_deploy.sh
+ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "bash /home/ubuntu/cpr-calculator-platform/remote_deploy.sh"
 
 echo "Deployment complete!"
