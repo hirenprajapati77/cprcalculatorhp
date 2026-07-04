@@ -21,13 +21,12 @@ async function main() {
 
   for (const row of allV2Logs) {
     const score = row.scoreV2!;
-    let classification = 'REJECT';
-    if (score >= 90) classification = 'ELITE_INSTITUTIONAL';
-    else if (score >= 80) classification = 'PRODUCTION_ALERT';
-    else if (score >= 70) classification = 'WATCHLIST';
-    else if (score >= 60) classification = 'MANUAL_REVIEW';
+    const v2Breakdown = (typeof row.v2Breakdown === 'string' ? JSON.parse(row.v2Breakdown) : row.v2Breakdown) as any;
+    const classification = v2Breakdown?.classification || 'REJECT';
     
-    totals[classification as keyof typeof totals].logged++;
+    if (totals[classification as keyof typeof totals]) {
+      totals[classification as keyof typeof totals].logged++;
+    }
     if (row.exitCmp !== null) {
       totals[classification as keyof typeof totals].closed++;
     }

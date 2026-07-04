@@ -350,7 +350,7 @@ export class BacktestService {
                 // when these fields are absent. Max backtest score = 65/100.
               };
 
-              const variant = run.name.includes('NO_VDU_WEIGHTED') ? 'no_vdu_weighted' : 
+              const variant = run.name.includes('CLV_HYBRID') ? 'clv_hybrid' : run.name.includes('CLV_CONTINUOUS') ? 'clv_continuous' : run.name.includes('NO_VDU_WEIGHTED') ? 'no_vdu_weighted' : 
                              (run.name.includes('CPR_AWARE') ? 'cpr_aware' : 'baseline');
               const btstResult = BtstService.evaluateOvernight(btstStock, today.date, variant);
 
