@@ -20,9 +20,9 @@ export async function GET(req: NextRequest) {
       orderBy: { entryDate: 'asc' }
     });
 
-    const equityCurve = [];
+    const equityCurve: any[] = [];
     const monthlyPnlMap: Record<string, { pnl: number; tradeCount: number }> = {};
-    const drawdown = [];
+    const drawdown: any[] = [];
     const signalMap: Record<string, { wins: number; losses: number; totalPnl: number }> = {};
     const distributionMap: Record<string, number> = {};
 
