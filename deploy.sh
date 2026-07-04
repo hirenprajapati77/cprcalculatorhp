@@ -23,6 +23,7 @@ ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChe
   cp .env .next/standalone/.env && \
   cp -r .next/static .next/standalone/.next/ && \
   cp -r public .next/standalone/ && \
+  rm -rf node_modules && \
   npm ci --omit=dev && \
   npx prisma@6.19.3 db push --schema=prisma/schema.postgresql.prisma && \
   npx prisma@6.19.3 generate --schema=prisma/schema.postgresql.prisma && \
