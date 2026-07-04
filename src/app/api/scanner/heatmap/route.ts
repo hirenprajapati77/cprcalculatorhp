@@ -29,7 +29,7 @@ export async function GET() {
     // 2. Fetch all market snapshots to get sectors
     const snapshots = await prisma.marketSnapshot.findMany();
     const sectorMap = new Map<string, string>();
-    snapshots.forEach((snap) => {
+    snapshots.forEach((snap: any) => {
       sectorMap.set(snap.symbol, snap.sector);
     });
 

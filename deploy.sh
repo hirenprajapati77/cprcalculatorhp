@@ -3,7 +3,7 @@
 
 echo "1. Installing dependencies & generating Prisma client locally..."
 npm ci
-DATABASE_URL="postgresql://dummy" npx prisma generate
+DATABASE_URL="postgresql://dummy" npx prisma generate --schema=prisma/schema.postgresql.prisma
 
 echo "2. Building locally..."
 DATABASE_URL="postgresql://dummy" npm run build
@@ -24,7 +24,8 @@ ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChe
   cp -r .next/static .next/standalone/.next/ && \
   cp -r public .next/standalone/ && \
   npm ci --omit=dev && \
-  npx prisma@6.19.3 db push && \
+  npx prisma@6.19.3 db push --schema=prisma/schema.postgresql.prisma && \
+  npx prisma@6.19.3 generate --schema=prisma/schema.postgresql.prisma && \
   pm2 reload cpr-platform --update-env"
 
 echo "Deployment complete!"
