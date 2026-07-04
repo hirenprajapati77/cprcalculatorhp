@@ -92,7 +92,7 @@ export class BtstService {
   /**
    * Scans the universe and returns BTST candidates and metrics.
    */
-  static async discover(universe: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' = 'baseline') {
+  static async discover(universe: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid' = 'baseline') {
     const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
     const results: BtstScoreResultEnriched[] = [];
 
@@ -189,7 +189,7 @@ export class BtstService {
     tomorrowCpr: CPRResult,
     volumeRatio: number,
     sessionVirgin: boolean,
-    strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted'
+    strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid'
   ): { score: number; signals: string[] } {
     let score = 0;
     const signals: string[] = [];
@@ -201,18 +201,40 @@ export class BtstService {
     }
     signals.push('HIGHER_VALUE');
 
-    const isNoVdu = strategyVariant === 'no_vdu_weighted';
-
-    // +20 Volume Expansion (unless no_vdu_weighted)
-    if (!isNoVdu && volumeRatio >= 2.0) {
-      score += 20;
-      signals.push('VOLUME_SPIKE');
+    if (strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid') {
+      const high = stock.high || 0;
+      const low = stock.low || 0;
+      if (high === low) {
+        console.warn(`[CLV] Symbol ${stock.symbol} has no range (high === low). Defaulting score to 0.`);
+        return { score: 0, signals: ['CLV_SCORED'] };
+      }
+      const close = stock.ltp;
+      const clv = ((close - low) - (high - close)) / (high - low);
+      
+      if (strategyVariant === 'clv_continuous') {
+        score = Math.round(((clv + 1) / 2) * 100);
+        signals.push('CLV_SCORED');
+        return { score, signals };
+      } else {
+        score = Math.round(((clv + 1) / 2) * 75);
+        signals.push('CLV_HYBRID_BASE');
+      }
     }
 
-    // +20 Price vs VWAP: ltp > vwap * 1.002
-    if (stock.vwap && stock.ltp > stock.vwap * 1.002) {
-      score += 20;
-      signals.push('ABOVE_VWAP');
+    const isNoVdu = strategyVariant === 'no_vdu_weighted';
+
+    if (strategyVariant !== 'clv_hybrid') {
+      // +20 Volume Expansion (unless no_vdu_weighted)
+      if (!isNoVdu && volumeRatio >= 2.0) {
+        score += 20;
+        signals.push('VOLUME_SPIKE');
+      }
+
+      // +20 Price vs VWAP: ltp > vwap * 1.002
+      if (stock.vwap && stock.ltp > stock.vwap * 1.002) {
+        score += 20;
+        signals.push('ABOVE_VWAP');
+      }
     }
 
     // CPR Narrow weight conditionally applied
@@ -223,12 +245,14 @@ export class BtstService {
       if (sessionVirgin) signals.push('VIRGIN_TODAY');
     }
 
-    // +15 Closing Strength: 15min candle close >= (15min candle high * 0.995)
-    if (stock.candle15m) {
-      const { high, close } = stock.candle15m;
-      if (close >= high * 0.995) {
-        score += 15;
-        signals.push('CLOSING_STRENGTH');
+    if (strategyVariant !== 'clv_hybrid') {
+      // +15 Closing Strength: 15min candle close >= (15min candle high * 0.995)
+      if (stock.candle15m) {
+        const { high, close } = stock.candle15m;
+        if (close >= high * 0.995) {
+          score += 15;
+          signals.push('CLOSING_STRENGTH');
+        }
       }
     }
 
@@ -238,7 +262,7 @@ export class BtstService {
       signals.push('LIQUID');
     }
 
-    return { score, signals: Array.from(new Set(signals)) };
+    return { score: Math.min(score, 100), signals: Array.from(new Set(signals)) };
   }
 
   /**
@@ -250,7 +274,7 @@ export class BtstService {
     tomorrowCpr: CPRResult,
     volumeRatio: number,
     sessionVirgin: boolean,
-    strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted'
+    strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid'
   ): { score: number; signals: string[] } {
     let score = 0;
     const signals: string[] = [];
@@ -262,18 +286,40 @@ export class BtstService {
     }
     signals.push('LOWER_VALUE');
 
-    const isNoVdu = strategyVariant === 'no_vdu_weighted';
-
-    // +20 Volume Expansion
-    if (!isNoVdu && volumeRatio >= 2.0) {
-      score += 20;
-      signals.push('VOLUME_SPIKE');
+    if (strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid') {
+      const high = stock.high || 0;
+      const low = stock.low || 0;
+      if (high === low) {
+        console.warn(`[CLV] Symbol ${stock.symbol} has no range (high === low). Defaulting score to 0.`);
+        return { score: 0, signals: ['CLV_SCORED'] };
+      }
+      const close = stock.ltp;
+      const clv = ((close - low) - (high - close)) / (high - low);
+      
+      if (strategyVariant === 'clv_continuous') {
+        score = Math.round(((-clv + 1) / 2) * 100);
+        signals.push('CLV_SCORED');
+        return { score, signals };
+      } else {
+        score = Math.round(((-clv + 1) / 2) * 75);
+        signals.push('CLV_HYBRID_BASE');
+      }
     }
 
-    // +20 Price vs VWAP: ltp < vwap * 0.998
-    if (stock.vwap && stock.ltp < stock.vwap * 0.998) {
-      score += 20;
-      signals.push('BELOW_VWAP');
+    const isNoVdu = strategyVariant === 'no_vdu_weighted';
+
+    if (strategyVariant !== 'clv_hybrid') {
+      // +20 Volume Expansion
+      if (!isNoVdu && volumeRatio >= 2.0) {
+        score += 20;
+        signals.push('VOLUME_SPIKE');
+      }
+
+      // +20 Price vs VWAP: ltp < vwap * 0.998
+      if (stock.vwap && stock.ltp < stock.vwap * 0.998) {
+        score += 20;
+        signals.push('BELOW_VWAP');
+      }
     }
 
     // CPR Narrow weight conditionally applied
@@ -284,12 +330,14 @@ export class BtstService {
       if (sessionVirgin) signals.push('VIRGIN_TODAY');
     }
 
-    // +15 Closing Weakness: 15min candle close <= (15min candle low * 1.005)
-    if (stock.candle15m) {
-      const { low, close } = stock.candle15m;
-      if (close <= low * 1.005) {
-        score += 15;
-        signals.push('CLOSING_WEAKNESS');
+    if (strategyVariant !== 'clv_hybrid') {
+      // +15 Closing Weakness: 15min candle close <= (15min candle low * 1.005)
+      if (stock.candle15m) {
+        const { low, close } = stock.candle15m;
+        if (close <= low * 1.005) {
+          score += 15;
+          signals.push('CLOSING_WEAKNESS');
+        }
       }
     }
 
@@ -299,10 +347,10 @@ export class BtstService {
       signals.push('LIQUID');
     }
 
-    return { score, signals: Array.from(new Set(signals)) };
+    return { score: Math.min(score, 100), signals: Array.from(new Set(signals)) };
   }
 
-  static evaluateOvernight(stock: MarketStockData, asOfDate?: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' = 'baseline'): BtstScoreResult {
+  static evaluateOvernight(stock: MarketStockData, asOfDate?: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid' = 'baseline'): BtstScoreResult {
     const todayStr = asOfDate ?? new Date().toISOString().split('T')[0];
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
@@ -452,7 +500,6 @@ export class BtstService {
 
   static evaluateOvernightV2(
     stock: MarketStockData,
-    sectorReturn: number,
     asOfDate?: string
   ) {
     const todayStr = asOfDate ?? new Date().toISOString().split('T')[0];
@@ -487,75 +534,47 @@ export class BtstService {
       close: todayCandle.close,
     });
 
-    // CLV
+    // 1. CLV Calculation
     const range = todayCandle.high - todayCandle.low;
     let clv = range > 0 ? ((2 * todayCandle.close - todayCandle.high - todayCandle.low) / range) : 0;
     clv = Math.max(-1, Math.min(1, clv));
-
-    // Volume Ratio
-    const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1.0;
-
-    // CPR Width
-    const pivot = tomorrowCpr.pivot;
-    const tc = tomorrowCpr.tc;
-    const bc = tomorrowCpr.bc;
-    const cprWidth = pivot > 0 ? (Math.abs(tc - bc) / pivot) * 100 : 999.0;
-
-    // Relative Strength
-    const stockReturn = yesterdayCandle.close > 0 ? ((todayCandle.close - yesterdayCandle.close) / yesterdayCandle.close) * 100 : 0;
-    const relativeStrength = stockReturn - sectorReturn;
-
-    // VWAP distance
-    const vwapDistance = stock.vwap && stock.vwap > 0 ? ((stock.ltp - stock.vwap) / stock.vwap) * 100 : 0;
 
     const isHvLong = tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc;
     const isLvShort = tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc;
 
     const direction: 'LONG' | 'SHORT' = isHvLong ? 'LONG' : (isLvShort ? 'SHORT' : 'LONG');
-
     const hvPassed = direction === 'LONG' ? isHvLong : isLvShort;
+    
+    // Validated liquidity gate (from baseline)
     const liquidityPassed = stock.avgVolume >= 500000 && (stock.ltp * stock.volume) >= 150000000;
-    const vwapPassed = direction === 'LONG'
-      ? (stock.vwap ? stock.ltp > stock.vwap : true)
-      : (stock.vwap ? stock.ltp < stock.vwap : true);
+    
+    // Gate logic: We only require higherValue / lowerValue for the V2 shadow logic, 
+    // keeping it strictly around validated features as requested.
+    const allGatesPassed = hvPassed;
 
-    const allGatesPassed = hvPassed && liquidityPassed && vwapPassed;
+    // sessionVirgin: today's live price action hasn't touched today's CPR band.
+    const sessionVirgin = isCprVirgin(stock.high, stock.low, todayCpr.tc, todayCpr.bc);
 
-    // Scoring
+    // 2. Scoring
     let clvScore = 0;
-    if (clv <= 0) clvScore = 0;
-    else if (clv <= 0.25) clvScore = 5;
-    else if (clv <= 0.50) clvScore = 10;
-    else if (clv <= 0.70) clvScore = 18;
-    else if (clv <= 0.85) clvScore = 27;
-    else clvScore = 35;
-
-    let volumeScore = 0;
-    if (volumeRatio < 1.0) volumeScore = 0;
-    else if (volumeRatio < 1.5) volumeScore = 5;
-    else if (volumeRatio < 2.0) volumeScore = 10;
-    else if (volumeRatio < 3.0) volumeScore = 18;
-    else if (volumeRatio < 4.0) volumeScore = 22;
-    else volumeScore = 25;
+    if (direction === 'LONG') {
+      clvScore = Math.round(((clv + 1) / 2) * 75);
+    } else {
+      clvScore = Math.round(((-clv + 1) / 2) * 75);
+    }
 
     let cprScore = 0;
-    if (cprWidth > 0.70) cprScore = 0;
-    else if (cprWidth > 0.50) cprScore = 5;
-    else if (cprWidth > 0.30) cprScore = 10;
-    else if (cprWidth > 0.15) cprScore = 15;
-    else cprScore = 20;
+    if (tomorrowCpr.classification === 'NARROW' || sessionVirgin) {
+      cprScore = 15;
+    }
 
-    let relativeStrengthScore = 0;
-    if (relativeStrength <= 0) relativeStrengthScore = 0;
-    else if (relativeStrength <= 0.50) relativeStrengthScore = 5;
-    else if (relativeStrength <= 1.00) relativeStrengthScore = 10;
-    else if (relativeStrength <= 1.50) relativeStrengthScore = 13;
-    else relativeStrengthScore = 15;
-
-    const confidenceBuffer = 0;
+    let liquidityScore = 0;
+    if (stock.avgVolume >= 500000) {
+      liquidityScore = 10;
+    }
 
     const finalScore = allGatesPassed
-      ? (clvScore + volumeScore + cprScore + relativeStrengthScore + confidenceBuffer)
+      ? (clvScore + cprScore + liquidityScore)
       : 0;
 
     let classification: 'REJECT' | 'MANUAL_REVIEW' | 'WATCHLIST' | 'PRODUCTION_ALERT' | 'ELITE_INSTITUTIONAL' = 'REJECT';
@@ -569,25 +588,19 @@ export class BtstService {
       symbol: stock.symbol,
       direction,
       hardGates: {
-        hvPassed,
-        liquidityPassed,
-        vwapPassed
+        hvPassed
       },
       scoreBreakdown: {
         clvScore,
-        volumeScore,
         cprScore,
-        relativeStrengthScore,
-        confidenceBuffer
+        liquidityScore
       },
       rawMetrics: {
         clv,
-        volumeRatio,
-        cprWidth,
-        relativeStrength,
-        vwapDistance
+        cprWidth: tomorrowCpr.pivot > 0 ? (Math.abs(tomorrowCpr.tc - tomorrowCpr.bc) / tomorrowCpr.pivot) * 100 : 999.0,
+        liquidityPassed
       },
-      finalScore,
+      finalScore: Math.min(finalScore, 100),
       classification
     };
   }

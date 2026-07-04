@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
         const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
           // Approximate sector return as 0 when no live index feed available
-          const v2Result = BtstService.evaluateOvernightV2(stockData, 0);
+          const v2Result = BtstService.evaluateOvernightV2(stockData);
           v2Fields = {
             scoreV2: v2Result.finalScore,
             v2Breakdown: {
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
       try {
         const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
-          const v2Result = BtstService.evaluateOvernightV2(stockData, 0);
+          const v2Result = BtstService.evaluateOvernightV2(stockData);
           v2Fields = {
             scoreV2: v2Result.finalScore,
             v2Breakdown: {
