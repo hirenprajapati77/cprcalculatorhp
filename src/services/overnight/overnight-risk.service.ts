@@ -1,4 +1,5 @@
 import { MarketStockData } from '../market.service';
+import { calculateATR } from '@/lib/atr';
 
 export interface OvernightRiskMetrics {
   gapRisk: number;         // Average gap percentage (absolute value)
@@ -21,18 +22,7 @@ export class OvernightRiskService {
     const len = history.length;
 
     // 1. ATR Calculation (default to 2% of close if history is insufficient)
-    let atr = stock.close * 0.02;
-    if (len >= 2) {
-      let trueRangeSum = 0;
-      for (let i = 1; i < len; i++) {
-        const high = history[i].high;
-        const low = history[i].low;
-        const prevClose = history[i - 1].close;
-        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        trueRangeSum += tr;
-      }
-      atr = trueRangeSum / (len - 1);
-    }
+    const atr = calculateATR(history, stock.close);
 
     // 2. Gap Risk (Average gap % between Open and previous Close)
     let gapRisk = 0.5; // default 0.5%

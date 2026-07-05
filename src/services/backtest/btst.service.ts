@@ -194,12 +194,12 @@ export class BtstService {
     let score = 0;
     const signals: string[] = [];
 
-    // HARD BOOLEAN GATE: Must have higherValue
+    // +20 Value Relationship: higherValue === true
     const higherValue = tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc;
-    if (!higherValue) {
-      return { score: 0, signals: [] };
+    if (higherValue) {
+      score += 20;
+      signals.push('HIGHER_VALUE');
     }
-    signals.push('HIGHER_VALUE');
 
     if (strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid') {
       const high = stock.high || 0;
@@ -279,12 +279,12 @@ export class BtstService {
     let score = 0;
     const signals: string[] = [];
 
-    // HARD BOOLEAN GATE: Must have lowerValue
+    // +20 Value Relationship: lowerValue === true
     const lowerValue = tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc;
-    if (!lowerValue) {
-      return { score: 0, signals: [] };
+    if (lowerValue) {
+      score += 20;
+      signals.push('LOWER_VALUE');
     }
-    signals.push('LOWER_VALUE');
 
     if (strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid') {
       const high = stock.high || 0;

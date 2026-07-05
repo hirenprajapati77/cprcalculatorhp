@@ -1,5 +1,6 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
+import { calculateATR } from '@/lib/atr';
 
 export interface SignalResult {
   signals: string[];
@@ -9,6 +10,11 @@ export interface SignalResult {
   overlappingValue: boolean;
   virginCPR: boolean;
   hotZone: boolean;
+  /**
+   * NOTE: this is a range-based proxy (pivot ± range*0.25), not a true Market Profile
+   * Value Area derived from volume distribution. Do not treat vah/val/poc here as
+   * real VAH/VAL/POC — they're a placeholder until real volume-profile data is wired in.
+   */
   moneyZone: {
     vah: number;
     val: number;
@@ -54,26 +60,30 @@ export class SignalService {
         : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : dayBeforeYesterdayCandle);
     }
 
+    // Calculate ATR% for dynamic thresholds
+    const atr = calculateATR(stock.history || [], stock.close);
+    const atrPct = stock.close > 0 ? atr / stock.close : 0.02;
+
     // Calculate Yesterday's CPR using day before yesterday's OHLC
     const cprYesterday = calculateCPR({
       high: dayBeforeYesterdayCandle.high,
       low: dayBeforeYesterdayCandle.low,
       close: dayBeforeYesterdayCandle.close,
-    });
+    }, atrPct);
 
     // 1. Calculate Today's CPR using yesterday's OHLC
     const cprToday = calculateCPR({
       high: yesterdayCandle.high,
       low: yesterdayCandle.low,
       close: yesterdayCandle.close,
-    });
+    }, atrPct);
 
     // Calculate Tomorrow's CPR using today's OHLC
     const cprTomorrow = calculateCPR({
       high: todayCandle.high,
       low: todayCandle.low,
       close: todayCandle.close,
-    });
+    }, atrPct);
 
     const tc = cprToday.tc;
     const bc = cprToday.bc;
@@ -123,7 +133,7 @@ export class SignalService {
         high: threeDaysAgoCandle.high,
         low: threeDaysAgoCandle.low,
         close: threeDaysAgoCandle.close
-      });
+      }, atrPct);
       const d2 = cprYesterday;
       const d3 = cprToday;
 
@@ -164,9 +174,11 @@ export class SignalService {
     }
 
     // 4. Hot Zone (Confluence Zone)
-    // Defined if CPR is Narrow AND current LTP is within 0.15% of CPR Pivot
+    // Defined if CPR is Narrow AND current LTP is within ATR-scaled distance of CPR Pivot
     const closeDistance = Math.abs(stock.ltp - pivot) / pivot;
-    const hotZone = cprToday.classification === 'NARROW' && closeDistance <= 0.0015;
+    // PROVISIONAL: derived from assumed 2% avg ATR, pending backtest confirmation
+    const hotZoneThreshold = 0.10 * atrPct;
+    const hotZone = cprToday.classification === 'NARROW' && closeDistance <= hotZoneThreshold;
     if (hotZone) {
       signals.push('HOT_ZONE');
     }
@@ -225,13 +237,17 @@ export class SignalService {
 
     // 12. F&O Build-up Proxies
     const priceChangePct = (ltp - stock.close) / stock.close;
-    if (priceChangePct > 0.015 && volumeRatio >= 1.5) {
+    // PROVISIONAL: derived from assumed 2% avg ATR, pending backtest confirmation
+    const buildThreshold = 0.75 * atrPct;
+    const unwindThreshold = 0.50 * atrPct; // Originally 0.010 (1.0%), using 0.50 * ATR% for scaling
+
+    if (priceChangePct > buildThreshold && volumeRatio >= 1.5) {
       signals.push('LONG_BUILD');
-    } else if (priceChangePct < -0.015 && volumeRatio >= 1.5) {
+    } else if (priceChangePct < -buildThreshold && volumeRatio >= 1.5) {
       signals.push('SHORT_BUILD');
-    } else if (priceChangePct < -0.010 && volumeRatio < 1.0) {
+    } else if (priceChangePct < -unwindThreshold && volumeRatio < 1.0) {
       signals.push('LONG_UNWIND');
-    } else if (priceChangePct > 0.010 && volumeRatio < 1.0) {
+    } else if (priceChangePct > unwindThreshold && volumeRatio < 1.0) {
       signals.push('SHORT_COVER');
     }
 
