@@ -178,19 +178,18 @@ test('BreakoutWatcher — deduplication logic', async (t) => {
     const originalUpsert = prisma.breakoutAlertState.upsert;
     let upsertCalled = false;
     
-    // @ts-ignore
-    prisma.breakoutAlertState.findUnique = async () => {
+    prisma.breakoutAlertState.findUnique = (async () => {
       throw new Error('Simulated DB connection error');
-    };
-    // @ts-ignore
-    prisma.breakoutAlertState.upsert = async (args) => {
+    }) as unknown as typeof prisma.breakoutAlertState.findUnique;
+
+    prisma.breakoutAlertState.upsert = (async (args: Parameters<typeof prisma.breakoutAlertState.upsert>[0]) => {
       upsertCalled = true;
       // It should still set hadBreakout = true, but lastAlerted should NOT be updated 
       // because stateReadFailed = true, meaning isNewAlert = false.
       assert.ok(args.update, 'should have update block');
-      assert.strictEqual(args.update.lastAlerted, undefined, 'should not update lastAlerted');
-      return {} as any;
-    };
+      assert.strictEqual((args.update as { lastAlerted?: Date }).lastAlerted, undefined, 'should not update lastAlerted');
+      return { symbol: 'SBIN', hadBreakout: true, lastAlerted: null } as unknown as Awaited<ReturnType<typeof prisma.breakoutAlertState.upsert>>;
+    }) as unknown as typeof prisma.breakoutAlertState.upsert;
     
     try {
       const scan = [makeScanResult('SBIN', true)]; // has BREAKOUT

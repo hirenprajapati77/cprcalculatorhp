@@ -1,21 +1,23 @@
-// 2026 NSE Trading Holidays
-const NSE_HOLIDAYS_2026 = [
-  '2026-01-26', // Republic Day
-  '2026-03-03', // Holi
-  '2026-03-26', // Shri Ram Navami
-  '2026-03-31', // Shri Mahavir Jayanti
-  '2026-04-03', // Good Friday
-  '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
-  '2026-05-01', // Maharashtra Day
-  '2026-05-28', // Bakri Id
-  '2026-06-26', // Muharram
-  '2026-09-14', // Ganesh Chaturthi
-  '2026-10-02', // Mahatma Gandhi Jayanti
-  '2026-10-20', // Dussehra
-  '2026-11-10', // Diwali-Balipratipada
-  '2026-11-24', // Prakash Gurpurb Sri Guru Nanak Dev
-  '2026-12-25', // Christmas
-];
+// NSE Trading Holidays mapped by year
+const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
+  '2026': [
+    '2026-01-26', // Republic Day
+    '2026-03-03', // Holi
+    '2026-03-26', // Shri Ram Navami
+    '2026-03-31', // Shri Mahavir Jayanti
+    '2026-04-03', // Good Friday
+    '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
+    '2026-05-01', // Maharashtra Day
+    '2026-05-28', // Bakri Id
+    '2026-06-26', // Muharram
+    '2026-09-14', // Ganesh Chaturthi
+    '2026-10-02', // Mahatma Gandhi Jayanti
+    '2026-10-20', // Dussehra
+    '2026-11-10', // Diwali-Balipratipada
+    '2026-11-24', // Prakash Gurpurb Sri Guru Nanak Dev
+    '2026-12-25', // Christmas
+  ]
+};
 
 export function getISTTime(date: Date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -37,7 +39,12 @@ export function getISTTime(date: Date = new Date()) {
   const day = parts.find(p => p.type === 'day')?.value || '';
   
   const dateString = `${year}-${month}-${day}`;
-  const isHoliday = NSE_HOLIDAYS_2026.includes(dateString);
+  
+  if (!NSE_HOLIDAYS_BY_YEAR[year]) {
+    console.warn(`[WARNING] No holiday list defined for year ${year}. Holiday calculations will be inaccurate.`);
+  }
+  const holidays = NSE_HOLIDAYS_BY_YEAR[year] || [];
+  const isHoliday = holidays.includes(dateString);
   const isWeekend = weekday === 'Saturday' || weekday === 'Sunday';
   const isTradingDay = !isWeekend && !isHoliday;
   

@@ -12,7 +12,7 @@ import { CPRInput, CPRResult, CPRClassification, CPRTrend } from '@/types/cpr.ty
  * Classification: NARROW (< 0.3%), NORMAL (< 0.8%), WIDE (>= 0.8%)
  * Trend: Narrow -> Trending, Wide -> Ranging, Normal -> Balanced
  */
-export function calculateCPR(input: CPRInput): CPRResult {
+export function calculateCPR(input: CPRInput, atrPct?: number): CPRResult {
   const { high: H, low: L, close: C } = input;
 
   const pivot = (H + L + C) / 3;
@@ -34,7 +34,7 @@ export function calculateCPR(input: CPRInput): CPRResult {
 
   const width = ((tcFinal - bcFinal) / pivot) * 100;
 
-  const classification: CPRClassification = classifyCprWidth(width);
+  const classification: CPRClassification = classifyCprWidth(width, atrPct);
 
   const trend: CPRTrend =
     classification === 'NARROW' ? 'Trending' :
@@ -77,8 +77,12 @@ export function isCprVirgin(
 
 /**
  * Shared CPR width classification — single source of truth.
- * NARROW < 0.3%, NORMAL < 0.8%, WIDE >= 0.8%
+ * PROVISIONAL: NARROW < 0.15 * ATR%, NORMAL < 0.40 * ATR%, WIDE >= 0.40 * ATR%.
+ * Derived from assumed 2% avg ATR, pending backtest confirmation.
+ * Falls back to 0.3% / 0.8% if atrPct is not provided.
  */
-export function classifyCprWidth(widthPct: number): 'NARROW' | 'NORMAL' | 'WIDE' {
-  return widthPct < 0.3 ? 'NARROW' : widthPct < 0.8 ? 'NORMAL' : 'WIDE';
+export function classifyCprWidth(widthPct: number, atrPct?: number): 'NARROW' | 'NORMAL' | 'WIDE' {
+  const narrowThresh = atrPct ? (0.15 * atrPct * 100) : 0.3;
+  const normalThresh = atrPct ? (0.40 * atrPct * 100) : 0.8;
+  return widthPct < narrowThresh ? 'NARROW' : widthPct < normalThresh ? 'NORMAL' : 'WIDE';
 }
