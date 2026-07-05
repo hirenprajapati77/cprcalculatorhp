@@ -27,23 +27,27 @@ export class BreakoutWatcherService {
       const hasBreakoutNow = result.signals.includes('BREAKOUT');
 
       let hadBreakoutBefore = false;
+      let stateReadFailed = false;
       try {
         const state = await prisma.breakoutAlertState.findUnique({
           where: { symbol: result.symbol }
         });
         hadBreakoutBefore = state?.hadBreakout ?? false;
       } catch (err) {
+        stateReadFailed = true;
         console.warn(`[BreakoutWatcher] Could not read state for ${result.symbol}:`, err);
       }
 
-      if (hasBreakoutNow && !hadBreakoutBefore) {
+      if (hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed) {
         // Transition: did NOT have BREAKOUT before → NOW has BREAKOUT → alert
+        // Skipped entirely if the state read failed, to avoid false "new breakout"
+        // spam caused by a DB error rather than a real signal transition.
         newBreakouts.push(result);
       }
 
       // Always update state to reflect current scan result
       try {
-        const isNewAlert = hasBreakoutNow && !hadBreakoutBefore;
+        const isNewAlert = hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed;
         await prisma.breakoutAlertState.upsert({
           where: { symbol: result.symbol },
           create: {

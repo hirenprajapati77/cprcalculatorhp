@@ -213,6 +213,11 @@ export class SignalService {
       signals.push('BREAKOUT');
     }
 
+    // 10b. Breakdown (bearish mirror of Breakout)
+    if (volumeRatio >= 1.5 && ltp < bc) {
+      signals.push('BREAKDOWN');
+    }
+
     // 11. Momentum
     if (ltp > cprToday.r1 || ltp < cprToday.s1) {
       signals.push('MOMENTUM');

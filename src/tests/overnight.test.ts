@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { BtstRankingService } from '../services/overnight/btst-ranking.service';
 import { StbtRankingService } from '../services/overnight/stbt-ranking.service';
 import { OvernightRiskService } from '../services/overnight/overnight-risk.service';
+import { GapProbabilityService } from '../services/overnight/gap-probability.service';
 
 describe('Overnight Engine Tests', () => {
   test('LONG setup (BTST Scoring Logic)', () => {
@@ -49,6 +50,47 @@ describe('Overnight Engine Tests', () => {
     const score = StbtRankingService.calculateScore(mockStock);
     assert.ok(score !== null);
     assert.ok(score >= 80, `Expected score >= 80, got ${score}`);
+  });
+
+  test('STBT Rule 4 scores 0 when close < vwap but close > todayBc', () => {
+    const mockStock = {
+      volume: 1200000,
+      avgVolume: 800000,
+      tomorrowCprWidth: 0.2,
+      tomorrowTc: 99,
+      tomorrowBc: 96,
+      todayBc: 97,      // todayBc is 97
+      todayTc: 100.5,
+      close: 98,        // close (98) > todayBc (97)
+      high: 101,
+      low: 97,
+      vwap: 99.5,       // close (98) < vwap (99.5)
+      intradayVolume: 50000,
+      last15mLow: 99,   // close < last15mLow (20 pts)
+      hasConfirmationCandles: true
+    };
+
+    const score = StbtRankingService.calculateScore(mockStock);
+    // VDU(25) + LowerValue(20) + NarrowCPR(30) + BreakLast15mLow(20) + ClosingWeakness(15)
+    // Rule 4 (0) because close (98) is NOT < todayBc (97)
+    assert.strictEqual(score, 85, `Expected score 85, got ${score}`);
+  });
+
+  test('GapProbabilityService with short history caps gapConfidence <= 50', () => {
+    const mockStock = {
+      symbol: 'TEST',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100,
+      history: [
+        { date: '1', open: 100, high: 102, low: 98, close: 100, volume: 1000 },
+        { date: '2', open: 105, high: 106, low: 104, close: 105, volume: 1000 },
+        { date: '3', open: 110, high: 112, low: 108, close: 110, volume: 1000 },
+        { date: '4', open: 115, high: 116, low: 114, close: 115, volume: 1000 }
+      ]
+    };
+    const res = GapProbabilityService.calculateGapProbability(mockStock, 'LONG');
+    assert.ok(res.gapConfidence <= 50, `Expected gapConfidence <= 50, got ${res.gapConfidence}`);
   });
 
   test('indexCorrelationEstimate is null — not derived from symbol string', () => {

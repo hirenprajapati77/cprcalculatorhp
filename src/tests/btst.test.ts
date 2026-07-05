@@ -45,7 +45,7 @@ describe('BTST Scoring Engine Tests', () => {
     
     const result = BtstService.evaluateOvernight(stockA);
     assert.strictEqual(result.tag, 'LONG');
-    assert.ok(result.longScore >= 85);
+    assert.ok(result.longScore >= 80); // Previously 85, but HV +20 was removed
     assert.ok(result.longScore - result.shortScore >= 20);
   });
 
@@ -67,7 +67,7 @@ describe('BTST Scoring Engine Tests', () => {
 
     const result = BtstService.evaluateOvernight(stockB);
     assert.strictEqual(result.tag, 'SHORT');
-    assert.ok(result.shortScore >= 85);
+    assert.ok(result.shortScore >= 80); // Previously 85, but LV +20 was removed
     assert.ok(result.shortScore - result.longScore >= 20);
   });
 
@@ -87,7 +87,9 @@ describe('BTST Scoring Engine Tests', () => {
     };
 
     const result = BtstService.evaluateOvernight(stockC);
-    assert.strictEqual(result.tag, 'NEUTRAL_CONFLICT');
+    // Since higherValue and lowerValue are now hard gates, if neither is met, both scores are 0.
+    // maxScore < 10 results in WEAK, not NEUTRAL_CONFLICT.
+    assert.strictEqual(result.tag, 'WEAK');
   });
 
   test('Stock D: WEAK (Max score < 30)', () => {

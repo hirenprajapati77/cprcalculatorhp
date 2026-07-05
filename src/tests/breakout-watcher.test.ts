@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { prisma } from '../lib/db';
+import { BreakoutWatcherService } from '../services/alert/breakout-watcher.service';
 
 // ─── In-process deduplication logic (mirrors BreakoutWatcherService) ──────────
 // We test the pure logic without hitting Prisma (which needs a live DB connection).
@@ -169,5 +171,36 @@ test('BreakoutWatcher — deduplication logic', async (t) => {
     assert.strictEqual(newBreakouts.length, 0);
     // SBIN state unchanged
     assert.strictEqual(updatedState.get('SBIN')?.hadBreakout, true);
+  });
+
+  await t.test('BreakoutWatcherService skips alert if DB read throws', async () => {
+    const originalFindUnique = prisma.breakoutAlertState.findUnique;
+    const originalUpsert = prisma.breakoutAlertState.upsert;
+    let upsertCalled = false;
+    
+    // @ts-ignore
+    prisma.breakoutAlertState.findUnique = async () => {
+      throw new Error('Simulated DB connection error');
+    };
+    // @ts-ignore
+    prisma.breakoutAlertState.upsert = async (args) => {
+      upsertCalled = true;
+      // It should still set hadBreakout = true, but lastAlerted should NOT be updated 
+      // because stateReadFailed = true, meaning isNewAlert = false.
+      assert.ok(args.update, 'should have update block');
+      assert.strictEqual(args.update.lastAlerted, undefined, 'should not update lastAlerted');
+      return {} as any;
+    };
+    
+    try {
+      const scan = [makeScanResult('SBIN', true)]; // has BREAKOUT
+      const results = await BreakoutWatcherService.detectNewBreakouts(scan);
+      
+      assert.strictEqual(results.length, 0, 'Should not return any new breakouts due to state read failure');
+      assert.strictEqual(upsertCalled, true, 'Should still update DB with current state');
+    } finally {
+      prisma.breakoutAlertState.findUnique = originalFindUnique;
+      prisma.breakoutAlertState.upsert = originalUpsert;
+    }
   });
 });

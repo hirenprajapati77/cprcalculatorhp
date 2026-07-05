@@ -27,6 +27,25 @@ test('Scanner Service Signals Evaluation', async (t) => {
     assert.ok(scanResult.signals.includes('BULLISH'));
   });
 
+  await t.test('evaluates BREAKDOWN signal correctly on high-volume move below bc', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'TESTSTOCK2',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 105,
+      low: 95,
+      close: 101, // P = 100.33, BC = 100, TC = 100.67
+      volume: 150000,
+      avgVolume: 100000, // volumeRatio = 1.5
+      marketCap: 120000,
+      ltp: 99, // LTP < BC => BREAKDOWN
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock);
+    assert.ok(scanResult.signals.includes('BREAKDOWN'), 'Missing BREAKDOWN signal');
+  });
+
   await t.test('detects GAPS and VIRGIN CPR correctly', () => {
     const todayStr = new Date().toISOString().split('T')[0];
     const mockStock: MarketStockData = {

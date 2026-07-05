@@ -14,7 +14,9 @@ export class GapProbabilityService {
     stock: MarketStockData,
     direction: 'LONG' | 'SHORT' = 'LONG'
   ): GapProbabilityResult {
-    const history = stock.history || [];
+    const ROLLING_WINDOW = 60; // sessions — avoid stale gap stats from old market regimes
+    const fullHistory = stock.history || [];
+    const history = fullHistory.slice(-ROLLING_WINDOW);
     const candlesWithGap = [];
     
     for (let i = 1; i < history.length; i++) {
@@ -51,9 +53,9 @@ export class GapProbabilityService {
       expectedGap: direction === 'SHORT' 
         ? parseFloat((-expectedGap).toFixed(2))   // negative for SHORT
         : parseFloat(expectedGap.toFixed(2)),
-      gapConfidence: Math.min(
-        Math.round(gapProbability * 100), 95
-      )
+      gapConfidence: totalCandles < 20
+        ? Math.min(Math.round(gapProbability * 100), 50) // small sample — cap confidence, avoid false precision
+        : Math.min(Math.round(gapProbability * 100), 95)
     };
   }
 }

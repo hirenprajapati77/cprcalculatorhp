@@ -49,8 +49,9 @@ export class StbtRankingService {
       score += 30;
     }
 
-    // Rule 4: Close < VWAP — bearish confirmation [mirrors BTST Rule 4 (price < VWAP): +20]
-    if (inputs.close < inputs.vwap) {
+    // Rule 4: Close < Today's BC AND Close < VWAP — bearish confirmation
+    // [true mirror of BTST Rule 4: close > todayTc && close > vwap]
+    if (inputs.close < inputs.todayBc && inputs.close < inputs.vwap) {
       score += 20;
     }
 
