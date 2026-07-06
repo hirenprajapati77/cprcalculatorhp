@@ -1,5 +1,6 @@
 import { HistoricalProvider } from './backtest/historical.provider';
-import { calculateCPR } from '@/lib/cpr-engine';
+import { calculateCPR, classifyCprWidth } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
 
 export interface CprWidthStats {
   symbol: string;
@@ -43,17 +44,22 @@ export class CprStatsService {
       const yesterday = recentOhlc[i - 1];
       const today = recentOhlc[i];
 
+      // Rolling ATR% using up to the 14 candles prior to `today`, so each day's
+      // classification only uses information available at that point in time.
+      const atrWindow = recentOhlc.slice(Math.max(0, i - 14), i);
+      const atrPct = getAtrPct(atrWindow, yesterday.close);
+
       const cpr = calculateCPR({
         high: yesterday.high,
         low: yesterday.low,
         close: yesterday.close,
-      });
+      }, atrPct);
 
       const widthPct = (Math.abs(cpr.tc - cpr.bc) / cpr.pivot) * 100;
       allWidths.push(widthPct);
 
-      const isNarrow = widthPct < 0.3;
-      const isWide = widthPct >= 0.8;
+      const isNarrow = cpr.classification === 'NARROW';
+      const isWide = cpr.classification === 'WIDE';
 
       // Trend condition: absolute body size > 0.5% of open
       const bodyPct = (Math.abs(today.close - today.open) / today.open) * 100;

@@ -1,4 +1,5 @@
 import { calculateCPR } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
@@ -55,19 +56,21 @@ export class ScannerService {
         : lastCandle;
     }
 
+    const atrPct = getAtrPct(stock.history || [], stock.close);
+
     // 1. Calculate Today's CPR using yesterday's OHLC
     const cprToday = calculateCPR({
       high: yesterdayCandle.high,
       low: yesterdayCandle.low,
       close: yesterdayCandle.close,
-    });
+    }, atrPct);
 
     // Calculate Tomorrow's CPR using today's OHLC
     const cprTomorrow = calculateCPR({
       high: todayCandle.high,
       low: todayCandle.low,
       close: todayCandle.close,
-    });
+    }, atrPct);
 
     const tc = cprToday.tc;
     const bc = cprToday.bc;

@@ -8,6 +8,7 @@
  */
 import { MarketStockData, MarketService } from '../market.service';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
 import { isMarketOpen } from '@/lib/market-hours';
@@ -371,17 +372,19 @@ export class BtstService {
         : lastCandle;
     }
 
+    const atrPct = getAtrPct(stock.history || [], stock.close);
+
     const todayCpr = calculateCPR({
       high: yesterdayCandle.high,
       low: yesterdayCandle.low,
       close: yesterdayCandle.close,
-    });
+    }, atrPct);
 
     const tomorrowCpr = calculateCPR({
       high: todayCandle.high,
       low: todayCandle.low,
       close: todayCandle.close,
-    });
+    }, atrPct);
 
     // sessionVirgin: today's live price action hasn't touched today's CPR band.
     // Distinct from signal.service.ts's VIRGIN (yesterday's CPR was untouched — retrospective).
@@ -522,17 +525,19 @@ export class BtstService {
         : lastCandle;
     }
 
+    const atrPct = getAtrPct(stock.history || [], stock.close);
+
     const todayCpr = calculateCPR({
       high: yesterdayCandle.high,
       low: yesterdayCandle.low,
       close: yesterdayCandle.close,
-    });
+    }, atrPct);
 
     const tomorrowCpr = calculateCPR({
       high: todayCandle.high,
       low: todayCandle.low,
       close: todayCandle.close,
-    });
+    }, atrPct);
 
     // 1. CLV Calculation
     const range = todayCandle.high - todayCandle.low;

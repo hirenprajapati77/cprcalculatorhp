@@ -33,3 +33,13 @@ export function calculateATR(history: HistoryCandle[], currentClose: number): nu
   
   return atr;
 }
+
+/**
+ * Convenience wrapper: returns ATR as a fraction of current close (e.g. 0.0174 = 1.74%).
+ * Use this everywhere CPR width needs volatility-normalized classification, instead of
+ * calling calculateATR() and dividing manually — keeps every call site in sync.
+ */
+export function getAtrPct(history: HistoryCandle[], currentClose: number): number {
+  const atr = calculateATR(history, currentClose);
+  return currentClose > 0 ? atr / currentClose : 0.02;
+}
