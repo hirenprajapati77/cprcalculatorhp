@@ -10,6 +10,7 @@
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { calculateCPR } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
@@ -296,8 +297,9 @@ export class OvernightService {
           : await MarketService.getStockData(stock.symbol);
         if (!fullStock) continue;
 
-        const todayCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.close });
-        const tomorrowCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.ltp });
+        const atrPct = getAtrPct(fullStock.history || [], fullStock.close);
+        const todayCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.close }, atrPct);
+        const tomorrowCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.ltp }, atrPct);
         const intraday = await this.getIntradayData(fullStock, currentTime);
 
         const mockStock = fullStock as MockOvernightStock;
