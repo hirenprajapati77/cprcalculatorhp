@@ -34,15 +34,6 @@ export class OptionChainService {
     return 100;
   }
 
-  public static buildOptionSymbol(underlying: string, strike: number, type: 'CE' | 'PE'): string {
-    const cleanUnderlying = underlying.toUpperCase().trim().replace('-EQ', '');
-    const now = new Date();
-    const year2Digit = now.getFullYear().toString().slice(-2);
-    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-    const month3Letter = months[now.getMonth()];
-
-    return `NSE:${cleanUnderlying}${year2Digit}${month3Letter}${strike}${type}`;
-  }
 
   public static async getOptionChain(symbol: string): Promise<OptionChainResult | { error: string }> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
@@ -87,8 +78,14 @@ export class OptionChainService {
           }
         });
 
+        if (res.status === 401) {
+          console.warn(`[OptionChain] 401 Unauthorized for ${cleanSym} on direct fetch. Clearing token.`);
+          await FyersAuthService.clearToken();
+        }
+
         if (res.ok) {
           let data = await res.json();
+
           const isOk = data.s === 'ok' || data.status === 'ok' || data.code === 200 || (data.data?.optionsChain && data.data.optionsChain.length > 0);
 
           if (isOk && data.data?.optionsChain && data.data.optionsChain.length > 0) {
@@ -199,8 +196,14 @@ export class OptionChainService {
         }
       });
 
+      if (res.status === 401) {
+        console.warn(`[OptionChain] 401 Unauthorized for ${cleanSym} on proxy fetch. Clearing token.`);
+        await FyersAuthService.clearToken();
+      }
+
       if (res.ok) {
         const data = await res.json();
+
         const isOk = data.s === 'ok' || data.status === 'ok' || data.code === 200 || (data.data?.optionsChain && data.data.optionsChain.length > 0);
         if (isOk && data.data?.optionsChain && data.data.optionsChain.length > 0) {
           const result: OptionChainResult = {

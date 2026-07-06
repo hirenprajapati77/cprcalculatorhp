@@ -7,8 +7,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const authCode = searchParams.get('auth_code') || searchParams.get('code');
   
-  const host = request.headers.get('host') || '129.159.230.41';
-  const proto = request.headers.get('x-forwarded-proto') || 'http';
+  const host = request.headers.get('host') || process.env.APP_HOST || 'localhost:3000';
+  const proto = request.headers.get('x-forwarded-proto') || process.env.APP_PROTOCOL || 'https';
   const baseUrl = `${proto}://${host}`;
 
   if (!authCode) {

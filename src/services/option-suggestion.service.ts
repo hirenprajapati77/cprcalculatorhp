@@ -69,11 +69,11 @@ export class OptionSuggestionService {
             const lotSize = parseInt(parts[3]?.trim(), 10);
             if (symbol && !isNaN(lotSize) && lotSize > 0) {
               lotSizesMap.set(symbol, lotSize);
-              const match = symbol.match(/NSE:([A-Z0-9_\-]+)\d{2}[A-Z]{3}/);
+              const match = symbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
               if (match) {
                 lotSizesMap.set(match[1], lotSize);
               }
-              const futMatch = symbol.match(/NSE:([A-Z0-9_\-]+)\d{2}[A-Z]{3}FUT/);
+              const futMatch = symbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
               if (futMatch) {
                 lotSizesMap.set(futMatch[1], lotSize);
               }
@@ -283,9 +283,15 @@ export class OptionSuggestionService {
       strike: c.option.strikePrice, depth: c.itmDepth, score: c.score, breakdown: c.scoreBreakdown
     })));
 
-    // 7. Select highest-scoring candidate — no budget check
+    // 7. Select highest-scoring candidate — verify it actually has meaningful data
     const selected = scored[0];
-    if (!selected || selected.score === 0) {
+    if (!selected) {
+      return { error: 'NO_VIABLE_STRIKES' };
+    }
+    
+    // Ensure we aren't just blindly picking the closest ITM when Fyers returns 0 OI/Volume for everything
+    if ((selected.scoreBreakdown.oiScore + selected.scoreBreakdown.volumeScore) === 0) {
+      console.warn(`[OptionSuggestion] Rejected candidate ${selected.option.symbol}: OI and Volume scores are both 0. Missing data?`);
       return { error: 'NO_VIABLE_STRIKES' };
     }
 

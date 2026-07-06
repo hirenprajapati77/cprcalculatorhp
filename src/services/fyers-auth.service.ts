@@ -89,6 +89,21 @@ export class FyersAuthService {
     }
   }
 
+  public static async clearToken(): Promise<void> {
+    try {
+      const prisma = await getPrisma();
+      await prisma.brokerToken.update({
+        where: { id: 1 },
+        data: {
+          expiresAt: new Date(0) // Expire immediately
+        }
+      });
+      console.log('[FyersAuthService] Token cleared explicitly (e.g. due to 401 response).');
+    } catch (err) {
+      console.error('[FyersAuthService] Error clearing token from database:', err);
+    }
+  }
+
   public static async isLoggedIn(): Promise<boolean> {
     const token = await this.getAccessToken();
     return !!token;
@@ -143,7 +158,14 @@ export class FyersAuthService {
           if (data.s === 'ok') {
             const token = data.access_token || data.data?.access_token;
             if (token) {
-              const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              // NOTE: Fyers tokens reportedly expire daily around 6:00 AM IST (00:30 UTC).
+              // This is based on community consensus, not explicitly documented API fields.
+              // If we are currently past 00:30 UTC, expiry is tomorrow at 00:30 UTC.
+              const expiresAt = new Date();
+              expiresAt.setUTCHours(0, 30, 0, 0);
+              if (new Date() >= expiresAt) {
+                expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
+              }
               await this.saveToken(token, expiresAt);
               console.log('[FyersAuthService] Direct token exchange succeeded.');
               return { success: true, message: 'Login successful (Direct)' };
@@ -177,7 +199,14 @@ export class FyersAuthService {
         if (data.s === 'ok') {
           const token = data.access_token || data.data?.access_token;
           if (token) {
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            // NOTE: Fyers tokens reportedly expire daily around 6:00 AM IST (00:30 UTC).
+            // This is based on community consensus, not explicitly documented API fields.
+            // If we are currently past 00:30 UTC, expiry is tomorrow at 00:30 UTC.
+            const expiresAt = new Date();
+            expiresAt.setUTCHours(0, 30, 0, 0);
+            if (new Date() >= expiresAt) {
+              expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
+            }
             await this.saveToken(token, expiresAt);
             console.log('[FyersAuthService] Proxy token exchange succeeded.');
             return { success: true, message: 'Login successful (Proxy)' };

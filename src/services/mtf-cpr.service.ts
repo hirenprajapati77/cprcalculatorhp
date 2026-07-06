@@ -18,21 +18,58 @@ export class MtfCprService {
     // We fetch a bit of history to ensure we get the last completed week and month
     const endDate = new Date();
     
-    // Weekly OHLC (last completed week)
-    const weekQueryOptions = { period1: new Date(endDate.getTime() - 40 * 24 * 60 * 60 * 1000).toISOString(), interval: '1wk' as const };
-    const weekHistory: any[] = await yahooFinance.historical(yfSymbol, weekQueryOptions); // eslint-disable-line @typescript-eslint/no-explicit-any
+    interface YahooCandle {
+      date: Date | string;
+      high: number;
+      low: number;
+      close: number;
+    }
     
-    // Monthly OHLC (last completed month)
-    const monthQueryOptions = { period1: new Date(endDate.getTime() - 100 * 24 * 60 * 60 * 1000).toISOString(), interval: '1mo' as const };
-    const monthHistory: any[] = await yahooFinance.historical(yfSymbol, monthQueryOptions); // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Weekly OHLC (last completed week) - fetching ~150 days to guarantee at least 15 weekly bars for 14-period ATR
+    const weekQueryOptions = { period1: new Date(endDate.getTime() - 150 * 24 * 60 * 60 * 1000).toISOString(), interval: '1wk' as const };
+    const weekHistory: YahooCandle[] = await yahooFinance.historical(yfSymbol, weekQueryOptions) as unknown as YahooCandle[];
+    
+    // Monthly OHLC (last completed month) - fetching ~500 days to guarantee at least 15 monthly bars for 14-period ATR
+    const monthQueryOptions = { period1: new Date(endDate.getTime() - 500 * 24 * 60 * 60 * 1000).toISOString(), interval: '1mo' as const };
+    const monthHistory: YahooCandle[] = await yahooFinance.historical(yfSymbol, monthQueryOptions) as unknown as YahooCandle[];
 
     if (weekHistory.length < 2 || monthHistory.length < 2) {
       throw new Error('Not enough MTF data');
     }
 
-    // The last element is usually the current incomplete week/month, so we take the second to last
-    const lastCompletedWeek = weekHistory[weekHistory.length - 2];
-    const lastCompletedMonth = monthHistory[monthHistory.length - 2];
+    // Helper to robustly find the LAST index of a completed period
+    const getLastCompletedIndex = (history: { date: Date | string }[], isMonthly: boolean) => {
+      const now = new Date();
+      const startOfCurrentPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      if (isMonthly) {
+        startOfCurrentPeriod.setDate(1);
+      } else {
+        const day = startOfCurrentPeriod.getDay();
+        const diff = startOfCurrentPeriod.getDate() - day + (day === 0 ? -6 : 1);
+        startOfCurrentPeriod.setDate(diff);
+      }
+      startOfCurrentPeriod.setHours(0, 0, 0, 0);
+
+      let lastCompletedIndex = -1;
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (new Date(history[i].date) < startOfCurrentPeriod) {
+          lastCompletedIndex = i;
+          break;
+        }
+      }
+      return lastCompletedIndex;
+    };
+
+    const wIdx = getLastCompletedIndex(weekHistory, false);
+    const mIdx = getLastCompletedIndex(monthHistory, true);
+
+    if (wIdx === -1 || mIdx === -1) {
+      throw new Error('Could not identify completed MTF periods');
+    }
+
+    const lastCompletedWeek = weekHistory[wIdx];
+    const lastCompletedMonth = monthHistory[mIdx];
 
     const weeklyCPR = calculateCPR({
       high: lastCompletedWeek.high,
@@ -46,11 +83,16 @@ export class MtfCprService {
       close: lastCompletedMonth.close
     });
 
+    const { getAtrPct } = await import('@/lib/atr');
+    // Calculate ATR% using all available history up to the last completed candle explicitly using its index
+    const wAtrPct = getAtrPct(weekHistory.slice(0, wIdx + 1), lastCompletedWeek.close);
+    const mAtrPct = getAtrPct(monthHistory.slice(0, mIdx + 1), lastCompletedMonth.close);
+
     const wWidth = Math.abs(weeklyCPR.tc - weeklyCPR.bc) / weeklyCPR.pivot * 100;
-    const wClass = classifyCprWidth(wWidth);
+    const wClass = classifyCprWidth(wWidth, wAtrPct);
 
     const mWidth = Math.abs(monthlyCPR.tc - monthlyCPR.bc) / monthlyCPR.pivot * 100;
-    const mClass = classifyCprWidth(mWidth);
+    const mClass = classifyCprWidth(mWidth, mAtrPct);
 
     const weekly = { ...weeklyCPR, width: wWidth, classification: wClass as "NARROW" | "NORMAL" | "WIDE" };
     const monthly = { ...monthlyCPR, width: mWidth, classification: mClass as "NARROW" | "NORMAL" | "WIDE" };
