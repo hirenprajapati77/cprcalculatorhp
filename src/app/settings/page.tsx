@@ -24,23 +24,38 @@ export default function SettingsPage() {
   const [fyersLoading, setFyersLoading] = useState<boolean>(true);
   const { showToast } = useToast();
 
-  // Load settings from localStorage on mount
+  // Load settings from server on mount (works on any device)
   useEffect(() => {
-    const localMode = localStorage.getItem('cpr_settings_market_mode') || 'live';
-    const localUniv = localStorage.getItem('cpr_settings_default_universe') || 'NSE_FNO';
-    const localRefresh = localStorage.getItem('cpr_settings_auto_refresh') || '15m';
-    const localMinPrice = parseFloat(localStorage.getItem('cpr_settings_min_price') || '20');
-    const localMinVol = parseInt(localStorage.getItem('cpr_settings_min_volume') || '50000');
-
-    setMarketMode(localMode);
-    setDefaultUniverse(localUniv);
-    setAutoRefresh(localRefresh);
-    setMinPrice(localMinPrice);
-    setMinVolume(localMinVol);
-    setBypassBtst(localStorage.getItem('cpr_settings_bypass_btst') === 'true');
-    setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
-    setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
-    setTelegramGroupChatId(localStorage.getItem('cpr_settings_telegram_group_chat_id') || '');
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        if (!res.ok) throw new Error('Failed to load settings');
+        const data = await res.json();
+        const s = data.settings;
+        setMarketMode(s.marketMode);
+        setDefaultUniverse(s.defaultUniverse);
+        setAutoRefresh(s.autoRefresh);
+        setMinPrice(s.minPrice);
+        setMinVolume(s.minVolume);
+        setBypassBtst(s.bypassBtst);
+        setTelegramToken(s.telegramToken);
+        setTelegramChatId(s.telegramChatId);
+        setTelegramGroupChatId(s.telegramGroupChatId);
+      } catch (err) {
+        console.error('Failed to load settings from server:', err);
+        // Fallback: read from localStorage if server is unavailable
+        setMarketMode(localStorage.getItem('cpr_settings_market_mode') || 'live');
+        setDefaultUniverse(localStorage.getItem('cpr_settings_default_universe') || 'NSE_FNO');
+        setAutoRefresh(localStorage.getItem('cpr_settings_auto_refresh') || '15m');
+        setMinPrice(parseFloat(localStorage.getItem('cpr_settings_min_price') || '20'));
+        setMinVolume(parseInt(localStorage.getItem('cpr_settings_min_volume') || '50000'));
+        setBypassBtst(localStorage.getItem('cpr_settings_bypass_btst') === 'true');
+        setTelegramToken(localStorage.getItem('cpr_settings_telegram_token') || '');
+        setTelegramChatId(localStorage.getItem('cpr_settings_telegram_chat_id') || '');
+        setTelegramGroupChatId(localStorage.getItem('cpr_settings_telegram_group_chat_id') || '');
+      }
+    }
+    loadSettings();
   }, []);
 
   // Check Fyers connection status on mount
@@ -121,12 +136,32 @@ export default function SettingsPage() {
     }
   };
 
-  // Save settings
-  const handleSaveSettings = (e: React.FormEvent) => {
+  // Save settings to server (and localStorage as local cache)
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    
+
+    const payload = {
+      marketMode,
+      defaultUniverse,
+      autoRefresh,
+      minPrice,
+      minVolume,
+      bypassBtst,
+      telegramToken,
+      telegramChatId,
+      telegramGroupChatId,
+    };
+
     try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Server returned error');
+
+      // Also keep localStorage in sync as a local cache / offline fallback
       localStorage.setItem('cpr_settings_market_mode', marketMode);
       localStorage.setItem('cpr_settings_default_universe', defaultUniverse);
       localStorage.setItem('cpr_settings_auto_refresh', autoRefresh);
@@ -136,15 +171,16 @@ export default function SettingsPage() {
       localStorage.setItem('cpr_settings_telegram_chat_id', telegramChatId);
       localStorage.setItem('cpr_settings_telegram_group_chat_id', telegramGroupChatId);
       localStorage.setItem('cpr_settings_bypass_btst', bypassBtst ? 'true' : 'false');
-      
-      showToast('Settings profiles updated successfully', 'success');
+
+      showToast('Settings saved — synced across all devices ✓', 'success');
     } catch (err) {
       console.error(err);
-      showToast('Failed to write settings profile', 'error');
+      showToast('Failed to save settings to server', 'error');
     } finally {
       setSaving(false);
     }
   };
+
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto px-4 py-6 font-mono text-xs text-slate-300">

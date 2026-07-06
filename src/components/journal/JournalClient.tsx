@@ -31,6 +31,8 @@ interface JournalEntry {
   pnl: number | null;
   pnlPct: number | null;
   score: number;
+  scoreV2?: number | null;
+  v2Breakdown?: Record<string, unknown> | null;
   confidence: number;
   signalSummary: string;
 }
@@ -243,7 +245,7 @@ export default function JournalClient() {
   function exportCSV() {
     const headers = [
       'Trade Date','Type','Stock','Option','Entry CMP',
-      '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','Score',
+      '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','V1 Score','V2 Score',
     ];
     const rows = entries.map(e => [
       fmtDate(e.tradeDate),
@@ -258,6 +260,7 @@ export default function JournalClient() {
       e.exitCmp ?? '',
       e.pnlPct  !== null ? e.pnlPct.toFixed(2) : '',
       e.score,
+      e.scoreV2 ?? '',
     ]);
     const csv = [headers, ...rows]
       .map(r => r.map(v => `"${v}"`).join(','))
@@ -443,6 +446,8 @@ export default function JournalClient() {
                     <th className="text-right px-3 py-3 font-semibold">10:00 AM</th>
                     <th className="text-right px-3 py-3 font-semibold">Exit CMP</th>
                     <th className="text-right px-3 py-3 font-semibold">P&amp;L %</th>
+                    <th className="text-right px-3 py-3 font-semibold">V1 Score</th>
+                    <th className="text-right px-3 py-3 font-semibold">V2 Score</th>
                     <th className="text-center px-3 py-3 font-semibold">Action</th>
                   </tr>
                 </thead>
@@ -489,6 +494,18 @@ export default function JournalClient() {
                         {entry.pnlPct !== null ? (
                           <span style={{ color: pnlColor(entry.pnlPct) }}>
                             {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-600">---</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-300">
+                        {entry.score}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400 group relative">
+                        {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
+                          <span className="cursor-help border-b border-dashed border-slate-600" title={entry.v2Breakdown ? JSON.stringify(entry.v2Breakdown, null, 2) : 'No breakdown data'}>
+                            {entry.scoreV2}
                           </span>
                         ) : (
                           <span className="text-slate-600">---</span>

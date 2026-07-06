@@ -87,7 +87,7 @@ export class TradeJournalService {
 
   /**
    * Fetch live option LTP by building the Fyers symbol string using
-   * OptionChainService.buildOptionSymbol() (format: NSE:SYMBOL26JUNSTRIKEPE/CE),
+   * OptionSuggestionService.buildSuggestion() (or extracting from it),
    * then looking it up in the cached option chain data.
    */
   static async fetchOptionCmp(

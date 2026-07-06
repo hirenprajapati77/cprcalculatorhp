@@ -319,3 +319,18 @@ model TradeJournal {
   @@index([tradeDate])
   @@index([signalType])
 }
+
+// Singleton settings row — always upserted with id = "global"
+model AppSettings {
+  id                    String  @id @default("global")
+  marketMode            String  @default("live")
+  defaultUniverse       String  @default("NSE_FNO")
+  autoRefresh           String  @default("15m")
+  minPrice              Float   @default(20)
+  minVolume             Int     @default(50000)
+  bypassBtst            Boolean @default(false)
+  telegramToken         String  @default("")
+  telegramChatId        String  @default("")
+  telegramGroupChatId   String  @default("")
+  updatedAt             DateTime @updatedAt
+}
