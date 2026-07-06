@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstService } from '../services/backtest/btst.service';
-import { MarketService } from '../services/market.service';
+import { MarketService, MarketStockData } from '../services/market.service';
 
 describe('BTST Scoring Engine Tests', () => {
   const baseHistory = [
@@ -187,12 +187,12 @@ describe('BTST Scoring Engine Tests', () => {
       // 1. LIQUID: avgVolume=500000, volume=600000 (ratio = 1.2) -> should pass
       // 2. ILLIQUID (avgVolume < 100k): avgVolume=50000, volume=100000 -> should be skipped
       // 3. ILLIQUID (volumeRatio < 1.2): avgVolume=200000, volume=210000 (ratio = 1.05) -> should be skipped
-      MarketService.getUniverse = (universe: string) => {
+      MarketService.getUniverse = (_universe: string) => {
         return [
           { symbol: 'LIQUID', name: 'Liquid Stock', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
           { symbol: 'ILLIQUID_AV', name: 'Low Avg Volume', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
           { symbol: 'ILLIQUID_VR', name: 'Low Volume Ratio', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false }
-        ] as any;
+        ] as unknown as ReturnType<typeof MarketService.getUniverse>;
       };
 
       MarketService.getStockData = async (symbol: string) => {
@@ -203,7 +203,7 @@ describe('BTST Scoring Engine Tests', () => {
             avgVolume: 500000,
             volume: 600000, // Ratio = 1.2
             high: 110, low: 105, ltp: 108 // Valid LONG setup
-          } as any;
+          } as unknown as MarketStockData;
         }
         if (symbol === 'ILLIQUID_AV') {
           return {
@@ -212,7 +212,7 @@ describe('BTST Scoring Engine Tests', () => {
             avgVolume: 50000, // < 100k
             volume: 100000,
             high: 110, low: 105, ltp: 108
-          } as any;
+          } as unknown as MarketStockData;
         }
         if (symbol === 'ILLIQUID_VR') {
           return {
@@ -221,7 +221,7 @@ describe('BTST Scoring Engine Tests', () => {
             avgVolume: 200000,
             volume: 210000, // Ratio = 1.05 < 1.2
             high: 110, low: 105, ltp: 108
-          } as any;
+          } as unknown as MarketStockData;
         }
         return null;
       };
