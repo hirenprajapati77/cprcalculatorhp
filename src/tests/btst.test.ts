@@ -91,20 +91,45 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(result.tag, 'NEUTRAL_CONFLICT');
   });
 
-  test('Stock D: WEAK (Max score < 30)', () => {
+  test('Stock D: WEAK (Max score < 10)', () => {
+    // Tomorrow CPR identical to today -> no higher/lower value (+0)
+    // volume = avgVolume = 100,000 -> volumeRatio = 1.0 -> no volume spike (+0)
+    // ltp = vwap -> no price vs vwap (+0)
+    // CPR width is normal -> no narrow CPR (+0)
+    // 15m candle close is neutral -> no closing strength/weakness (+0)
+    // avgVolume = 200,000 (< 500,000) -> no liquidity (+0)
+    // Total score = 0
     const stockD = {
+      ...baseStock,
+      high: 120,
+      low: 80,
+      ltp: 120, // close = 120 makes Pivot = 106.66, BC = 100 -> Wide CPR
+      volume: 200000,
+      avgVolume: 200000, // < 500k -> no liquidity
+      vwap: 120, // ltp == vwap -> no vwap bonus
+      candle15m: { open: 110, high: 120, low: 100, close: 110, volume: 5000 } // neutral close
+    };
+
+    const result = BtstService.evaluateOvernight(stockD);
+    assert.strictEqual(result.tag, 'WEAK');
+    assert.ok(Math.max(result.longScore, result.shortScore) < 10);
+  });
+
+  test('Stock E: NEUTRAL_CONFLICT (Max score between 10 and 30)', () => {
+    const stockE = {
       ...baseStock,
       high: 105,
       low: 95,
       ltp: 100, // Same value as yesterday
       volume: 10000, // No expansion (+0)
-      avgVolume: 10000, // Not liquid enough (< 500k) (+0)
+      avgVolume: 500000, // Liquid enough (+10 L, +10 S) -> score is 10
       vwap: 100, 
       candle15m: { open: 100, high: 101, low: 99, close: 100, volume: 5000 }
     };
 
-    const result = BtstService.evaluateOvernight(stockD);
+    const result = BtstService.evaluateOvernight(stockE);
     assert.strictEqual(result.tag, 'NEUTRAL_CONFLICT');
+    assert.ok(Math.max(result.longScore, result.shortScore) >= 10);
     assert.ok(Math.max(result.longScore, result.shortScore) < 30);
   });
 
