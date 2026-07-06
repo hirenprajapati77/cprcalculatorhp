@@ -560,8 +560,8 @@ export class BtstService {
     const isHvLong = tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc;
     const isLvShort = tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc;
 
-    const direction: 'LONG' | 'SHORT' = isHvLong ? 'LONG' : (isLvShort ? 'SHORT' : 'LONG');
-    const hvPassed = direction === 'LONG' ? isHvLong : isLvShort;
+    const direction: 'LONG' | 'SHORT' | 'NEUTRAL' = isHvLong ? 'LONG' : (isLvShort ? 'SHORT' : 'NEUTRAL');
+    const hvPassed = direction === 'LONG' ? isHvLong : (direction === 'SHORT' ? isLvShort : false);
     
     // Validated liquidity gate (from baseline)
     const liquidityPassed = stock.avgVolume >= 500000 && (stock.ltp * stock.volume) >= 150000000;
@@ -577,8 +577,10 @@ export class BtstService {
     let clvScore = 0;
     if (direction === 'LONG') {
       clvScore = Math.round(((clv + 1) / 2) * 75);
-    } else {
+    } else if (direction === 'SHORT') {
       clvScore = Math.round(((-clv + 1) / 2) * 75);
+    } else {
+      clvScore = 0;
     }
 
     let cprScore = 0;

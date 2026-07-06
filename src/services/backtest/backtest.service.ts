@@ -350,6 +350,14 @@ export class BacktestService {
                 // when these fields are absent. Max backtest score = 65/100.
               };
 
+              const avgVolume = btstStock.avgVolume || 0;
+              const volume = btstStock.volume || 0;
+              const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+
+              if (avgVolume < 100000 || volume < 100000 || volumeRatio < 1.2) {
+                continue; // skip illiquid stock entirely — aligns backtest with live discover() gate
+              }
+
               const variant = run.name.includes('CLV_HYBRID') ? 'clv_hybrid' : run.name.includes('CLV_CONTINUOUS') ? 'clv_continuous' : run.name.includes('NO_VDU_WEIGHTED') ? 'no_vdu_weighted' : 
                              (run.name.includes('CPR_AWARE') ? 'cpr_aware' : 'baseline');
               const btstResult = BtstService.evaluateOvernight(btstStock, today.date, variant);
