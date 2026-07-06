@@ -118,6 +118,19 @@ export class BtstService {
 
     for (const { stock } of stockResults) {
       if (stock) {
+        // Hard liquidity/volume eligibility gate — mirrors the first 3 checks in
+        // EntryManagerService.evaluateEligibility(), ported here because that service
+        // is only wired into the informational overnight.service.ts view, not this
+        // live production path. Rejected stocks are skipped entirely, before scoring,
+        // rather than merely losing the +10 liquidity bonus point.
+        const avgVolume = stock.avgVolume || 0;
+        const volume = stock.volume || 0;
+        const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+
+        if (avgVolume < 100000 || volume < 100000 || volumeRatio < 1.2) {
+          continue; // skip illiquid stock entirely — do not score or include in results
+        }
+
         const result = this.evaluateOvernight(stock, undefined, strategyVariant);
 
         // Compute gap probability based on direction

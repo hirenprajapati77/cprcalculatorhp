@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstService } from '../services/backtest/btst.service';
+import { MarketService } from '../services/market.service';
 
 describe('BTST Scoring Engine Tests', () => {
   const baseHistory = [
@@ -176,4 +177,68 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(withOverride.longScore, withoutOverride.longScore);
     assert.strictEqual(withOverride.shortScore, withoutOverride.shortScore);
   });
+
+  test('discover() filters out illiquid stocks via the hard liquidity gate', async () => {
+    const originalGetUniverse = MarketService.getUniverse;
+    const originalGetStockData = MarketService.getStockData;
+
+    try {
+      // Mock universe with 3 test stocks:
+      // 1. LIQUID: avgVolume=500000, volume=600000 (ratio = 1.2) -> should pass
+      // 2. ILLIQUID (avgVolume < 100k): avgVolume=50000, volume=100000 -> should be skipped
+      // 3. ILLIQUID (volumeRatio < 1.2): avgVolume=200000, volume=210000 (ratio = 1.05) -> should be skipped
+      MarketService.getUniverse = (universe: string) => {
+        return [
+          { symbol: 'LIQUID', name: 'Liquid Stock', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
+          { symbol: 'ILLIQUID_AV', name: 'Low Avg Volume', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
+          { symbol: 'ILLIQUID_VR', name: 'Low Volume Ratio', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false }
+        ] as any;
+      };
+
+      MarketService.getStockData = async (symbol: string) => {
+        if (symbol === 'LIQUID') {
+          return {
+            ...baseStock,
+            symbol: 'LIQUID',
+            avgVolume: 500000,
+            volume: 600000, // Ratio = 1.2
+            high: 110, low: 105, ltp: 108 // Valid LONG setup
+          } as any;
+        }
+        if (symbol === 'ILLIQUID_AV') {
+          return {
+            ...baseStock,
+            symbol: 'ILLIQUID_AV',
+            avgVolume: 50000, // < 100k
+            volume: 100000,
+            high: 110, low: 105, ltp: 108
+          } as any;
+        }
+        if (symbol === 'ILLIQUID_VR') {
+          return {
+            ...baseStock,
+            symbol: 'ILLIQUID_VR',
+            avgVolume: 200000,
+            volume: 210000, // Ratio = 1.05 < 1.2
+            high: 110, low: 105, ltp: 108
+          } as any;
+        }
+        return null;
+      };
+
+      const result = await BtstService.discover('TEST_UNIVERSE');
+      
+      // Verification: Only 'LIQUID' should be in the results
+      assert.strictEqual(result.results.length, 1);
+      assert.strictEqual(result.results[0].symbol, 'LIQUID');
+
+      // Rejected stocks should not count toward insights
+      assert.strictEqual(result.insights.totalLong, 1);
+      assert.strictEqual(result.insights.avoid, 0); // No illiquid stocks counted as avoid/conflict/etc
+    } finally {
+      MarketService.getUniverse = originalGetUniverse;
+      MarketService.getStockData = originalGetStockData;
+    }
+  });
 });
+
