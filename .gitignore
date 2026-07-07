@@ -53,4 +53,7 @@ fyers_token.txt
 # build artifacts
 deploy_bundle.tar.gz
 
+# local untracked configs / scripts
+*.local.env
+*.local.sh
 

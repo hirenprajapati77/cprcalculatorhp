@@ -15,7 +15,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  const bypassWindow = req.nextUrl.searchParams.get('bypassWindow') === 'true' &&
+  const bypassWindow = process.env.NODE_ENV !== 'production' &&
+                       req.nextUrl.searchParams.get('bypassWindow') === 'true' &&
                        req.nextUrl.searchParams.get('bypassSecret') === cronSecret;
 
   // Determine which snapshot slot based on current IST time
