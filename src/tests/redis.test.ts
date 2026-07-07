@@ -47,3 +47,7 @@ test('Redis Cache Client Tests', async (t) => {
     }
   });
 });
+
+test.after(() => {
+  redisClient?.disconnect();
+});
