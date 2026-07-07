@@ -62,8 +62,8 @@ export class HistoryService {
         await cache.del(`calc:share:${record.shareToken}`);
       }
       
-      // Invalidate general history cache keys
-      await cache.clear(); 
+      // Invalidate general history cache keys scoped to history namespace
+      await cache.delPattern('history:limit:*'); 
       return true;
     } catch (err) {
       console.error('Failed to delete calculation entry:', err);

@@ -8,7 +8,7 @@
     "build:clean": "rm -rf .next && next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts src/tests/overnight.test.ts src/tests/option-suggestion.test.ts src/tests/backtest.test.ts src/tests/redis.test.ts"
+    "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts src/tests/overnight.test.ts src/tests/option-suggestion.test.ts src/tests/backtest.test.ts src/tests/redis.test.ts src/tests/history.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
