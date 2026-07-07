@@ -8,6 +8,12 @@ if (process.env.REDIS_URL) {
       maxRetriesPerRequest: 1,
       lazyConnect: true, // Do not block application startup
       connectTimeout: 2000, // Fast timeout
+      retryStrategy: (times) => {
+        if (times > 3) {
+          return null; // Stop retrying
+        }
+        return Math.min(times * 50, 2000);
+      },
     });
     
     redis.on('error', (err) => {
@@ -72,6 +78,31 @@ export const cache = {
       }
     }
     memoryCache.delete(key);
+  },
+
+  async delPattern(pattern: string): Promise<void> {
+    if (redis && redis.status === 'ready') {
+      try {
+        let cursor = '0';
+        do {
+          const reply = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+          cursor = reply[0];
+          const keys = reply[1];
+          if (keys.length > 0) {
+            await redis.del(...keys);
+          }
+        } while (cursor !== '0');
+        return;
+      } catch (err) {
+        console.warn('Redis delPattern failed, falling back to memory cache:', err);
+      }
+    }
+    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    for (const key of Array.from(memoryCache.keys())) {
+      if (regex.test(key)) {
+        memoryCache.delete(key);
+      }
+    }
   },
 
   async clear(): Promise<void> {
