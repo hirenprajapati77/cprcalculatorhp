@@ -182,6 +182,18 @@ export default function JournalClient() {
   const [exitLoading, setExitLoading] = useState(false);
   const [exitError, setExitError]     = useState<string | null>(null);
 
+  // Tooltip State for V2 Score breakdown on mobile
+  const [activeTooltipRow, setActiveTooltipRow] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeTooltipRow) return;
+    const handleOutsideClick = () => {
+      setActiveTooltipRow(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [activeTooltipRow]);
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async (p: number) => {
@@ -352,10 +364,10 @@ export default function JournalClient() {
             />
             <StatWidget
               label="Best Signal"
-              value={stats.bestSignalType}
-              sub={`${stats.byType[stats.bestSignalType].winRate}% win rate`}
+              value={stats.bestSignalType ?? '---'}
+              sub={stats.bestSignalType ? `${stats.byType[stats.bestSignalType].winRate}% win rate` : 'Not enough data'}
               icon={<Award size={16} />}
-              color={SIGNAL_COLORS[stats.bestSignalType]}
+              color={stats.bestSignalType ? SIGNAL_COLORS[stats.bestSignalType] : '#64748b'}
             />
           </div>
         )}
@@ -502,11 +514,43 @@ export default function JournalClient() {
                       <td className="px-3 py-3 text-right font-mono text-slate-300">
                         {entry.score}
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400 group relative">
+                      <td className="px-3 py-3 text-right font-mono text-slate-400 relative">
                         {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
-                          <span className="cursor-help border-b border-dashed border-slate-600" title={entry.v2Breakdown ? JSON.stringify(entry.v2Breakdown, null, 2) : 'No breakdown data'}>
-                            {entry.scoreV2}
-                          </span>
+                          <div className="inline-block relative group">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
+                              }}
+                              className="cursor-help border-b border-dashed border-slate-600 select-none hover:text-white transition-colors"
+                            >
+                              {entry.scoreV2}
+                            </span>
+
+                            {/* Premium Tooltip Overlay */}
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className={`absolute z-50 right-0 bottom-full mb-2 w-52 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-lg shadow-xl text-left pointer-events-auto transition-all ${
+                                activeTooltipRow === entry.id ? 'block opacity-100 translate-y-0' : 'hidden md:group-hover:block md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0'
+                              }`}
+                            >
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800">
+                                V2 Score Breakdown
+                              </div>
+                              <div className="space-y-1.5 font-sans text-[11px] text-slate-300">
+                                {entry.v2Breakdown && typeof entry.v2Breakdown === 'object' ? (
+                                  Object.entries(entry.v2Breakdown).map(([k, v]) => (
+                                    <div key={k} className="flex justify-between items-center">
+                                      <span className="capitalize text-slate-500 font-medium">{k.replace(/([A-Z])/g, ' $1')}</span>
+                                      <span className="font-mono text-white font-semibold">+{String(v)}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-slate-500 italic">No breakdown details</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <span className="text-slate-600">---</span>
                         )}
