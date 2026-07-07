@@ -105,6 +105,85 @@ function computeAvgAtTime(
   return parseFloat((sum / valid.length).toFixed(2));
 }
 
+interface V2Breakdown {
+  direction?: string;
+  classification?: string;
+  hardGates?: Record<string, boolean>;
+  scoreBreakdown?: Record<string, number>;
+  rawMetrics?: Record<string, number | string>;
+}
+
+function renderV2Breakdown(breakdown: V2Breakdown | null | undefined): React.ReactNode {
+  if (!breakdown || typeof breakdown !== 'object') {
+    return <div className="text-slate-500 italic">No breakdown details</div>;
+  }
+
+  const fmtKey = (k: string) => k.replace(/([A-Z])/g, ' $1').toLowerCase();
+
+  return (
+    <div className="space-y-2">
+      {/* Direction & Classification */}
+      <div className="flex justify-between text-[10px] border-b border-slate-800 pb-1">
+        <span className="text-slate-500 font-medium">Direction</span>
+        <span className="font-semibold text-blue-400">{breakdown.direction ?? '---'}</span>
+      </div>
+      <div className="flex justify-between text-[10px] border-b border-slate-800 pb-1">
+        <span className="text-slate-500 font-medium">Classification</span>
+        <span className="font-semibold text-purple-400 text-right max-w-[120px] truncate">{breakdown.classification ?? '---'}</span>
+      </div>
+
+      {/* Hard Gates */}
+      {breakdown.hardGates && typeof breakdown.hardGates === 'object' && (
+        <div className="border-b border-slate-800 pb-1">
+          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Hard Gates</div>
+          <div className="space-y-0.5 pl-1">
+            {Object.entries(breakdown.hardGates).map(([k, v]) => (
+              <div key={k} className="flex justify-between text-[9px]">
+                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
+                <span className={v ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                  {v ? 'Passed' : 'Failed'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Score Breakdown */}
+      {breakdown.scoreBreakdown && typeof breakdown.scoreBreakdown === 'object' && (
+        <div className="border-b border-slate-800 pb-1">
+          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Score Breakdown</div>
+          <div className="space-y-0.5 pl-1">
+            {Object.entries(breakdown.scoreBreakdown).map(([k, v]) => (
+              <div key={k} className="flex justify-between text-[9px]">
+                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
+                <span className="font-mono text-white font-semibold">+{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Raw Metrics */}
+      {breakdown.rawMetrics && typeof breakdown.rawMetrics === 'object' && (
+        <div>
+          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Raw Metrics</div>
+          <div className="space-y-0.5 pl-1">
+            {Object.entries(breakdown.rawMetrics).map(([k, v]) => (
+              <div key={k} className="flex justify-between text-[9px]">
+                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
+                <span className="font-mono text-slate-300 font-medium">
+                  {typeof v === 'number' ? (v > 1000 ? v.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : v.toFixed(2)) : String(v)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatWidget({
@@ -538,16 +617,7 @@ export default function JournalClient() {
                                 V2 Score Breakdown
                               </div>
                               <div className="space-y-1.5 font-sans text-[11px] text-slate-300">
-                                {entry.v2Breakdown && typeof entry.v2Breakdown === 'object' ? (
-                                  Object.entries(entry.v2Breakdown).map(([k, v]) => (
-                                    <div key={k} className="flex justify-between items-center">
-                                      <span className="capitalize text-slate-500 font-medium">{k.replace(/([A-Z])/g, ' $1')}</span>
-                                      <span className="font-mono text-white font-semibold">+{String(v)}</span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="text-slate-500 italic">No breakdown details</div>
-                                )}
+                                {renderV2Breakdown(entry.v2Breakdown)}
                               </div>
                             </div>
                           </div>
