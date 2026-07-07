@@ -50,10 +50,20 @@ dev.db
 # fyers token
 fyers_token.txt
 
-# build artifacts
+# build artifacts — never commit these
 deploy_bundle.tar.gz
+deploy_bundle.zip
+next-build.tar.gz
+next-build.zip
+dotnext.tar.gz
+standalone.tar.gz
+prisma.tar.gz
+*.tar.gz
+*.zip
+
+# generated remote deploy script (scratch, never commit)
+remote_deploy.sh
 
 # local untracked configs / scripts
 *.local.env
 *.local.sh
-
