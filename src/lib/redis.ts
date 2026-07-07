@@ -16,6 +16,10 @@ if (process.env.REDIS_URL) {
         console.warn('Redis connection issue, using memory cache fallback:', err.message);
       }
     });
+
+    redis.connect().catch((err) => {
+      console.warn('Redis initial connection failed, will use memory cache fallback:', err.message);
+    });
   } catch (err) {
     console.warn('Failed to initialize Redis client:', err);
   }
