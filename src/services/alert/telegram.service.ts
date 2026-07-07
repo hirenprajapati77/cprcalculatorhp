@@ -1,10 +1,27 @@
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
+import { prisma } from '../../lib/db';
 
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
-    const token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
-    const resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
+    let token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
+    let resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
+
+    if (!token || !resolvedChatId) {
+      try {
+        const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
+        if (settings) {
+          if (!token && settings.telegramToken) {
+            token = settings.telegramToken;
+          }
+          if (!resolvedChatId && settings.telegramChatId) {
+            resolvedChatId = settings.telegramChatId;
+          }
+        }
+      } catch (dbErr) {
+        console.error('[Telegram] Failed to load credentials from AppSettings:', dbErr);
+      }
+    }
 
     if (!token || !resolvedChatId) {
       console.warn('[Telegram] Bot token or chat ID not configured. Skipping alert.');
@@ -113,7 +130,25 @@ export class TelegramService {
   ): Promise<{ ok: boolean; reason?: string }> {
     if (!stocks.length) return { ok: false, reason: 'no_breakouts' };
 
-    const chatId = overrideChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
+    let chatId = overrideChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
+    let token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!chatId || !token) {
+      try {
+        const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
+        if (settings) {
+          if (!chatId && settings.telegramGroupChatId) {
+            chatId = settings.telegramGroupChatId;
+          }
+          if (!token && settings.telegramToken) {
+            token = settings.telegramToken;
+          }
+        }
+      } catch (dbErr) {
+        console.error('[Telegram] Failed to load breakout credentials from AppSettings:', dbErr);
+      }
+    }
+
     if (!chatId) {
       console.warn('[Telegram] TELEGRAM_GROUP_CHAT_ID not set, skipping breakout alert');
       return { ok: false, reason: 'missing_config' };
