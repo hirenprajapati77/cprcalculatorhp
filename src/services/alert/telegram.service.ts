@@ -2,28 +2,36 @@ import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 
 export class TelegramService {
-  static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<void> {
+  static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
     const token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
     const resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
 
     if (!token || !resolvedChatId) {
       console.warn('[Telegram] Bot token or chat ID not configured. Skipping alert.');
-      return;
+      return { ok: false, reason: 'missing_config' };
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: resolvedChatId,
-        text,
-        parse_mode: 'HTML'
-      })
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: resolvedChatId,
+          text,
+          parse_mode: 'HTML'
+        })
+      });
 
-    if (!response.ok) {
-      console.error('[Telegram] Failed to send message:', await response.text());
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error('[Telegram] Failed to send message:', errBody);
+        return { ok: false, reason: `telegram_api_error: ${errBody}` };
+      }
+      return { ok: true };
+    } catch (err) {
+      console.error('[Telegram] Network/fetch error sending message:', err);
+      return { ok: false, reason: `fetch_error: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
@@ -41,13 +49,13 @@ export class TelegramService {
 
     // Only send if strongSignal > 0 OR breakoutReady > 2
     if (strongSignalCount === 0 && breakoutCount <= 2 && longs.length === 0 && shorts.length === 0) {
-      await this.sendMessage(
+      const result = await this.sendMessage(
         `📊 <b>CPR PRO — BTST/STBT SCAN</b>\n` +
         `📅 ${dateStr}\n\n` +
         `<i>No qualifying setups found today (score < 60).\n` +
         `Scanner ran successfully.</i>`
       );
-      return { sent: false, reason: 'no setups' };
+      return { sent: result.ok, ...(result.ok ? { reason: 'no setups' } : (result.reason ? { reason: result.reason } : {})) };
     }
 
 
@@ -85,8 +93,8 @@ export class TelegramService {
     text += `📊 Strong Signal: ${strongSignalCount} | Breakout: ${breakoutCount}\n`;
 
     // Uses default TELEGRAM_CHAT_ID (no chatId arg = personal BTST alert — unchanged)
-    await this.sendMessage(text);
-    return { sent: true };
+    const result = await this.sendMessage(text);
+    return { sent: result.ok, ...(result.ok ? {} : (result.reason ? { reason: result.reason } : {})) };
   }
 
   static async sendBreakoutAlert(
@@ -102,13 +110,13 @@ export class TelegramService {
     }>,
     overrideChatId?: string,
     overrideToken?: string
-  ): Promise<void> {
-    if (!stocks.length) return;
+  ): Promise<{ ok: boolean; reason?: string }> {
+    if (!stocks.length) return { ok: false, reason: 'no_breakouts' };
 
     const chatId = overrideChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
     if (!chatId) {
       console.warn('[Telegram] TELEGRAM_GROUP_CHAT_ID not set, skipping breakout alert');
-      return;
+      return { ok: false, reason: 'missing_config' };
     }
 
     const lines = stocks.map(s =>
@@ -132,6 +140,6 @@ export class TelegramService {
       `${lines}\n\n` +
       `⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.`;
 
-    await this.sendMessage(message, chatId, overrideToken);
+    return await this.sendMessage(message, chatId, overrideToken);
   }
 }
