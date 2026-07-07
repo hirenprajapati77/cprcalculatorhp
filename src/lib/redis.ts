@@ -8,18 +8,19 @@ if (process.env.REDIS_URL) {
       maxRetriesPerRequest: 1,
       lazyConnect: true, // Do not block application startup
       connectTimeout: 2000, // Fast timeout
-      retryStrategy: (times) => {
-        if (times > 3) {
-          return null; // Stop retrying
-        }
-        return Math.min(times * 50, 2000);
-      },
     });
     
+    let lastErrorLogTime = 0;
+    const ERROR_LOG_THROTTLE_MS = 60000; // Log at most once per minute
+
     redis.on('error', (err) => {
       // Log silently to avoid flooding console in environment without Redis
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Redis connection issue, using memory cache fallback:', err.message);
+      const now = Date.now();
+      if (now - lastErrorLogTime > ERROR_LOG_THROTTLE_MS) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Redis connection issue, using memory cache fallback:', err.message);
+        }
+        lastErrorLogTime = now;
       }
     });
 

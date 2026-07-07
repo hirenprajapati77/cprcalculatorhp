@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { HistoryService } from '../services/history.service';
 import { cache } from '../lib/redis';
+import redisClient from '../lib/redis';
 import { prisma } from '../lib/db';
 
 test('HistoryService Cache Scoped Eviction Tests', async (t) => {
@@ -55,4 +56,8 @@ test('HistoryService Cache Scoped Eviction Tests', async (t) => {
       await cache.del(unrelatedKey);
     }
   });
+});
+
+test.after(() => {
+  redisClient?.disconnect();
 });
