@@ -845,6 +845,19 @@ export default function ScannerClient() {
   const [isNotesSaving, setIsNotesSaving] = useState<boolean>(false);
   const [showSavedIndicator, setShowSavedIndicator] = useState<boolean>(false);
 
+  // Heatmap Mobile/Click Tooltip State
+  const [activeHeatmapTooltip, setActiveHeatmapTooltip] = useState<{ sector: string; signal: string } | null>(null);
+
+  // Click outside to dismiss active heatmap tooltip
+  useEffect(() => {
+    if (!activeHeatmapTooltip) return;
+    const handleOutsideClick = () => {
+      setActiveHeatmapTooltip(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [activeHeatmapTooltip]);
+
   const getTelemetryState = () => {
     const parts = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -1999,6 +2012,12 @@ export default function ScannerClient() {
                               <div
                                 className="group p-2 cursor-pointer"
                                 style={{ minWidth: 90 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveHeatmapTooltip(prev => 
+                                    prev?.sector === sectorName && prev?.signal === sig ? null : { sector: sectorName, signal: sig }
+                                  );
+                                }}
                               >
                                 {/* Count badge */}
                                 <div className="text-sm font-extrabold mb-1 text-center">{count}</div>
@@ -2015,7 +2034,11 @@ export default function ScannerClient() {
                                 </div>
                                 {/* Hover tooltip showing avg score */}
                                 <div
-                                  className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block pointer-events-none"
+                                  className={`absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 pointer-events-none ${
+                                    activeHeatmapTooltip?.sector === sectorName && activeHeatmapTooltip?.signal === sig
+                                      ? 'block'
+                                      : 'hidden group-hover:block'
+                                  }`}
                                   style={{ minWidth: 160 }}
                                 >
                                   <div className="bg-slate-900 border border-slate-600 rounded-lg p-2.5 shadow-2xl text-left">
