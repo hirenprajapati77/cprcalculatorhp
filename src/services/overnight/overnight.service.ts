@@ -298,8 +298,37 @@ export class OvernightService {
         if (!fullStock) continue;
 
         const atrPct = getAtrPct(fullStock.history || [], fullStock.close);
-        const todayCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.close }, atrPct);
-        const tomorrowCpr = calculateCPR({ high: fullStock.high, low: fullStock.low, close: fullStock.ltp }, atrPct);
+
+        let yesterdayCandle = { high: fullStock.high, low: fullStock.low, close: fullStock.close };
+        let todayCandle = { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
+
+        let isLastToday = false;
+        if (fullStock.history && fullStock.history.length > 0) {
+          const lastCandle = fullStock.history[fullStock.history.length - 1];
+          isLastToday = lastCandle.date === dateStr;
+
+          todayCandle = isLastToday ? lastCandle : {
+            high: fullStock.high,
+            low: fullStock.low,
+            close: fullStock.ltp
+          };
+
+          yesterdayCandle = isLastToday
+            ? (fullStock.history.length >= 2 ? fullStock.history[fullStock.history.length - 2] : lastCandle)
+            : lastCandle;
+        }
+
+        const todayCpr = calculateCPR({
+          high: yesterdayCandle.high,
+          low: yesterdayCandle.low,
+          close: yesterdayCandle.close,
+        }, atrPct);
+
+        const tomorrowCpr = calculateCPR({
+          high: todayCandle.high,
+          low: todayCandle.low,
+          close: todayCandle.close,
+        }, atrPct);
         const intraday = await this.getIntradayData(fullStock, currentTime);
 
         const mockStock = fullStock as MockOvernightStock;
