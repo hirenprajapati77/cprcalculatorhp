@@ -1,8 +1,7 @@
-import { prisma } from '@/lib/db';
-import redis from '@/lib/redis';
-
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { prisma } = await import('@/lib/db');
+    const { default: redis } = await import('@/lib/redis');
     // We only want this to run once on the server startup
     console.log('==================================================');
     console.log('🚀 CPR Calculator Platform - Node Startup Initialized');

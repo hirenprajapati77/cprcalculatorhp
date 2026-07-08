@@ -1,5 +1,5 @@
 import yahooFinance from 'yahoo-finance2';
-import { calculateCPR, classifyCprWidth } from '@/lib/cpr-engine';
+import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 
 export interface MtfCprLevels {

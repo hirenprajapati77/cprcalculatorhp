@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstRankingService } from '../services/overnight/btst-ranking.service';
