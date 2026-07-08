@@ -174,8 +174,8 @@ describe('Overnight Engine Tests', () => {
     const originalHistMode = process.env.HISTORICAL_MODE;
     process.env.HISTORICAL_MODE = 'live';
 
-    // Mock Yahoo Finance response with missing/undefined indexes in quote arrays
-    global.fetch = async () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    global.fetch = (async () => ({
       ok: true,
       json: async () => ({
         chart: {
@@ -193,7 +193,7 @@ describe('Overnight Engine Tests', () => {
           }]
         }
       })
-    }) as unknown as typeof originalFetch;
+    })) as any;
 
     try {
       const metrics = await OvernightService.getIntradayData(mockStock, new Date(1719828400000));
@@ -320,7 +320,8 @@ describe('Overnight Engine Tests', () => {
     const originalHistMode = process.env.HISTORICAL_MODE;
     process.env.HISTORICAL_MODE = 'live';
 
-    global.fetch = async () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    global.fetch = (async () => ({
       ok: true,
       json: async () => ({
         chart: {
@@ -337,7 +338,7 @@ describe('Overnight Engine Tests', () => {
           }]
         }
       })
-    }) as unknown as typeof originalFetch;
+    })) as any;
 
     try {
       const metrics = await OvernightService.getIntradayData(mockStock, new Date());
@@ -367,6 +368,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await OvernightService.discover('BOTH', date, [stock14 as any, stock15 as any]);
 
       assert.strictEqual(upserted.includes('STOCK14'), false, '14 candle history should be skipped');
@@ -390,8 +392,9 @@ describe('Overnight Engine Tests', () => {
     
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = process.env.HISTORICAL_MODE;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
-    
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
 
     const upserted: string[] = [];
@@ -403,6 +406,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await OvernightService.discover('BOTH', date, [stockDiff9 as any, stockDiff10 as any, stockDiff11 as any]);
 
       assert.strictEqual(upserted.includes('DIFF9'), false, 'Diff 9 (conflict) should be skipped from persistence');
@@ -411,6 +415,7 @@ describe('Overnight Engine Tests', () => {
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       process.env.HISTORICAL_MODE = originalHistMode;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
     }
   });
@@ -477,22 +482,23 @@ describe('Overnight Engine Tests', () => {
     
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = process.env.HISTORICAL_MODE;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
-    
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
 
     // Mock RegimeService to return default (error / missing data)
     const originalRegime = RegimeService.getMarketRegime;
     RegimeService.getMarketRegime = async () => ({ trend: 'CHOPPY', volatility: 'LOW', score: 50 });
 
-    const originalStockEvent = EventCalendarService.getEventRisk;
-    const originalMacroEvent = EventCalendarService.getMacroEventRisk;
+    const _originalStockEvent = EventCalendarService.getEventRisk;
+    const _originalMacroEvent = EventCalendarService.getMacroEventRisk;
 
     
     EventCalendarService.getMacroEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
 
-    const upserted: any[] = [];
-    prisma.overnightSignal.upsert = (async (args: { create: any }) => {
+    const upserted: Record<string, unknown>[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: Record<string, unknown> }) => {
       upserted.push(args.create);
       return args.create;
     }) as unknown as typeof originalUpsert;
@@ -500,16 +506,19 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await OvernightService.discover('BOTH', date, [mockStock as any]);
 
       assert.strictEqual(upserted.length, 1);
-      assert.strictEqual(upserted[0].symbol, 'REGIME_TEST');
-      assert.strictEqual(upserted[0].regimeFit, 50); // CHOPPY gives 50 regimeFit
-      assert.strictEqual(upserted[0].qualityBucket, 'TRADEABLE'); // Should still be TRADEABLE
-      assert.ok(upserted[0].historyQuality > 0);
+      const u0 = upserted[0] as { symbol: string; regimeFit: number; qualityBucket: string; historyQuality: number };
+      assert.strictEqual(u0.symbol, 'REGIME_TEST');
+      assert.strictEqual(u0.regimeFit, 50); // CHOPPY gives 50 regimeFit
+      assert.strictEqual(u0.qualityBucket, 'TRADEABLE'); // Should still be TRADEABLE
+      assert.ok(u0.historyQuality > 0);
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       process.env.HISTORICAL_MODE = originalHistMode;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
       RegimeService.getMarketRegime = originalRegime;
       

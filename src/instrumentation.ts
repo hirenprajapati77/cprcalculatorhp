@@ -16,19 +16,23 @@ export async function register() {
     try {
       await prisma.$queryRaw`SELECT 1`;
       console.log('✅ DB:      Reachable');
-    } catch (e) {
+    } catch (_e) {
       console.log('❌ DB:      UNREACHABLE');
     }
 
     // Test Redis
     try {
-      const ping = await redis.ping();
-      if (ping === 'PONG') {
-        console.log('✅ REDIS:   Reachable');
+      if (redis) {
+        const ping = await redis.ping();
+        if (ping === 'PONG') {
+          console.log('✅ REDIS:   Reachable');
+        } else {
+          console.log('⚠️ REDIS:   Degraded / Not responding to PING');
+        }
       } else {
-        console.log('⚠️ REDIS:   Degraded / Not responding to PING');
+        console.log('⚠️ REDIS:   NOT CONFIGURED (Using Memory Fallback)');
       }
-    } catch (e) {
+    } catch (_e) {
       console.log('❌ REDIS:   UNREACHABLE');
     }
 
@@ -48,10 +52,8 @@ export async function register() {
       } else {
         console.log('❌ EVENTS:  EMPTY (No data found)');
       }
-    } catch (e) {
+    } catch (_e) {
       console.log('❌ EVENTS:  DB Error during check');
     }
-
-    console.log('==================================================');
   }
 }

@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { prisma } from '../lib/db';
 import { TradeJournalService } from '../services/journal/trade-journal.service';
-import { JournalReportService } from '../services/reporting/journal-report.service';
 
 test('TradeJournalService Phase 3', async (t) => {
   await t.test('Classifies EXECUTION_SLIPPAGE correctly', async () => {

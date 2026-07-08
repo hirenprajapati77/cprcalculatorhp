@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { RetentionService } from '@/services/retention/retention.service';
+import { isValidCronSecret } from '@/lib/crypto';
 
-export async function GET(request: Request) {
-  // Authorization check — matches all other cron routes: x-cron-secret header, no fallback
-  const cronSecret = process.env.CRON_SECRET;
+export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('x-cron-secret');
-  if (!cronSecret || authHeader !== cronSecret) {
+  
+  if (!isValidCronSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

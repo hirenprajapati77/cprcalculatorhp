@@ -65,18 +65,22 @@ export async function GET() {
   let regimeHealth = 'unknown';
   let regimeError = null;
   try {
-    const regimeData = await redis.get('cpr:market_regime:NIFTY_50');
-    if (regimeData) {
-      const parsed = JSON.parse(regimeData);
-      if (parsed.timestamp) {
-        latestRegimeDate = parsed.timestamp;
-        const diffHours = (Date.now() - new Date(parsed.timestamp).getTime()) / (1000 * 60 * 60);
-        regimeHealth = diffHours < 48 ? 'healthy' : 'stale';
+    if (redis) {
+      const regimeData = await redis.get('cpr:market_regime:NIFTY_50');
+      if (regimeData) {
+        const parsed = JSON.parse(regimeData);
+        if (parsed.timestamp) {
+          latestRegimeDate = parsed.timestamp;
+          const diffHours = (Date.now() - new Date(parsed.timestamp).getTime()) / (1000 * 60 * 60);
+          regimeHealth = diffHours < 48 ? 'healthy' : 'stale';
+        } else {
+          regimeHealth = 'unknown_format';
+        }
       } else {
-        regimeHealth = 'unknown_format';
+        regimeHealth = 'no_data';
       }
     } else {
-      regimeHealth = 'no_data';
+      regimeHealth = 'redis_not_connected';
     }
   } catch (err) {
     regimeHealth = 'error';

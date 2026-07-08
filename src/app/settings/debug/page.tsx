@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { notFound } from 'next/navigation';
+
 
 interface HealthData {
   version: string;
@@ -22,10 +22,7 @@ export default function DebugPanel() {
   const [healthData, setHealthData] = useState<HealthData | null>(null);
 
   useEffect(() => {
-    // Basic check for dev mode or explicit env flag
-    if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL !== 'true') {
-      return notFound();
-    }
+    // Auth check is now handled by middleware.ts
     
     const fetchHealth = async () => {
       try {

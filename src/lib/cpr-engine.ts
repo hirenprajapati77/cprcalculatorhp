@@ -1,5 +1,7 @@
 import { CPRInput, CPRResult, CPRClassification, CPRTrend } from '@/types/cpr.types';
 
+import { safeRatio } from './math';
+
 /**
  * Calculates CPR and support/resistance levels.
  *
@@ -32,7 +34,7 @@ export function calculateCPR(input: CPRInput, atrPct?: number): CPRResult {
   const s3 = L - 2 * (H - pivot);
   const s4 = s3 - (s1 - s2);
 
-  const width = ((tcFinal - bcFinal) / pivot) * 100;
+  const width = safeRatio(tcFinal - bcFinal, pivot, 0) * 100;
 
   const classification: CPRClassification = classifyCprWidth(width, atrPct);
 

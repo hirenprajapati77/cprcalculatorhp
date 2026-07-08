@@ -54,7 +54,6 @@ export default function RootLayout({
       >
         <Providers>
           <ToastProvider>
-            <Navbar />
             {process.env.EXECUTION_MODE === 'SHADOW' && (
               <div className="w-full bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-center gap-2 text-amber-500 text-xs font-medium tracking-wide z-50 relative">
                 <span className="flex h-2 w-2 relative">
@@ -64,6 +63,7 @@ export default function RootLayout({
                 SHADOW VALIDATION MODE — NO LIVE ORDERS WILL BE ROUTED
               </div>
             )}
+            <Navbar />
             <main className="flex-grow flex flex-col w-full max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
               {children}
             </main>

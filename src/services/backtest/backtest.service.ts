@@ -1,12 +1,10 @@
 import { MarketService, MarketStockData } from '../market.service';
-import { PrismaClient } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { TradeEngineService } from './trade-engine.service';
 import { HistoricalProvider } from './historical.provider';
 import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
-import { EntryManagerService } from '../overnight/entry-manager.service';
 import { RegimeService } from '../overnight/regime.service';
 import { BtstService } from './btst.service';
 import { prisma } from '@/lib/db';
@@ -504,7 +502,7 @@ export class BacktestService {
               // Entry, SL, Target (mirrors live scanner logic)
               let entryPrice: number, sl: number, target: number;
               let direction: 'LONG' | 'SHORT';
-              let targetType: 'R2' | 'R1' | 'fallback' = 'fallback';
+              let _targetType: 'R2' | 'R1' | 'fallback' = 'fallback';
 
               if (bias === 'BULLISH') {
                 direction = 'LONG';
@@ -539,7 +537,7 @@ export class BacktestService {
                 if (r2RrL >= 1.5)      { target = cpr.r2; targetTypeL = 'R2'; }
                 else if (r1RrL >= 1.5) { target = cpr.r1; targetTypeL = 'R1'; }
                 else                   { target = entryPrice + risk * 2.0; targetTypeL = 'fallback'; }
-                targetType = targetTypeL;
+                _targetType = targetTypeL;
               } else {
                 direction = 'SHORT';
                 entryPrice = cpr.bc;
@@ -571,7 +569,7 @@ export class BacktestService {
                 if (r2RrS >= 1.5)      { target = cpr.s2; targetTypeS = 'R2'; }
                 else if (r1RrS >= 1.5) { target = cpr.s1; targetTypeS = 'R1'; }
                 else                   { target = entryPrice - risk * 2.0; targetTypeS = 'fallback'; }
-                targetType = targetTypeS;
+                _targetType = targetTypeS;
               }
 
               // Only run directions matching executionMode

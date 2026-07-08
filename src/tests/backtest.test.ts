@@ -29,7 +29,9 @@ const baseConfig = {
   capital: 100000,
   riskModel: 'Risk%',
   riskValue: 1,
-  executionMode: 'conservative'
+  executionMode: 'conservative',
+  avgVolume: 1000000,
+  volatility: 'LOW' as const,
 };
 
 // ─── Test Suite: Trade Engine Holding Period ──────────────────────────────────
@@ -336,7 +338,7 @@ test('TradeEngineService — SCANNER_DRIVEN holding period and safety valve', as
       95,   // stopLoss
       110,  // target
       ohlc.slice(0, 2), // legacy 2 days slice
-      { capital: 100000, riskModel: 'Risk%', riskValue: 1.0, executionMode: 'conservative' }
+      baseConfig
     );
 
     assert.strictEqual(tradeResult.status, 'CLOSED_TIME_EXIT');
@@ -352,7 +354,7 @@ test('TradeEngineService — SCANNER_DRIVEN holding period and safety valve', as
       95,   // stopLoss
       110,  // target
       ohlc.slice(0, 7), // 7 days of data available (fits in 20-day safety valve)
-      { capital: 100000, riskModel: 'Risk%', riskValue: 1.0, executionMode: 'conservative' }
+      baseConfig
     );
 
     assert.strictEqual(tradeResult.status, 'CLOSED_TARGET');

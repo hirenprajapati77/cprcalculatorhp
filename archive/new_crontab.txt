@@ -1,6 +1,0 @@
-50 9 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/cpr-journal >> /tmp/cpr-cron.log 2>&1
-55 9 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/btst-journal >> /tmp/btst-cron.log 2>&1
-46 3 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/journal-snapshot >> /tmp/snap-cron.log 2>&1
-0 4 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/journal-snapshot >> /tmp/snap-cron.log 2>&1
-15 4 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/journal-snapshot >> /tmp/snap-cron.log 2>&1
-30 4 * * 1-5 curl -s -H "x-cron-secret: cpr-admin-2026" http://localhost:3000/api/cron/journal-snapshot >> /tmp/snap-cron.log 2>&1

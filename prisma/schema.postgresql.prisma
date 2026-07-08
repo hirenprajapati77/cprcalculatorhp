@@ -102,7 +102,7 @@ model Watchlist {
 }
 
 model BacktestRun {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   name           String
   universe       String
   startDate      DateTime
@@ -110,11 +110,11 @@ model BacktestRun {
   capital        Float
   riskModel      String
   executionMode  String
-  riskValue      Float    @default(1.0)
+  riskValue      Float     @default(1.0)
   status         String
-  strategyMode   String   @default("LEGACY_NARROW_CPR")
-  metricsVersion Int      @default(1)
-  createdAt      DateTime @default(now())
+  strategyMode   String    @default("LEGACY_NARROW_CPR")
+  metricsVersion Int       @default(1)
+  createdAt      DateTime  @default(now())
   deletedAt      DateTime?
 
   trades      Trade[]
@@ -224,47 +224,58 @@ model BacktestMetricSnapshot {
 }
 
 model OvernightSignal {
-  id              String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  symbol          String
-  signalDate      String
-  signalTime      String
+  symbol     String
+  signalDate String
+  signalTime String
 
-  direction       String @default("LONG")
+  direction String @default("LONG")
 
-  entry           Float?
-  stopLoss        Float?
-  target          Float?
+  entry    Float?
+  stopLoss Float?
+  target   Float?
 
-  overnightScore  Int?
+  overnightScore Int?
 
-  expectedGap     Float?
-  expectedMove    Float?
+  expectedGap  Float?
+  expectedMove Float?
 
-  confidence      Int?
+  confidence Int?
 
-  exitStrategy    String?
+  exitStrategy String?
 
-  actualExit      Float?
-  actualReturn    Float?
+  actualExit   Float?
+  actualReturn Float?
 
-  executed        Boolean @default(false)
+  executed Boolean @default(false)
 
-  classification  String
+  classification String
 
-  freezeTime      DateTime?
+  freezeTime DateTime?
 
   rejectionReason String?
 
-  createdAt       DateTime @default(now())
+  historyQuality       Int?
+  liquidityQuality     Int?
+  eventRisk            Int?
+  regimeFit            Int?
+  conflictConfidence   Int?
+  qualityModelVersion  Int?
+  qualityBucket        String?
+  eventRiskReason      String?
+  slippageModelVersion Int?
+  regimeSnapshot       String?
+
+  createdAt DateTime @default(now())
+
+  journalEntries TradeJournal[]
 
   @@unique([symbol, signalDate, signalTime])
-
   @@index([direction])
   @@index([classification])
   @@index([signalDate])
   @@index([signalDate, direction])
-
   @@map("BtstSignal")
 }
 
@@ -285,34 +296,52 @@ model BreakoutAlertState {
 }
 
 model TradeJournal {
-  id             String    @id @default(cuid())
-  tradeDate      DateTime  // stored as midnight IST for the signal date
-  signalType     String    // 'CPR' | 'BTST' | 'STBT'
+  id             String   @id @default(cuid())
+  tradeDate      DateTime // stored as midnight IST for the signal date
+  signalType     String // 'CPR' | 'BTST' | 'STBT'
   symbol         String
-  optionContract String    // e.g. '1920 CE' | '2400 PE'
+  optionContract String // e.g. '1920 CE' | '2400 PE'
   optionStrike   Int
-  optionType     String    // 'CE' | 'PE'
-  entryCmp       Float     // option CMP at signal time (~3:15-3:25 PM)
-  entryTime      DateTime  // exact signal capture time
+  optionType     String // 'CE' | 'PE'
+  entryCmp       Float // option CMP at signal time (~3:15-3:25 PM)
+  entryTime      DateTime // exact signal capture time
 
   // Next day snapshots (null until cron fills them)
-  cmp916         Float?    // 9:16 AM next day
-  cmp930         Float?    // 9:30 AM next day
-  cmp945         Float?    // 9:45 AM next day
-  cmp1000        Float?    // 10:00 AM next day (auto-close)
+  cmp916  Float? // 9:16 AM next day
+  cmp930  Float? // 9:30 AM next day
+  cmp945  Float? // 9:45 AM next day
+  cmp1000 Float? // 10:00 AM next day (auto-close)
 
   // Trade result
-  exitCmp        Float?    // actual exit price (manual or 10:00 AM auto)
-  exitTime       DateTime?
-  pnl            Float?    // exitCmp - entryCmp
-  pnlPct         Float?    // (exitCmp - entryCmp) / entryCmp * 100
+  exitCmp  Float? // actual exit price (manual or 10:00 AM auto)
+  exitTime DateTime?
+  pnl      Float? // exitCmp - entryCmp
+  pnlPct   Float? // (exitCmp - entryCmp) / entryCmp * 100
 
   // Signal context (stored for analysis)
-  score          Int
-  confidence     Float
-  signalSummary  String    // CSV of signals at time of logging
-  scoreV2        Int?
-  v2Breakdown    Json?     // JSON object of breakdown and raw metrics for v2
+  score         Int
+  confidence    Float
+  signalSummary String // CSV of signals at time of logging
+  scoreV2       Int?
+  v2Breakdown   Json? // JSON of breakdown and raw metrics for v2
+
+  // Linkage to generating signal
+  overnightSignalId String?
+  overnightSignal   OvernightSignal? @relation(fields: [overnightSignalId], references: [id])
+
+  // Execution Variance & Observability
+  modelEntryPrice      Float?
+  modelExitPrice       Float?
+  executionVariancePct Float?
+  executionOutcome     String? // MODEL_VALID, EXECUTION_SLIPPAGE, GAP_FAILURE, LOW_QUALITY_SHOULD_SKIP
+
+  // Signal-Time Immutable Snapshots
+  qualityBucketAtSignal        String?
+  eventRiskReasonAtSignal      String?
+  eventRiskScoreAtSignal       Int?
+  slippageModelVersionAtSignal Int?
+  regimeSnapshotAtSignal       String?
+  qualityModelVersionAtSignal  Int?
 
   // Deduplication: one entry per symbol+date+signalType
   @@unique([symbol, tradeDate, signalType])
@@ -322,16 +351,29 @@ model TradeJournal {
 
 // Singleton settings row — always upserted with id = "global"
 model AppSettings {
-  id                    String  @id @default("global")
-  marketMode            String  @default("live")
-  defaultUniverse       String  @default("NSE_FNO")
-  autoRefresh           String  @default("15m")
-  minPrice              Float   @default(20)
-  minVolume             Int     @default(50000)
-  bypassBtst            Boolean @default(false)
-  telegramToken         String  @default("")
-  telegramChatId        String  @default("")
-  telegramGroupChatId   String  @default("")
-  updatedAt             DateTime @updatedAt
+  id                  String   @id @default("global")
+  marketMode          String   @default("live")
+  defaultUniverse     String   @default("NSE_FNO")
+  autoRefresh         String   @default("15m")
+  minPrice            Float    @default(20)
+  minVolume           Int      @default(50000)
+  bypassBtst          Boolean  @default(false)
+  telegramToken       String   @default("")
+  telegramChatId      String   @default("")
+  telegramGroupChatId String   @default("")
+  updatedAt           DateTime @updatedAt
 }
 
+model MarketEvent {
+  id          String   @id @default(cuid())
+  symbol      String // 'MACRO' for system-wide events
+  date        String // YYYY-MM-DD
+  eventType   String // e.g., 'EARNINGS', 'RBI_POLICY', 'FED_RATE'
+  impact      String // e.g., 'HIGH', 'MEDIUM', 'LOW'
+  source      String   @default("MANUAL")
+  eventStatus String   @default("CONFIRMED")
+  createdAt   DateTime @default(now())
+
+  @@index([symbol, date])
+  @@index([date])
+}
