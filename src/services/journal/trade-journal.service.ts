@@ -93,7 +93,8 @@ export class TradeJournalService {
   static async fetchOptionCmp(
     symbol: string,
     strike: number,
-    optionType: 'CE' | 'PE'
+    optionType: 'CE' | 'PE',
+    entryDbId?: string
   ): Promise<number | null> {
     try {
       const { OptionChainService } = await import('@/services/option-chain.service');
@@ -102,12 +103,64 @@ export class TradeJournalService {
       if ('error' in chainRes) {
         throw new Error(`Failed to fetch option chain: ${chainRes.error}`);
       }
-      const option = chainRes.optionsChain.find(
+      
+      let option = chainRes.optionsChain.find(
         o => o.strikePrice === strike && o.optionType === optionType
       );
+      let wasAdjusted = false;
+
+      if (!option) {
+        // Fallback: Find closest strike of same type (handles corporate action adjustments like 2340 -> 2338)
+        const sameTypeOptions = chainRes.optionsChain.filter(
+          o => o.optionType === optionType && o.strikePrice > 0
+        );
+        if (sameTypeOptions.length > 0) {
+          sameTypeOptions.sort((a, b) => Math.abs(a.strikePrice - strike) - Math.abs(b.strikePrice - strike));
+          const closest = sameTypeOptions[0];
+          const maxDiff = strike * 0.05; // reasonable threshold (within 5% of target strike)
+          if (Math.abs(closest.strikePrice - strike) <= maxDiff) {
+            console.log(
+              `[TradeJournal] Exact strike ${strike} not found for ${symbol} ${optionType}. ` +
+              `Using closest adjusted strike ${closest.strikePrice} (symbol: ${closest.symbol})`
+            );
+            option = closest;
+            wasAdjusted = true;
+          }
+        }
+      }
+
       if (!option) {
         throw new Error(`Option not found in chain for strike ${strike} and type ${optionType}`);
       }
+
+      if (wasAdjusted && entryDbId) {
+        try {
+          let expiryStr = '';
+          const prefix = `NSE:${cleanSym}`;
+          if (option.symbol.startsWith(prefix)) {
+            const remainder = option.symbol.substring(prefix.length);
+            const suffixStr = `${option.strikePrice}${optionType}`;
+            if (remainder.endsWith(suffixStr)) {
+              expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
+            }
+          }
+          const finalFormattedName = expiryStr 
+            ? `${cleanSym} ${expiryStr} ${option.strikePrice} ${optionType}` 
+            : `${cleanSym} ${option.strikePrice} ${optionType}`;
+
+          await prisma.tradeJournal.update({
+            where: { id: entryDbId },
+            data: {
+              optionStrike: option.strikePrice,
+              optionContract: finalFormattedName,
+            },
+          });
+          console.log(`[TradeJournal] Updated DB record ${entryDbId} with adjusted strike ${option.strikePrice} and contract name ${finalFormattedName}`);
+        } catch (dbErr) {
+          console.warn(`[TradeJournal] Failed to update DB record ${entryDbId} with adjusted strike:`, dbErr);
+        }
+      }
+
       return option.ltp > 0 ? option.ltp : null;
     } catch (err) {
       console.error(
@@ -157,7 +210,8 @@ export class TradeJournalService {
         const cmp = await TradeJournalService.fetchOptionCmp(
           entry.symbol,
           entry.optionStrike,
-          entry.optionType as 'CE' | 'PE'
+          entry.optionType as 'CE' | 'PE',
+          entry.id
         );
 
         if (!cmp) {
