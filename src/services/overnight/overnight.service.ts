@@ -74,20 +74,17 @@ export class OvernightService {
       return 'ACTIVE';
     }
 
-    const { isWeekend } = getISTTime(time);
-    if (isWeekend) {
+    const { isTradingDay } = getISTTime(time);
+    if (!isTradingDay) {
       return 'FROZEN';
     }
 
     const { totalMinutes } = this.getISTTime(time);
 
-    const startMinutes = 15 * 60 + 15; // 3:15 PM
     const activeMinutes = 15 * 60 + 20; // 3:20 PM
     const freezeMinutes = 15 * 60 + 25; // 3:25 PM
 
-    if (totalMinutes < startMinutes) {
-      return 'DISCOVERING';
-    } else if (totalMinutes >= startMinutes && totalMinutes < activeMinutes) {
+    if (totalMinutes < activeMinutes) {
       return 'DISCOVERING';
     } else if (totalMinutes >= activeMinutes && totalMinutes < freezeMinutes) {
       return 'ACTIVE';
@@ -138,7 +135,7 @@ export class OvernightService {
             const close = quotes.close[i];
             const volume = quotes.volume[i] || 0;
 
-            if (high !== null && low !== null && close !== null) {
+            if (high != null && low != null && close != null) {
               const typicalPrice = (high + low + close) / 3;
               sumPriceVol += typicalPrice * volume;
               sumVol += volume;
@@ -154,7 +151,7 @@ export class OvernightService {
           if (timestamps[i] <= currentTimestampSec) {
             const high = quotes.high[i];
             const low = quotes.low[i];
-            if (high !== null && low !== null) {
+            if (high != null && low != null) {
               maxHigh = Math.max(maxHigh, high);
               minLow = Math.min(minLow, low);
               count++;
@@ -297,26 +294,30 @@ export class OvernightService {
           : await MarketService.getStockData(stock.symbol);
         if (!fullStock) continue;
 
-        const atrPct = getAtrPct(fullStock.history || [], fullStock.close);
-
-        let yesterdayCandle = { high: fullStock.high, low: fullStock.low, close: fullStock.close };
-        let todayCandle = { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
-
-        let isLastToday = false;
-        if (fullStock.history && fullStock.history.length > 0) {
-          const lastCandle = fullStock.history[fullStock.history.length - 1];
-          isLastToday = lastCandle.date === dateStr;
-
-          todayCandle = isLastToday ? lastCandle : {
-            high: fullStock.high,
-            low: fullStock.low,
-            close: fullStock.ltp
-          };
-
-          yesterdayCandle = isLastToday
-            ? (fullStock.history.length >= 2 ? fullStock.history[fullStock.history.length - 2] : lastCandle)
-            : lastCandle;
+        const history = fullStock.history || [];
+        if (history.length === 0) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Empty market history (cannot establish distinct prior day candle).`);
+          continue;
         }
+
+        const lastCandle = history[history.length - 1];
+        const isLastToday = lastCandle.date === dateStr;
+
+        // Ensure we have distinct candles for both today's candle and yesterday's (prior day) candle.
+        if (isLastToday && history.length < 2) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} for today-appended database state (requires at least 2 distinct daily candles).`);
+          continue;
+        }
+
+        const todayCandle = isLastToday
+          ? lastCandle
+          : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
+
+        const yesterdayCandle = isLastToday
+          ? history[history.length - 2]
+          : lastCandle;
+
+        const atrPct = getAtrPct(history, fullStock.close);
 
         const todayCpr = calculateCPR({
           high: yesterdayCandle.high,

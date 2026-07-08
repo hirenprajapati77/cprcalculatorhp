@@ -156,5 +156,159 @@ describe('Overnight Engine Tests', () => {
       process.env.HISTORICAL_MODE = originalHistMode;
     }
   });
+
+  test('getIntradayData handles undefined quote values safely without returning NaN', async () => {
+    const mockStock = {
+      symbol: 'UNDEFINEDVALS',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100,
+      history: []
+    };
+
+    const originalFetch = global.fetch;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    process.env.HISTORICAL_MODE = 'live';
+
+    // Mock Yahoo Finance response with missing/undefined indexes in quote arrays
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        chart: {
+          result: [{
+            timestamp: [1719828000, 1719828300],
+            indicators: {
+              quote: [{
+                // high has undefined/missing element, low/close/volume are valid
+                high: [undefined, 104],
+                low: [98, 99],
+                close: [100, 101],
+                volume: [1000, 2000]
+              }]
+            }
+          }]
+        }
+      })
+    }) as unknown as typeof originalFetch;
+
+    try {
+      const metrics = await OvernightService.getIntradayData(mockStock, new Date(1719828400000));
+      // First candle should be skipped due to undefined high, second candle typicalPrice is (104+99+101)/3 = 101.333
+      // vwap = typicalPrice = 101.333
+      assert.ok(metrics.hasIntraday);
+      assert.ok(metrics.vwap !== null && !isNaN(metrics.vwap));
+      assert.ok(Math.abs(metrics.vwap - 101.33) < 0.05);
+    } finally {
+      global.fetch = originalFetch;
+      process.env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
+  test('discover() skips stocks with empty history / insufficient history based on candle roles', async () => {
+    const stockEmpty = {
+      symbol: 'EMPTYHIST',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100,
+      history: []
+    };
+
+    const stockOneToday = {
+      symbol: 'ONETODAY',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100,
+      history: [
+        { date: '2026-07-08', open: 100, high: 105, low: 95, close: 100, volume: 1000000 }
+      ]
+    };
+
+    const stockOneNotToday = {
+      symbol: 'ONENOTTODAY',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100,
+      history: [
+        { date: '2026-07-07', open: 100, high: 105, low: 95, close: 100, volume: 1000000 }
+      ]
+    };
+
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    const upserted: string[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
+      upserted.push(args.create.symbol);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+
+    process.env.HISTORICAL_MODE = 'mock';
+
+    try {
+      const date = new Date('2026-07-08T15:20:00+05:30');
+      
+      // Empty history -> should skip
+      // 1 candle (today) -> should skip because we need at least 2 distinct candles (yesterday and today)
+      // 1 candle (yesterday/not-today) -> should scan (yesterday candle = history[0], today candle = live ltp)
+      await OvernightService.discover('BOTH', date, [stockEmpty, stockOneToday, stockOneNotToday]);
+
+      assert.strictEqual(upserted.includes('EMPTYHIST'), false, 'Empty history should be skipped');
+      assert.strictEqual(upserted.includes('ONETODAY'), false, '1-candle history (isLastToday) should be skipped');
+      assert.strictEqual(upserted.includes('ONENOTTODAY'), true, '1-candle history (not today) should proceed using live candle for today');
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      process.env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
+  test('calculateOvernightRisk handles zero close price and near-zero close price safely', () => {
+    const stockZeroClose = {
+      symbol: 'ZEROCLOSE',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 0, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100,
+      history: [
+        { date: '2026-07-06', open: 100, high: 105, low: 95, close: 0, volume: 1000 },
+        { date: '2026-07-07', open: 100, high: 105, low: 95, close: 0, volume: 1000 }
+      ]
+    };
+
+    const stockNearZeroClose = {
+      symbol: 'NEARZEROCLOSE',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 1e-10, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100,
+      history: [
+        { date: '2026-07-06', open: 100, high: 105, low: 95, close: 1e-10, volume: 1000 },
+        { date: '2026-07-07', open: 100, high: 105, low: 95, close: 1e-10, volume: 1000 }
+      ]
+    };
+
+    const metricsZero = OvernightRiskService.calculateOvernightRisk(stockZeroClose);
+    const metricsNearZero = OvernightRiskService.calculateOvernightRisk(stockNearZeroClose);
+
+    // Assert returns are calculated safely (e.g. falling back or zero instead of NaN/Infinity)
+    assert.ok(!isNaN(metricsZero.volatility) && isFinite(metricsZero.volatility));
+    assert.ok(!isNaN(metricsZero.gapRisk) && isFinite(metricsZero.gapRisk));
+    assert.ok(!isNaN(metricsZero.shortSqueezeProb) && isFinite(metricsZero.shortSqueezeProb));
+
+    assert.ok(!isNaN(metricsNearZero.volatility) && isFinite(metricsNearZero.volatility));
+    assert.ok(!isNaN(metricsNearZero.gapRisk) && isFinite(metricsNearZero.gapRisk));
+    assert.ok(!isNaN(metricsNearZero.shortSqueezeProb) && isFinite(metricsNearZero.shortSqueezeProb));
+  });
+
+  test('determineState holiday freeze boundary transitions', () => {
+    // 2026-01-26 is Republic Day (NSE Trading Holiday)
+    const holidayDateStr = '2026-01-26T15:20:00+05:30';
+    const dayBeforeHolidayStr = '2026-01-23T15:20:00+05:30'; // Friday (working day)
+    const dayAfterHolidayStr = '2026-01-27T15:20:00+05:30'; // Tuesday (working day)
+
+    const stateHoliday = OvernightService.determineState(new Date(holidayDateStr));
+    const stateBefore = OvernightService.determineState(new Date(dayBeforeHolidayStr));
+    const stateAfter = OvernightService.determineState(new Date(dayAfterHolidayStr));
+
+    assert.strictEqual(stateHoliday, 'FROZEN', 'Holiday date should be FROZEN');
+    assert.strictEqual(stateBefore, 'ACTIVE', 'Trading day before holiday should allow ACTIVE scan');
+    assert.strictEqual(stateAfter, 'ACTIVE', 'Trading day after holiday should allow ACTIVE scan');
+  });
 });
 

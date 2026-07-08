@@ -1,5 +1,6 @@
 import { MarketStockData } from '../market.service';
 import { calculateATR } from '@/lib/atr';
+import { safeRatio } from '@/lib/math';
 
 export interface OvernightRiskMetrics {
   gapRisk: number;         // Average gap percentage (absolute value)
@@ -31,9 +32,9 @@ export class OvernightRiskService {
       for (let i = 1; i < len; i++) {
         const prevClose = history[i - 1].close;
         const open = history[i].open;
-        gapSum += Math.abs((open - prevClose) / prevClose) * 100;
+        gapSum += Math.abs(safeRatio(open - prevClose, prevClose, 0)) * 100;
       }
-      gapRisk = gapSum / (len - 1);
+      gapRisk = safeRatio(gapSum, len - 1, 0.5);
     }
 
     // 3. Sector Risk Factor (deterministic based on sector name)
@@ -60,10 +61,10 @@ export class OvernightRiskService {
       for (let i = 1; i < len; i++) {
         const prevClose = history[i - 1].close;
         const close = history[i].close;
-        returns.push(((close - prevClose) / prevClose) * 100);
+        returns.push(safeRatio(close - prevClose, prevClose, 0) * 100);
       }
-      const mean = returns.reduce((sum, val) => sum + val, 0) / returns.length;
-      const variance = returns.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / returns.length;
+      const mean = safeRatio(returns.reduce((sum, val) => sum + val, 0), returns.length, 0);
+      const variance = safeRatio(returns.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0), returns.length, 0);
       volatility = Math.sqrt(variance);
     }
 
@@ -71,7 +72,7 @@ export class OvernightRiskService {
     // Proxy: High volatility + strong recent upward momentum increases squeeze probability
     let shortSqueezeProb = 10;
     if (len >= 3) {
-      const recentReturn = ((stock.close - history[len - 3].close) / history[len - 3].close) * 100;
+      const recentReturn = safeRatio(stock.close - history[len - 3].close, history[len - 3].close, 0) * 100;
       if (recentReturn > 0) {
         shortSqueezeProb = Math.min(100, Math.floor((recentReturn * 2) + (volatility * 5) + 10));
       }
