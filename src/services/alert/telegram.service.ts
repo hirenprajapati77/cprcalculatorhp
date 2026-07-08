@@ -2,6 +2,8 @@ import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
 
+import { decrypt } from '../../lib/crypto';
+
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
     let token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
@@ -12,7 +14,7 @@ export class TelegramService {
         const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
         if (settings) {
           if (!token && settings.telegramToken) {
-            token = settings.telegramToken;
+            token = decrypt(settings.telegramToken);
           }
           if (!resolvedChatId && settings.telegramChatId) {
             resolvedChatId = settings.telegramChatId;
@@ -29,6 +31,9 @@ export class TelegramService {
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -37,8 +42,11 @@ export class TelegramService {
           chat_id: resolvedChatId,
           text,
           parse_mode: 'HTML'
-        })
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errBody = await response.text();
@@ -47,6 +55,7 @@ export class TelegramService {
       }
       return { ok: true };
     } catch (err) {
+      clearTimeout(timeoutId);
       console.error('[Telegram] Network/fetch error sending message:', err);
       return { ok: false, reason: `fetch_error: ${err instanceof Error ? err.message : String(err)}` };
     }

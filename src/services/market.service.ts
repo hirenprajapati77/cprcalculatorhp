@@ -541,7 +541,7 @@ export class MarketService {
                   }
                 }
               }
-            } catch (err) {
+            } catch (_err) {
               // Fallback handled by initial vwap assignment
             }
 

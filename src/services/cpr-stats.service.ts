@@ -1,5 +1,5 @@
 import { HistoricalProvider } from './backtest/historical.provider';
-import { calculateCPR, classifyCprWidth } from '@/lib/cpr-engine';
+import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 
 export interface CprWidthStats {

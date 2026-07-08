@@ -4,11 +4,12 @@ import { MarketService } from '@/services/market.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { getISTTime } from '@/lib/market-hours';
+import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('x-cron-secret');
-  if (!cronSecret || authHeader !== cronSecret) {
+  
+  if (!isValidCronSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

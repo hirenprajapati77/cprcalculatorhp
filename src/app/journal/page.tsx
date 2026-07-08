@@ -8,6 +8,9 @@ export const metadata: Metadata = {
 
 import { JournalReportService } from '@/services/reporting/journal-report.service';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function JournalPage() {
   const [buckets, regimes, execution, risks, variance] = await Promise.all([
     JournalReportService.getQualityBucketStats(),

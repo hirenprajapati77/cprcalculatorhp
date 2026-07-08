@@ -20,6 +20,8 @@ const BASE_CONFIG = {
   riskModel: 'Risk%',
   riskValue: 1,
   executionMode: 'conservative' as const,
+  avgVolume: 1000000,
+  volatility: 'LOW' as const,
 };
 
 describe('BTST backtest — single-day EOD-forced-exit simulation (Task I)', () => {

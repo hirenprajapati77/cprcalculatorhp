@@ -7,11 +7,9 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cpr_db_password}
       POSTGRES_DB: cpr_pro
       TZ: Asia/Kolkata
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -19,10 +17,9 @@ services:
     image: redis:7-alpine
     container_name: cpr-cache
     restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-cpr_redis_password}
     environment:
       TZ: Asia/Kolkata
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
 
@@ -35,8 +32,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: "postgresql://postgres:postgrespassword@cpr-db:5432/cpr_pro?schema=public"
-      REDIS_URL: "redis://cpr-cache:6379"
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD:-cpr_db_password}@cpr-db:5432/cpr_pro?schema=public"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-cpr_redis_password}@cpr-cache:6379"
       NEXT_PUBLIC_BASE_URL: "http://localhost:3000"
       NODE_ENV: "production"
       RATE_LIMIT_MAX: "60"

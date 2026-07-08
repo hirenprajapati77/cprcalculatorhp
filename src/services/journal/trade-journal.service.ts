@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { OptionChainService } from '@/services/option-chain.service';
+
 
 export class TradeJournalService {
 

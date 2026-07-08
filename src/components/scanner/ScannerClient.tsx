@@ -268,7 +268,7 @@ const SECTORS_LIST = [
   'Other',
 ];
 
-const SECTOR_ALIASES: Record<string, string[]> = {
+const _SECTOR_ALIASES: Record<string, string[]> = {
   'IT': ['tech', 'technology', 'software', 'computers', 'digital'],
   'Financial Services': ['bank', 'banking', 'finance', 'nbfc', 'loan', 'insurance', 'wealth'],
   'Energy': ['oil', 'gas', 'refinery', 'petro', 'power', 'utility'],
@@ -827,7 +827,8 @@ export default function ScannerClient() {
   const [drawerStock, setDrawerStock] = useState<ScannedStock | null>(null);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'signals' | 'tradeSetup' | 'history' | 'compare' | 'notes' | 'cprStats'>('overview');
   const [drawerCprStats, setDrawerCprStats] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const [drawerMtf, setDrawerMtf] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [drawerMtf, setDrawerMtf] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [isDrawerCprStatsLoading, setIsDrawerCprStatsLoading] = useState<boolean>(false);
   const [drawerHistory, setDrawerHistory] = useState<{
     date: string;

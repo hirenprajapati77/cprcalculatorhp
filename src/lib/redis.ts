@@ -30,6 +30,10 @@ if (process.env.REDIS_URL) {
   } catch (err) {
     console.warn('Failed to initialize Redis client:', err);
   }
+} else {
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('WARNING: REDIS_URL is not set in production. Rate limiting and caching will fall back to an in-memory map which is NOT shared across multiple workers or instances!');
+  }
 }
 
 // In-memory cache fallback implementation

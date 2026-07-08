@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { z } from 'zod';
+import { encrypt } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
+
+const SettingsSchema = z.object({
+  marketMode: z.string().optional(),
+  defaultUniverse: z.string().optional(),
+  autoRefresh: z.string().optional(),
+  minPrice: z.number().nonnegative().optional(),
+  minVolume: z.number().nonnegative().optional(),
+  bypassBtst: z.boolean().optional(),
+  telegramToken: z.string().optional(),
+  telegramChatId: z.string().optional(),
+  telegramGroupChatId: z.string().optional(),
+});
 
 // GET — load current settings (creates defaults row if missing)
 export async function GET() {
@@ -11,6 +25,14 @@ export async function GET() {
       create: { id: 'global' },
       update: {},
     });
+
+    // Mask the telegram token if present
+    if (settings.telegramToken && settings.telegramToken.length > 4) {
+      settings.telegramToken = '*'.repeat(settings.telegramToken.length - 4) + settings.telegramToken.slice(-4);
+    } else if (settings.telegramToken) {
+      settings.telegramToken = '****';
+    }
+
     return NextResponse.json({ success: true, settings });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -22,6 +44,11 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const parsed = SettingsSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.issues }, { status: 400 });
+    }
+
     const {
       marketMode,
       defaultUniverse,
@@ -32,7 +59,9 @@ export async function POST(request: NextRequest) {
       telegramToken,
       telegramChatId,
       telegramGroupChatId,
-    } = body;
+    } = parsed.data;
+
+    const encryptedToken = telegramToken && telegramToken.trim() !== '' ? encrypt(telegramToken) : undefined;
 
     const settings = await prisma.appSettings.upsert({
       where: { id: 'global' },
@@ -44,7 +73,7 @@ export async function POST(request: NextRequest) {
         minPrice:             minPrice             ?? 20,
         minVolume:            minVolume            ?? 50000,
         bypassBtst:           bypassBtst           ?? false,
-        telegramToken:        telegramToken        ?? '',
+        telegramToken:        encryptedToken       ?? '',
         telegramChatId:       telegramChatId       ?? '',
         telegramGroupChatId:  telegramGroupChatId  ?? '',
       },
@@ -55,11 +84,19 @@ export async function POST(request: NextRequest) {
         ...(minPrice             !== undefined && { minPrice }),
         ...(minVolume            !== undefined && { minVolume }),
         ...(bypassBtst           !== undefined && { bypassBtst }),
-        ...(telegramToken        !== undefined && { telegramToken }),
+        ...(encryptedToken       !== undefined && { telegramToken: encryptedToken }),
         ...(telegramChatId       !== undefined && { telegramChatId }),
         ...(telegramGroupChatId  !== undefined && { telegramGroupChatId }),
       },
     });
+
+    // Mask for response
+    if (settings.telegramToken && settings.telegramToken.length > 4) {
+      settings.telegramToken = '*'.repeat(settings.telegramToken.length - 4) + settings.telegramToken.slice(-4);
+    } else if (settings.telegramToken) {
+      settings.telegramToken = '****';
+    }
+
     return NextResponse.json({ success: true, settings });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

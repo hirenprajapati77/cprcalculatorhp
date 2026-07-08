@@ -45,3 +45,16 @@ export function decrypt(ciphertext: string): string {
   
   return decrypted;
 }
+
+export function isValidCronSecret(header: string | null): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || !header) {
+    return false;
+  }
+  const a = Buffer.from(secret);
+  const b = Buffer.from(header);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(a, b);
+}

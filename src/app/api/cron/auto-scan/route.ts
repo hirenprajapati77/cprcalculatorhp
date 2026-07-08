@@ -4,12 +4,12 @@ import { CacheService } from '@/services/cache.service';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { getISTTime } from '@/lib/market-hours';
+import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('x-cron-secret');
 
-  if (!cronSecret || authHeader !== cronSecret) {
+  if (!isValidCronSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -109,14 +109,14 @@ export class FyersAuthService {
     return !!token;
   }
 
-  public static getLoginUrl(customRedirectUrl?: string): string {
+  public static getLoginUrl(customRedirectUrl?: string, state: string = 'fyers_auth'): string {
     const { appId, redirectUrl } = this.getCredentials();
     const finalRedirect = customRedirectUrl || redirectUrl;
     const params = new URLSearchParams({
       client_id: appId,
       redirect_uri: finalRedirect,
       response_type: 'code',
-      state: 'fyers_auth'
+      state: state
     });
     return `https://api-t1.fyers.in/api/v3/generate-authcode?${params.toString()}`;
   }
@@ -140,6 +140,9 @@ export class FyersAuthService {
         redirect_uri: finalRedirect
       };
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       // 1. Attempt DIRECT call first
       try {
         console.log('[FyersAuthService] Attempting token generation DIRECTLY...');
@@ -150,8 +153,11 @@ export class FyersAuthService {
             'Accept': 'application/json',
             'X-Fyers-AppId': appId
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
 
         if (res.ok) {
           const data = await res.json();
@@ -184,6 +190,9 @@ export class FyersAuthService {
 
       console.warn('[FyersAuthService] WARNING: Using external proxy for token exchange. Ensure this URL is a trusted, self-controlled endpoint.');
       console.log(`[FyersAuthService] Attempting token generation via PROXY (${authProxyUrl})...`);
+      const proxyController = new AbortController();
+      const proxyTimeoutId = setTimeout(() => proxyController.abort(), 10000);
+      
       const res = await fetch(`${authProxyUrl.replace(/\/$/, '')}/api/v3/validate-authcode`, {
         method: 'POST',
         headers: {
@@ -191,8 +200,10 @@ export class FyersAuthService {
           'Accept': 'application/json',
           'X-Fyers-AppId': appId
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: proxyController.signal
       });
+      clearTimeout(proxyTimeoutId);
 
       if (res.ok) {
         const data = await res.json();

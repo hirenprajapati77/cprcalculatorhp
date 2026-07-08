@@ -69,22 +69,35 @@ export async function GET(request: NextRequest) {
     if (useCache) {
       const { CacheService } = await import('@/services/cache.service');
       const cached = await CacheService.get('AUTO_SCAN_RESULT');
-      if (cached && (cached as any).data) { // eslint-disable-line @typescript-eslint/no-explicit-any
-        const formattedResults = (cached as any).data.map((r: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (cached && typeof cached === 'object' && 'data' in cached) {
+        // Type the cached items — they come from AutoScanResult which always
+        // has symbol, ltp, score, tc, bc, r1 at minimum.
+        interface CachedScanItem {
+          symbol: string;
+          ltp: number;
+          score: number;
+          tc?: number;
+          bc?: number;
+          r1?: number;
+          signalSummary?: string | null;
+          [key: string]: unknown;
+        }
+        const cachedData = cached as { data: CachedScanItem[]; timestamp?: string };
+        const formattedResults = cachedData.data.map((r) => ({
           ...r,
           market: 'NSE',
           sector: 'Auto-Scan Cache',
           volumeRatio: 1.0,
-          entry: r.tc,
-          sl: r.bc,
-          target: r.r1,
+          entry: r.tc ?? null,
+          sl: r.bc ?? null,
+          target: r.r1 ?? null,
           rr: 1.5,
         }));
 
         if (isMarketOpen()) {
           const topForOptions = formattedResults
-            .filter((r: any) => r.score >= 75) // eslint-disable-line @typescript-eslint/no-explicit-any
-            .sort((a: any, b: any) => b.score - a.score) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .filter((r) => r.score >= 75)
+            .sort((a, b) => b.score - a.score)
             .slice(0, 10);
           const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
           for (const r of formattedResults) {
@@ -107,7 +120,7 @@ export async function GET(request: NextRequest) {
           results: formattedResults,
           insights: { strongBuy: 0, breakoutReady: 0, avoid: 0 },
           fromCache: true,
-          cachedAt: (cached as any).timestamp // eslint-disable-line @typescript-eslint/no-explicit-any
+          cachedAt: cachedData.timestamp
         }, { status: 200 });
       }
     }
