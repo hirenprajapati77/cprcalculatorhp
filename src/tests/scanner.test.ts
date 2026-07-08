@@ -47,7 +47,8 @@ test('Scanner Service Signals Evaluation', async (t) => {
   });
 
   await t.test('detects GAPS and VIRGIN CPR correctly', () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Use IST-aware date to match signal.service.ts candle classification logic
+    const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
     const mockStock: MarketStockData = {
       symbol: 'TESTSTOCK3',
       market: 'NSE',
@@ -217,7 +218,8 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
 });
 
 test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Use IST-aware date to match signal.service.ts candle classification logic
+  const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days', () => {
     const mockStock: MarketStockData = {
