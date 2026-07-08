@@ -1,4 +1,4 @@
-import { MarketService } from '../market.service';
+import { HistoricalProvider } from '../backtest/historical.provider';
 
 export interface MarketRegime {
   trend: 'BULL' | 'BEAR' | 'CHOPPY';
@@ -20,7 +20,11 @@ export class RegimeService {
 
     try {
       // Use ^NSEI for Nifty 50
-      const history = await MarketService.getHistoricalData('^NSEI', '1d', '3mo');
+      const endDateObj = new Date(date);
+      const startDateObj = new Date(date);
+      startDateObj.setDate(startDateObj.getDate() - 90);
+
+      const history = await HistoricalProvider.getHistory('^NSEI', startDateObj, endDateObj);
       
       if (!history || history.length < 20) {
         // Fallback if data is missing

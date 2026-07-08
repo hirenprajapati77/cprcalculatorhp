@@ -35,11 +35,11 @@ export async function register() {
     // Event Calendar Freshness Test
     try {
       const latestEvent = await prisma.marketEvent.findFirst({
-        orderBy: { lastUpdated: 'desc' },
-        select: { lastUpdated: true }
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true }
       });
       if (latestEvent) {
-        const diffHours = (Date.now() - latestEvent.lastUpdated.getTime()) / (1000 * 60 * 60);
+        const diffHours = (Date.now() - latestEvent.createdAt.getTime()) / (1000 * 60 * 60);
         if (diffHours > 72) {
           console.log(`❌ EVENTS:  STALE (Last sync ${diffHours.toFixed(1)}h ago)`);
         } else {

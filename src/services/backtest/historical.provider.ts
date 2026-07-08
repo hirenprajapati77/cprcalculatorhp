@@ -106,7 +106,8 @@ export class HistoricalProvider {
   private static async getLiveHistory(symbol: string, startDate: Date, endDate: Date): Promise<OHLC[]> {
     const period1 = Math.floor(startDate.getTime() / 1000);
     const period2 = Math.floor(endDate.getTime() / 1000);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.NS?period1=${period1}&period2=${period2}&interval=1d`;
+    const yahooSymbol = symbol.startsWith('^') ? symbol : `${symbol}.NS`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?period1=${period1}&period2=${period2}&interval=1d`;
 
     // Retry and Timeout mechanism
     let attempts = 0;
