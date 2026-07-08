@@ -5,6 +5,8 @@ import { StbtRankingService } from '../services/overnight/stbt-ranking.service';
 import { OvernightRiskService } from '../services/overnight/overnight-risk.service';
 import { GapProbabilityService } from '../services/overnight/gap-probability.service';
 import { OvernightService } from '../services/overnight/overnight.service';
+import { RegimeService } from '../services/overnight/regime.service';
+import { SignalQualityService } from '../services/overnight/signal-quality.service';
 import { prisma } from '../lib/db';
 
 describe('Overnight Engine Tests', () => {
@@ -409,6 +411,82 @@ describe('Overnight Engine Tests', () => {
       prisma.overnightSignal.upsert = originalUpsert;
       process.env.HISTORICAL_MODE = originalHistMode;
       require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
+    }
+  });
+
+  test('SignalQualityService evaluates and buckets correctly', () => {
+    const stock = {
+      symbol: 'TEST', market: 'NSE' as const, sector: 'IT',
+      open: 100, high: 105, low: 95, close: 200,
+      volume: 2000000, avgVolume: 2000000, marketCap: 10000, ltp: 200
+    };
+
+    // 1. Bull regime + Long + high liquidity + long history -> TRADEABLE
+    const q1 = SignalQualityService.evaluateSignal(
+      stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100
+    );
+    assert.strictEqual(q1.qualityBucket, 'TRADEABLE');
+    assert.strictEqual(q1.regimeFit, 100);
+    assert.strictEqual(q1.conflictConfidence, 50);
+
+    // 2. Bear regime + Long (Contrarian) -> WATCHLIST
+    const q2 = SignalQualityService.evaluateSignal(
+      stock, 'LONG', 100, 50, { trend: 'BEAR', volatility: 'LOW', score: 20 }, 100
+    );
+    assert.strictEqual(q2.qualityBucket, 'WATCHLIST');
+    assert.strictEqual(q2.regimeFit, 0);
+
+    // 3. Low Conflict Confidence (< 15) -> LOW_QUALITY
+    const q3 = SignalQualityService.evaluateSignal(
+      stock, 'LONG', 80, 70, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100
+    );
+    assert.strictEqual(q3.qualityBucket, 'LOW_QUALITY');
+    assert.strictEqual(q3.conflictConfidence, 10);
+    
+    // 4. Low Liquidity -> LOW_QUALITY
+    const illiquidStock = { ...stock, avgVolume: 50000, ltp: 100 };
+    const q4 = SignalQualityService.evaluateSignal(
+      illiquidStock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100
+    );
+    assert.strictEqual(q4.qualityBucket, 'LOW_QUALITY');
+    assert.strictEqual(q4.liquidityQuality, 0);
+  });
+
+  test('discover() integrates quality without breaking backward compatibility if regime data is missing', async () => {
+    const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 2000000 }));
+    const mockStock = { symbol: 'REGIME_TEST', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 200, volume: 2000000, avgVolume: 2000000, marketCap: 10000, ltp: 200, history: makeHistory(100), longScoreOverride: 100, shortScoreOverride: 20 };
+    
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
+    
+    require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
+
+    // Mock RegimeService to return default (error / missing data)
+    const originalRegime = RegimeService.getMarketRegime;
+    RegimeService.getMarketRegime = async () => ({ trend: 'CHOPPY', volatility: 'LOW', score: 50 });
+
+    const upserted: any[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: any }) => {
+      upserted.push(args.create);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+    process.env.HISTORICAL_MODE = 'mock';
+
+    try {
+      const date = new Date('2026-08-01T15:20:00+05:30');
+      await OvernightService.discover('BOTH', date, [mockStock as any]);
+
+      assert.strictEqual(upserted.length, 1);
+      assert.strictEqual(upserted[0].symbol, 'REGIME_TEST');
+      assert.strictEqual(upserted[0].regimeFit, 50); // CHOPPY gives 50 regimeFit
+      assert.strictEqual(upserted[0].qualityBucket, 'TRADEABLE'); // Should still be TRADEABLE
+      assert.ok(upserted[0].historyQuality > 0);
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      process.env.HISTORICAL_MODE = originalHistMode;
+      require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
+      RegimeService.getMarketRegime = originalRegime;
     }
   });
 });

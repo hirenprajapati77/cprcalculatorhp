@@ -17,6 +17,8 @@ import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
 import { getISTTime } from '@/lib/market-hours';
+import { RegimeService } from './regime.service';
+import { SignalQualityService } from './signal-quality.service';
 
 const MIN_HISTORY_FOR_RELIABLE_ATR = 15; // Minimum daily candles for stable ATR computation
 
@@ -292,6 +294,8 @@ export class OvernightService {
     const timeStr = TIME_FORMATTER.format(currentTime); // "HH:MM"
 
     const state = this.determineState(currentTime);
+    const regime = await RegimeService.getMarketRegime(dateStr);
+    
     const universeStocks = mockStocks 
       ? mockStocks.map(s => ({ symbol: s.symbol })) 
       : MarketService.getUniverse('NSE_FNO');
@@ -421,6 +425,19 @@ export class OvernightService {
           
           if (finalCls === 'IGNORE') finalCls = finalSig.cls;
 
+          const quality = SignalQualityService.evaluateSignal(
+            fullStock,
+            finalDir,
+            longSig?.score || 0,
+            shortSig?.score || 0,
+            regime,
+            history.length
+          );
+
+          if (quality.qualityBucket === 'LOW_QUALITY') {
+             console.log(`[OvernightScan] ${fullStock.symbol} flagged as LOW_QUALITY (Liquidity: ${quality.liquidityQuality}, Regime: ${quality.regimeFit}).`);
+          }
+
           signalsToSave.push({
             symbol: stock.symbol,
             signalDate: dateStr,
@@ -439,7 +456,14 @@ export class OvernightService {
             executed: false,
             classification: finalCls,
             freezeTime: state === 'FROZEN' ? new Date() : null,
-            rejectionReason: null
+            rejectionReason: null,
+            historyQuality: quality.historyQuality,
+            liquidityQuality: quality.liquidityQuality,
+            eventRisk: quality.eventRisk,
+            regimeFit: quality.regimeFit,
+            conflictConfidence: quality.conflictConfidence,
+            qualityModelVersion: quality.qualityModelVersion,
+            qualityBucket: quality.qualityBucket,
           });
         }
       } catch (err) {
