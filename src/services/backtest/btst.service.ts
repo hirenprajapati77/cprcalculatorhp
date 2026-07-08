@@ -104,6 +104,7 @@ export class BtstService {
     let totalShort = 0;
     let totalConflict = 0;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stockResults: { stockMeta: any; stock: any }[] = [];
     const batchSize = Number(process.env.YAHOO_BATCH_SIZE || 10);
     const maxRetries = Number(process.env.YAHOO_MAX_RETRIES || 3);
@@ -119,6 +120,7 @@ export class BtstService {
             const timeoutPromise = new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Fetch timeout')), 5000)
             );
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             stock = (await Promise.race([fetchPromise, timeoutPromise])) as any;
             break; // success
           } catch (err) {
