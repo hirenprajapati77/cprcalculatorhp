@@ -34,9 +34,15 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
    - **Liquidity & History Rules**: Requires minimum daily average volume and robust historical data (minimum 15 days) to ensure reliable ATR calculations.
 3. **Execution Realism (Phase 2)**:
    - **Event Risk Profiling**: Uses a bulk-fetching `EventCalendarService` to flag individual stock and macro events (e.g., Earnings, RBI Policy) that could unpredictably override technical signals.
-   - **Dynamic Slippage**: Slippage is not hardcoded. It dynamically scales based on the stock's liquidity tiers and the market's current volatility regime (HIGH/LOW/NORMAL).
+   - **Dynamic Slippage**: Slippage is not hardcoded. It dynamically scales based on the stock's liquidity tiers and the market's current volatility regime (`HIGH` / `NORMAL` / `LOW`).
    - **Gap Penalties**: Differentiates between favorable and adverse gaps. Implements a severe penalty multiplier (3x) for adverse stop-loss blow-throughs (auction fills) while applying standard slippage to favorable target gaps.
 4. **Observability & Journaling (Phase 3 - Completed)**: End-to-end telemetry (e.g., `eventRiskReason`, `slippageModelVersion`, `regimeSnapshot`) tracks exactly *why* a model generated or downgraded a signal, allowing for direct parity analysis against the executed `TradeJournal`. With the new UI layers, execution outcomes (`EXECUTION_SLIPPAGE`, `GAP_FAILURE`, `MODEL_VALID`) are visually audited inside the native journal tab.
+
+---
+
+## 📜 Releases & Changelog
+For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
+Release `v1.0.0-rc.1` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 ---
 
@@ -99,6 +105,28 @@ Immediately after deploying, verify the engine's baseline health to ensure data 
 - [ ] Container startup logs successfully report `APP_VERSION`, `EXECUTION_MODE=SHADOW`, and DB connectivity.
 - [ ] The `/api/health` endpoint payload returns `status: "healthy"`.
 - [ ] Regime Snapshot Freshness and Event Data Freshness are marked healthy. *(Note: Stale event data >72h will universally block trades due to the engine's hard fallback policy).*
-- [ ] Verify Docker container chron timing matches IST.
+- [ ] Verify Docker container **cron** timing matches IST.
+
+### Example Health Route Payload
+You can poll `http://localhost:3000/api/health` to receive this validation payload:
+```json
+{
+  "status": "healthy",
+  "version": "v1.0.0-rc.1",
+  "executionMode": "SHADOW",
+  "checks": {
+    "database": "healthy",
+    "redis": "connected",
+    "signals": "healthy",
+    "events": "healthy",
+    "regime": "healthy"
+  },
+  "timestamps": {
+    "latestSignal": "2026-07-08T09:45:00.000Z",
+    "latestEvent": "2026-07-08T06:30:00.000Z",
+    "latestRegime": "2026-07-08T04:15:00.000Z"
+  }
+}
+```
 
 For daily operational guidelines, refer to the **[Operational Runbook (ops/RUNBOOK.md)](ops/RUNBOOK.md)**.
