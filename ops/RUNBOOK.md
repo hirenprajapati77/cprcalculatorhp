@@ -52,3 +52,15 @@ Before relying on the system's generated signals for paper-trading or shadow val
 4. **Verify Cron Freshness**
    - Confirm `checks.signals` is `healthy` (yesterday's 3:15 PM scan ran successfully).
 
+## 6. Daily Post-Market Shadow Checklist
+After the trading day concludes (e.g., around 4:00 PM IST), run this validation checklist:
+
+1. **Compare Signal Generation**
+   - Did the 3:15 PM cron run? Verify `OvernightSignal` rows were created.
+   - Were risky symbols properly downgraded to `LOW_QUALITY` or `WATCHLIST`?
+2. **Review Execution Outcomes**
+   - Use the `Trade Journal > Analytics` tab to review the distribution of `EXECUTION_SLIPPAGE`, `GAP_FAILURE`, and `EVENT_RISK_AVOIDABLE`.
+   - Export the CSV via the `Export` button to run offline divergence analysis between live V2 scores vs execution realities.
+3. **Handle Missing Exits**
+   - If the 10:00 AM sweep missed an exit, manually update the `Exit CMP` for the affected row in the Journal UI so it doesn't skew overall outcome metrics.
+
