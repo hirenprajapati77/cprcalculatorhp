@@ -11,9 +11,13 @@ export async function GET() {
     const loginUrl = FyersAuthService.getLoginUrl(undefined, state);
     
     const response = NextResponse.redirect(loginUrl);
+    // secure:true only if actually serving HTTPS — NOT based on NODE_ENV,
+    // because production can run on plain HTTP (e.g. IP-based without TLS).
+    const isHttps = (process.env.NEXT_PUBLIC_BASE_URL || '').startsWith('https://');
     response.cookies.set('oauth_state', state, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
+      sameSite: 'lax',
       maxAge: 60 * 10 // 10 minutes
     });
 
