@@ -269,6 +269,8 @@ model OvernightSignal {
 
   createdAt DateTime @default(now())
 
+  journalEntries TradeJournal[]
+
   @@unique([symbol, signalDate, signalTime])
   @@index([direction])
   @@index([classification])
@@ -322,6 +324,24 @@ model TradeJournal {
   signalSummary String // CSV of signals at time of logging
   scoreV2       Int?
   v2Breakdown   Json? // JSON of breakdown and raw metrics for v2
+
+  // Linkage to generating signal
+  overnightSignalId String?
+  overnightSignal   OvernightSignal? @relation(fields: [overnightSignalId], references: [id])
+
+  // Execution Variance & Observability
+  modelEntryPrice      Float?
+  modelExitPrice       Float?
+  executionVariancePct Float?
+  executionOutcome     String? // MODEL_VALID, EXECUTION_SLIPPAGE, GAP_FAILURE, LOW_QUALITY_SHOULD_SKIP
+
+  // Signal-Time Immutable Snapshots
+  qualityBucketAtSignal        String?
+  eventRiskReasonAtSignal      String?
+  eventRiskScoreAtSignal       Int?
+  slippageModelVersionAtSignal Int?
+  regimeSnapshotAtSignal       String?
+  qualityModelVersionAtSignal  Int?
 
   // Deduplication: one entry per symbol+date+signalType
   @@unique([symbol, tradeDate, signalType])

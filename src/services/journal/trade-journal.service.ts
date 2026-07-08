@@ -23,6 +23,16 @@ export class TradeJournalService {
     v2Breakdown?: Record<string, unknown>;
   }): Promise<void> {
     try {
+      // Find matching OvernightSignal
+      const signalDateStr = TradeJournalService.todayISTString();
+      const overnightSignal = await prisma.overnightSignal.findFirst({
+        where: {
+          symbol: params.symbol,
+          signalDate: signalDateStr,
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
       const entryCmp = await TradeJournalService.fetchOptionCmp(
         params.symbol,
         params.optionStrike,
@@ -73,6 +83,17 @@ export class TradeJournalService {
           v2Breakdown: params.v2Breakdown !== undefined
             ? params.v2Breakdown as Prisma.InputJsonValue
             : Prisma.JsonNull,
+          
+          // Phase 3 Snapshots
+          overnightSignalId: overnightSignal?.id ?? null,
+          modelEntryPrice: overnightSignal?.entry ?? null,
+          modelExitPrice: overnightSignal?.target ?? null,
+          qualityBucketAtSignal: overnightSignal?.qualityBucket ?? null,
+          eventRiskReasonAtSignal: overnightSignal?.eventRiskReason ?? null,
+          eventRiskScoreAtSignal: overnightSignal?.eventRisk ?? null,
+          slippageModelVersionAtSignal: overnightSignal?.slippageModelVersion ?? null,
+          regimeSnapshotAtSignal: overnightSignal?.regimeSnapshot ?? null,
+          qualityModelVersionAtSignal: overnightSignal?.qualityModelVersion ?? null,
         },
       });
 
@@ -242,6 +263,10 @@ export class TradeJournalService {
           `[TradeJournal] ${timeSlot} snapshot: ` +
           `${entry.symbol} ${entry.optionContract} @ ₹${cmp}`
         );
+        
+        if (timeSlot === '1000' && !entry.exitCmp) {
+           await TradeJournalService.classifyExecutionOutcome(entry.id);
+        }
       }
     } catch (err) {
       console.error(`[TradeJournal] Snapshot ${timeSlot} failed:`, err);
@@ -380,5 +405,49 @@ export class TradeJournalService {
     const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
     midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
     return midnightUTC;
+  }
+
+  static todayISTString(): string {
+    return new Date().toLocaleDateString('en-CA', {
+      timeZone: 'Asia/Kolkata',
+    });
+  }
+
+  static async classifyExecutionOutcome(tradeId: string): Promise<void> {
+    try {
+      const trade = await prisma.tradeJournal.findUnique({ where: { id: tradeId } });
+      if (!trade || trade.exitCmp === null || trade.entryCmp === null) return;
+  
+      let outcome = 'MODEL_VALID'; // Default assumed good
+      const pnlPct = trade.pnlPct ?? 0;
+  
+      // Adverse Gap checks (Comparing 9:16 vs entry)
+      if (trade.signalType !== 'CPR' && trade.cmp916) {
+        const gapPct = ((trade.cmp916 - trade.entryCmp) / trade.entryCmp) * 100;
+        // Severe adverse gap blow-through in options is usually -15% or worse overnight
+        if (gapPct < -15) {
+          outcome = 'GAP_FAILURE';
+        }
+      }
+  
+      if (pnlPct < 0 && outcome !== 'GAP_FAILURE') {
+        if (trade.qualityBucketAtSignal === 'LOW_QUALITY') {
+          outcome = 'LOW_QUALITY_SHOULD_SKIP';
+        } else if (trade.eventRiskScoreAtSignal && trade.eventRiskScoreAtSignal >= 50) {
+          outcome = 'EVENT_RISK_AVOIDABLE';
+        } else if (trade.qualityBucketAtSignal === 'WATCHLIST') {
+           outcome = 'MODEL_WEAK';
+        } else {
+           outcome = 'EXECUTION_SLIPPAGE'; // It was TRADEABLE but lost
+        }
+      }
+  
+      await prisma.tradeJournal.update({
+        where: { id: tradeId },
+        data: { executionOutcome: outcome },
+      });
+    } catch (e) {
+      console.error(`[TradeJournal] Failed to classify execution outcome for ${tradeId}`, e);
+    }
   }
 }
