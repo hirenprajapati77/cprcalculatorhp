@@ -35,6 +35,13 @@ interface JournalEntry {
   v2Breakdown?: Record<string, unknown> | null;
   confidence: number;
   signalSummary: string;
+  
+  // Phase 3 Linkage
+  executionOutcome?: string | null;
+  qualityBucketAtSignal?: string | null;
+  eventRiskReasonAtSignal?: string | null;
+  regimeSnapshotAtSignal?: string | null;
+  slippageModelVersionAtSignal?: number | null;
 }
 
 interface JournalStats {

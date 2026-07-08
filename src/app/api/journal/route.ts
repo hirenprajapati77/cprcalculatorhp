@@ -75,6 +75,8 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
+    await TradeJournalService.classifyExecutionOutcome(id);
+
     return NextResponse.json({ success: true, entry: updated });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
