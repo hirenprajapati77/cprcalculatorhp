@@ -25,6 +25,22 @@ A production-grade, high-fidelity Central Pivot Range (CPR) trading terminal bui
 
 ---
 
+## 🏛️ Architecture & Execution Model
+
+The platform goes beyond raw signal generation by implementing a realistic, multi-layered execution architecture:
+
+1. **Overnight Signal Discovery**: Scans the `NSE_FNO` universe for potential BTST/STBT setups based on CPR, gaps, and momentum parameters.
+2. **Signal Quality Gates (Phase 1)**: Evaluates raw signals against dynamic thresholds, assigning them into `TRADEABLE`, `WATCHLIST`, or `LOW_QUALITY` buckets. It incorporates:
+   - **Regime Filtering**: Matches signal direction against the broader market trend (NIFTY 50 Bull/Bear) and volatility context.
+   - **Liquidity & History Rules**: Requires minimum daily average volume and robust historical data (minimum 15 days) to ensure reliable ATR calculations.
+3. **Execution Realism (Phase 2)**:
+   - **Event Risk Profiling**: Uses a bulk-fetching `EventCalendarService` to flag individual stock and macro events (e.g., Earnings, RBI Policy) that could unpredictably override technical signals.
+   - **Dynamic Slippage**: Slippage is not hardcoded. It dynamically scales based on the stock's liquidity tiers and the market's current volatility regime (HIGH/LOW/NORMAL).
+   - **Gap Penalties**: Differentiates between favorable and adverse gaps. Implements a severe penalty multiplier (3x) for adverse stop-loss blow-throughs (auction fills) while applying standard slippage to favorable target gaps.
+4. **Observability & Journaling (Phase 3 - In Progress)**: End-to-end telemetry (e.g., `eventRiskReason`, `slippageModelVersion`, `regimeSnapshot`) tracks exactly *why* a model generated or downgraded a signal, allowing for direct parity analysis against the executed `TradeJournal`.
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
