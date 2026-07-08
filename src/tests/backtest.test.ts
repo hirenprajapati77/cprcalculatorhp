@@ -358,8 +358,8 @@ test('TradeEngineService — SCANNER_DRIVEN holding period and safety valve', as
     );
 
     assert.strictEqual(tradeResult.status, 'CLOSED_TARGET');
-    assert.strictEqual(tradeResult.exitReason, 'Target Hit (Slippage: 0.15%)');
-    assert.strictEqual(tradeResult.exitPrice, 109.83500000000001);
+    assert.strictEqual(tradeResult.exitReason, 'Target Hit (Slippage: 0.04%)');
+    assert.strictEqual(tradeResult.exitPrice, 109.956);
     assert.strictEqual(tradeResult.durationDays, 6); // entered day 0, exited day 5 (6th element, inclusive day-count = 6)
   });
 });

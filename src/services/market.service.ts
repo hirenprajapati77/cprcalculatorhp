@@ -458,21 +458,35 @@ export class MarketService {
             // Map history candles
             const history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
             for (let i = 0; i < len; i++) {
-              if (quote.high[i] !== null && quote.low[i] !== null && quote.close[i] !== null) {
-                const timestamp = result.timestamp?.[i];
-                const dateStr = timestamp
-                  ? new Date(timestamp * 1000).toISOString().split('T')[0]
-                  : new Date(Date.now() - (len - 1 - i) * 86400 * 1000).toISOString().split('T')[0];
+              const h = quote.high[i];
+              const l = quote.low[i];
+              const c = quote.close[i];
+              const o = quote.open?.[i] || c;
+              const v = quote.volume?.[i] || 0;
 
-                history.push({
-                  date: dateStr,
-                  open: (quote.open?.[i] as number) || (quote.close[i] as number),
-                  high: quote.high[i] as number,
-                  low: quote.low[i] as number,
-                  close: quote.close[i] as number,
-                  volume: (quote.volume?.[i] as number) || 100000,
-                });
+              if (
+                h === null || l === null || c === null || o === null || v === null ||
+                isNaN(h) || isNaN(l) || isNaN(c) || isNaN(o) || isNaN(v) ||
+                h <= 0 || l <= 0 || c <= 0 || o <= 0 || v < 0 ||
+                h < l || c > h || c < l
+              ) {
+                console.warn(`[MarketService] Validation failed for ${cleanSymbol} candle ${i}: H=${h}, L=${l}, C=${c}, O=${o}, V=${v}. Skipping candle.`);
+                continue;
               }
+
+              const timestamp = result.timestamp?.[i];
+              const dateStr = timestamp
+                ? new Date(timestamp * 1000).toISOString().split('T')[0]
+                : new Date(Date.now() - (len - 1 - i) * 86400 * 1000).toISOString().split('T')[0];
+
+              history.push({
+                date: dateStr,
+                open: o,
+                high: h,
+                low: l,
+                close: c,
+                volume: v,
+              });
             }
 
             const closes = history.map(c => c.close);

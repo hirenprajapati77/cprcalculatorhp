@@ -354,8 +354,8 @@ describe('Overnight Engine Tests', () => {
   test('discover() skips stocks with < 15 daily candles (MIN_HISTORY_FOR_RELIABLE_ATR)', async () => {
     const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
     
-    const stock14 = { symbol: 'STOCK14', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(14) };
-    const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
+    const stock14 = { symbol: 'STOCK14', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(14), longScoreOverride: 80, shortScoreOverride: 50 };
+    const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15), longScoreOverride: 80, shortScoreOverride: 50 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = process.env.HISTORICAL_MODE;
@@ -493,9 +493,10 @@ describe('Overnight Engine Tests', () => {
 
     const _originalStockEvent = EventCalendarService.getEventRisk;
     const _originalMacroEvent = EventCalendarService.getMacroEventRisk;
+    const originalBulkEvent = EventCalendarService.getBulkEventRisk;
 
-    
     EventCalendarService.getMacroEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
+    EventCalendarService.getBulkEventRisk = async () => ({ REGIME_TEST: { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' } });
 
     const upserted: Record<string, unknown>[] = [];
     prisma.overnightSignal.upsert = (async (args: { create: Record<string, unknown> }) => {
@@ -521,8 +522,8 @@ describe('Overnight Engine Tests', () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
       RegimeService.getMarketRegime = originalRegime;
-      
-      
+      EventCalendarService.getMacroEventRisk = _originalMacroEvent;
+      EventCalendarService.getBulkEventRisk = originalBulkEvent;
     }
   });
 });
