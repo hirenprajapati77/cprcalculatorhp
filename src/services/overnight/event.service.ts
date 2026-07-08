@@ -55,8 +55,8 @@ export class EventCalendarService {
 
       // Check Calendar Freshness relative to signalDate
       const latestGlobalEvent = await prisma.marketEvent.findFirst({
-        orderBy: { lastUpdated: 'desc' },
-        select: { lastUpdated: true }
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true }
       });
       
       const isHistoricalMode = process.env.HISTORICAL_MODE === 'mock' || process.env.HISTORICAL_MODE === 'db';
@@ -66,7 +66,7 @@ export class EventCalendarService {
          if (!latestGlobalEvent) {
            isCalendarStale = true;
          } else {
-           const diffHours = (Date.now() - latestGlobalEvent.lastUpdated.getTime()) / (1000 * 60 * 60);
+           const diffHours = (Date.now() - latestGlobalEvent.createdAt.getTime()) / (1000 * 60 * 60);
            if (diffHours > 72) isCalendarStale = true;
          }
       }
@@ -144,18 +144,48 @@ export class EventCalendarService {
         const severity = event.impact === 'HIGH' ? 100 : (event.impact === 'MEDIUM' ? 70 : 30);
         const currentRisk = result[event.symbol];
         
-        if (severity > currentRisk.severity) {
+        if (currentRisk.reason === 'UNVERIFIED_CALENDAR' || severity > currentRisk.severity) {
           currentRisk.severity = severity;
           const daysAway = this.daysBetween(todayStr, event.date);
           const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
           currentRisk.reason = `${event.eventType}_${timeFrame}`;
         }
       }
+      // Add freshness check logic matching getEventRisk (using createdAt instead of lastUpdated to avoid compilation error)
+      const latestGlobalEvent = await prisma.marketEvent.findFirst({
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true }
+      });
+      
+      const isHistoricalMode = process.env.HISTORICAL_MODE === 'mock' || process.env.HISTORICAL_MODE === 'db';
+      
+      let isCalendarStale = false;
+      if (!isHistoricalMode) {
+         if (!latestGlobalEvent) {
+           isCalendarStale = true;
+         } else {
+           const diffHours = (Date.now() - latestGlobalEvent.createdAt.getTime()) / (1000 * 60 * 60);
+           if (diffHours > 72) isCalendarStale = true;
+         }
+      }
+
+      for (const sym of symbols) {
+        if (result[sym].reason === 'UNVERIFIED_CALENDAR') {
+          if (!isCalendarStale) {
+            result[sym] = { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' };
+          } else {
+            result[sym].reason = 'STALE_CALENDAR_FALLBACK';
+            result[sym].confidence = 'LOW';
+            // severity stays 100
+          }
+        }
+      }
+
     } catch (err) {
       console.error(`[EventCalendarService] Error bulk fetching events:`, err);
-      // Fallback to UNKNOWN
+      // Fallback to CONSERVATIVE 100
       for (const sym of symbols) {
-        result[sym] = { severity: 0, reason: 'DB_FETCH_ERROR', source: 'ERROR', confidence: 'UNKNOWN' };
+        result[sym] = { severity: 100, reason: 'DB_FETCH_ERROR', source: 'ERROR', confidence: 'UNKNOWN' };
       }
     }
     

@@ -30,12 +30,13 @@ export async function GET() {
     
     // Check Latest Signal
     const latestSignal = await prisma.overnightSignal.findFirst({
-      orderBy: { tradeDate: 'desc' },
-      select: { tradeDate: true }
+      orderBy: { signalDate: 'desc' },
+      select: { signalDate: true }
     });
     if (latestSignal) {
-      latestSignalDate = latestSignal.tradeDate.toISOString();
-      const diffHours = (Date.now() - latestSignal.tradeDate.getTime()) / (1000 * 60 * 60);
+      const latestSignalDateObj = new Date(latestSignal.signalDate);
+      latestSignalDate = latestSignalDateObj.toISOString();
+      const diffHours = (Date.now() - latestSignalDateObj.getTime()) / (1000 * 60 * 60);
       signalsHealth = diffHours < 72 ? 'healthy' : 'stale';
     } else {
       signalsHealth = 'no_data';
@@ -43,12 +44,12 @@ export async function GET() {
 
     // Check Latest Event
     const latestEvent = await prisma.marketEvent.findFirst({
-      orderBy: { lastUpdated: 'desc' },
-      select: { lastUpdated: true }
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true }
     });
     if (latestEvent) {
-      latestEventDate = latestEvent.lastUpdated.toISOString();
-      const diffHours = (Date.now() - latestEvent.lastUpdated.getTime()) / (1000 * 60 * 60);
+      latestEventDate = latestEvent.createdAt.toISOString();
+      const diffHours = (Date.now() - latestEvent.createdAt.getTime()) / (1000 * 60 * 60);
       eventsHealth = diffHours < 48 ? 'healthy' : 'stale';
     } else {
       eventsHealth = 'no_data';

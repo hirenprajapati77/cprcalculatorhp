@@ -1,5 +1,6 @@
 import { MarketRegime } from './regime.service';
 import { EventRiskResult } from './event.service';
+import { MarketStockData } from '../market.service';
 
 export interface SignalQualityMetrics {
   historyQuality: number;

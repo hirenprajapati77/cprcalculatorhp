@@ -409,6 +409,8 @@ export class BacktestService {
                   riskModel: run.riskModel,
                   riskValue: run.riskValue ?? 1,
                   executionMode: 'conservative',
+                  avgVolume: avgVol,
+                  volatility
                 }
               );
 
@@ -475,6 +477,12 @@ export class BacktestService {
               blockedUntilIndex = i + 1; // Hold for 1 day — block next day from new setup
 
             } else {
+              const validHistory = ohlc.slice(0, i);
+              const avgVolume = validHistory.length > 0
+                ? validHistory.reduce((sum, d) => sum + d.volume, 0) / validHistory.length
+                : today.volume;
+              const volatility = (await RegimeService.getMarketRegime(today.date)).volatility;
+
               // Compute today's CPR from yesterday's OHLC
               const cpr = calculateCPR({
                 high: yesterday.high,

@@ -40,6 +40,7 @@ interface JournalEntry {
   executionOutcome?: string | null;
   qualityBucketAtSignal?: string | null;
   eventRiskReasonAtSignal?: string | null;
+  eventRiskScoreAtSignal?: number | null;
   regimeSnapshotAtSignal?: string | null;
   slippageModelVersionAtSignal?: number | null;
 }
@@ -416,9 +417,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     ];
     const rows = entries.map(e => {
       let parsedRegime = '';
-      if (e.regimeSnapshot && typeof e.regimeSnapshot === 'object') {
-        const r = e.regimeSnapshot as any;
-        parsedRegime = `${r.trend || 'UNKNOWN'} / ${r.volatility || 'UNKNOWN'}`;
+      if (e.regimeSnapshotAtSignal) {
+        try {
+          const r = JSON.parse(e.regimeSnapshotAtSignal);
+          parsedRegime = `${r.trend || 'UNKNOWN'} / ${r.volatility || 'UNKNOWN'}`;
+        } catch {
+          parsedRegime = e.regimeSnapshotAtSignal;
+        }
       }
       return [
         fmtDate(e.tradeDate),
@@ -437,7 +442,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         e.qualityBucketAtSignal ?? '',
         e.executionOutcome ?? '',
         e.eventRiskScoreAtSignal ?? '',
-        e.regimeSnapshot ? JSON.stringify(e.regimeSnapshot).replace(/"/g, '""') : '',
+        e.regimeSnapshotAtSignal ? e.regimeSnapshotAtSignal.replace(/"/g, '""') : '',
         parsedRegime
       ];
     });
