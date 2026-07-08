@@ -425,13 +425,14 @@ export class OvernightService {
           
           if (finalCls === 'IGNORE') finalCls = finalSig.cls;
 
-          const quality = SignalQualityService.evaluateSignal(
+          const quality = await SignalQualityService.evaluateSignal(
             fullStock,
             finalDir,
             longSig?.score || 0,
             shortSig?.score || 0,
             regime,
-            history.length
+            history.length,
+            dateStr
           );
 
           if (quality.qualityBucket === 'LOW_QUALITY') {
