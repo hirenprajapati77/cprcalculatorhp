@@ -53,8 +53,35 @@ export class EventCalendarService {
         };
       }
 
-      // If no events found, we assume no risk, but confidence could be mapped 
-      // if we had a sync status. Assuming HIGH confidence in an empty result for now.
+      // Check Calendar Freshness relative to signalDate
+      const latestGlobalEvent = await prisma.marketEvent.findFirst({
+        orderBy: { lastUpdated: 'desc' },
+        select: { lastUpdated: true }
+      });
+      
+      const isHistoricalMode = process.env.HISTORICAL_MODE === 'mock' || process.env.HISTORICAL_MODE === 'db';
+      
+      let isCalendarStale = false;
+      if (!isHistoricalMode) {
+         if (!latestGlobalEvent) {
+           isCalendarStale = true;
+         } else {
+           const diffHours = (Date.now() - latestGlobalEvent.lastUpdated.getTime()) / (1000 * 60 * 60);
+           if (diffHours > 72) isCalendarStale = true;
+         }
+      }
+
+      if (isCalendarStale) {
+        console.warn(`[EventCalendarService] Calendar is STALE or EMPTY. Applying conservative 100 risk for ${symbol}.`);
+        return {
+          severity: 100,
+          reason: 'STALE_CALENDAR_FALLBACK',
+          source: 'ERROR',
+          confidence: 'LOW'
+        };
+      }
+
+      // If calendar is fresh, we safely assume 0 risk for this symbol
       return {
         severity: 0,
         reason: null,
@@ -64,9 +91,8 @@ export class EventCalendarService {
 
     } catch (err) {
       console.error(`[EventCalendarService] Error fetching events for ${symbol}:`, err);
-      // Return UNKNOWN confidence if DB fails
       return {
-        severity: 0,
+        severity: 100, // CONSERVATIVE FALLBACK
         reason: 'DB_FETCH_ERROR',
         source: 'ERROR',
         confidence: 'UNKNOWN'
@@ -94,9 +120,9 @@ export class EventCalendarService {
   static async getBulkEventRisk(symbols: string[], signalDate: string): Promise<Record<string, EventRiskResult>> {
     const result: Record<string, EventRiskResult> = {};
     
-    // Initialize defaults
+    // Initialize defaults to conservative 100 if we cannot verify calendar health later
     for (const sym of symbols) {
-      result[sym] = { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' };
+      result[sym] = { severity: 100, reason: 'UNVERIFIED_CALENDAR', source: 'LOCAL_DB', confidence: 'UNKNOWN' };
     }
 
     try {

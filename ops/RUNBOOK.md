@@ -38,3 +38,17 @@ If a new model deployment causes unstable signals or crashing cron jobs:
 2. Stop the application: `docker-compose down`
 3. If database schemas were altered, restore from backup: `sqlite3 dev.db < archive/backup.sql`
 4. Restart the application: `docker-compose up -d --build`
+
+## 5. Daily Pre-Market Shadow Checklist
+Before relying on the system's generated signals for paper-trading or shadow validation, run this manual checklist every trading day (e.g., at 9:00 AM IST):
+
+1. **Check `/api/health` Payload**
+   - Confirm `status` is `healthy`.
+   - Verify `checks.database` and `checks.redis` are `connected`/`healthy`.
+2. **Verify Regime Freshness**
+   - Confirm `checks.regime` is `healthy` (last snapshot < 48 hours). If it says `stale`, today's signals might be excessively filtered out due to the conservative `NEUTRAL` fallback.
+3. **Verify Event Calendar Freshness**
+   - Confirm `checks.events` is `healthy` (last sync < 48 hours). If it says `stale`, all symbols will be evaluated with `100` Event Risk (`STALE_CALENDAR_FALLBACK`) and overnight trades will be universally blocked or heavily downgraded.
+4. **Verify Cron Freshness**
+   - Confirm `checks.signals` is `healthy` (yesterday's 3:15 PM scan ran successfully).
+
