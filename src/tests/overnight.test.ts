@@ -118,6 +118,7 @@ describe('Overnight Engine Tests', () => {
       marketCap: 10000,
       ltp: 105,
       history: [
+        ...Array.from({ length: 13 }).map((_, i) => ({ date: `2026-06-${(i+10).toString()}`, open: 100, high: 105, low: 95, close: 100, volume: 500000 })),
         { date: '2026-07-06', open: 95, high: 98, low: 92, close: 96, volume: 500000 },
         { date: '2026-07-07', open: 96, high: 110, low: 90, close: 105, volume: 1000000 }
       ]
@@ -253,7 +254,7 @@ describe('Overnight Engine Tests', () => {
 
       assert.strictEqual(upserted.includes('EMPTYHIST'), false, 'Empty history should be skipped');
       assert.strictEqual(upserted.includes('ONETODAY'), false, '1-candle history (isLastToday) should be skipped');
-      assert.strictEqual(upserted.includes('ONENOTTODAY'), true, '1-candle history (not today) should proceed using live candle for today');
+      assert.strictEqual(upserted.includes('ONENOTTODAY'), false, '1-candle history (not today) should be skipped due to MIN_HISTORY_FOR_RELIABLE_ATR');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       process.env.HISTORICAL_MODE = originalHistMode;
@@ -310,5 +311,104 @@ describe('Overnight Engine Tests', () => {
     assert.strictEqual(stateBefore, 'ACTIVE', 'Trading day before holiday should allow ACTIVE scan');
     assert.strictEqual(stateAfter, 'ACTIVE', 'Trading day after holiday should allow ACTIVE scan');
   });
-});
+  test('getIntradayData validates array lengths for high, low, close, volume', async () => {
+    const mockStock = { symbol: 'MISALIGNED', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100, history: [] };
+    const originalFetch = global.fetch;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    process.env.HISTORICAL_MODE = 'live';
 
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        chart: {
+          result: [{
+            timestamp: [1719828000, 1719828300],
+            indicators: {
+              quote: [{
+                high: [105, 104],
+                low: [98, 99],
+                close: [100], // Mismatched length
+                volume: [1000, 2000]
+              }]
+            }
+          }]
+        }
+      })
+    }) as unknown as typeof originalFetch;
+
+    try {
+      const metrics = await OvernightService.getIntradayData(mockStock, new Date());
+      // Expect null metrics because the throw gets caught in try-catch and returns empty intraday
+      assert.strictEqual(metrics.vwap, null);
+      assert.strictEqual(metrics.hasIntraday, false);
+    } finally {
+      global.fetch = originalFetch;
+      process.env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
+  test('discover() skips stocks with < 15 daily candles (MIN_HISTORY_FOR_RELIABLE_ATR)', async () => {
+    const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
+    
+    const stock14 = { symbol: 'STOCK14', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(14) };
+    const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
+    
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    const upserted: string[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
+      upserted.push(args.create.symbol);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+    process.env.HISTORICAL_MODE = 'mock';
+
+    try {
+      const date = new Date('2026-08-01T15:20:00+05:30');
+      await OvernightService.discover('BOTH', date, [stock14 as any, stock15 as any]);
+
+      assert.strictEqual(upserted.includes('STOCK14'), false, '14 candle history should be skipped');
+      assert.strictEqual(upserted.includes('STOCK15'), true, '15 candle history should proceed');
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      process.env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
+  test('discover() handles NEUTRAL_CONFLICT boundary (diff 9, 10, 11) and skips persistence', async () => {
+    const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
+    const baseStock = { market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
+    
+    // diff = 9 (conflict) -> skipped
+    const stockDiff9 = { ...baseStock, symbol: 'DIFF9', longScoreOverride: 80, shortScoreOverride: 71 };
+    // diff = 10 (not conflict) -> upserted
+    const stockDiff10 = { ...baseStock, symbol: 'DIFF10', longScoreOverride: 80, shortScoreOverride: 70 };
+    // diff = 11 (not conflict) -> upserted
+    const stockDiff11 = { ...baseStock, symbol: 'DIFF11', longScoreOverride: 80, shortScoreOverride: 69 };
+    
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = process.env.HISTORICAL_MODE;
+    const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
+    
+    require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
+
+    const upserted: string[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
+      upserted.push(args.create.symbol);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+    process.env.HISTORICAL_MODE = 'mock';
+
+    try {
+      const date = new Date('2026-08-01T15:20:00+05:30');
+      await OvernightService.discover('BOTH', date, [stockDiff9 as any, stockDiff10 as any, stockDiff11 as any]);
+
+      assert.strictEqual(upserted.includes('DIFF9'), false, 'Diff 9 (conflict) should be skipped from persistence');
+      assert.strictEqual(upserted.includes('DIFF10'), true, 'Diff 10 should be persisted');
+      assert.strictEqual(upserted.includes('DIFF11'), true, 'Diff 11 should be persisted');
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      process.env.HISTORICAL_MODE = originalHistMode;
+      require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
+    }
+  });
+});
