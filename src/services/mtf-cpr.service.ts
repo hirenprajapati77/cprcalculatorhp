@@ -71,28 +71,28 @@ export class MtfCprService {
     const lastCompletedWeek = weekHistory[wIdx];
     const lastCompletedMonth = monthHistory[mIdx];
 
-    const weeklyCPR = calculateCPR({
-      high: lastCompletedWeek.high,
-      low: lastCompletedWeek.low,
-      close: lastCompletedWeek.close
-    });
-
-    const monthlyCPR = calculateCPR({
-      high: lastCompletedMonth.high,
-      low: lastCompletedMonth.low,
-      close: lastCompletedMonth.close
-    });
-
     const { getAtrPct } = await import('@/lib/atr');
     // Calculate ATR% using all available history up to the last completed candle explicitly using its index
     const wAtrPct = getAtrPct(weekHistory.slice(0, wIdx + 1), lastCompletedWeek.close);
     const mAtrPct = getAtrPct(monthHistory.slice(0, mIdx + 1), lastCompletedMonth.close);
 
-    const wWidth = Math.abs(weeklyCPR.tc - weeklyCPR.bc) / weeklyCPR.pivot * 100;
-    const wClass = classifyCprWidth(wWidth, wAtrPct);
+    const weeklyCPR = calculateCPR({
+      high: lastCompletedWeek.high,
+      low: lastCompletedWeek.low,
+      close: lastCompletedWeek.close
+    }, wAtrPct);
 
-    const mWidth = Math.abs(monthlyCPR.tc - monthlyCPR.bc) / monthlyCPR.pivot * 100;
-    const mClass = classifyCprWidth(mWidth, mAtrPct);
+    const monthlyCPR = calculateCPR({
+      high: lastCompletedMonth.high,
+      low: lastCompletedMonth.low,
+      close: lastCompletedMonth.close
+    }, mAtrPct);
+
+    const wWidth = weeklyCPR.width;
+    const wClass = weeklyCPR.classification;
+
+    const mWidth = monthlyCPR.width;
+    const mClass = monthlyCPR.classification;
 
     const weekly = { ...weeklyCPR, width: wWidth, classification: wClass as "NARROW" | "NORMAL" | "WIDE" };
     const monthly = { ...monthlyCPR, width: mWidth, classification: mClass as "NARROW" | "NORMAL" | "WIDE" };

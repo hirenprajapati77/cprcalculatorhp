@@ -104,17 +104,39 @@ export class BtstService {
     let totalShort = 0;
     let totalConflict = 0;
 
-    const stockPromises = stocks.map(async (stockMeta) => {
-      try {
-        const stock = await MarketService.getStockData(stockMeta.symbol);
-        return { stockMeta, stock };
-      } catch (err) {
-        console.error(`Failed to fetch stock data for ${stockMeta.symbol}:`, err);
-        return { stockMeta, stock: null };
-      }
-    });
+    const stockResults: { stockMeta: any; stock: any }[] = [];
+    const batchSize = Number(process.env.YAHOO_BATCH_SIZE || 10);
+    const maxRetries = Number(process.env.YAHOO_MAX_RETRIES || 3);
 
-    const stockResults = await Promise.all(stockPromises);
+    for (let i = 0; i < stocks.length; i += batchSize) {
+      const batch = stocks.slice(i, i + batchSize);
+      const batchPromises = batch.map(async (stockMeta) => {
+        let attempts = 0;
+        let stock = null;
+        while (attempts < maxRetries) {
+          try {
+            const fetchPromise = MarketService.getStockData(stockMeta.symbol);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Fetch timeout')), 5000)
+            );
+            stock = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+            break; // success
+          } catch (err) {
+            attempts++;
+            console.warn(`Attempt ${attempts} failed for ${stockMeta.symbol}: ${err instanceof Error ? err.message : err}`);
+            if (attempts >= maxRetries) {
+              console.error(`Max retries reached for ${stockMeta.symbol}. Skipping.`);
+              break;
+            }
+            await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
+          }
+        }
+        return { stockMeta, stock };
+      });
+
+      const batchResults = await Promise.all(batchPromises);
+      stockResults.push(...batchResults);
+    }
 
     for (const { stock } of stockResults) {
       if (stock) {
@@ -589,7 +611,7 @@ export class BtstService {
     }
 
     let liquidityScore = 0;
-    if (stock.avgVolume >= 500000) {
+    if (liquidityPassed) {
       liquidityScore = 10;
     }
 

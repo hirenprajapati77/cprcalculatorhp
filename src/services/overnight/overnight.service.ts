@@ -431,6 +431,10 @@ export class OvernightService {
           
           if (finalCls === 'IGNORE') finalCls = finalSig.cls;
 
+          if (finalCls === 'IGNORE' && process.env.SAVE_IGNORE_SIGNALS !== 'true') {
+            continue;
+          }
+
           const quality = SignalQualityService.evaluateSignal(
             fullStock,
             finalDir,

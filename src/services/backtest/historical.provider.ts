@@ -36,8 +36,24 @@ export class HistoricalProvider {
         throw new Error(`Invalid provider mode: ${mode}`);
       }
 
-      this.validateOHLC(data);
-      return data;
+      const validData = data.filter((candle, idx) => {
+        if (!candle.date || candle.open === null || candle.high === null || candle.low === null || candle.close === null || candle.volume === null) {
+          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at index ${idx}: Missing date or OHLC values. Skipping candle.`);
+          return false;
+        }
+        if (candle.open < 0 || candle.high < 0 || candle.low < 0 || candle.close < 0 || candle.volume < 0) {
+          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at ${candle.date}: Negative price or volume. Skipping candle.`);
+          return false;
+        }
+        if (candle.high < candle.low || candle.close > candle.high || candle.close < candle.low) {
+          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at ${candle.date}: Invalid OHLC structure (High < Low, or Close outside High/Low). Skipping candle.`);
+          return false;
+        }
+        return true;
+      });
+
+      this.validateOHLC(validData);
+      return validData;
     } catch (e: unknown) {
       const err = e instanceof Error ? e : new Error('Unknown history error');
       console.error(`[HistoricalProvider] Failed to fetch history for ${symbol}:`, err.message);

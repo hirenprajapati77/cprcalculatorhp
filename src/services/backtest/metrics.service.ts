@@ -153,7 +153,10 @@ export class MetricsService {
     const RISK_FREE_DAILY = 0.065 / 252;
     const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED' && t.exitPrice !== null && t.exitPrice !== undefined);
     const dailyReturns = closedTrades.map(t => {
-      const tradeReturn = ((t.exitPrice as number) - t.entryPrice) / t.entryPrice;
+      const isShort = ['SHORT', 'STBT', 'SELL', 'SHORT_SELL', 'PE'].includes((t.type ?? '').toUpperCase());
+      const tradeReturn = isShort
+        ? (t.entryPrice - (t.exitPrice as number)) / t.entryPrice
+        : ((t.exitPrice as number) - t.entryPrice) / t.entryPrice;
       return tradeReturn / (t.durationDays || 1); // normalize by holding duration
     });
 

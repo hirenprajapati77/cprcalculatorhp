@@ -160,8 +160,9 @@ export class BacktestService {
               // 1. Build MarketStockData snapshot for "end of day i"
               const historySlice = ohlc.slice(0, i + 1);
               const validHistory = ohlc.slice(0, i); // history excluding setup day (today) to match live market service
-              const avgVolume = validHistory.length > 0
-                ? validHistory.reduce((sum, d) => sum + d.volume, 0) / validHistory.length
+              const rollingWindow = validHistory.slice(Math.max(0, validHistory.length - 20));
+              const avgVolume = rollingWindow.length > 0
+                ? rollingWindow.reduce((sum, d) => sum + d.volume, 0) / rollingWindow.length
                 : today.volume;
 
               const stock: MarketStockData = {
@@ -333,8 +334,9 @@ export class BacktestService {
               // Build MarketStockData snapshot — no vwap/candle15m (zeros those components)
               const historySlice = ohlc.slice(0, i + 1);
               const validHistory = ohlc.slice(0, i);
-              const avgVol = validHistory.length > 0
-                ? validHistory.reduce((sum, d) => sum + d.volume, 0) / validHistory.length
+              const rollingWindow = validHistory.slice(Math.max(0, validHistory.length - 20));
+              const avgVol = rollingWindow.length > 0
+                ? rollingWindow.reduce((sum, d) => sum + d.volume, 0) / rollingWindow.length
                 : today.volume;
 
               const btstStock: MarketStockData = {
