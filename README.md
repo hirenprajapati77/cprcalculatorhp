@@ -1,18 +1,17 @@
-# CPR PRO — Advanced Central Pivot Range Platform
+# CPR PRO — Algorithmic BTST/STBT Execution Engine
 
-A production-grade, high-fidelity Central Pivot Range (CPR) trading terminal built with Next.js 15, TypeScript, Tailwind CSS, Prisma, PostgreSQL, and Redis caching.
+A production-grade algorithmic validation engine built with Next.js 15, TypeScript, Tailwind CSS, Prisma, PostgreSQL, and Redis caching. This platform has evolved from a standalone Central Pivot Range (CPR) charting terminal into a high-fidelity, execution-aware overnight trading system designed for disciplined shadow validation and eventual live deployment.
 
 ---
 
 ## ⚡ Features
 
-- **Central Pivot Range Engine:** Calculates Pivot Point, Top Central (TC), Bottom Central (BC), Resistance levels (R1–R4), and Support levels (S1–S4) using Daily High, Low, and Close parameters.
-- **Aesthetic Trading Terminal UI:** Responsive dark-themed trading dashboard with glowing indicators, count-up animations, width progress bars, and custom trading insights.
-- **Interactive Visualizations:** Horizontal level charts plotted dynamically on the price boundaries (via Recharts).
-- **Session Overlay:** Multi-session comparison line charts displaying historical Pivot, TC, BC, R1, and S1 lines side-by-side to detect market momentum.
-- **Dual-Storage Vault:** Session history synced with both browser local storage (local backup) and a backend database.
-- **Data Export & Sharing:** Copy formatted levels in one click, download structured CSV data reports, or share public calculations via read-only tokenized URLs.
-- **Resilient Fallback Design:** Dual-database compatibility (PostgreSQL in production, SQLite fallback in development) and caching fallbacks (Redis with in-memory map).
+- **Overnight Validation Engine:** High-fidelity BTST/STBT signal generation with parallel tracking of live expectations vs executed reality.
+- **Strict Quality Gates:** Filters low-probability setups utilizing broader market regime alignment (NIFTY 50 trend), structural liquidity rules, and 15-day ATR momentum histories.
+- **Event-Risk Profiling:** Automatically cross-references setups against corporate (Earnings/Dividends) and macro events, applying a hard fallback if calendar data goes stale.
+- **Server-Side Journaling:** Immutable signal metadata snapshots (V2 Score, Regime, Event Risk) bound to every generated trade for off-line divergence analysis.
+- **Aesthetic Terminal UI:** Responsive dark-themed dashboard mapping raw CPR calculations alongside execution telemetry (Recharts).
+- **Resilient Fallback Design:** Dual-database compatibility (PostgreSQL/SQLite) and robust caching fallbacks (Redis/In-memory).
 
 ---
 
@@ -77,14 +76,29 @@ npm test
 
 ---
 
-## 🐳 Docker Deployment
+## 🐳 Docker Deployment (Shadow Validation)
 
-The platform is fully containerized. Start the Next.js standalone application along with dedicated PostgreSQL database and Redis caching servers:
+The platform is fully containerized and production-ready for controlled shadow trading.
 
-```bash
-docker compose up --build
-```
-This binds:
-- Next.js Web App: [http://localhost:3000](http://localhost:3000)
-- PostgreSQL Database: `localhost:5432`
-- Redis Cache: `localhost:6379`
+1. **Configure Environment:** Ensure your `.env` is explicitly gated:
+   ```env
+   EXECUTION_MODE="SHADOW"
+   APP_VERSION="v1.0.0-rc.1"
+   ```
+2. **Pre-flight Check:** Run the deployment verification script on your host to catch config or schema mismatches before boot:
+   ```bash
+   bash scripts/deploy-check.sh
+   ```
+3. **Deploy:**
+   ```bash
+   docker compose up -d --build
+   ```
+
+### Server Smoke Test
+Immediately after deploying, verify the engine's baseline health to ensure data freshness:
+- [ ] Container startup logs successfully report `APP_VERSION`, `EXECUTION_MODE=SHADOW`, and DB connectivity.
+- [ ] The `/api/health` endpoint payload returns `status: "healthy"`.
+- [ ] Regime Snapshot Freshness and Event Data Freshness are marked healthy. *(Note: Stale event data >72h will universally block trades due to the engine's hard fallback policy).*
+- [ ] Verify Docker container chron timing matches IST.
+
+For daily operational guidelines, refer to the **[Operational Runbook (ops/RUNBOOK.md)](ops/RUNBOOK.md)**.
