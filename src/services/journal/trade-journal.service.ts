@@ -145,8 +145,8 @@ export class TradeJournalService {
             }
           }
           const finalFormattedName = expiryStr 
-            ? `${cleanSym} ${expiryStr} ${option.strikePrice} ${optionType}` 
-            : `${cleanSym} ${option.strikePrice} ${optionType}`;
+            ? `${expiryStr} ${option.strikePrice} ${optionType}` 
+            : `${option.strikePrice} ${optionType}`;
 
           await prisma.tradeJournal.update({
             where: { id: entryDbId },
