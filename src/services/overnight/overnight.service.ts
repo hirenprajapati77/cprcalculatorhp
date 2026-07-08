@@ -18,6 +18,21 @@ import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
 import { getISTTime } from '@/lib/market-hours';
 
+const MIN_HISTORY_FOR_RELIABLE_ATR = 15; // Minimum daily candles for stable ATR computation
+
+const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+
+const TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  hour12: false,
+  hour: '2-digit',
+  minute: '2-digit'
+});
 export interface MockOvernightStock extends MarketStockData {
   longScoreOverride?: number;
   shortScoreOverride?: number;
@@ -119,6 +134,14 @@ export class OvernightService {
         const timestamps = result.timestamp;
         const quotes = result.indicators?.quote?.[0];
         if (!quotes) throw new Error('Live fetch returned empty data');
+
+        if (!quotes.high || !quotes.low || !quotes.close || !quotes.volume || 
+            quotes.high.length !== timestamps.length || 
+            quotes.low.length !== timestamps.length || 
+            quotes.close.length !== timestamps.length || 
+            quotes.volume.length !== timestamps.length) {
+          throw new Error('Live fetch returned misaligned quote arrays');
+        }
 
         let sumPriceVol = 0;
         let sumVol = 0;
@@ -265,21 +288,8 @@ export class OvernightService {
 
     const currentTime = dateOverride || new Date();
     
-    const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const dateStr = dateFormatter.format(currentTime); // "YYYY-MM-DD"
-    
-    const timeFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    const timeStr = timeFormatter.format(currentTime); // "HH:MM"
+    const dateStr = DATE_FORMATTER.format(currentTime); // "YYYY-MM-DD"
+    const timeStr = TIME_FORMATTER.format(currentTime); // "HH:MM"
 
     const state = this.determineState(currentTime);
     const universeStocks = mockStocks 
@@ -309,6 +319,11 @@ export class OvernightService {
           continue;
         }
 
+        if (history.length < MIN_HISTORY_FOR_RELIABLE_ATR) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} < MIN_HISTORY_FOR_RELIABLE_ATR (${MIN_HISTORY_FOR_RELIABLE_ATR}).`);
+          continue;
+        }
+
         const todayCandle = isLastToday
           ? lastCandle
           : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
@@ -334,50 +349,49 @@ export class OvernightService {
 
         const mockStock = fullStock as MockOvernightStock;
 
+        const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
+        if (!elig.eligible) {
+          continue;
+        }
+
         // -- Evaluate LONG --
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
-          const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
-          if (elig.eligible) {
-            const score = mockStock.longScoreOverride !== undefined
-              ? mockStock.longScoreOverride
-              : BtstRankingService.calculateScore({
-                  volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                  tomorrowCprWidth: tomorrowCpr.width,
-                  tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
-                  todayBc: todayCpr.bc, todayTc: todayCpr.tc,
-                  close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
-                  vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
-                  hasConfirmationCandles: intraday.hasIntraday
-                });
-            const cls = BtstRankingService.getClassification(score);
-            const sl = Math.min(fullStock.low, tomorrowCpr.bc);
-            const target = fullStock.ltp + Math.max((fullStock.ltp - sl) * 2.5, fullStock.ltp * 0.05);
-            longSig = { score, cls, sl, target };
-          }
+          const score = mockStock.longScoreOverride !== undefined
+            ? mockStock.longScoreOverride
+            : BtstRankingService.calculateScore({
+                volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                tomorrowCprWidth: tomorrowCpr.width,
+                tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
+                todayBc: todayCpr.bc, todayTc: todayCpr.tc,
+                close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
+                vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
+                hasConfirmationCandles: intraday.hasIntraday
+              });
+          const cls = BtstRankingService.getClassification(score);
+          const sl = Math.min(fullStock.low, tomorrowCpr.bc);
+          const target = fullStock.ltp + Math.max((fullStock.ltp - sl) * 2.5, fullStock.ltp * 0.05);
+          longSig = { score, cls, sl, target };
         }
 
         // -- Evaluate SHORT --
         let shortSig: OvernightSignalCalc | null = null;
         if (direction === 'SHORT' || direction === 'BOTH') {
-          const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
-          if (elig.eligible) {
-            const score = mockStock.shortScoreOverride !== undefined
-              ? mockStock.shortScoreOverride
-              : StbtRankingService.calculateScore({
-                  volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                  tomorrowCprWidth: tomorrowCpr.width,
-                  tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
-                  todayBc: todayCpr.bc, todayTc: todayCpr.tc,
-                  close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
-                  vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
-                  hasConfirmationCandles: intraday.hasIntraday
-                });
-            const cls = StbtRankingService.getClassification(score);
-            const sl = Math.max(fullStock.high, tomorrowCpr.tc);
-            const target = fullStock.ltp - Math.max((sl - fullStock.ltp) * 2.5, fullStock.ltp * 0.05);
-            shortSig = { score, cls, sl, target };
-          }
+          const score = mockStock.shortScoreOverride !== undefined
+            ? mockStock.shortScoreOverride
+            : StbtRankingService.calculateScore({
+                volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                tomorrowCprWidth: tomorrowCpr.width,
+                tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
+                todayBc: todayCpr.bc, todayTc: todayCpr.tc,
+                close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
+                vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
+                hasConfirmationCandles: intraday.hasIntraday
+              });
+          const cls = StbtRankingService.getClassification(score);
+          const sl = Math.max(fullStock.high, tomorrowCpr.tc);
+          const target = fullStock.ltp - Math.max((sl - fullStock.ltp) * 2.5, fullStock.ltp * 0.05);
+          shortSig = { score, cls, sl, target };
         }
 
         // -- Conflict Resolution --
@@ -388,9 +402,8 @@ export class OvernightService {
         if (longSig && shortSig) {
           const diff = Math.abs((longSig.score || 0) - (shortSig.score || 0));
           if (diff < 10) {
-            finalCls = 'NEUTRAL_CONFLICT';
-            finalDir = 'LONG';
-            finalSig = longSig;
+            console.warn(`[OvernightScan] ${fullStock.symbol} skipped: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
+            continue;
           } else {
             if ((longSig.score || 0) > (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
             else { finalDir = 'SHORT'; finalSig = shortSig; }
