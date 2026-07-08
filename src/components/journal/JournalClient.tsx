@@ -57,6 +57,14 @@ interface JournalStats {
   };
 }
 
+interface ReportingResponse {
+  qualityBuckets: { groupValue: string; count: number; winRate: number; avgPnlPct: number; }[];
+  regimes: { groupValue: string; count: number; winRate: number; avgPnlPct: number; }[];
+  executionOutcomes: { groupValue: string; count: number; winRate: number; avgPnlPct: number; }[];
+  eventRisks: { groupValue: string; count: number; winRate: number; avgPnlPct: number; }[];
+  variance: { averageVariancePct: number; sampleSize: number; };
+}
+
 interface JournalResponse {
   success: boolean;
   entries: JournalEntry[];
@@ -246,9 +254,58 @@ function SnapshotCell({ value }: { value: number | null }) {
   return <span className="text-slate-300 text-xs font-mono">₹{fmt(value)}</span>;
 }
 
+function OutcomeBadge({ outcome }: { outcome: string | null | undefined }) {
+  if (!outcome) return null;
+  
+  let color = '#94a3b8';
+  let bg = 'rgba(148,163,184,0.1)';
+  const label = outcome;
+  let tooltip = '';
+
+  if (outcome === 'MODEL_VALID') {
+    color = '#22c55e'; // Green
+    bg = 'rgba(34,197,94,0.1)';
+    tooltip = 'Model signal was correct and execution was profitable.';
+  } else if (outcome === 'EXECUTION_SLIPPAGE' || outcome === 'MODEL_WEAK') {
+    color = '#eab308'; // Yellow
+    bg = 'rgba(234,179,8,0.1)';
+    tooltip = outcome === 'EXECUTION_SLIPPAGE' 
+      ? 'Signal was TRADEABLE, but option execution lost money (possible slippage).' 
+      : 'Signal was WATCHLIST quality and resulted in a loss.';
+  } else if (outcome === 'GAP_FAILURE' || outcome === 'EVENT_RISK_AVOIDABLE' || outcome === 'LOW_QUALITY_SHOULD_SKIP') {
+    color = '#ef4444'; // Red
+    bg = 'rgba(239,68,68,0.1)';
+    if (outcome === 'GAP_FAILURE') tooltip = 'Extreme adverse overnight gap blow-through (>15%).';
+    if (outcome === 'EVENT_RISK_AVOIDABLE') tooltip = 'Loss occurred during a known high-risk event.';
+    if (outcome === 'LOW_QUALITY_SHOULD_SKIP') tooltip = 'Trade was forced on a LOW_QUALITY signal.';
+  }
+
+  return (
+    <span
+      title={tooltip}
+      style={{ color, background: bg, border: `1px solid ${color}40` }}
+      className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase cursor-help"
+    >
+      {label.replace(/_/g, ' ')}
+    </span>
+  );
+}
+
+function formatRegime(regime: string | null | undefined) {
+  if (!regime) return '---';
+  try {
+    const parsed = JSON.parse(regime);
+    return `${parsed.trend ?? 'UNKNOWN'} | ${parsed.volatility ?? 'UNKNOWN'} VOL`;
+  } catch {
+    return regime;
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function JournalClient() {
+export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
+  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS'>('LOG');
+  const [reportingData]               = useState<ReportingResponse | null>(initialReportingData || null);
   const [entries, setEntries]         = useState<JournalEntry[]>([]);
   const [stats, setStats]             = useState<JournalStats | null>(null);
   const [total, setTotal]             = useState(0);
@@ -261,6 +318,8 @@ export default function JournalClient() {
   const [fromDate, setFromDate]       = useState('');
   const [toDate, setToDate]           = useState('');
   const [signalType, setSignalType]   = useState<'ALL' | 'CPR' | 'BTST' | 'STBT'>('ALL');
+  const [qualityFilter, setQualityFilter] = useState<'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'>('ALL');
+  const [outcomeFilter, setOutcomeFilter] = useState<string>('ALL');
 
   // Inline exit input state per row
   const [exitRow, setExitRow]         = useState<string | null>(null);
@@ -296,7 +355,16 @@ export default function JournalClient() {
       const res  = await fetch(`/api/journal?${params}`);
       const data: JournalResponse = await res.json();
       if (!data.success) throw new Error('API returned error');
-      setEntries(data.entries);
+      
+      let filteredEntries = data.entries;
+      if (qualityFilter !== 'ALL') {
+         filteredEntries = filteredEntries.filter(e => e.qualityBucketAtSignal === qualityFilter);
+      }
+      if (outcomeFilter !== 'ALL') {
+         filteredEntries = filteredEntries.filter(e => e.executionOutcome === outcomeFilter);
+      }
+      
+      setEntries(filteredEntries);
       setStats(data.stats);
       setTotal(data.total);
       setPage(data.page);
@@ -306,7 +374,7 @@ export default function JournalClient() {
     } finally {
       setLoading(false);
     }
-  }, [signalType, fromDate, toDate]);
+  }, [signalType, fromDate, toDate, qualityFilter, outcomeFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -404,6 +472,25 @@ export default function JournalClient() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex bg-[#0d0f18] p-1 rounded-lg border border-slate-800 mr-4">
+              <button
+                onClick={() => setActiveTab('LOG')}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === 'LOG' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Trade Log
+              </button>
+              <button
+                onClick={() => setActiveTab('ANALYTICS')}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === 'ANALYTICS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Analytics
+              </button>
+            </div>
+            
             <button
               id="journal-refresh-btn"
               onClick={() => fetchData(1)}
@@ -424,7 +511,109 @@ export default function JournalClient() {
           </div>
         </div>
 
-        {/* ── Stat Widgets ─────────────────────────────────────────────────── */}
+        {activeTab === 'ANALYTICS' && reportingData && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Variance Widget */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatWidget
+                label="Execution Variance"
+                value={`${reportingData.variance.averageVariancePct >= 0 ? '+' : ''}${reportingData.variance.averageVariancePct.toFixed(2)}%`}
+                sub={`Avg gap between model & actual (${reportingData.variance.sampleSize} trades)`}
+                icon={<Activity size={16} />}
+                color={reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444'}
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Quality Buckets Table */}
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
+                  <h3 className="text-sm font-semibold text-white">Quality Bucket Performance</h3>
+                </div>
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-[#12141c] text-slate-400">
+                     <tr>
+                       <th className="px-4 py-2 font-medium">Bucket</th>
+                       <th className="px-4 py-2 font-medium text-right">Trades</th>
+                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
+                       <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {reportingData.qualityBuckets.map(b => (
+                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 font-medium">{b.groupValue}</td>
+                        <td className="px-4 py-3 text-right">{b.count}</td>
+                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
+                        <td className={`px-4 py-3 text-right font-mono ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Execution Outcomes Table */}
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
+                  <h3 className="text-sm font-semibold text-white">Execution Outcomes</h3>
+                </div>
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-[#12141c] text-slate-400">
+                     <tr>
+                       <th className="px-4 py-2 font-medium">Outcome</th>
+                       <th className="px-4 py-2 font-medium text-right">Trades</th>
+                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {reportingData.executionOutcomes.map(b => (
+                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 font-medium"><OutcomeBadge outcome={b.groupValue} /></td>
+                        <td className="px-4 py-3 text-right">{b.count}</td>
+                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Regime Performance Table */}
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden col-span-1 lg:col-span-2">
+                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
+                  <h3 className="text-sm font-semibold text-white">Regime Performance</h3>
+                </div>
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-[#12141c] text-slate-400">
+                     <tr>
+                       <th className="px-4 py-2 font-medium">Regime</th>
+                       <th className="px-4 py-2 font-medium text-right">Trades</th>
+                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
+                       <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {reportingData.regimes.map(b => (
+                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 font-medium text-slate-300">{formatRegime(b.groupValue)}</td>
+                        <td className="px-4 py-3 text-right">{b.count}</td>
+                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
+                        <td className={`px-4 py-3 text-right font-mono ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'LOG' && (
+          <>
+            {/* ── Stat Widgets ─────────────────────────────────────────────────── */}
         {stats && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatWidget
@@ -503,9 +692,37 @@ export default function JournalClient() {
               </button>
             ))}
           </div>
-          {(fromDate || toDate || signalType !== 'ALL') && (
+          
+          <div className="flex items-center gap-2 border-l border-slate-700 pl-3 ml-1">
+            <select
+              value={qualityFilter}
+              onChange={e => { setQualityFilter(e.target.value as 'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'); setPage(1); }}
+              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-400 text-xs focus:outline-none focus:border-blue-500/50"
+            >
+              <option value="ALL">All Qualities</option>
+              <option value="TRADEABLE">Tradeable</option>
+              <option value="WATCHLIST">Watchlist</option>
+              <option value="LOW_QUALITY">Low Quality</option>
+            </select>
+            
+            <select
+              value={outcomeFilter}
+              onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }}
+              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-400 text-xs focus:outline-none focus:border-blue-500/50 w-[140px]"
+            >
+              <option value="ALL">All Outcomes</option>
+              <option value="MODEL_VALID">Model Valid</option>
+              <option value="EXECUTION_SLIPPAGE">Exec Slippage</option>
+              <option value="GAP_FAILURE">Gap Failure</option>
+              <option value="EVENT_RISK_AVOIDABLE">Event Risk</option>
+              <option value="MODEL_WEAK">Model Weak</option>
+              <option value="LOW_QUALITY_SHOULD_SKIP">Low Quality Skip</option>
+            </select>
+          </div>
+          
+          {(fromDate || toDate || signalType !== 'ALL' || qualityFilter !== 'ALL' || outcomeFilter !== 'ALL') && (
             <button
-              onClick={() => { setFromDate(''); setToDate(''); setSignalType('ALL'); setPage(1); }}
+              onClick={() => { setFromDate(''); setToDate(''); setSignalType('ALL'); setQualityFilter('ALL'); setOutcomeFilter('ALL'); setPage(1); }}
               className="text-xs text-slate-600 hover:text-slate-400 underline transition-colors"
             >
               Clear filters
@@ -559,7 +776,13 @@ export default function JournalClient() {
                         {fmtDate(entry.tradeDate)}
                       </td>
                       <td className="px-3 py-3">
-                        <SignalBadge type={entry.signalType} />
+                        <div className="flex flex-col gap-1 items-start">
+                          <SignalBadge type={entry.signalType} />
+                          {entry.qualityBucketAtSignal && (
+                            <span className="text-[9px] text-slate-500 border border-slate-700 rounded px-1">{entry.qualityBucketAtSignal}</span>
+                          )}
+                          <OutcomeBadge outcome={entry.executionOutcome} />
+                        </div>
                       </td>
                       <td className="px-3 py-3 font-semibold text-white font-mono">
                         {entry.symbol}
@@ -815,7 +1038,8 @@ export default function JournalClient() {
 
           </div>
         )}
-
+          </>
+        )}
       </div>
     </div>
   );
