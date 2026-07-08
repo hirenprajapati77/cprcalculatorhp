@@ -45,6 +45,26 @@ Before relying on the system's generated signals for paper-trading or shadow val
 1. **Check `/api/health` Payload**
    - Confirm `status` is `healthy`.
    - Verify `checks.database` and `checks.redis` are `connected`/`healthy`.
+   - *Example Payload Expected:*
+     ```json
+     {
+       "status": "healthy",
+       "version": "v1.0.0-rc.1",
+       "executionMode": "SHADOW",
+       "checks": {
+         "database": "healthy",
+         "redis": "connected",
+         "signals": "healthy",
+         "events": "healthy",
+         "regime": "healthy"
+       },
+       "timestamps": {
+         "latestSignal": "2026-07-08T09:45:00.000Z",
+         "latestEvent": "2026-07-08T06:30:00.000Z",
+         "latestRegime": "2026-07-08T04:15:00.000Z"
+       }
+     }
+     ```
 2. **Verify Regime Freshness**
    - Confirm `checks.regime` is `healthy` (last snapshot < 48 hours). If it says `stale`, today's signals might be excessively filtered out due to the conservative `NEUTRAL` fallback.
 3. **Verify Event Calendar Freshness**
