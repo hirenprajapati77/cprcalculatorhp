@@ -1,6 +1,7 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
+import { safeRatio } from '@/lib/math';
 
 export interface SignalResult {
   signals: string[];
@@ -38,14 +39,6 @@ function getISTDateString(): string {
   const now = new Date();
   const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
   return istTime.toISOString().split('T')[0];
-}
-
-/**
- * Safe division — returns `fallback` when denominator is zero/NaN to prevent
- * Infinity/NaN from propagating into signal thresholds.
- */
-function safeRatio(numerator: number, denominator: number, fallback = 0): number {
-  return denominator > 0 ? numerator / denominator : fallback;
 }
 
 export class SignalService {
