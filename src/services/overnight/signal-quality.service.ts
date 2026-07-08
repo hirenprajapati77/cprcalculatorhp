@@ -1,5 +1,5 @@
 import { MarketRegime } from './regime.service';
-import { EventCalendarService } from './event.service';
+import { EventRiskResult } from './event.service';
 
 export interface SignalQualityMetrics {
   historyQuality: number;
@@ -9,6 +9,7 @@ export interface SignalQualityMetrics {
   conflictConfidence: number;
   qualityModelVersion: number;
   qualityBucket: 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY';
+  eventRiskReason: string | null;
 }
 
 export class SignalQualityService {
@@ -17,15 +18,16 @@ export class SignalQualityService {
   /**
    * Evaluates the quality of an overnight signal and categorizes it into a tradability bucket.
    */
-  static async evaluateSignal(
+  static evaluateSignal(
     stock: MarketStockData,
     direction: 'LONG' | 'SHORT',
     longScore: number,
     shortScore: number,
     regime: MarketRegime,
     historyLength: number,
-    signalDate: string
-  ): Promise<SignalQualityMetrics> {
+    stockEvent: EventRiskResult,
+    macroEvent: EventRiskResult
+  ): SignalQualityMetrics {
     // 1. History Quality (0-100)
     // 15 candles = 0, 200 candles = 100
     let historyQuality = 0;
@@ -61,11 +63,9 @@ export class SignalQualityService {
     if (direction === 'SHORT' && regime.trend === 'BULL') regimeFit = 0;
 
     // 5. Event Risk
-    const stockEvent = await EventCalendarService.getEventRisk(stock.symbol, signalDate);
-    const macroEvent = await EventCalendarService.getMacroEventRisk(signalDate);
-    
     const maxSeverityEvent = stockEvent.severity >= macroEvent.severity ? stockEvent : macroEvent;
     const eventRisk = maxSeverityEvent.severity;
+    const eventRiskReason = maxSeverityEvent.reason;
 
     // 6. Quality Bucket Classification
     let qualityBucket: 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY' = 'TRADEABLE';
@@ -90,6 +90,7 @@ export class SignalQualityService {
       conflictConfidence,
       qualityModelVersion: this.QUALITY_MODEL_VERSION,
       qualityBucket,
+      eventRiskReason,
     };
   }
 }

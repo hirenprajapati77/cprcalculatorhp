@@ -422,54 +422,52 @@ describe('Overnight Engine Tests', () => {
       volume: 2000000, avgVolume: 2000000, marketCap: 10000, ltp: 200
     };
 
-    const originalStockEvent = EventCalendarService.getEventRisk;
-    const originalMacroEvent = EventCalendarService.getMacroEventRisk;
-
-    EventCalendarService.getEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
-    EventCalendarService.getMacroEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
+    
 
     try {
       // 1. Bull regime + Long + high liquidity + long history -> TRADEABLE
-      const q1 = await SignalQualityService.evaluateSignal(
-        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, '2026-07-08'
+      const q1 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
       );
       assert.strictEqual(q1.qualityBucket, 'TRADEABLE');
       assert.strictEqual(q1.regimeFit, 100);
       assert.strictEqual(q1.conflictConfidence, 50);
 
       // 2. Bear regime + Long (Contrarian) -> WATCHLIST
-      const q2 = await SignalQualityService.evaluateSignal(
-        stock, 'LONG', 100, 50, { trend: 'BEAR', volatility: 'LOW', score: 20 }, 100, '2026-07-08'
+      const q2 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BEAR', volatility: 'LOW', score: 20 }, 100, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
       );
       assert.strictEqual(q2.qualityBucket, 'WATCHLIST');
       assert.strictEqual(q2.regimeFit, 0);
 
       // 3. Low Conflict Confidence (< 15) -> LOW_QUALITY
-      const q3 = await SignalQualityService.evaluateSignal(
-        stock, 'LONG', 80, 70, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, '2026-07-08'
+      const q3 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 80, 70, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
       );
       assert.strictEqual(q3.qualityBucket, 'LOW_QUALITY');
       assert.strictEqual(q3.conflictConfidence, 10);
       
       // 4. Low Liquidity -> LOW_QUALITY
       const illiquidStock = { ...stock, avgVolume: 50000, ltp: 100 };
-      const q4 = await SignalQualityService.evaluateSignal(
-        illiquidStock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, '2026-07-08'
+      const q4 = SignalQualityService.evaluateSignal(
+        illiquidStock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }, { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
       );
       assert.strictEqual(q4.qualityBucket, 'LOW_QUALITY');
       assert.strictEqual(q4.liquidityQuality, 0);
 
       // 5. Event Risk -> LOW_QUALITY
-      EventCalendarService.getEventRisk = async () => ({ severity: 100, reason: 'EARNINGS', source: 'LOCAL_DB', confidence: 'HIGH' });
-      const q5 = await SignalQualityService.evaluateSignal(
-        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, '2026-07-08'
+      
+      const q5 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100, 
+        { severity: 100, reason: 'EARNINGS', source: 'LOCAL_DB', confidence: 'HIGH' }, 
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
       );
       assert.strictEqual(q5.qualityBucket, 'LOW_QUALITY');
       assert.strictEqual(q5.eventRisk, 100);
 
     } finally {
-      EventCalendarService.getEventRisk = originalStockEvent;
-      EventCalendarService.getMacroEventRisk = originalMacroEvent;
+      
+      
     }
   });
 
@@ -490,7 +488,7 @@ describe('Overnight Engine Tests', () => {
     const originalStockEvent = EventCalendarService.getEventRisk;
     const originalMacroEvent = EventCalendarService.getMacroEventRisk;
 
-    EventCalendarService.getEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
+    
     EventCalendarService.getMacroEventRisk = async () => ({ severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' });
 
     const upserted: any[] = [];
@@ -514,8 +512,8 @@ describe('Overnight Engine Tests', () => {
       process.env.HISTORICAL_MODE = originalHistMode;
       require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
       RegimeService.getMarketRegime = originalRegime;
-      EventCalendarService.getEventRisk = originalStockEvent;
-      EventCalendarService.getMacroEventRisk = originalMacroEvent;
+      
+      
     }
   });
 });

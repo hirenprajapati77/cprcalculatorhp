@@ -6,6 +6,8 @@ import { HistoricalProvider } from './historical.provider';
 import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
+import { EntryManagerService } from '../overnight/entry-manager.service';
+import { RegimeService } from '../overnight/regime.service';
 import { BtstService } from './btst.service';
 import { prisma } from '@/lib/db';
 
@@ -207,9 +209,12 @@ export class BacktestService {
 
               // 5. Simulate or Record NEVER_TRIGGERED
               if (triggeredIndex !== -1) {
+                const regime = await RegimeService.getMarketRegime(today.date);
+                const volatility = regime.volatility;
+
                 const entrySlipped = bias === 'BULLISH'
-                  ? triggeredPrice * (1 + TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false))
-                  : triggeredPrice * (1 - TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                  ? triggeredPrice * (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false))
+                  : triggeredPrice * (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
 
                 const SAFETY_VALVE_DAYS = 20; // Computational safety valve to prevent out-of-dataset overflow, not a trading rule.
                 const tradeOhlc = ohlc.slice(triggeredIndex, Math.min(triggeredIndex + SAFETY_VALVE_DAYS, ohlc.length));
@@ -224,7 +229,9 @@ export class BacktestService {
                     capital: run.capital,
                     riskModel: run.riskModel,
                     riskValue: run.riskValue ?? 1,
-                    executionMode: 'conservative'
+                    executionMode: 'conservative',
+                    avgVolume,
+                    volatility
                   }
                 );
 
@@ -250,7 +257,7 @@ export class BacktestService {
                     target: target,
                     riskAmount: tradeResult.riskAmount,
                     fees,
-                    slippage: TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false) * 2 * 100,
+                    slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
                     executionDelayMs: 0,
                     rr: tradeResult.rr,
                     durationDays: tradeResult.durationDays,
@@ -317,7 +324,7 @@ export class BacktestService {
                 processedTrades++;
                 blockedUntilIndex = i + 5;
               }
-            } else if (isBtstDriven) {
+            } else if (isBtstDriven) { const regime = await RegimeService.getMarketRegime(today.date); const volatility = regime.volatility;
               // ── BTST_STBT_DRIVEN ────────────────────────────────────────────────────
               // Entry: today's close (day i). Exit: next day only (EOD forced).
               // VWAP(20pt) + closeStrength(15pt) are absent from snapshot → score out of 65.
@@ -377,8 +384,8 @@ export class BacktestService {
 
               // Entry = today's close with slippage (confirmed BTST mechanic — no trigger search)
               const btstEntry = btstDirection === 'LONG'
-                ? today.close * (1 + TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false))
-                : today.close * (1 - TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                ? today.close * (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false))
+                : today.close * (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
 
               const btstSl = btstResult.sl;
               const btstTarget = btstResult.target;
@@ -439,7 +446,7 @@ export class BacktestService {
                   target: btstTarget,
                   riskAmount: btstTradeResult.riskAmount,
                   fees: btstFees,
-                  slippage: TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false) * 2 * 100,
+                  slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
                   executionDelayMs: 0,
                   rr: btstTradeResult.rr,
                   durationDays: btstTradeResult.durationDays,
@@ -498,7 +505,7 @@ export class BacktestService {
                 if (today.open > cpr.tc) {
                   // Gap-up open: breakout confirmed, fill at open
                   entryPrice = today.open;
-                  entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                  entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 } else if (today.high < cpr.tc) {
                   continue; // TC never reached today — skip
                 } else {
@@ -506,7 +513,7 @@ export class BacktestService {
                   // close > TC (day held above TC) AND close > open (bullish body, not wick rejection)
                   // Models BTST-style confirmed breakout on daily data; entry at TC price.
                   if (today.close <= cpr.tc || today.close <= today.open) continue;
-                  entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                  entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 }
 
                 // CPR-based SL: use BC as natural support (known pre-market).
@@ -532,14 +539,14 @@ export class BacktestService {
                 if (today.open < cpr.bc) {
                   // Gap-down open: breakdown confirmed, fill at open
                   entryPrice = today.open;
-                  entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                  entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 } else if (today.low > cpr.bc) {
                   continue; // BC never reached — skip
                 } else {
                   // Non-gap intraday touch of BC — require EOD close confirmation:
                   // close < BC (day held below BC) AND close < open (bearish body, not wick rejection)
                   if (today.close >= cpr.bc || today.close >= today.open) continue;
-                  entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false));
+                  entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 }
 
                 // CPR-based SL: use TC as natural resistance (known pre-market).
@@ -576,7 +583,9 @@ export class BacktestService {
                   capital: run.capital,
                   riskModel: run.riskModel,
                   riskValue: run.riskValue ?? 1,
-                  executionMode: 'conservative'
+                  executionMode: 'conservative',
+                  avgVolume,
+                  volatility
                 }
               );
 
@@ -601,7 +610,7 @@ export class BacktestService {
                   target: target,
                   riskAmount: tradeResult.riskAmount,
                   fees,
-                  slippage: TradeEngineService.calculateSlippage(avgVolume, 'NORMAL', false) * 2 * 100,
+                  slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
                   executionDelayMs: 0,
                   rr: tradeResult.rr,
                   durationDays: tradeResult.durationDays,
