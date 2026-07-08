@@ -412,22 +412,35 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     const headers = [
       'Trade Date','Type','Stock','Option','Entry CMP',
       '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','V1 Score','V2 Score',
+      'Quality Bucket', 'Execution Outcome', 'Event Risk', 'Regime Snapshot', 'Regime Parsed'
     ];
-    const rows = entries.map(e => [
-      fmtDate(e.tradeDate),
-      e.signalType,
-      e.symbol,
-      e.optionContract,
-      e.entryCmp,
-      e.cmp916  ?? '',
-      e.cmp930  ?? '',
-      e.cmp945  ?? '',
-      e.cmp1000 ?? '',
-      e.exitCmp ?? '',
-      e.pnlPct  !== null ? e.pnlPct.toFixed(2) : '',
-      e.score,
-      e.scoreV2 ?? '',
-    ]);
+    const rows = entries.map(e => {
+      let parsedRegime = '';
+      if (e.regimeSnapshot && typeof e.regimeSnapshot === 'object') {
+        const r = e.regimeSnapshot as any;
+        parsedRegime = `${r.trend || 'UNKNOWN'} / ${r.volatility || 'UNKNOWN'}`;
+      }
+      return [
+        fmtDate(e.tradeDate),
+        e.signalType,
+        e.symbol,
+        e.optionContract,
+        e.entryCmp,
+        e.cmp916  ?? '',
+        e.cmp930  ?? '',
+        e.cmp945  ?? '',
+        e.cmp1000 ?? '',
+        e.exitCmp ?? '',
+        e.pnlPct  !== null ? e.pnlPct.toFixed(2) : '',
+        e.score,
+        e.scoreV2 ?? '',
+        e.qualityBucketAtSignal ?? '',
+        e.executionOutcome ?? '',
+        e.eventRiskScoreAtSignal ?? '',
+        e.regimeSnapshot ? JSON.stringify(e.regimeSnapshot).replace(/"/g, '""') : '',
+        parsedRegime
+      ];
+    });
     const csv = [headers, ...rows]
       .map(r => r.map(v => `"${v}"`).join(','))
       .join('\n');
