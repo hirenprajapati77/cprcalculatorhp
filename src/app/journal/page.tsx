@@ -6,6 +6,24 @@ export const metadata: Metadata = {
   description: 'Live option trade journal with snapshot tracking and P&L analysis for CPR, BTST, and STBT signals.',
 };
 
-export default function JournalPage() {
-  return <JournalClient />;
+import { JournalReportService } from '@/services/reporting/journal-report.service';
+
+export default async function JournalPage() {
+  const [buckets, regimes, execution, risks, variance] = await Promise.all([
+    JournalReportService.getQualityBucketStats(),
+    JournalReportService.getRegimeStats(),
+    JournalReportService.getExecutionOutcomeStats(),
+    JournalReportService.getEventRiskStats(),
+    JournalReportService.getExecutionVarianceReport()
+  ]);
+
+  const initialReportingData = {
+    qualityBuckets: buckets,
+    regimes,
+    executionOutcomes: execution,
+    eventRisks: risks,
+    variance,
+  };
+
+  return <JournalClient initialReportingData={initialReportingData} />;
 }

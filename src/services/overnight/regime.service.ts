@@ -79,10 +79,9 @@ export class RegimeService {
     return ema;
   }
 
-  private static calculateATR(history: any[], period: number): number {
+  private static calculateATR(history: { high: number, low: number, close: number }[], period: number): number {
     if (history.length <= period) return 0;
     
-    let trSum = 0;
     const trValues = [];
     
     for (let i = 1; i < history.length; i++) {
