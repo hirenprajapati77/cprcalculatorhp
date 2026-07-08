@@ -13,7 +13,7 @@ export class TradeEngineService {
   /**
    * Dynamically calculates slippage based on liquidity and regime volatility.
    */
-  static calculateSlippage(avgVolume: number, volatility: string, isGapExit: boolean): number {
+  static calculateSlippage(avgVolume: number, volatility: string, isAdverseGap: boolean): number {
     // 1. Base Slippage from Liquidity Tiers
     let baseSlippage = 0.0015; // default 0.15% for low liquidity
     if (avgVolume >= 500000) {
@@ -29,9 +29,9 @@ export class TradeEngineService {
 
     let finalSlippage = baseSlippage * multiplier;
 
-    // 3. Gap-through-stop / Auction penalty
-    if (isGapExit) {
-      // Severe penalty for auction fill on gap-through-stop
+    // 3. Gap-through-stop / Auction penalty (Adverse only)
+    if (isAdverseGap) {
+      // Severe penalty for auction fill on adverse gap-through-stop
       finalSlippage = finalSlippage * 3.0; 
       // Cap gap slippage at 1.0%
       finalSlippage = Math.min(finalSlippage, 0.01);
@@ -117,10 +117,11 @@ export class TradeEngineService {
         }
         if (candle.open >= target) {
           status = 'CLOSED_TARGET_GAP';
-          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          // Favorable target gap -> Normal slippage (isAdverseGap = false)
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, false);
           exitPrice = candle.open * (1 - slip);
           exitDate = candle.date;
-          exitReason = `Gap Up above Target (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
+          exitReason = `Gap Up above Target (Slippage: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'TARGET',
             timestamp: new Date(candle.date),
@@ -144,10 +145,11 @@ export class TradeEngineService {
         }
         if (candle.open <= target) {
           status = 'CLOSED_TARGET_GAP';
-          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          // Favorable target gap -> Normal slippage (isAdverseGap = false)
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, false);
           exitPrice = candle.open * (1 + slip);
           exitDate = candle.date;
-          exitReason = `Gap Down below Target (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
+          exitReason = `Gap Down below Target (Slippage: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'TARGET',
             timestamp: new Date(candle.date),

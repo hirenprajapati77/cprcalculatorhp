@@ -87,4 +87,52 @@ export class EventCalendarService {
     const diffTime = Math.abs(end.getTime() - start.getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }
+
+  /**
+   * Bulk fetches event risk for multiple symbols to prevent N+1 queries.
+   */
+  static async getBulkEventRisk(symbols: string[], signalDate: string): Promise<Record<string, EventRiskResult>> {
+    const result: Record<string, EventRiskResult> = {};
+    
+    // Initialize defaults
+    for (const sym of symbols) {
+      result[sym] = { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' };
+    }
+
+    try {
+      const todayDate = new Date(signalDate);
+      const threeDaysFromNow = new Date(todayDate);
+      threeDaysFromNow.setDate(todayDate.getDate() + 3);
+
+      const todayStr = signalDate;
+      const futureStr = threeDaysFromNow.toISOString().split('T')[0];
+
+      const events = await prisma.marketEvent.findMany({
+        where: {
+          symbol: { in: symbols },
+          date: { gte: todayStr, lte: futureStr }
+        }
+      });
+
+      for (const event of events) {
+        const severity = event.impact === 'HIGH' ? 100 : (event.impact === 'MEDIUM' ? 70 : 30);
+        const currentRisk = result[event.symbol];
+        
+        if (severity > currentRisk.severity) {
+          currentRisk.severity = severity;
+          const daysAway = this.daysBetween(todayStr, event.date);
+          const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
+          currentRisk.reason = `${event.eventType}_${timeFrame}`;
+        }
+      }
+    } catch (err) {
+      console.error(`[EventCalendarService] Error bulk fetching events:`, err);
+      // Fallback to UNKNOWN
+      for (const sym of symbols) {
+        result[sym] = { severity: 0, reason: 'DB_FETCH_ERROR', source: 'ERROR', confidence: 'UNKNOWN' };
+      }
+    }
+    
+    return result;
+  }
 }

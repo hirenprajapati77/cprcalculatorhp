@@ -17,6 +17,7 @@ import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
 import { getISTTime } from '@/lib/market-hours';
+import { EventCalendarService } from './event.service';
 import { RegimeService } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
 
@@ -301,6 +302,11 @@ export class OvernightService {
       : MarketService.getUniverse('NSE_FNO');
     const signalsToSave: Prisma.OvernightSignalCreateInput[] = [];
 
+    // Pre-fetch async dependencies for the entire universe to prevent N+1 query bottlenecks
+    const symbols = universeStocks.map(s => s.symbol);
+    const bulkEventRisks = await EventCalendarService.getBulkEventRisk(symbols, dateStr);
+    const macroEventRisk = await EventCalendarService.getMacroEventRisk(dateStr);
+
     for (const stock of universeStocks) {
       try {
         const fullStock = mockStocks
@@ -425,14 +431,15 @@ export class OvernightService {
           
           if (finalCls === 'IGNORE') finalCls = finalSig.cls;
 
-          const quality = await SignalQualityService.evaluateSignal(
+          const quality = SignalQualityService.evaluateSignal(
             fullStock,
             finalDir,
             longSig?.score || 0,
             shortSig?.score || 0,
             regime,
             history.length,
-            dateStr
+            bulkEventRisks[fullStock.symbol] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'UNKNOWN' },
+            macroEventRisk
           );
 
           if (quality.qualityBucket === 'LOW_QUALITY') {
@@ -465,6 +472,8 @@ export class OvernightService {
             conflictConfidence: quality.conflictConfidence,
             qualityModelVersion: quality.qualityModelVersion,
             qualityBucket: quality.qualityBucket,
+            eventRiskReason: quality.eventRiskReason,
+            regimeSnapshot: JSON.stringify(regime),
           });
         }
       } catch (err) {

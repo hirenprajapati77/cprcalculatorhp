@@ -256,13 +256,16 @@ model OvernightSignal {
 
   rejectionReason String?
 
-  historyQuality      Int?
-  liquidityQuality    Int?
-  eventRisk           Int?
-  regimeFit           Int?
-  conflictConfidence  Int?
-  qualityModelVersion Int?
-  qualityBucket       String?
+  historyQuality       Int?
+  liquidityQuality     Int?
+  eventRisk            Int?
+  regimeFit            Int?
+  conflictConfidence   Int?
+  qualityModelVersion  Int?
+  qualityBucket        String?
+  eventRiskReason      String?
+  slippageModelVersion Int?
+  regimeSnapshot       String?
 
   createdAt DateTime @default(now())
 
@@ -342,12 +345,14 @@ model AppSettings {
 }
 
 model MarketEvent {
-  id        String   @id @default(cuid())
-  symbol    String // 'MACRO' for system-wide events
-  date      String // YYYY-MM-DD
-  eventType String // e.g., 'EARNINGS', 'RBI_POLICY', 'FED_RATE'
-  impact    String // e.g., 'HIGH', 'MEDIUM', 'LOW'
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  symbol      String // 'MACRO' for system-wide events
+  date        String // YYYY-MM-DD
+  eventType   String // e.g., 'EARNINGS', 'RBI_POLICY', 'FED_RATE'
+  impact      String // e.g., 'HIGH', 'MEDIUM', 'LOW'
+  source      String   @default("MANUAL")
+  eventStatus String   @default("CONFIRMED")
+  createdAt   DateTime @default(now())
 
   @@index([symbol, date])
   @@index([date])
