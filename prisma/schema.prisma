@@ -340,3 +340,15 @@ model AppSettings {
   telegramGroupChatId String   @default("")
   updatedAt           DateTime @updatedAt
 }
+
+model MarketEvent {
+  id        String   @id @default(cuid())
+  symbol    String // 'MACRO' for system-wide events
+  date      String // YYYY-MM-DD
+  eventType String // e.g., 'EARNINGS', 'RBI_POLICY', 'FED_RATE'
+  impact    String // e.g., 'HIGH', 'MEDIUM', 'LOW'
+  createdAt DateTime @default(now())
+
+  @@index([symbol, date])
+  @@index([date])
+}

@@ -1,5 +1,5 @@
-import { MarketStockData } from '../market.service';
 import { MarketRegime } from './regime.service';
+import { EventCalendarService } from './event.service';
 
 export interface SignalQualityMetrics {
   historyQuality: number;
@@ -17,14 +17,15 @@ export class SignalQualityService {
   /**
    * Evaluates the quality of an overnight signal and categorizes it into a tradability bucket.
    */
-  static evaluateSignal(
+  static async evaluateSignal(
     stock: MarketStockData,
     direction: 'LONG' | 'SHORT',
     longScore: number,
     shortScore: number,
     regime: MarketRegime,
-    historyLength: number
-  ): SignalQualityMetrics {
+    historyLength: number,
+    signalDate: string
+  ): Promise<SignalQualityMetrics> {
     // 1. History Quality (0-100)
     // 15 candles = 0, 200 candles = 100
     let historyQuality = 0;
@@ -59,8 +60,12 @@ export class SignalQualityService {
     if (direction === 'LONG' && regime.trend === 'BEAR') regimeFit = 0;
     if (direction === 'SHORT' && regime.trend === 'BULL') regimeFit = 0;
 
-    // 5. Event Risk (Placeholder)
-    const eventRisk = 0; // Will be integrated with event calendar later
+    // 5. Event Risk
+    const stockEvent = await EventCalendarService.getEventRisk(stock.symbol, signalDate);
+    const macroEvent = await EventCalendarService.getMacroEventRisk(signalDate);
+    
+    const maxSeverityEvent = stockEvent.severity >= macroEvent.severity ? stockEvent : macroEvent;
+    const eventRisk = maxSeverityEvent.severity;
 
     // 6. Quality Bucket Classification
     let qualityBucket: 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY' = 'TRADEABLE';
@@ -68,12 +73,12 @@ export class SignalQualityService {
     if (
       historyQuality < 20 ||
       liquidityQuality < 50 ||
-      eventRisk > 80 ||
+      eventRisk >= 80 ||
       conflictConfidence < 15 // Stricter than the absolute 10-point cutoff
     ) {
       qualityBucket = 'LOW_QUALITY';
-    } else if (regimeFit < 50 || liquidityQuality < 80) {
-      // Misaligned regime or slightly weak liquidity drops it to Watchlist
+    } else if (regimeFit < 50 || liquidityQuality < 80 || maxSeverityEvent.confidence === 'UNKNOWN') {
+      // Misaligned regime, slightly weak liquidity, or unknown event risk drops it to Watchlist
       qualityBucket = 'WATCHLIST';
     }
 

@@ -1,17 +1,45 @@
 import { OHLC } from './historical.provider';
 
-// TODO: 0.05% per side is a placeholder estimate for liquid NSE large-caps.
-// Small-cap or low-volume names will require dynamic spread-based calibration in production.
-export const SLIPPAGE_PCT = 0.0005;
-
 export interface BacktestTradeConfig {
   capital: number;
   riskModel: string; // "Fixed" | "Risk%" | "Capital%"
   riskValue: number;
   executionMode: string; // "conservative" | "optimistic"
+  avgVolume: number;
+  volatility: string; // "HIGH" | "LOW" | "NORMAL"
 }
 
 export class TradeEngineService {
+  /**
+   * Dynamically calculates slippage based on liquidity and regime volatility.
+   */
+  static calculateSlippage(avgVolume: number, volatility: string, isGapExit: boolean): number {
+    // 1. Base Slippage from Liquidity Tiers
+    let baseSlippage = 0.0015; // default 0.15% for low liquidity
+    if (avgVolume >= 500000) {
+      baseSlippage = 0.0005; // 0.05% for high liquidity
+    } else if (avgVolume >= 250000) {
+      baseSlippage = 0.0010; // 0.10% for medium liquidity
+    }
+
+    // 2. Volatility Multiplier
+    let multiplier = 1.0;
+    if (volatility === 'HIGH') multiplier = 1.5;
+    else if (volatility === 'LOW') multiplier = 0.8;
+
+    let finalSlippage = baseSlippage * multiplier;
+
+    // 3. Gap-through-stop / Auction penalty
+    if (isGapExit) {
+      // Severe penalty for auction fill on gap-through-stop
+      finalSlippage = finalSlippage * 3.0; 
+      // Cap gap slippage at 1.0%
+      finalSlippage = Math.min(finalSlippage, 0.01);
+    }
+
+    // Cap normal slippage at 0.5%
+    return Math.min(finalSlippage, 0.005);
+  }
   /**
    * Simulates a trade's execution through OHLC data until it hits SL or Target or the data ends.
    */
@@ -76,50 +104,54 @@ export class TradeEngineService {
       if (type === 'LONG') {
         if (candle.open <= sl) {
           status = 'CLOSED_SL_GAP';
-          exitPrice = candle.open;
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          exitPrice = candle.open * (1 - slip);
           exitDate = candle.date;
-          exitReason = 'Gap Down below Stop Loss';
+          exitReason = `Gap Down below Stop Loss (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'SL_MOVE',
             timestamp: new Date(candle.date),
-            details: `Stop loss executed due to gap at ${candle.open.toFixed(2)}`
+            details: `Stop loss executed due to gap at ${exitPrice.toFixed(2)}`
           });
           break;
         }
         if (candle.open >= target) {
           status = 'CLOSED_TARGET_GAP';
-          exitPrice = candle.open;
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          exitPrice = candle.open * (1 - slip);
           exitDate = candle.date;
-          exitReason = 'Gap Up above Target';
+          exitReason = `Gap Up above Target (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'TARGET',
             timestamp: new Date(candle.date),
-            details: `Target reached due to gap at ${candle.open.toFixed(2)}`
+            details: `Target reached due to gap at ${exitPrice.toFixed(2)}`
           });
           break;
         }
       } else { // SHORT
         if (candle.open >= sl) {
           status = 'CLOSED_SL_GAP';
-          exitPrice = candle.open;
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          exitPrice = candle.open * (1 + slip);
           exitDate = candle.date;
-          exitReason = 'Gap Up above Stop Loss';
+          exitReason = `Gap Up above Stop Loss (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'SL_MOVE',
             timestamp: new Date(candle.date),
-            details: `Stop loss executed due to gap at ${candle.open.toFixed(2)}`
+            details: `Stop loss executed due to gap at ${exitPrice.toFixed(2)}`
           });
           break;
         }
         if (candle.open <= target) {
           status = 'CLOSED_TARGET_GAP';
-          exitPrice = candle.open;
+          const slip = this.calculateSlippage(config.avgVolume, config.volatility, true);
+          exitPrice = candle.open * (1 + slip);
           exitDate = candle.date;
-          exitReason = 'Gap Down below Target';
+          exitReason = `Gap Down below Target (Gap Penalty: ${(slip * 100).toFixed(2)}%)`;
           journalEvents.push({
             event: 'TARGET',
             timestamp: new Date(candle.date),
-            details: `Target reached due to gap at ${candle.open.toFixed(2)}`
+            details: `Target reached due to gap at ${exitPrice.toFixed(2)}`
           });
           break;
         }
@@ -153,28 +185,30 @@ export class TradeEngineService {
 
       if (hitSl) {
         status = 'CLOSED_SL';
-        exitPrice = sl;
+        const slip = this.calculateSlippage(config.avgVolume, config.volatility, false);
+        exitPrice = type === 'LONG' ? sl * (1 - slip) : sl * (1 + slip);
         exitDate = candle.date;
-        exitReason = 'Stop Loss Hit';
+        exitReason = `Stop Loss Hit (Slippage: ${(slip * 100).toFixed(2)}%)`;
         
         journalEvents.push({
           event: 'SL_MOVE',
           timestamp: new Date(candle.date),
-          details: `Stop loss executed at ${sl.toFixed(2)}`
+          details: `Stop loss executed at ${exitPrice.toFixed(2)}`
         });
         break;
       }
 
       if (hitTarget) {
         status = 'CLOSED_TARGET';
-        exitPrice = target;
+        const slip = this.calculateSlippage(config.avgVolume, config.volatility, false);
+        exitPrice = type === 'LONG' ? target * (1 - slip) : target * (1 + slip);
         exitDate = candle.date;
-        exitReason = 'Target Hit';
+        exitReason = `Target Hit (Slippage: ${(slip * 100).toFixed(2)}%)`;
         
         journalEvents.push({
           event: 'TARGET',
           timestamp: new Date(candle.date),
-          details: `Target reached at ${target.toFixed(2)}`
+          details: `Target reached at ${exitPrice.toFixed(2)}`
         });
         break;
       }
