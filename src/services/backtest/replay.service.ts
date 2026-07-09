@@ -21,7 +21,7 @@ export class ReplayService {
     let truncatedEvents = false;
 
     if (events.length > 100) {
-      events = events.slice(0, 100);
+      events = events.slice(-100);
       truncatedEvents = true;
     }
 
@@ -36,7 +36,7 @@ export class ReplayService {
     let truncatedCandles = false;
 
     if (ohlc.length > 500) {
-      ohlc = ohlc.slice(0, 500);
+      ohlc = ohlc.slice(-500);
       truncatedCandles = true;
     }
 

@@ -149,6 +149,7 @@ export class EventCalendarService {
           const daysAway = this.daysBetween(todayStr, event.date);
           const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
           currentRisk.reason = `${event.eventType}_${timeFrame}`;
+          currentRisk.confidence = 'HIGH';
         }
       }
       // Add freshness check logic matching getEventRisk (using createdAt instead of lastUpdated to avoid compilation error)

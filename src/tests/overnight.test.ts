@@ -82,6 +82,39 @@ describe('Overnight Engine Tests', () => {
     assert.strictEqual(score, 85, `Expected score 85, got ${score}`);
   });
 
+  test('STBT Rule 6 strictly requires closingWeakness < 0.30 (boundary test)', () => {
+    const baseStock = {
+      volume: 1300000, // > 1.5 * 800000 (Rule 1: VDU +25)
+      avgVolume: 800000,
+      tomorrowCprWidth: 0.2, // < 0.35 (Rule 3: NarrowCPR +30)
+      tomorrowTc: 99,
+      tomorrowBc: 96,
+      todayBc: 97, 
+      todayTc: 100.5, // 99 < 100.5 and 96 < 97 (Rule 2: LowerValue +20)
+      high: 100,
+      low: 90,
+      vwap: 101, 
+      intradayVolume: 50000,
+      last15mLow: 89, // close is not < 89 (Rule 5: 0)
+      hasConfirmationCandles: true
+    };
+
+    // Case 1: closingWeakness exactly 0.30
+    // close = 93 -> (93 - 90) / 10 = 0.30
+    const stock30 = { ...baseStock, close: 93 };
+    // Rule 4: close(93) < todayBc(97) AND close < vwap(101) (+20)
+    // Total base score = 25 + 20 + 30 + 20 = 95
+    const score30 = StbtRankingService.calculateScore(stock30);
+    assert.strictEqual(score30, 95, `Expected score 95 for closingWeakness=0.30, got ${score30}`);
+
+    // Case 2: closingWeakness exactly 0.29
+    // close = 92.9 -> (92.9 - 90) / 10 = 0.29
+    const stock29 = { ...baseStock, close: 92.9 };
+    // Base score (95) + Rule 6 (15) = 110
+    const score29 = StbtRankingService.calculateScore(stock29);
+    assert.strictEqual(score29, 110, `Expected score 110 for closingWeakness=0.29, got ${score29}`);
+  });
+
   test('GapProbabilityService with short history caps gapConfidence <= 50', () => {
     const mockStock = {
       symbol: 'TEST',

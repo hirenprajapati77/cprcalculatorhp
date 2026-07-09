@@ -34,6 +34,7 @@ export interface BtstScoreResult {
     vwap?: number;
     liquidity?: number;   // was conf15m (misnomer — was always avgVolume gate, not 15m candle)
     closeStrength?: number;
+    clvScore?: number;
   };
 }
 
@@ -234,7 +235,8 @@ export class BtstService {
 
     // +20 Value Relationship: higherValue === true
     const higherValue = tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc;
-    if (higherValue) {
+    const isClvVariant = strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid';
+    if (higherValue && !isClvVariant) {
       score += 20;
       signals.push('HIGHER_VALUE');
     }
@@ -319,7 +321,8 @@ export class BtstService {
 
     // +20 Value Relationship: lowerValue === true
     const lowerValue = tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc;
-    if (lowerValue) {
+    const isClvVariant = strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid';
+    if (lowerValue && !isClvVariant) {
       score += 20;
       signals.push('LOWER_VALUE');
     }
@@ -491,13 +494,30 @@ export class BtstService {
     }
 
     const isLong = tag === 'LONG' || (tag !== 'SHORT' && longScore >= shortScore);
-    
-    let vduPoints = volumeRatio >= 2.0 ? 20 : 0;
-    let cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? 15 : 0;
-    const hvPoints = isLong
+    const isClvVariant = strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid';
+    const isClvContinuous = strategyVariant === 'clv_continuous';
+
+    let clvScore = 0;
+    if (isClvVariant) {
+      const high = stock.high || 0;
+      const low = stock.low || 0;
+      if (high !== low) {
+        const close = stock.ltp;
+        const clv = ((close - low) - (high - close)) / (high - low);
+        const factor = isLong ? clv : -clv;
+        const multiplier = strategyVariant === 'clv_continuous' ? 100 : 75;
+        clvScore = Math.round(((factor + 1) / 2) * multiplier);
+      }
+    }
+
+    let vduPoints = (!isClvVariant && volumeRatio >= 2.0) ? 20 : 0;
+    const hvPoints = isClvVariant ? 0 : (isLong
       ? (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc ? 20 : 0)
-      : (tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc ? 20 : 0);
-    const liqPoints = stock.avgVolume >= 500000 ? 10 : 0;
+      : (tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc ? 20 : 0));
+
+    // For clv_continuous, it exits early in calculateLongScore/ShortScore, so other parameters are 0
+    // For clv_hybrid, cprPoints (15) and liquidity (10) remain active and additive
+    let cprPoints = isClvContinuous ? 0 : ((tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? 15 : 0);
 
     if (strategyVariant === 'no_vdu_weighted') {
       vduPoints = 0;
@@ -505,19 +525,26 @@ export class BtstService {
       cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? cprWeight : 0;
     }
 
+    const vwapPoints = isClvVariant ? 0 : (isLong
+      ? (stock.vwap && stock.ltp > stock.vwap * 1.002 ? 20 : 0)
+      : (stock.vwap && stock.ltp < stock.vwap * 0.998 ? 20 : 0));
+
+    const closeStrengthPoints = isClvVariant ? 0 : (stock.candle15m
+      ? (isLong
+          ? (stock.candle15m.close >= stock.candle15m.high * 0.995 ? 15 : 0)
+          : (stock.candle15m.close <= stock.candle15m.low * 1.005 ? 15 : 0))
+      : 0);
+
+    const liqPoints = isClvContinuous ? 0 : (stock.avgVolume >= 500000 ? 10 : 0);
+
     const scoreBreakdown = {
       vdu: vduPoints,
       cprNarrow: cprPoints,
       higherValue: hvPoints,
-      vwap: isLong
-        ? (stock.vwap && stock.ltp > stock.vwap * 1.002 ? 20 : 0)
-        : (stock.vwap && stock.ltp < stock.vwap * 0.998 ? 20 : 0),
-      closeStrength: stock.candle15m
-        ? (isLong
-            ? (stock.candle15m.close >= stock.candle15m.high * 0.995 ? 15 : 0)
-            : (stock.candle15m.close <= stock.candle15m.low * 1.005 ? 15 : 0))
-        : 0,
-      liquidity: liqPoints
+      vwap: vwapPoints,
+      closeStrength: closeStrengthPoints,
+      liquidity: liqPoints,
+      ...(isClvVariant ? { clvScore } : {})
     };
 
     return {

@@ -2780,6 +2780,12 @@ export default function ScannerClient() {
                               <span className="text-text-tertiary">Closing Strength</span>
                               <span className="font-mono text-text-primary">{breakdown.closeStrength ?? '—'}</span>
                             </div>
+                            {breakdown.clvScore !== undefined && (
+                              <div className="flex justify-between border-b border-border-primary/30 pb-1 col-span-2">
+                                <span className="text-text-tertiary">CLV Score Component</span>
+                                <span className="font-mono text-accent-blue font-bold">+{breakdown.clvScore}</span>
+                              </div>
+                            )}
                           </div>
                           
                           <div className="flex justify-between items-center mt-2 bg-bg-primary/50 p-2 rounded border border-border-primary">
