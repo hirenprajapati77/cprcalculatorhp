@@ -3,7 +3,7 @@ import { getAtrPct } from '@/lib/atr';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
-import { isMarketOpen } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -36,22 +36,27 @@ export class ScannerService {
    */
   static scanStock(stock: MarketStockData, asOfDate?: string): ScannerSignalResult {
     // Differentiate yesterday's and today's daily candles robustly
-    const todayStr = asOfDate || new Date().toISOString().split('T')[0];
+    const todayStr = asOfDate || getISTDateString();
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
     let isLastToday = false;
+    let isTodayCandleFinal = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       isLastToday = lastCandle.date === todayStr;
       
-      todayCandle = isLastToday ? lastCandle : {
+      isTodayCandleFinal = asOfDate 
+        ? isLastToday 
+        : (isLastToday && isTodayCandleClosed());
+      
+      todayCandle = isTodayCandleFinal ? lastCandle : {
         high: stock.high,
         low: stock.low,
         close: stock.ltp
       };
       
-      yesterdayCandle = isLastToday 
+      yesterdayCandle = isTodayCandleFinal 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }
@@ -235,7 +240,7 @@ export class ScannerService {
       target,
       rr,
       confidence,
-      tomorrowCPRProvisional: isMarketOpen() && !isLastToday,
+      tomorrowCPRProvisional: isMarketOpen() && !isTodayCandleFinal,
     };
   }
 

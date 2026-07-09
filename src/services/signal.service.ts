@@ -2,6 +2,7 @@ import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
+import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
 
 export interface SignalResult {
   signals: string[];
@@ -35,11 +36,6 @@ const DEFAULT_ATR_PCT = 0.02;
  * at 3:30 PM IST, but UTC date flips 5.5 hours earlier — causing the last
  * history candle to be misclassified between ~9:30 PM UTC and midnight UTC.
  */
-function getISTDateString(): string {
-  const now = new Date();
-  const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-  return istTime.toISOString().split('T')[0];
-}
 
 export class SignalService {
   /**
@@ -65,23 +61,27 @@ export class SignalService {
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       const isLastToday = lastCandle.date === todayStr;
+      
+      const isTodayCandleFinal = asOfDate 
+        ? isLastToday 
+        : (isLastToday && isTodayCandleClosed());
 
-      todayCandle = isLastToday
+      todayCandle = isTodayCandleFinal
         ? lastCandle
         : { high: stock.high, low: stock.low, close: stock.ltp };
 
-      yesterdayCandle = isLastToday
+      yesterdayCandle = isTodayCandleFinal
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
 
       // Only assign when a genuinely distinct (older) candle exists.
       // Previously these fell back to yesterdayCandle, which could fabricate
       // fake ascending/descending CPR patterns on short history.
-      dayBeforeYesterdayCandle = isLastToday
+      dayBeforeYesterdayCandle = isTodayCandleFinal
         ? (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null)
         : (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : null);
 
-      threeDaysAgoCandle = isLastToday
+      threeDaysAgoCandle = isTodayCandleFinal
         ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null)
         : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null);
     }
