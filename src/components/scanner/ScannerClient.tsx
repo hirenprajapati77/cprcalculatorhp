@@ -208,6 +208,7 @@ interface ScannedStock {
     vwap?: number;
     liquidity?: number;
     closeStrength?: number;
+    clvScore?: number;
   };
   optionSuggestion?: {
     symbol?: string;
@@ -2710,6 +2711,7 @@ export default function ScannerClient() {
                     vwap: (activeSignals.includes('ABOVE_VWAP') || activeSignals.includes('BELOW_VWAP')) ? 20 : 0,
                     liquidity: activeSignals.includes('LIQUID') ? 10 : 0,
                     closeStrength: (activeSignals.includes('CLOSING_STRENGTH') || activeSignals.includes('CLOSING_WEAKNESS')) ? 15 : 0,
+                    clvScore: undefined,
                   };
                   return (
                     <div className="space-y-4 animate-fade-in">
