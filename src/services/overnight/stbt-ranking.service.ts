@@ -64,7 +64,7 @@ export class StbtRankingService {
     // Symmetric with BTST closing-strength (top 70%) but for the bear side.
     if (range > 0) {
       const closingWeakness = (inputs.close - inputs.low) / range;
-      if (closingWeakness <= 0.30) {
+      if (closingWeakness < 0.30) {
         score += 15;
       }
     }

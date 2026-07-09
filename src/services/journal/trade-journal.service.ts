@@ -290,8 +290,14 @@ export class TradeJournalService {
 
     if (fromDate || toDate) {
       where.tradeDate = {
-        ...(fromDate ? { gte: new Date(fromDate) } : {}),
-        ...(toDate   ? { lte: new Date(toDate)   } : {}),
+        ...(fromDate ? { gte: TradeJournalService.istDateStringToMidnightUTC(fromDate) } : {}),
+        ...(toDate ? {
+          lt: (() => {
+            const next = TradeJournalService.istDateStringToMidnightUTC(toDate);
+            next.setUTCDate(next.getUTCDate() + 1);
+            return next;
+          })(),
+        } : {}),
       };
     }
 
@@ -402,6 +408,13 @@ export class TradeJournalService {
       timeZone: 'Asia/Kolkata',
     }); // → "2026-06-24"
     const [y, m, d] = istStr.split('-').map(Number);
+    const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+    midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
+    return midnightUTC;
+  }
+
+  private static istDateStringToMidnightUTC(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
     const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
     midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
     return midnightUTC;
