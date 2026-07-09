@@ -11,7 +11,7 @@ import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -392,22 +392,27 @@ export class BtstService {
   }
 
   static evaluateOvernight(stock: MarketStockData, asOfDate?: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid' = 'baseline'): BtstScoreResult {
-    const todayStr = asOfDate ?? new Date().toISOString().split('T')[0];
+    const todayStr = asOfDate ?? getISTDateString();
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
     let isLastToday = false;
+    let isTodayCandleFinal = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       isLastToday = lastCandle.date === todayStr;
       
-      todayCandle = isLastToday ? lastCandle : {
+      isTodayCandleFinal = asOfDate 
+        ? isLastToday 
+        : (isLastToday && isTodayCandleClosed());
+      
+      todayCandle = isTodayCandleFinal ? lastCandle : {
         high: stock.high,
         low: stock.low,
         close: stock.ltp
       };
       
-      yesterdayCandle = isLastToday 
+      yesterdayCandle = isTodayCandleFinal 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }
@@ -560,7 +565,7 @@ export class BtstService {
       rr: rrStr,
       sector: stock.sector,
       marketCap: stock.marketCap,
-      tomorrowCPRProvisional: isMarketOpen() && !isLastToday,
+      tomorrowCPRProvisional: isMarketOpen() && !isTodayCandleFinal,
       scoreBreakdown
     };
   }
@@ -569,22 +574,27 @@ export class BtstService {
     stock: MarketStockData,
     asOfDate?: string
   ) {
-    const todayStr = asOfDate ?? new Date().toISOString().split('T')[0];
+    const todayStr = asOfDate ?? getISTDateString();
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
     let isLastToday = false;
+    let isTodayCandleFinal = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       isLastToday = lastCandle.date === todayStr;
       
-      todayCandle = isLastToday ? lastCandle : {
+      isTodayCandleFinal = asOfDate 
+        ? isLastToday 
+        : (isLastToday && isTodayCandleClosed());
+      
+      todayCandle = isTodayCandleFinal ? lastCandle : {
         high: stock.high,
         low: stock.low,
         close: stock.ltp
       };
       
-      yesterdayCandle = isLastToday 
+      yesterdayCandle = isTodayCandleFinal 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }

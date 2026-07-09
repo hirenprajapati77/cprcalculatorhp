@@ -16,7 +16,7 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { RegimeService } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -322,9 +322,12 @@ export class OvernightService {
 
         const lastCandle = history[history.length - 1];
         const isLastToday = lastCandle.date === dateStr;
+        const isTodayCandleFinal = dateOverride 
+          ? isLastToday 
+          : (isLastToday && isTodayCandleClosed());
 
         // Ensure we have distinct candles for both today's candle and yesterday's (prior day) candle.
-        if (isLastToday && history.length < 2) {
+        if (isTodayCandleFinal && history.length < 2) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} for today-appended database state (requires at least 2 distinct daily candles).`);
           continue;
         }
@@ -334,11 +337,11 @@ export class OvernightService {
           continue;
         }
 
-        const todayCandle = isLastToday
+        const todayCandle = isTodayCandleFinal
           ? lastCandle
           : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
 
-        const yesterdayCandle = isLastToday
+        const yesterdayCandle = isTodayCandleFinal
           ? history[history.length - 2]
           : lastCandle;
 

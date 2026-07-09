@@ -19,6 +19,16 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
   ]
 };
 
+/**
+ * Returns the current date string (YYYY-MM-DD) in IST.
+ * This is used to align candle dates which are keyed by the NSE trading day,
+ * avoiding the 5.5 hour mismatch window when UTC date rolls over before IST.
+ */
+export function getISTDateString(date: Date = new Date()): string {
+  const istTime = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+  return istTime.toISOString().split('T')[0];
+}
+
 export function getISTTime(date: Date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Kolkata',

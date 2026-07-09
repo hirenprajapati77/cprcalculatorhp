@@ -1,4 +1,5 @@
 import { CacheService } from './cache.service';
+import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
 
 export interface HistoricalCandle {
   date: string;
@@ -446,8 +447,29 @@ export class MarketService {
             const prevVolume = (quote.volume?.[idx] as number) || 100000;
 
             // Average volume over the window, excluding today's partial candle
-            const validVolumesAll = (quote.volume as (number | null)[]).filter(v => v !== null) as number[];
-            const validVolumes = validVolumesAll.length > 1 ? validVolumesAll.slice(0, -1) : validVolumesAll;
+            const timestamps = result.timestamp as number[] | undefined;
+            const todayStr = getISTDateString();
+
+            const safeLength = Math.min(
+              quote.volume?.length ?? 0,
+              timestamps?.length ?? 0
+            );
+
+            const volumeEntries = (quote.volume as (number | null)[])
+              .slice(0, safeLength)
+              .map((v, i) => ({
+                v,
+                date: timestamps?.[i] ? getISTDateString(new Date(timestamps[i] * 1000)) : null,
+              }))
+              .filter((e): e is { v: number; date: string | null } => e.v !== null);
+
+            const lastEntry = volumeEntries[volumeEntries.length - 1];
+            const shouldDropLast =
+              volumeEntries.length > 1 && lastEntry?.date === todayStr && !isTodayCandleClosed();
+
+            const validVolumes = shouldDropLast
+              ? volumeEntries.slice(0, -1).map(e => e.v)
+              : volumeEntries.map(e => e.v);
             const avgVolume = validVolumes.length > 0
               ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
               : prevVolume;
@@ -476,8 +498,8 @@ export class MarketService {
 
               const timestamp = result.timestamp?.[i];
               const dateStr = timestamp
-                ? new Date(timestamp * 1000).toISOString().split('T')[0]
-                : new Date(Date.now() - (len - 1 - i) * 86400 * 1000).toISOString().split('T')[0];
+                ? getISTDateString(new Date(timestamp * 1000))
+                : getISTDateString(new Date(Date.now() - (len - 1 - i) * 86400 * 1000));
 
               history.push({
                 date: dateStr,
