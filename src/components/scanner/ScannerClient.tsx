@@ -2586,6 +2586,7 @@ export default function ScannerClient() {
                           />
                         );
                       })}
+                    </tbody>
                   </table>
                   </div>
                 )}
