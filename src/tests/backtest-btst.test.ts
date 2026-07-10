@@ -40,7 +40,8 @@ describe('BTST backtest — single-day EOD-forced-exit simulation (Task I)', () 
     );
 
     assert.strictEqual(result.status, 'CLOSED_TARGET', `Expected CLOSED_TARGET, got ${result.status}`);
-    assert.strictEqual(result.exitPrice, 106, 'Exit price should equal target');
+    const slip = TradeEngineService.calculateSlippage(1000000, 'LOW', false);
+    assert.strictEqual(result.exitPrice, 106 * (1 - slip), 'Exit price should equal slippage-adjusted target');
     assert.strictEqual(result.durationDays, 1, 'Should exit in 1 day');
     assert.ok(result.pnl > 0, 'LONG target exit must be profitable');
   });
@@ -59,7 +60,8 @@ describe('BTST backtest — single-day EOD-forced-exit simulation (Task I)', () 
     );
 
     assert.strictEqual(result.status, 'CLOSED_SL', `Expected CLOSED_SL, got ${result.status}`);
-    assert.strictEqual(result.exitPrice, 97, 'Exit price should equal SL');
+    const slip = TradeEngineService.calculateSlippage(1000000, 'LOW', false);
+    assert.strictEqual(result.exitPrice, 97 * (1 - slip), 'Exit price should equal slippage-adjusted SL');
     assert.strictEqual(result.durationDays, 1, 'Should exit in 1 day');
     assert.ok(result.pnl < 0, 'SL exit must be a loss');
   });
@@ -97,7 +99,8 @@ describe('BTST backtest — single-day EOD-forced-exit simulation (Task I)', () 
     );
 
     assert.strictEqual(result.status, 'CLOSED_TARGET', `Expected CLOSED_TARGET, got ${result.status}`);
-    assert.strictEqual(result.exitPrice, 94, 'Exit price should equal target');
+    const slip = TradeEngineService.calculateSlippage(1000000, 'LOW', false);
+    assert.strictEqual(result.exitPrice, 94 * (1 + slip), 'Exit price should equal slippage-adjusted target');
     assert.ok(result.pnl > 0, 'SHORT target exit must be profitable');
   });
 
