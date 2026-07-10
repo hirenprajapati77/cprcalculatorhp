@@ -37,7 +37,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
 
   return (
     <div className="w-full overflow-x-auto border border-border-primary rounded-lg font-mono">
-      <table className="w-full text-left border-collapse min-w-[650px]">
+      <table className="w-full text-left border-collapse min-w-[650px] whitespace-nowrap">
         <thead>
           <tr className="bg-bg-secondary border-b border-border-primary text-[10px] text-text-tertiary uppercase tracking-wider">
             <th className="px-4 py-3 font-semibold">Saved Time</th>
