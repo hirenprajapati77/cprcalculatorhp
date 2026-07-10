@@ -1,4 +1,5 @@
 import { HistoricalProvider } from '../backtest/historical.provider';
+import { calculateATR } from '@/lib/atr';
 
 export interface MarketRegime {
   trend: 'BULL' | 'BEAR' | 'CHOPPY';
@@ -52,8 +53,9 @@ export class RegimeService {
       }
 
       // Volatility calculation (ATR % over 14 days)
-      const atr = this.calculateATR(history, 14);
-      const atrPct = (atr / latest.close) * 100;
+      // Passing slice(-15) yields 14 TR calculations, matching the old 14-day behavior
+      const atr = calculateATR(history.slice(-15), latest.close);
+      const atrPct = latest.close > 0 ? (atr / latest.close) * 100 : 0;
       // Nifty typically ranges 0.5% to 1.5% daily. > 1.2% is high volatility.
       const volatility: 'HIGH' | 'LOW' = atrPct > 1.2 ? 'HIGH' : 'LOW';
 
@@ -75,34 +77,22 @@ export class RegimeService {
   }
 
   private static calculateEMA(prices: number[], period: number): number[] {
+    if (prices.length < period) return [];
+    
+    const ema = new Array(prices.length).fill(0);
+    
+    let sum = 0;
+    for (let i = 0; i < period; i++) {
+      sum += prices[i];
+    }
+    const sma = sum / period;
+    
+    ema[period - 1] = sma;
+    
     const k = 2 / (period + 1);
-    const ema = [prices[0]];
-    for (let i = 1; i < prices.length; i++) {
-      ema.push(prices[i] * k + ema[i - 1] * (1 - k));
+    for (let i = period; i < prices.length; i++) {
+      ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
     }
     return ema;
-  }
-
-  private static calculateATR(history: { high: number, low: number, close: number }[], period: number): number {
-    if (history.length <= period) return 0;
-    
-    const trValues = [];
-    
-    for (let i = 1; i < history.length; i++) {
-      const high = history[i].high;
-      const low = history[i].low;
-      const prevClose = history[i - 1].close;
-      
-      const tr = Math.max(
-        high - low,
-        Math.abs(high - prevClose),
-        Math.abs(low - prevClose)
-      );
-      trValues.push(tr);
-    }
-    
-    // Simple average of True Range for ATR
-    const recentTr = trValues.slice(-period);
-    return recentTr.reduce((a, b) => a + b, 0) / period;
   }
 }
