@@ -14,7 +14,15 @@ export class TelegramService {
         const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
         if (settings) {
           if (!token && settings.telegramToken) {
-            token = decrypt(settings.telegramToken);
+            try {
+              token = decrypt(settings.telegramToken);
+            } catch (err: unknown) {
+              if (err instanceof Error && err.message === 'Invalid ciphertext format.') {
+                token = settings.telegramToken; // Fallback to plain text
+              } else {
+                throw err;
+              }
+            }
           }
           if (!resolvedChatId && settings.telegramChatId) {
             resolvedChatId = settings.telegramChatId;
@@ -150,7 +158,15 @@ export class TelegramService {
             chatId = settings.telegramGroupChatId;
           }
           if (!token && settings.telegramToken) {
-            token = settings.telegramToken;
+            try {
+              token = decrypt(settings.telegramToken);
+            } catch (err: unknown) {
+              if (err instanceof Error && err.message === 'Invalid ciphertext format.') {
+                token = settings.telegramToken; // Fallback to plain text
+              } else {
+                throw err;
+              }
+            }
           }
         }
       } catch (dbErr) {

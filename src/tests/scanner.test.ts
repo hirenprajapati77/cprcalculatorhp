@@ -89,7 +89,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
 
     assert.ok(scanResult.signals.includes('GAP_UP'));
     assert.ok(scanResult.signals.includes('VIRGIN'));
@@ -242,7 +242,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_ASC_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
   });
@@ -268,7 +268,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_DESC_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
   });
@@ -293,7 +293,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_INSIDE_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_OUTSIDE_CPR'));
   });
@@ -318,7 +318,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_OUTSIDE_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_INSIDE_CPR'));
   });
@@ -341,7 +341,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: []
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_RTP'));
   });
 
@@ -377,7 +377,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         }
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('INSIDE_VALUE'));
   });
 });

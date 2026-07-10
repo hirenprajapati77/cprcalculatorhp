@@ -208,7 +208,7 @@ describe('Overnight Engine Tests', () => {
     const originalHistMode = process.env.HISTORICAL_MODE;
     process.env.HISTORICAL_MODE = 'live';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     global.fetch = (async () => ({
       ok: true,
       json: async () => ({
@@ -354,7 +354,7 @@ describe('Overnight Engine Tests', () => {
     const originalHistMode = process.env.HISTORICAL_MODE;
     process.env.HISTORICAL_MODE = 'live';
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     global.fetch = (async () => ({
       ok: true,
       json: async () => ({
@@ -402,7 +402,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await OvernightService.discover('BOTH', date, [stock14 as any, stock15 as any]);
 
       assert.strictEqual(upserted.includes('STOCK14'), false, '14 candle history should be skipped');
@@ -440,7 +440,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await OvernightService.discover('BOTH', date, [stockDiff9 as any, stockDiff10 as any, stockDiff11 as any]);
 
       assert.strictEqual(upserted.includes('DIFF9'), false, 'Diff 9 (conflict) should be skipped from persistence');
@@ -541,7 +541,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const date = new Date('2026-08-01T15:20:00+05:30');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await OvernightService.discover('BOTH', date, [mockStock as any]);
 
       assert.strictEqual(upserted.length, 1);

@@ -98,8 +98,8 @@ function run() {
 
   // 4. Verify evaluateOvernight breakdown for clv_hybrid
   // Let's make sure CPR is Narrow and liquidity is high to test additions
-  const mockStockLiquid = { ...mockStock, avgVolume: 600000 };
-  const tomorrowCprNarrow = { ...tomorrowCpr, classification: 'NARROW' as const };
+  const _mockStockLiquid = { ...mockStock, avgVolume: 600000 };
+  const _tomorrowCprNarrow = { ...tomorrowCpr, classification: 'NARROW' as const };
   
   // scoreBreakdown calculation in evaluateOvernight:
   // We need to pass mockStockLiquid and tomorrowCprNarrow through discover or simulate evaluateOvernight.
