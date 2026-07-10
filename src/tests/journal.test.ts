@@ -68,4 +68,38 @@ test('TradeJournalService Phase 3', async (t) => {
     assert.strictEqual(updated?.executionOutcome, 'EVENT_RISK_AVOIDABLE');
     await prisma.tradeJournal.delete({ where: { id: mockId } });
   });
+
+  await t.test('getStats calculates totalAllTrades and totalClosedTrades correctly', async (t) => {
+    // 1. Mock Prisma to return specific counts and entries
+    const originalCount = prisma.tradeJournal.count;
+    const originalFindMany = prisma.tradeJournal.findMany;
+    
+    // @ts-expect-error Mocking Prisma for tests
+    prisma.tradeJournal.count = async () => 5;
+    
+    // @ts-expect-error Mocking Prisma for tests
+    prisma.tradeJournal.findMany = async () => {
+      return [
+        { id: '1', signalType: 'CPR', pnl: 100, pnlPct: 10 },
+        { id: '2', signalType: 'CPR', pnl: -50, pnlPct: -5 },
+        { id: '3', signalType: 'BTST', pnl: 200, pnlPct: 20 },
+        // 2 Open Trades (no PnL yet)
+        { id: '4', signalType: 'STBT', pnl: null, pnlPct: null },
+        { id: '5', signalType: 'BTST', pnl: null, pnlPct: null },
+      ];
+    };
+
+    // 2. Call the service
+    const result = await TradeJournalService.getEntries({ page: 1, limit: 10, signalType: 'ALL' });
+
+    // 3. Verify math
+    assert.strictEqual(result.stats.totalAllTrades, 5, 'totalAllTrades should count all trades, including open ones');
+    assert.strictEqual(result.stats.totalClosedTrades, 3, 'totalClosedTrades should only count trades with PnL');
+    assert.strictEqual(result.stats.totalTrades, 3, 'totalTrades should equal closed.length for backward compatibility');
+    assert.strictEqual(result.stats.winners, 2, 'winners should only count trades with pnl > 0');
+    
+    // 4. Restore Prisma
+    prisma.tradeJournal.count = originalCount;
+    prisma.tradeJournal.findMany = originalFindMany;
+  });
 });
