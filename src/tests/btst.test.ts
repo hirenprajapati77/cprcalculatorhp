@@ -265,5 +265,32 @@ describe('BTST Scoring Engine Tests', () => {
       MarketService.getStockData = originalGetStockData;
     }
   });
+
+  test('isExecutionWindowOpen() enforces 15:10 - 15:25 IST window', () => {
+    // Generate dates on a Wednesday to avoid weekend logic overriding times
+    const createDate = (h: number, m: number) => {
+      // 2026-07-08 is a Wednesday
+      const d = new Date('2026-07-08T00:00:00Z');
+      d.setUTCHours(h - 5);
+      d.setUTCMinutes(m - 30);
+      return d;
+    };
+
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 9)), false, '15:09 should be closed');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 10)), true, '15:10 should be open');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 25)), true, '15:25 should be open');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 26)), false, '15:26 should be closed');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(16, 0)), false, '16:00 should be closed');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(23, 0)), false, '23:00 should be closed');
+    
+    // Weekend test: 2026-07-11 is a Saturday
+    const weekendDate = new Date('2026-07-11T00:00:00Z');
+    weekendDate.setUTCHours(15 - 5);
+    weekendDate.setUTCMinutes(15 - 30);
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, weekendDate), false, 'Weekends should be closed');
+
+    // Bypass check
+    assert.strictEqual(BtstService.isExecutionWindowOpen(true, createDate(15, 9)), true, 'bypassQuery=true should be open');
+  });
 });
 
