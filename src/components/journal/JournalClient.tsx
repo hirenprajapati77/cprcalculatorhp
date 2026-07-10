@@ -354,7 +354,7 @@ function SignalBadge({ type }: { type: string }) {
         background: SIGNAL_BG[type] ?? 'rgba(148,163,184,0.1)',
         border: `1px solid ${SIGNAL_COLORS[type] ?? '#94a3b8'}40`,
       }}
-      className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase"
+      className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase whitespace-nowrap"
     >
       {type}
     </span>
@@ -398,7 +398,7 @@ function OutcomeBadge({ outcome }: { outcome: string | null | undefined }) {
     <span
       title={tooltip}
       style={{ color, background: bg, border: `1px solid ${color}40` }}
-      className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase cursor-help"
+      className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase cursor-help whitespace-nowrap"
     >
       {label.replace(/_/g, ' ')}
     </span>
@@ -750,7 +750,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       <h3 className="text-sm font-semibold text-white">Execution Outcomes</h3>
                       <p className="text-[10px] text-slate-500 mt-0.5">What happened after the signal fired</p>
                     </div>
-                    <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs whitespace-nowrap">
                       <thead className="bg-[#12141c] text-slate-500">
                         <tr>
                           <th className="px-4 py-2 font-medium">Outcome</th>
@@ -775,6 +776,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         ))}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 </div>
 
@@ -787,7 +789,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       <h3 className="text-sm font-semibold text-white">Regime Performance</h3>
                       <p className="text-[10px] text-slate-500 mt-0.5">Market condition × strategy fit</p>
                     </div>
-                    <table className="w-full text-left text-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs whitespace-nowrap">
                       <thead className="bg-[#12141c] text-slate-500">
                         <tr>
                           <th className="px-4 py-2 font-medium">Regime</th>
@@ -827,6 +830,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
 
                   {/* Strategy Comparison */}
@@ -878,7 +882,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         <h3 className="text-sm font-semibold text-white">Event Risk Impact</h3>
                         <p className="text-[10px] text-slate-500 mt-0.5">How event risk affects outcomes</p>
                       </div>
-                      <table className="w-full text-left text-xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs whitespace-nowrap">
                         <thead className="bg-[#12141c] text-slate-500">
                           <tr>
                             <th className="px-4 py-2 font-medium">Event Risk</th>
@@ -905,6 +910,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
 
                     {/* Loss Analysis */}
@@ -1104,7 +1110,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           )}
           {entries.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider text-[10px]">
                     <th className="text-left px-4 py-3 font-semibold">Trade Date</th>
@@ -1136,7 +1142,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         <div className="flex flex-col gap-1 items-start">
                           <SignalBadge type={entry.signalType} />
                           {entry.qualityBucketAtSignal && (
-                            <span className="text-[9px] text-slate-500 border border-slate-700 rounded px-1">{entry.qualityBucketAtSignal}</span>
+                            <span className="text-[9px] text-slate-500 border border-slate-700 rounded px-1 whitespace-nowrap">{entry.qualityBucketAtSignal}</span>
                           )}
                           <OutcomeBadge outcome={entry.executionOutcome} />
                         </div>
