@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 
 interface Props {
   params: Promise<{ symbol: string }>;
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest, { params }: Props) {
         },
       });
       
-      const peerSymbols = peerSnapshots.map(p => p.symbol);
+      const peerSymbols = peerSnapshots.map((p: MarketSnapshot) => p.symbol);
 
       if (peerSymbols.length > 0) {
         const peers = await prisma.scannerResult.findMany({
@@ -71,13 +72,13 @@ export async function GET(request: NextRequest, { params }: Props) {
         });
 
         if (peers.length > 0) {
-          const totalWidth = peers.reduce((sum, p) => sum + p.width, 0) + current.width;
-          const totalScore = peers.reduce((sum, p) => sum + p.score, 0) + current.score;
+          const totalWidth = peers.reduce((sum: number, p: ScannerResult) => sum + p.width, 0) + current.width;
+          const totalScore = peers.reduce((sum: number, p: ScannerResult) => sum + p.score, 0) + current.score;
           const count = peers.length + 1;
           
           sectorAverageWidth = totalWidth / count;
           sectorAverageScore = totalScore / count;
-          sectorPeers = peers.map(p => {
+          sectorPeers = peers.map((p: ScannerResult) => {
             const cleanPeerSymbol = p.symbol.split(':')[0];
             return {
               symbol: cleanPeerSymbol,
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest, { params }: Props) {
         signal: current.signalSummary,
         signals: currentSignals,
       },
-      history: history.map(h => ({
+      history: history.map((h: ScannerResult) => ({
         ...h,
         symbol: cleanSymbol,
         signals: h.signalSummary ? h.signalSummary.split(',') : [],

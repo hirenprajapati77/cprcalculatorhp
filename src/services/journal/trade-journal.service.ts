@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import type { TradeJournal } from '@prisma/client';
 
 
 export class TradeJournalService {
@@ -317,20 +318,20 @@ export class TradeJournalService {
       prisma.tradeJournal.findMany({ where }),
     ]);
 
-    const closed  = allEntries.filter(e => e.pnl !== null);
+    const closed  = allEntries.filter((e: TradeJournal) => e.pnl !== null);
     // Strictly positive PnL = winner; breakeven (pnl === 0) is not a win
-    const winners = closed.filter(e => (e.pnl ?? 0) > 0);
+    const winners = closed.filter((e: TradeJournal) => (e.pnl ?? 0) > 0);
 
     const byType = {
-      CPR:  closed.filter(e => e.signalType === 'CPR'),
-      BTST: closed.filter(e => e.signalType === 'BTST'),
-      STBT: closed.filter(e => e.signalType === 'STBT'),
+      CPR:  closed.filter((e: TradeJournal) => e.signalType === 'CPR'),
+      BTST: closed.filter((e: TradeJournal) => e.signalType === 'BTST'),
+      STBT: closed.filter((e: TradeJournal) => e.signalType === 'STBT'),
     };
 
     const winRateByType = (arr: typeof closed): number =>
       arr.length > 0
         ? parseFloat(
-            (arr.filter(e => (e.pnl ?? 0) > 0).length / arr.length * 100)
+            (arr.filter((e: TradeJournal) => (e.pnl ?? 0) > 0).length / arr.length * 100)
               .toFixed(1)
           )
         : 0;
@@ -359,7 +360,7 @@ export class TradeJournalService {
           : 0,
         avgPnlPct: closed.length > 0
           ? parseFloat(
-              (closed.reduce((s, e) => s + (e.pnlPct ?? 0), 0) / closed.length)
+              (closed.reduce((s: number, e: TradeJournal) => s + (e.pnlPct ?? 0), 0) / closed.length)
                 .toFixed(2)
             )
           : 0,

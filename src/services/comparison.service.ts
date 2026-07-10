@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import type { ScannerResult } from '@prisma/client';
 
 export interface ComparisonMetric {
   symbol: string;
@@ -57,7 +58,7 @@ export class ComparisonService {
             score: current.score,
             classification: current.classification,
             signals: current.signalSummary ? current.signalSummary.split(',') : [],
-            history: history.map(h => ({
+            history: history.map((h: ScannerResult) => ({
               date: h.date,
               ltp: h.ltp,
               width: h.width,

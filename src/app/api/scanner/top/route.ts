@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,13 +27,13 @@ export async function GET(request: NextRequest) {
     });
 
     // Query sectors matching symbols for visual metadata
-    const symbols = topOpportunities.map(o => o.symbol);
+    const symbols = topOpportunities.map((o: ScannerResult) => o.symbol);
     const snapshots = await prisma.marketSnapshot.findMany({
       where: { symbol: { in: symbols } },
     });
 
-    const formatted = topOpportunities.map((r) => {
-      const snap = snapshots.find(s => s.symbol === r.symbol);
+    const formatted = topOpportunities.map((r: ScannerResult) => {
+      const snap = snapshots.find((s: MarketSnapshot) => s.symbol === r.symbol);
       const cleanSymbol = r.symbol.split(':')[0];
 
       return {
