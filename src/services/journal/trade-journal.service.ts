@@ -354,6 +354,8 @@ export class TradeJournalService {
       totalPages: Math.ceil(total / limit),
       stats: {
         totalTrades:    closed.length,
+        totalClosedTrades: closed.length,
+        totalAllTrades: total,
         winners:        winners.length,
         winRate:        closed.length > 0
           ? parseFloat((winners.length / closed.length * 100).toFixed(1))
