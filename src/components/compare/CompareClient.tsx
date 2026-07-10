@@ -292,7 +292,7 @@ function CompareContent() {
           {stocksData.length > 0 && (
             <Card title="Structural Comparison Matrix" icon={<Columns size={14} className="text-accent-blue" />}>
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse font-mono text-xs select-none">
+                <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                   <thead>
                     <tr className="border-b border-border-primary bg-bg-secondary/50 text-text-secondary text-[10px] uppercase">
                       <th className="p-3">Symbol</th>

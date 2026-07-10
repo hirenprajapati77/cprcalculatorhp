@@ -291,7 +291,7 @@ export default function WatchlistPage() {
           {/* Desktop table view */}
           <div className="hidden sm:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse font-mono text-xs select-none">
+              <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[10px] uppercase">
                     <th className="p-4 w-[50px] text-center">Pin</th>

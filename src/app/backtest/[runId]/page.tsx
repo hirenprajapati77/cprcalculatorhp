@@ -134,7 +134,7 @@ export default function RunDetailsPage() {
                 <p className="text-muted-foreground">Loading trades...</p>
               ) : tradesData?.trades ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse">
+                  <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
                     <thead className="text-xs text-muted-foreground bg-black/40 border-b border-border/50">
                       <tr>
                         <th className="px-4 py-3">Symbol</th>
@@ -225,7 +225,7 @@ export default function RunDetailsPage() {
                 <p className="text-muted-foreground">Loading snapshots...</p>
               ) : snapshotsData && snapshotsData.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse max-w-md">
+                  <table className="w-full text-sm text-left border-collapse max-w-md whitespace-nowrap">
                     <thead className="text-xs text-muted-foreground bg-black/40 border-b border-border/50">
                       <tr>
                         <th className="px-4 py-3">Period</th>

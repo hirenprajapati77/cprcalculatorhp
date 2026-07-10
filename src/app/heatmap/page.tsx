@@ -123,7 +123,7 @@ export default function HeatmapPage() {
             <span>{heatmapData.length} sectors</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse select-none" style={{ minWidth: 560 }}>
+            <table className="w-full text-left border-collapse select-none whitespace-nowrap" style={{ minWidth: 560 }}>
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[9px] uppercase">
                   <th className="p-2 sm:p-4 w-[110px] sm:w-[200px] sticky left-0 bg-slate-950 z-10">Sector</th>

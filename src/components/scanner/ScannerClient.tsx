@@ -1960,7 +1960,7 @@ export default function ScannerClient() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse font-mono text-[10px] select-none text-center">
+            <table className="w-full text-left border-collapse font-mono text-[10px] select-none text-center whitespace-nowrap">
               <thead>
                 <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary uppercase">
                   <th className="p-2.5 text-left w-36">Sector</th>
@@ -2487,7 +2487,8 @@ export default function ScannerClient() {
                     </div>
                   )
                 ) : (
-                  <table className="w-full text-left border-collapse font-mono text-xs select-none">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
                         {visibleColumns.includes('checkbox') && <th className="p-2.5 w-8"></th>}
@@ -2585,8 +2586,8 @@ export default function ScannerClient() {
                           />
                         );
                       })}
-                    </tbody>
                   </table>
+                  </div>
                 )}
               </div>
 
@@ -3027,8 +3028,8 @@ export default function ScannerClient() {
                     ) : compareStocks.length === 0 ? (
                       <div className="text-center py-5 text-text-tertiary text-xs">Compare data unavailable.</div>
                     ) : (
-                      <div className="border border-border-primary rounded overflow-hidden">
-                        <table className="w-full text-left border-collapse text-[10px]">
+                      <div className="border border-border-primary rounded overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-[10px] whitespace-nowrap">
                           <thead>
                             <tr className="bg-bg-primary/50 text-text-secondary uppercase border-b border-border-primary">
                               <th className="p-2">Symbol</th>
@@ -3082,8 +3083,8 @@ export default function ScannerClient() {
                     ) : drawerHistory.length === 0 ? (
                       <div className="text-center py-5 text-text-tertiary text-xs">No scan history yet for this symbol.</div>
                     ) : (
-                      <div className="border border-border-primary rounded overflow-hidden">
-                        <table className="w-full text-left border-collapse text-[10px]">
+                      <div className="border border-border-primary rounded overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-[10px] whitespace-nowrap">
                           <thead>
                             <tr className="bg-bg-primary/50 text-text-secondary uppercase border-b border-border-primary">
                               <th className="p-2">Date</th>
