@@ -127,75 +127,186 @@ interface V2Breakdown {
   direction?: string;
   classification?: string;
   hardGates?: Record<string, boolean>;
-  scoreBreakdown?: Record<string, number>;
-  rawMetrics?: Record<string, number | string>;
+  scoreBreakdown?: { clvScore?: number; cprScore?: number; liquidityScore?: number; [k: string]: number | undefined };
+  rawMetrics?: { clv?: number; cprWidth?: number; liquidityPassed?: boolean | number; [k: string]: number | boolean | undefined };
 }
 
-function renderV2Breakdown(breakdown: V2Breakdown | null | undefined): React.ReactNode {
+function V2DirectionPill({ direction }: { direction?: string | undefined }) {
+  if (!direction) return <span className="text-slate-500">---</span>;
+  const cfg: Record<string, { label: string; color: string; bg: string }> = {
+    LONG:    { label: '🟢 LONG',    color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+    SHORT:   { label: '🔴 SHORT',   color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+    NEUTRAL: { label: '🟡 NEUTRAL', color: '#eab308', bg: 'rgba(234,179,8,0.12)' },
+  };
+  const c = cfg[direction] ?? { label: direction, color: '#94a3b8', bg: 'rgba(148,163,184,0.08)' };
+  return (
+    <span style={{ color: c.color, background: c.bg, border: `1px solid ${c.color}40` }}
+      className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider">
+      {c.label}
+    </span>
+  );
+}
+
+function V2CprClassBadge({ cls }: { cls?: string | undefined }) {
+  if (!cls) return <span className="text-slate-500 text-[9px]">---</span>;
+  const colors: Record<string, string> = { NARROW: '#22c55e', NORMAL: '#3b82f6', WIDE: '#f97316', VIRGIN: '#a855f7' };
+  return <span style={{ color: colors[cls] ?? '#94a3b8' }} className="font-bold text-[9px] tracking-wider">{cls}</span>;
+}
+
+function V2FinalScore({ score }: { score: number }) {
+  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#eab308' : score >= 40 ? '#f97316' : '#ef4444';
+  return <span style={{ color }} className="font-mono font-bold text-sm">{score}</span>;
+}
+
+function renderV2Breakdown(
+  breakdown: V2Breakdown | null | undefined,
+  scoreV2: number | null | undefined,
+  isExpanded: boolean,
+  onToggleExpand: () => void,
+): React.ReactNode {
   if (!breakdown || typeof breakdown !== 'object') {
-    return <div className="text-slate-500 italic">No breakdown details</div>;
+    return (
+      <div className="space-y-1 text-[10px] text-slate-500 italic">
+        No breakdown data available.
+        <div className="text-[9px] text-slate-600 mt-1 not-italic">V2 scoring runs at signal creation via overnight cron.</div>
+      </div>
+    );
   }
 
-  const fmtKey = (k: string) => k.replace(/([A-Z])/g, ' $1').toLowerCase();
+  const gates   = breakdown.hardGates ?? {};
+  const scores  = breakdown.scoreBreakdown ?? {};
+  const metrics = breakdown.rawMetrics ?? {};
+  const allGatesPass = Object.values(gates).every(Boolean);
+  const scoreBeforeGate = (scores.clvScore ?? 0) + (scores.cprScore ?? 0) + (scores.liquidityScore ?? 0);
+  const finalScore = scoreV2 ?? 0;
+
+  let rejectionReason = '';
+  if (!allGatesPass) {
+    const dir = breakdown.direction;
+    if (dir === 'NEUTRAL') rejectionReason = 'BC & TC moved in opposite directions — split CPR, no valid trend direction';
+    else rejectionReason = 'Higher/Lower Value gate failed — CPR did not confirm the required trend shift';
+  }
 
   return (
-    <div className="space-y-2">
-      {/* Direction & Classification */}
-      <div className="flex justify-between text-[10px] border-b border-slate-800 pb-1">
+    <div className="space-y-2 text-[10px]">
+
+      {/* Info tooltip */}
+      <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}
+        className="rounded px-2 py-1.5 text-[9px] text-slate-400 leading-relaxed">
+        <span className="text-blue-400 font-semibold">ⓘ</span>{' '}
+        Raw Score = CLV + CPR + Liquidity. Hard Gate determines eligibility.
+        If gate fails, Stored V2 Score becomes <span className="text-red-400 font-semibold">0</span>.
+      </div>
+
+      {/* Direction */}
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
         <span className="text-slate-500 font-medium">Direction</span>
-        <span className="font-semibold text-blue-400">{breakdown.direction ?? '---'}</span>
-      </div>
-      <div className="flex justify-between text-[10px] border-b border-slate-800 pb-1">
-        <span className="text-slate-500 font-medium">Classification</span>
-        <span className="font-semibold text-purple-400 text-right max-w-[120px] truncate">{breakdown.classification ?? '---'}</span>
+        <V2DirectionPill direction={breakdown.direction} />
       </div>
 
-      {/* Hard Gates */}
-      {breakdown.hardGates && typeof breakdown.hardGates === 'object' && (
-        <div className="border-b border-slate-800 pb-1">
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Hard Gates</div>
-          <div className="space-y-0.5 pl-1">
-            {Object.entries(breakdown.hardGates).map(([k, v]) => (
-              <div key={k} className="flex justify-between text-[9px]">
-                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
-                <span className={v ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
-                  {v ? 'Passed' : 'Failed'}
-                </span>
-              </div>
-            ))}
+      {/* Hard Gate */}
+      <div style={{
+          background: allGatesPass ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
+          border: `1px solid ${allGatesPass ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+        }} className="rounded-md px-2 py-1.5 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Hard Gate</span>
+          <span style={{ color: allGatesPass ? '#22c55e' : '#ef4444' }} className="text-[9px] font-bold">
+            {allGatesPass ? '🟢 PASSED' : '🔴 FAILED'}
+          </span>
+        </div>
+        <div className="text-[9px] leading-snug" style={{ color: allGatesPass ? 'rgba(134,239,172,0.8)' : 'rgba(252,165,165,0.8)' }}>
+          {allGatesPass ? 'Higher Value confirmed — CPR trend valid' : rejectionReason}
+        </div>
+      </div>
+
+      {/* Raw Component Score */}
+      <div className="border-b border-slate-800/80 pb-1.5 space-y-0.5">
+        <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">Raw Component Score</div>
+        <div className="pl-1 space-y-0.5">
+          <div className="flex justify-between text-[9px]">
+            <span className="text-slate-400">CLV Score</span>
+            <span className="font-mono text-white font-semibold">+{scores.clvScore ?? 0}</span>
+          </div>
+          <div className="flex justify-between text-[9px]">
+            <span className="text-slate-400">CPR Score</span>
+            <span className="font-mono text-white font-semibold">+{scores.cprScore ?? 0}</span>
+          </div>
+          <div className="flex justify-between text-[9px]">
+            <span className="text-slate-400">Liquidity Score</span>
+            <span className="font-mono text-white font-semibold">+{scores.liquidityScore ?? 0}</span>
+          </div>
+          <div className="flex justify-between text-[9px] pt-0.5 mt-0.5" style={{ borderTop: '1px dashed rgba(148,163,184,0.2)' }}>
+            <span className="text-slate-400 font-semibold">Score Before Gate</span>
+            <span className="font-mono text-white font-bold">{scoreBeforeGate}</span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Score Breakdown */}
-      {breakdown.scoreBreakdown && typeof breakdown.scoreBreakdown === 'object' && (
-        <div className="border-b border-slate-800 pb-1">
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Score Breakdown</div>
-          <div className="space-y-0.5 pl-1">
-            {Object.entries(breakdown.scoreBreakdown).map(([k, v]) => (
-              <div key={k} className="flex justify-between text-[9px]">
-                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
-                <span className="font-mono text-white font-semibold">+{String(v)}</span>
-              </div>
-            ))}
-          </div>
+      {/* Gate Result & Final */}
+      <div className="border-b border-slate-800/80 pb-1.5 pl-1 space-y-0.5">
+        <div className="flex justify-between text-[9px]">
+          <span className="text-slate-400">Gate Result</span>
+          <span style={{ color: allGatesPass ? '#22c55e' : '#ef4444' }} className="font-bold">{allGatesPass ? 'PASSED' : 'FAILED'}</span>
         </div>
-      )}
+        <div className="flex justify-between text-[9px]">
+          <span className="text-slate-400">Multiplier</span>
+          <span className="font-mono font-bold text-white">×{allGatesPass ? '1' : '0'}</span>
+        </div>
+        <div className="flex justify-between text-[9px] items-center">
+          <span className="text-slate-400 font-semibold">Stored V2 Score</span>
+          <V2FinalScore score={finalScore} />
+        </div>
+      </div>
 
-      {/* Raw Metrics */}
-      {breakdown.rawMetrics && typeof breakdown.rawMetrics === 'object' && (
-        <div>
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">Raw Metrics</div>
-          <div className="space-y-0.5 pl-1">
-            {Object.entries(breakdown.rawMetrics).map(([k, v]) => (
-              <div key={k} className="flex justify-between text-[9px]">
-                <span className="text-slate-400 capitalize">{fmtKey(k)}</span>
-                <span className="font-mono text-slate-300 font-medium">
-                  {typeof v === 'number' ? (v > 1000 ? v.toLocaleString('en-IN', { maximumFractionDigits: 1 }) : v.toFixed(2)) : String(v)}
-                </span>
-              </div>
-            ))}
+      {/* Expand toggle */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+        className="w-full text-[9px] text-blue-400 hover:text-blue-300 font-semibold flex items-center justify-center gap-1 py-0.5 transition-colors"
+      >
+        {isExpanded ? '▲ Hide Details' : '▼ Show Details'}
+      </button>
+
+      {/* Expanded detail section */}
+      {isExpanded && (
+        <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">CPR Classification</div>
+          <div className="flex justify-between text-[9px] pl-1">
+            <span className="text-slate-400">Tomorrow&apos;s CPR</span>
+            <V2CprClassBadge cls={breakdown.classification} />
           </div>
+
+          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-1.5 mb-0.5">CLV Detail</div>
+          <div className="pl-1 space-y-0.5">
+            <div className="flex justify-between text-[9px]">
+              <span className="text-slate-400">CLV Raw</span>
+              <span className="font-mono text-slate-300">{typeof metrics.clv === 'number' ? metrics.clv.toFixed(4) : '---'}</span>
+            </div>
+            <div className="flex justify-between text-[9px]">
+              <span className="text-slate-400">CPR Width %</span>
+              <span className="font-mono text-slate-300">{typeof metrics.cprWidth === 'number' ? metrics.cprWidth.toFixed(3) + '%' : '---'}</span>
+            </div>
+            <div className="flex justify-between text-[9px]">
+              <span className="text-slate-400">Liquidity Gate</span>
+              <span style={{ color: metrics.liquidityPassed ? '#22c55e' : '#ef4444' }} className="font-bold">
+                {metrics.liquidityPassed ? '✓ Passed' : '✗ Failed'}
+              </span>
+            </div>
+          </div>
+
+          {Object.keys(gates).length > 0 && (
+            <>
+              <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-1.5 mb-0.5">Gate Detail</div>
+              <div className="pl-1 space-y-0.5">
+                {Object.entries(gates).map(([k, v]) => (
+                  <div key={k} className="flex justify-between text-[9px]">
+                    <span className="text-slate-400 capitalize">{k.replace(/([A-Z])/g, ' $1').toLowerCase()}</span>
+                    <span style={{ color: v ? '#22c55e' : '#ef4444' }} className="font-bold">{v ? '✓ Passed' : '✗ Failed'}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -332,6 +443,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
 
   // Tooltip State for V2 Score breakdown on mobile
   const [activeTooltipRow, setActiveTooltipRow] = useState<string | null>(null);
+  // Expand state for V2 breakdown detail section
+  const [expandedV2Row, setExpandedV2Row] = useState<string>('');
 
   useEffect(() => {
     if (!activeTooltipRow) return;
@@ -531,103 +644,327 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           </div>
         </div>
 
-        {activeTab === 'ANALYTICS' && reportingData && (
+        {activeTab === 'ANALYTICS' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Variance Widget */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatWidget
-                label="Execution Variance"
-                value={`${reportingData.variance.averageVariancePct >= 0 ? '+' : ''}${reportingData.variance.averageVariancePct.toFixed(2)}%`}
-                sub={`Avg gap between model & actual (${reportingData.variance.sampleSize} trades)`}
-                icon={<Activity size={16} />}
-                color={reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444'}
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Quality Buckets Table */}
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-white">Quality Bucket Performance</h3>
-                </div>
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-[#12141c] text-slate-400">
-                     <tr>
-                       <th className="px-4 py-2 font-medium">Bucket</th>
-                       <th className="px-4 py-2 font-medium text-right">Trades</th>
-                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
-                       <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {reportingData.qualityBuckets.map(b => (
-                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 font-medium">{b.groupValue}</td>
-                        <td className="px-4 py-3 text-right">{b.count}</td>
-                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
-                        <td className={`px-4 py-3 text-right font-mono ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
 
-              {/* Execution Outcomes Table */}
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-white">Execution Outcomes</h3>
-                </div>
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-[#12141c] text-slate-400">
-                     <tr>
-                       <th className="px-4 py-2 font-medium">Outcome</th>
-                       <th className="px-4 py-2 font-medium text-right">Trades</th>
-                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {reportingData.executionOutcomes.map(b => (
-                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 font-medium"><OutcomeBadge outcome={b.groupValue} /></td>
-                        <td className="px-4 py-3 text-right">{b.count}</td>
-                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* ── No-data empty state ── */}
+            {(!reportingData || (reportingData.qualityBuckets.length === 0 && reportingData.executionOutcomes.length === 0)) && (
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center">
+                <div className="text-4xl mb-3">📊</div>
+                <div className="text-slate-400 font-semibold mb-1">Not enough completed trades to generate analytics.</div>
+                <div className="text-slate-600 text-xs">Close at least 5 trades to unlock strategy insights.</div>
               </div>
-              
-              {/* Regime Performance Table */}
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden col-span-1 lg:col-span-2">
-                <div className="p-4 border-b border-slate-800/50 flex justify-between items-center">
-                  <h3 className="text-sm font-semibold text-white">Regime Performance</h3>
+            )}
+
+            {reportingData && (
+              <>
+                {/* ── 1. KPI Cards ── */}
+                {(() => {
+                  const closed = reportingData.qualityBuckets.reduce((s, b) => s + b.count, 0);
+                  const wins   = reportingData.executionOutcomes.find(b => b.groupValue === 'MODEL_VALID')?.count ?? 0;
+                  const wr     = closed > 0 ? (wins / closed) * 100 : 0;
+                  const avgPnl = reportingData.qualityBuckets.reduce((s, b) => s + b.avgPnlPct * b.count, 0) / (closed || 1);
+                  const grossWin  = reportingData.executionOutcomes.filter(b => b.avgPnlPct > 0).reduce((s, b) => s + Math.abs(b.avgPnlPct) * b.count, 0);
+                  const grossLoss = reportingData.executionOutcomes.filter(b => b.avgPnlPct < 0).reduce((s, b) => s + Math.abs(b.avgPnlPct) * b.count, 0);
+                  const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? 999 : 0);
+                  const expectancy = (wr / 100) * avgPnl - ((100 - wr) / 100) * Math.abs(Math.min(avgPnl, 0));
+                  const variance = reportingData.variance.averageVariancePct;
+
+                  const kpis = [
+                    { label: 'Closed Trades', value: String(closed), color: '#3b82f6', good: closed >= 10, neutral: closed >= 5 },
+                    { label: 'Win Rate', value: `${wr.toFixed(1)}%`, color: wr >= 55 ? '#22c55e' : wr >= 45 ? '#eab308' : '#ef4444', good: wr >= 55, neutral: wr >= 45 },
+                    { label: 'Avg PnL %', value: `${avgPnl >= 0 ? '+' : ''}${avgPnl.toFixed(2)}%`, color: avgPnl >= 0 ? '#22c55e' : '#ef4444', good: avgPnl >= 5, neutral: avgPnl >= 0 },
+                    { label: 'Profit Factor', value: pf >= 999 ? '∞' : pf.toFixed(2), color: pf >= 1.5 ? '#22c55e' : pf >= 1.0 ? '#eab308' : '#ef4444', good: pf >= 1.5, neutral: pf >= 1.0 },
+                    { label: 'Expectancy', value: `${expectancy >= 0 ? '+' : ''}${expectancy.toFixed(2)}%`, color: expectancy >= 0 ? '#22c55e' : '#ef4444', good: expectancy >= 3, neutral: expectancy >= 0 },
+                    { label: 'Exec Variance', value: `${variance >= 0 ? '+' : ''}${variance.toFixed(2)}%`, color: variance >= -2 ? '#22c55e' : '#ef4444', good: variance >= -2, neutral: variance >= -5 },
+                  ];
+
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {kpis.map(k => (
+                        <div key={k.label}
+                          style={{ borderColor: `${k.color}28`, background: `${k.color}08` }}
+                          className="rounded-xl border p-3 flex flex-col gap-1 min-w-0">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">{k.label}</span>
+                          <span style={{ color: k.color }} className="text-lg font-bold leading-tight font-mono">{k.value}</span>
+                          <span className="text-[9px] font-semibold"
+                            style={{ color: k.good ? '#22c55e' : k.neutral ? '#eab308' : '#ef4444' }}>
+                            {k.good ? '● Good' : k.neutral ? '● Neutral' : '● Poor'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* ── 2+3: Quality Buckets & Execution Outcomes ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* Quality Bucket Performance */}
+                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                    <div className="p-4 border-b border-slate-800/50">
+                      <h3 className="text-sm font-semibold text-white">Quality Bucket Performance</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Signal classification breakdown</p>
+                    </div>
+                    <div className="divide-y divide-slate-800/40">
+                      {(() => {
+                        const total = reportingData.qualityBuckets.reduce((s, b) => s + b.count, 0);
+                        const labelMap: Record<string, string> = {
+                          TRADEABLE: 'Tradeable', WATCHLIST: 'Watchlist', LOW_QUALITY: 'Low Quality',
+                        };
+                        const colorMap: Record<string, string> = {
+                          TRADEABLE: '#22c55e', WATCHLIST: '#eab308', LOW_QUALITY: '#ef4444',
+                        };
+                        return reportingData.qualityBuckets.map(b => {
+                          const contrib = total > 0 ? ((b.count / total) * 100) : 0;
+                          const col = colorMap[b.groupValue] ?? '#94a3b8';
+                          return (
+                            <div key={b.groupValue} className="px-4 py-3 hover:bg-white/[0.02] transition-colors">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span style={{ color: col }} className="text-xs font-bold">{labelMap[b.groupValue] ?? b.groupValue}</span>
+                                <span className={`text-xs font-mono font-semibold ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                  {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                  <div style={{ width: `${contrib}%`, background: col }} className="h-full rounded-full transition-all" />
+                                </div>
+                                <span className="text-[10px] text-slate-500 font-mono w-8 text-right">{contrib.toFixed(0)}%</span>
+                              </div>
+                              <div className="flex gap-3 text-[10px] text-slate-500">
+                                <span>Trades: <span className="text-slate-300 font-semibold">{b.count}</span></span>
+                                <span>Win Rate: <span className="text-slate-300 font-semibold">{b.winRate.toFixed(1)}%</span></span>
+                                <span>Contribution: <span className="text-slate-300 font-semibold">{contrib.toFixed(0)}%</span></span>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Execution Outcomes */}
+                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                    <div className="p-4 border-b border-slate-800/50">
+                      <h3 className="text-sm font-semibold text-white">Execution Outcomes</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">What happened after the signal fired</p>
+                    </div>
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#12141c] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-2 font-medium">Outcome</th>
+                          <th className="px-4 py-2 font-medium text-right">Trades</th>
+                          <th className="px-4 py-2 font-medium text-right">Win %</th>
+                          <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {reportingData.executionOutcomes.map(b => (
+                          <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="px-4 py-2.5"><OutcomeBadge outcome={b.groupValue} /></td>
+                            <td className="px-4 py-2.5 text-right text-slate-300">{b.count}</td>
+                            <td className="px-4 py-2.5 text-right">
+                              <span style={{ color: b.winRate >= 50 ? '#22c55e' : b.winRate >= 33 ? '#eab308' : '#ef4444' }}
+                                className="font-mono font-semibold">{b.winRate.toFixed(1)}%</span>
+                            </td>
+                            <td className={`px-4 py-2.5 text-right font-mono font-semibold ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-[#12141c] text-slate-400">
-                     <tr>
-                       <th className="px-4 py-2 font-medium">Regime</th>
-                       <th className="px-4 py-2 font-medium text-right">Trades</th>
-                       <th className="px-4 py-2 font-medium text-right">Win Rate</th>
-                       <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {reportingData.regimes.map(b => (
-                      <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 font-medium text-slate-300">{formatRegime(b.groupValue)}</td>
-                        <td className="px-4 py-3 text-right">{b.count}</td>
-                        <td className="px-4 py-3 text-right">{b.winRate.toFixed(1)}%</td>
-                        <td className={`px-4 py-3 text-right font-mono ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+
+                {/* ── 4+5: Regime + Strategy ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* Regime Performance */}
+                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                    <div className="p-4 border-b border-slate-800/50">
+                      <h3 className="text-sm font-semibold text-white">Regime Performance</h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Market condition × strategy fit</p>
+                    </div>
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#12141c] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-2 font-medium">Regime</th>
+                          <th className="px-4 py-2 font-medium text-right">Trades</th>
+                          <th className="px-4 py-2 font-medium text-right">Win %</th>
+                          <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {reportingData.regimes.length === 0 ? (
+                          <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-600 text-xs italic">No regime data yet</td></tr>
+                        ) : reportingData.regimes.map(b => {
+                          const label = formatRegime(b.groupValue);
+                          const isUnknown = !b.groupValue || label === '---' || label.toLowerCase().includes('unknown');
+                          if (isUnknown && b.count === 0) return null;
+                          const regimeColor = label.toLowerCase().includes('bull') ? '#22c55e'
+                            : label.toLowerCase().includes('bear') ? '#ef4444'
+                            : label.toLowerCase().includes('sideways') ? '#eab308' : '#94a3b8';
+                          return (
+                            <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  <span style={{ background: regimeColor }} className="w-1.5 h-1.5 rounded-full shrink-0" />
+                                  <span className="text-slate-300 font-medium">{label}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-slate-300">{b.count}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                <span style={{ color: b.winRate >= 50 ? '#22c55e' : b.winRate >= 33 ? '#eab308' : '#ef4444' }}
+                                  className="font-mono font-semibold">{b.winRate.toFixed(1)}%</span>
+                              </td>
+                              <td className={`px-4 py-2.5 text-right font-mono font-semibold ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Strategy Comparison */}
+                  {stats && (
+                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                      <div className="p-4 border-b border-slate-800/50">
+                        <h3 className="text-sm font-semibold text-white">Strategy Comparison</h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Which signal type performs best</p>
+                      </div>
+                      <div className="divide-y divide-slate-800/40">
+                        {(['CPR', 'BTST', 'STBT'] as const).map(sig => {
+                          const d = stats.byType[sig];
+                          if (!d || d.count === 0) return null;
+                          const col = SIGNAL_COLORS[sig];
+                          const isBest = stats.bestSignalType === sig;
+                          return (
+                            <div key={sig} className="px-4 py-3 hover:bg-white/[0.02] transition-colors">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span style={{ color: col, background: `${col}18`, border: `1px solid ${col}40` }}
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider">{sig}</span>
+                                  {isBest && (
+                                    <span className="text-[9px] text-amber-400 font-bold">★ Best</span>
+                                  )}
+                                </div>
+                                <span style={{ color: d.winRate >= 55 ? '#22c55e' : d.winRate >= 40 ? '#eab308' : '#ef4444' }}
+                                  className="text-xs font-bold font-mono">{d.winRate.toFixed(1)}% WR</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden mb-1.5">
+                                <div style={{ width: `${Math.min(d.winRate, 100)}%`, background: col }} className="h-full rounded-full" />
+                              </div>
+                              <div className="flex gap-3 text-[10px] text-slate-500">
+                                <span>Trades: <span className="text-slate-300 font-semibold">{d.count}</span></span>
+                                <span>Win Rate: <span className="text-slate-300 font-semibold">{d.winRate.toFixed(1)}%</span></span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── 6. Event Risk & Loss Analysis ── */}
+                {(reportingData.eventRisks?.length > 0) && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                      <div className="p-4 border-b border-slate-800/50">
+                        <h3 className="text-sm font-semibold text-white">Event Risk Impact</h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">How event risk affects outcomes</p>
+                      </div>
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#12141c] text-slate-500">
+                          <tr>
+                            <th className="px-4 py-2 font-medium">Event Risk</th>
+                            <th className="px-4 py-2 font-medium text-right">Trades</th>
+                            <th className="px-4 py-2 font-medium text-right">Win %</th>
+                            <th className="px-4 py-2 font-medium text-right">Avg PnL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/40">
+                          {reportingData.eventRisks.map(b => (
+                            <tr key={b.groupValue} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="px-4 py-2.5 text-slate-300 font-medium text-xs">
+                                {b.groupValue === 'NONE' ? '✓ No Event Risk' : b.groupValue === 'HIGH' ? '⚠ High Risk' : b.groupValue === 'MEDIUM' ? '⚡ Medium Risk' : b.groupValue}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-slate-300">{b.count}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                <span style={{ color: b.winRate >= 50 ? '#22c55e' : b.winRate >= 33 ? '#eab308' : '#ef4444' }}
+                                  className="font-mono font-semibold">{b.winRate.toFixed(1)}%</span>
+                              </td>
+                              <td className={`px-4 py-2.5 text-right font-mono font-semibold ${b.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {b.avgPnlPct >= 0 ? '+' : ''}{b.avgPnlPct.toFixed(2)}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Loss Analysis */}
+                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                      <div className="p-4 border-b border-slate-800/50">
+                        <h3 className="text-sm font-semibold text-white">Loss Analysis</h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Top reasons trades underperform</p>
+                      </div>
+                      <div className="divide-y divide-slate-800/40">
+                        {reportingData.executionOutcomes
+                          .filter(b => b.avgPnlPct < 0)
+                          .sort((a, b) => a.avgPnlPct - b.avgPnlPct)
+                          .map(b => {
+                            const severity = b.avgPnlPct < -15 ? '#ef4444' : b.avgPnlPct < -8 ? '#f97316' : '#eab308';
+                            return (
+                              <div key={b.groupValue} className="px-4 py-3 flex items-center gap-3">
+                                <div style={{ background: severity }} className="w-1 h-8 rounded-full shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <OutcomeBadge outcome={b.groupValue} />
+                                    <span className="text-red-400 font-mono font-bold text-xs">{b.avgPnlPct.toFixed(2)}%</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500">{b.count} trades · {b.winRate.toFixed(0)}% win rate</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {reportingData.executionOutcomes.filter(b => b.avgPnlPct < 0).length === 0 && (
+                          <div className="px-4 py-6 text-center text-green-400 text-xs font-semibold">🎉 No loss categories yet!</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── 7. Execution Variance Card ── */}
+                <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 flex items-start gap-4">
+                  <div style={{ background: (reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444') + '18', color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}
+                    className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-lg">
+                    <Activity size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Execution Variance</div>
+                    <div style={{ color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}
+                      className="text-2xl font-bold font-mono">
+                      {reportingData.variance.averageVariancePct >= 0 ? '+' : ''}{reportingData.variance.averageVariancePct.toFixed(2)}%
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Average gap between model prediction and actual return · {reportingData.variance.sampleSize} trades sampled
+                    </div>
+                    <div className="mt-2 text-[10px]" style={{ color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}>
+                      {reportingData.variance.averageVariancePct >= -2
+                        ? '● Execution quality is within acceptable range'
+                        : '● Execution slippage is hurting returns — review option selection'}
+                    </div>
+                  </div>
+                </div>
+
+              </>
+            )}
           </div>
         )}
 
@@ -859,17 +1196,23 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                             {/* Premium Tooltip Overlay */}
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className={`absolute z-50 right-0 w-52 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-lg shadow-xl text-left pointer-events-auto transition-all ${
+                              className={`absolute z-50 right-0 w-64 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-xl shadow-2xl text-left pointer-events-auto transition-all ${
                                 index < 3 ? 'top-full mt-2' : 'bottom-full mb-2'
                               } ${
                                 activeTooltipRow === entry.id ? 'block opacity-100 translate-y-0' : 'hidden md:group-hover:block md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0'
                               }`}
                             >
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800">
-                                V2 Score Breakdown
+                              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V2 Score Breakdown</span>
+                                <span className="text-[9px] text-slate-600 font-mono">Shadow Mode</span>
                               </div>
-                              <div className="space-y-1.5 font-sans text-[11px] text-slate-300">
-                                {renderV2Breakdown(entry.v2Breakdown)}
+                              <div className="font-sans text-[11px] text-slate-300">
+                                {renderV2Breakdown(
+                                  entry.v2Breakdown as V2Breakdown | null,
+                                  entry.scoreV2,
+                                  expandedV2Row === entry.id,
+                                  () => setExpandedV2Row(prev => prev === entry.id ? '' : entry.id),
+                                )}
                               </div>
                             </div>
                           </div>
