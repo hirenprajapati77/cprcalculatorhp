@@ -8,7 +8,7 @@
     "build:clean": "rm -rf .next && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/tests/cpr-engine.test.ts src/tests/scanner.test.ts src/tests/btst.test.ts src/tests/overnight.test.ts src/tests/option-suggestion.test.ts src/tests/backtest.test.ts src/tests/redis.test.ts src/tests/history.test.ts src/tests/trading-logic-fixes.test.ts"
+    "test": "tsx --test src/tests/*.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -36,7 +36,6 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/ioredis": "^4.28.10",
-    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -44,7 +43,6 @@
     "eslint-config-next": "15.5.19",
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
-    "ts-jest": "^29.4.11",
     "tsx": "^4.22.4",
     "typescript": "^5"
   }
