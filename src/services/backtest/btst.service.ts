@@ -411,7 +411,7 @@ export class BtstService {
         close: stock.ltp
       };
       
-      yesterdayCandle = isTodayCandleFinal 
+      yesterdayCandle = isLastToday 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }
@@ -593,7 +593,7 @@ export class BtstService {
         close: stock.ltp
       };
       
-      yesterdayCandle = isTodayCandleFinal 
+      yesterdayCandle = isLastToday 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }
