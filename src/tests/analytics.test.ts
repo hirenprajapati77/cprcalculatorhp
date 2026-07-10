@@ -5,7 +5,7 @@ import { GET } from '../app/api/analytics/route';
 import { prisma } from '../lib/db';
 
 test('Analytics API Route Logic', async (t) => {
-  await t.test('Breakeven classification and winRate math is correct', async (t) => {
+  await t.test('Breakeven classification and winRate math is correct', async () => {
     // 1. Mock Prisma to return a fixed run and specific trades
     const originalFindUnique = prisma.backtestRun.findUnique;
     const originalFindMany = prisma.trade.findMany;
@@ -37,7 +37,7 @@ test('Analytics API Route Logic', async (t) => {
     assert.strictEqual(response.status, 200, 'Endpoint should return 200 OK');
     assert.ok(json.signalBreakdown, 'Response should contain signalBreakdown');
     
-    const cprStats = json.signalBreakdown.find((s: any) => s.signal === 'CPR');
+    const cprStats = json.signalBreakdown.find((s: { signal: string; wins: number; losses: number; breakeven: number; winRate: number; avgPnl: number; }) => s.signal === 'CPR');
     assert.ok(cprStats, 'CPR stats should exist');
     
     assert.strictEqual(cprStats.wins, 2, 'Should count 2 wins');

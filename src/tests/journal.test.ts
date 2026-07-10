@@ -69,7 +69,7 @@ test('TradeJournalService Phase 3', async (t) => {
     await prisma.tradeJournal.delete({ where: { id: mockId } });
   });
 
-  await t.test('getStats calculates totalAllTrades and totalClosedTrades correctly', async (t) => {
+  await t.test('getStats calculates totalAllTrades and totalClosedTrades correctly', async () => {
     // 1. Mock Prisma to return specific counts and entries
     const originalCount = prisma.tradeJournal.count;
     const originalFindMany = prisma.tradeJournal.findMany;
