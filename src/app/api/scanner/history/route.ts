@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import type { ScannerResult, ScanHistory } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
         take: 10,
       });
 
-      const formatted = results.map(r => ({
+      const formatted = results.map((r: ScannerResult) => ({
         id: r.id,
         date: r.date,
         score: r.score,
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       take: 15,
     });
 
-    const formatted = history.map((h) => ({
+    const formatted = history.map((h: ScanHistory) => ({
       ...h,
       filters: h.filtersJson ? JSON.parse(h.filtersJson) : {},
     }));

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
 import { isMarketOpen } from '@/lib/market-hours';
@@ -142,8 +143,8 @@ export async function GET(request: NextRequest) {
 
     // 2. Map universe stock symbols to database keys
     const universeStocks = MarketService.getUniverse(universe);
-    const baseSymbols = universeStocks.map(s => s.symbol.trim());
-    const dbSymbols = baseSymbols.map(s => market === 'NSE' ? s : `${s}:BSE`);
+    const baseSymbols = universeStocks.map((s: { symbol: string }) => s.symbol.trim());
+    const dbSymbols = baseSymbols.map((s: string) => market === 'NSE' ? s : `${s}:BSE`);
 
     // 3. Query MarketSnapshot for Sector and Market Cap filtering
     const snapshotWhere: {
@@ -170,10 +171,10 @@ export async function GET(request: NextRequest) {
       where: snapshotWhere
     });
     
-    const finalDbSymbols = matchingSnapshots.map(s => s.symbol);
+    const finalDbSymbols = matchingSnapshots.map((s: MarketSnapshot) => s.symbol);
     
     const searchedSymbols = search 
-      ? finalDbSymbols.filter(s => s.split(':')[0].toLowerCase().includes(search.toLowerCase()))
+      ? finalDbSymbols.filter((s: string) => s.split(':')[0].toLowerCase().includes(search.toLowerCase()))
       : finalDbSymbols;
 
     // 4. Build ScannerResult Query Conditions
@@ -247,8 +248,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
-    const formattedResults = results.map((r) => {
-      const snap = matchingSnapshots.find(s => s.symbol === r.symbol);
+    const formattedResults = results.map((r: ScannerResult) => {
+      const snap = matchingSnapshots.find((s: MarketSnapshot) => s.symbol === r.symbol);
       const cleanSymbol = r.symbol.split(':')[0];
 
       return {

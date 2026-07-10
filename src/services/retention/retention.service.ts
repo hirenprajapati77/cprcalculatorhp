@@ -55,7 +55,7 @@ export class RetentionService {
       take: safeLimit
     });
 
-    const runIds = runsToDelete.map(r => r.id);
+    const runIds = runsToDelete.map((r: { id: string }) => r.id);
     let hardDeleted = 0;
 
     if (!dryRun && runIds.length > 0) {

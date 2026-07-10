@@ -31,7 +31,7 @@ export class ScannerController {
     let stocks: { symbol: string }[] = [];
     if (universeName === 'WATCHLIST') {
       const watchlistItems = await prisma.watchlist.findMany();
-      stocks = watchlistItems.map(item => ({ symbol: item.symbol }));
+      stocks = watchlistItems.map((item: { symbol: string }) => ({ symbol: item.symbol }));
     } else {
       stocks = MarketService.getUniverse(universeName);
     }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function GET() {
     // 2. Fetch all market snapshots to get sectors
     const snapshots = await prisma.marketSnapshot.findMany();
     const sectorMap = new Map<string, string>();
-    snapshots.forEach((snap) => {
+    snapshots.forEach((snap: MarketSnapshot) => {
       sectorMap.set(snap.symbol, snap.sector);
     });
 
@@ -37,7 +38,7 @@ export async function GET() {
     // Structure: sector -> { signal -> count }
     const counts: Record<string, Record<string, number>> = {};
 
-    scans.forEach((scan) => {
+    scans.forEach((scan: ScannerResult) => {
       const sector = sectorMap.get(scan.symbol) || 'Other';
       const signals = scan.signalSummary ? scan.signalSummary.split(',') : [];
 
@@ -54,7 +55,7 @@ export async function GET() {
         };
       }
 
-      signals.forEach((sig) => {
+      signals.forEach((sig: string) => {
         if (counts[sector][sig] !== undefined) {
           counts[sector][sig]++;
         } else {
