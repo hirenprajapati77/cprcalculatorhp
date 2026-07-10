@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const equityCurve = [];
     const monthlyPnlMap: Record<string, { pnl: number; tradeCount: number }> = {};
     const drawdown = [];
-    const signalMap: Record<string, { wins: number; losses: number; totalPnl: number }> = {};
+    const signalMap: Record<string, { wins: number; losses: number; breakeven: number; totalPnl: number }> = {};
     const distributionMap: Record<string, number> = {};
 
     let cumulativePnl = 0;
@@ -68,10 +68,11 @@ export async function GET(req: NextRequest) {
       // Safe to use directly since backtest now stores a stable key (e.g. NARROW_CPR_BULLISH)
       const baseSignal = trade.signal;
       if (!signalMap[baseSignal]) {
-        signalMap[baseSignal] = { wins: 0, losses: 0, totalPnl: 0 };
+        signalMap[baseSignal] = { wins: 0, losses: 0, breakeven: 0, totalPnl: 0 };
       }
       if (trade.pnl > 0) signalMap[baseSignal].wins++;
-      else signalMap[baseSignal].losses++;
+      else if (trade.pnl < 0) signalMap[baseSignal].losses++;
+      else signalMap[baseSignal].breakeven++;
       signalMap[baseSignal].totalPnl += trade.pnl;
 
       // Trade Distribution
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
     const monthlyPnl = Object.keys(monthlyPnlMap).sort().map(key => {
       const [year, month] = key.split('-');
       return {
-        month: new Date(Number(year), Number(month) - 1, 1).toLocaleString('default', { month: 'short' }),
+        month: new Date(Number(year), Number(month) - 1, 1).toLocaleString('en-US', { month: 'short' }),
         year: Number(year),
         pnl: monthlyPnlMap[key].pnl,
         tradeCount: monthlyPnlMap[key].tradeCount
@@ -92,13 +93,15 @@ export async function GET(req: NextRequest) {
     });
 
     const signalBreakdown = Object.keys(signalMap).map(signal => {
-      const { wins, losses, totalPnl } = signalMap[signal];
-      const total = wins + losses;
+      const { wins, losses, breakeven, totalPnl } = signalMap[signal];
+      const decisive = wins + losses; // excludes breakeven from the win-rate denominator
+      const total = wins + losses + breakeven;
       return {
         signal,
         wins,
         losses,
-        winRate: total > 0 ? (wins / total) * 100 : 0,
+        breakeven,
+        winRate: decisive > 0 ? (wins / decisive) * 100 : 0,
         avgPnl: total > 0 ? totalPnl / total : 0
       };
     });

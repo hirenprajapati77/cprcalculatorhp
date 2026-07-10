@@ -47,6 +47,8 @@ interface JournalEntry {
 
 interface JournalStats {
   totalTrades: number;
+  totalClosedTrades?: number;
+  totalAllTrades?: number;
   winners: number;
   winRate: number;
   avgPnlPct: number;
@@ -636,7 +638,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatWidget
               label="Total Trades"
-              value={String(stats.totalTrades)}
+              value={String(stats.totalAllTrades ?? stats.totalTrades)}
               sub={`${stats.winners} winners`}
               icon={<Activity size={16} />}
               color="#3b82f6"
@@ -644,7 +646,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             <StatWidget
               label="Win Rate"
               value={`${stats.winRate}%`}
-              sub={`${stats.totalTrades} closed trades`}
+              sub={`${stats.totalClosedTrades ?? stats.totalTrades} closed trades`}
               icon={<TrendingUp size={16} />}
               color={stats.winRate >= 50 ? '#22c55e' : '#ef4444'}
             />
