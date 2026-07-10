@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
-import { encrypt } from '@/lib/crypto';
+import { encrypt, decrypt } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,10 +27,17 @@ export async function GET() {
     });
 
     // Mask the telegram token if present
-    if (settings.telegramToken && settings.telegramToken.length > 4) {
-      settings.telegramToken = '*'.repeat(settings.telegramToken.length - 4) + settings.telegramToken.slice(-4);
-    } else if (settings.telegramToken) {
-      settings.telegramToken = '****';
+    if (settings.telegramToken) {
+      try {
+        const plainToken = decrypt(settings.telegramToken);
+        if (plainToken.length > 4) {
+          settings.telegramToken = '*'.repeat(plainToken.length - 4) + plainToken.slice(-4);
+        } else {
+          settings.telegramToken = '****';
+        }
+      } catch (_e) {
+        settings.telegramToken = '****'; // Fallback if decryption fails
+      }
     }
 
     return NextResponse.json({ success: true, settings });
@@ -61,7 +68,8 @@ export async function POST(request: NextRequest) {
       telegramGroupChatId,
     } = parsed.data;
 
-    const encryptedToken = telegramToken && telegramToken.trim() !== '' ? encrypt(telegramToken) : undefined;
+    const isMaskedToken = telegramToken && telegramToken.startsWith('***');
+    const encryptedToken = telegramToken && telegramToken.trim() !== '' && !isMaskedToken ? encrypt(telegramToken) : undefined;
 
     const settings = await prisma.appSettings.upsert({
       where: { id: 'global' },
@@ -91,10 +99,17 @@ export async function POST(request: NextRequest) {
     });
 
     // Mask for response
-    if (settings.telegramToken && settings.telegramToken.length > 4) {
-      settings.telegramToken = '*'.repeat(settings.telegramToken.length - 4) + settings.telegramToken.slice(-4);
-    } else if (settings.telegramToken) {
-      settings.telegramToken = '****';
+    if (settings.telegramToken) {
+      try {
+        const plainToken = decrypt(settings.telegramToken);
+        if (plainToken.length > 4) {
+          settings.telegramToken = '*'.repeat(plainToken.length - 4) + plainToken.slice(-4);
+        } else {
+          settings.telegramToken = '****';
+        }
+      } catch (_e) {
+        settings.telegramToken = '****';
+      }
     }
 
     return NextResponse.json({ success: true, settings });

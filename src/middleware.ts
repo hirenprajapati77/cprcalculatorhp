@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { timingSafeStringEqual } from './lib/crypto';
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
@@ -31,9 +32,9 @@ export function middleware(request: NextRequest) {
       const authCookie = request.cookies.get('app_access_token')?.value;
 
       let isAuth = false;
-      if (authHeader && authHeader === `Bearer ${expectedToken}`) {
+      if (authHeader && timingSafeStringEqual(authHeader, `Bearer ${expectedToken}`)) {
         isAuth = true;
-      } else if (authCookie && authCookie === expectedToken) {
+      } else if (authCookie && timingSafeStringEqual(authCookie, expectedToken)) {
         isAuth = true;
       }
 
