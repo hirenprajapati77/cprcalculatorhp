@@ -49,7 +49,7 @@ export class BtstService {
   /**
    * Checks if the 15:10-15:25 IST window is open.
    */
-  static isExecutionWindowOpen(bypassQuery?: boolean): boolean {
+  static isExecutionWindowOpen(bypassQuery?: boolean, now: Date = new Date()): boolean {
     const bypassAllowed = 
       bypassQuery ||
       (process.env.NODE_ENV !== 'production' &&
@@ -59,7 +59,6 @@ export class BtstService {
       return true;
     }
 
-    const now = new Date();
     const istDateStr = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Kolkata',
       weekday: 'long'
@@ -79,7 +78,7 @@ export class BtstService {
     if (hourPart && minutePart) {
       const istHour = parseInt(hourPart, 10);
       const istMin = parseInt(minutePart, 10);
-      return (istHour === 15 && istMin >= 10) || (istHour > 15);
+      return istHour === 15 && istMin >= 10 && istMin <= 25;
     }
 
     // Fallback if formatting fails for some reason
@@ -88,7 +87,7 @@ export class BtstService {
     const istTime = new Date(utcTime + istOffset);
     const hour = istTime.getHours();
     const min = istTime.getMinutes();
-    return (hour === 15 && min >= 10) || (hour > 15);
+    return hour === 15 && min >= 10 && min <= 25;
   }
 
   /**
