@@ -1,5 +1,5 @@
 import { Queue, QueueOptions } from 'bullmq';
-import { CacheService } from './cache.service';
+
 
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -47,8 +47,9 @@ class QueueServiceImpl {
   }
 
   private setupGracefulShutdown() {
-    if ((globalThis as any).__queueServiceShutdownRegistered) return;
-    (globalThis as any).__queueServiceShutdownRegistered = true;
+    const globalWithShutdown = globalThis as unknown as { __queueServiceShutdownRegistered?: boolean };
+    if (globalWithShutdown.__queueServiceShutdownRegistered) return;
+    globalWithShutdown.__queueServiceShutdownRegistered = true;
 
     const shutdown = async () => {
       console.log('Closing BullMQ connections...');

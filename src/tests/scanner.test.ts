@@ -541,6 +541,7 @@ test('ScannerService degenerate single-candle history', async () => {
       ]
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = ScannerService.scanStock(mockStock as any, todayStr);
     
     assert.strictEqual(res.degenerateData, true, 'degenerateData flag should be true');

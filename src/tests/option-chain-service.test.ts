@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { OptionChainService } from '../services/option-chain.service';
 
-test('OptionChainService fetchOptionQuote regex supports &', async (t) => {
+test('OptionChainService fetchOptionQuote regex supports &', async (_t) => {
   let fetchedSymbol = '';
   
   // Mock getOptionChain
