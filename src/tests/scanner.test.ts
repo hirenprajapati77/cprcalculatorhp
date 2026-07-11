@@ -512,3 +512,40 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
 
 
 
+
+test('ScannerService degenerate single-candle history', async () => {
+  const originalWarn = console.warn;
+  let warnCalled = false;
+  console.warn = (msg) => {
+    if (msg.includes('Degenerate CPR for TEST_DEGENERATE')) {
+      warnCalled = true;
+    }
+  };
+
+  try {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const mockStock = {
+      symbol: 'TEST_DEGENERATE',
+      market: 'NSE',
+      sector: 'IT',
+      open: 100,
+      high: 105,
+      low: 95,
+      close: 101,
+      ltp: 102,
+      volume: 1000,
+      avgVolume: 1000,
+      marketCap: 100000,
+      history: [
+        { date: todayStr, open: 100, high: 105, low: 95, close: 101, volume: 1000 }
+      ]
+    };
+
+    const res = ScannerService.scanStock(mockStock as any, todayStr);
+    
+    assert.strictEqual(res.degenerateData, true, 'degenerateData flag should be true');
+    assert.strictEqual(warnCalled, true, 'Should log a warning for degenerate CPR');
+  } finally {
+    console.warn = originalWarn;
+  }
+});

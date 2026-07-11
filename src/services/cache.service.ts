@@ -77,10 +77,10 @@ class CacheServiceImpl {
         const data = await this.redisClient!.get(key);
         result = data ? JSON.parse(data) : null;
       } catch {
-        result = memoryCache.get(key) as T | null || null;
+        result = memoryCache.get(key) as T | null ?? null;
       }
     } else {
-      result = memoryCache.get(key) as T | null || null;
+      result = memoryCache.get(key) as T | null ?? null;
     }
 
     if (result !== null) {
@@ -115,10 +115,14 @@ class CacheServiceImpl {
   async clearNamespace(prefix: string): Promise<void> {
     this.evictions++;
     if (this.isRedisConnected) {
-      const keys = await this.redisClient!.keys(`${prefix}*`);
-      if (keys.length > 0) {
-        await this.redisClient!.del(...keys);
-      }
+      let cursor = '0';
+      do {
+        const [nextCursor, keys] = await this.redisClient!.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
+        cursor = nextCursor;
+        if (keys.length > 0) {
+          await this.redisClient!.del(...keys);
+        }
+      } while (cursor !== '0');
     }
     for (const key of memoryCache.keys()) {
       if (key.startsWith(prefix)) {

@@ -186,7 +186,11 @@ export class OptionChainService {
       }
 
       // 2. FALLBACK to Cloudflare proxy worker
-      const proxyUrl = process.env.FYERS_AUTH_PROXY_URL || 'https://cold-dew-46bf.prahiren.workers.dev';
+      const proxyUrl = process.env.FYERS_AUTH_PROXY_URL;
+      if (!proxyUrl) {
+        console.warn(`[OptionChain] Direct call failed and FYERS_AUTH_PROXY_URL is not set. Aborting proxy fallback.`);
+        return { error: 'PROXY_NOT_CONFIGURED' };
+      }
       console.log(`[OptionChain] Attempting proxy fetch for ${cleanSym} via ${proxyUrl}...`);
       const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=NSE:${cleanSym}-${suffix}&strikecount=30`, {
         headers: {
@@ -237,7 +241,7 @@ export class OptionChainService {
   }
 
   public static async fetchOptionQuote(optionSymbol: string): Promise<number> {
-    const match = optionSymbol.match(/NSE:([A-Z0-9_\-]+)\d{2}[A-Z]{3}/);
+    const match = optionSymbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
     if (!match) {
       throw new Error(`Invalid option symbol format: ${optionSymbol}`);
     }

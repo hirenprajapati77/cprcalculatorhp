@@ -27,6 +27,7 @@ export interface ScannerSignalResult extends MarketStockData {
   rr: string; // Risk-Reward ratio, e.g. "1:2.5"
   confidence: number; // Trade confidence percentage
   tomorrowCPRProvisional?: boolean;
+  degenerateData?: boolean;
 }
 
 
@@ -42,6 +43,7 @@ export class ScannerService {
 
     let isLastToday = false;
     let isTodayCandleFinal = false;
+    let degenerateData = false;
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       isLastToday = lastCandle.date === todayStr;
@@ -55,6 +57,11 @@ export class ScannerService {
         low: stock.low,
         close: stock.ltp
       };
+      
+      if (isTodayCandleFinal && stock.history.length < 2) {
+        console.warn(`[ScannerService] Degenerate CPR for ${stock.symbol} (history length: ${stock.history.length}). Computed against itself.`);
+        degenerateData = true;
+      }
       
       yesterdayCandle = isTodayCandleFinal 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
@@ -241,6 +248,7 @@ export class ScannerService {
       rr,
       confidence,
       tomorrowCPRProvisional: isMarketOpen() && !isTodayCandleFinal,
+      degenerateData,
     };
   }
 
