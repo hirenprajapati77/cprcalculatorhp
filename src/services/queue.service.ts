@@ -33,16 +33,38 @@ class QueueServiceImpl {
   public historyQueue: Queue | null = null;
 
   constructor() {
-    if (isQueueEnabled && CacheService.getProvider() !== 'memory') {
+    if (isQueueEnabled) {
       try {
         this.scannerQueue = new Queue('scanner', defaultQueueOptions);
         this.marketQueue = new Queue('market', defaultQueueOptions);
         this.historyQueue = new Queue('history', defaultQueueOptions);
         console.log('Queues initialized successfully.');
+        this.setupGracefulShutdown();
       } catch (e) {
         console.error('Failed to initialize queues, running in sync mode.', e);
       }
     }
+  }
+
+  private setupGracefulShutdown() {
+    if ((globalThis as any).__queueServiceShutdownRegistered) return;
+    (globalThis as any).__queueServiceShutdownRegistered = true;
+
+    const shutdown = async () => {
+      console.log('Closing BullMQ connections...');
+      try {
+        await Promise.all([
+          this.scannerQueue?.close(),
+          this.marketQueue?.close(),
+          this.historyQueue?.close(),
+        ]);
+        console.log('BullMQ connections closed successfully.');
+      } catch (e) {
+        console.error('Error closing BullMQ connections', e);
+      }
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   }
 
   get isEnabled() {

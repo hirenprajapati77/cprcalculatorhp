@@ -8,7 +8,7 @@
     "build:clean": "rm -rf .next && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/tests/*.test.ts"
+    "test": "tsc --noEmit && node --test -r tsx src/tests/**/*.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

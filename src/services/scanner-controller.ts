@@ -48,8 +48,15 @@ export class ScannerController {
       const { QueueService } = await import('./queue.service');
       if (QueueService.isEnabled && QueueService.scannerQueue) {
         console.log(`Offloading scan to queue (threshold ${queueThreshold} exceeded by ${stocks.length} symbols).`);
-        await QueueService.scannerQueue.add('full-scan', { universeName, market, stocks });
-        return []; // Return empty or a job status indicator in a real app
+        try {
+          await Promise.race([
+            QueueService.scannerQueue.add('full-scan', { universeName, market, stocks }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+          ]);
+          return []; // Return empty or a job status indicator in a real app
+        } catch (error) {
+          console.warn(`[${universeName}] Queue add timed out or failed. Falling back to sync scan. Note: If this was a timeout, the job might eventually enqueue as a duplicate once BullMQ reconnects (accepted tradeoff). Error: ${error}`);
+        }
       } else {
         console.warn('Queue is disabled or unavailable. Falling back to sync execution.');
       }

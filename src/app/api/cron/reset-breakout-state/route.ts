@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { isValidCronSecret } from '@/lib/crypto';
+import { getISTTime } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
 
   if (!isValidCronSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { isTradingDay } = getISTTime();
+  if (!isTradingDay) {
+    return NextResponse.json({ reset: false, reason: 'not a trading day' });
   }
 
   try {

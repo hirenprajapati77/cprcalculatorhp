@@ -456,6 +456,7 @@ const StockRow = React.memo(({
                       <span>⚠️</span>
                       <span className="truncate max-w-[120px]" title={row.optionSuggestion.error}>
                         {row.optionSuggestion.error === 'TOKEN_EXPIRED' ? 'Fyers Disconnected' : 
+                         row.optionSuggestion.error === 'PROXY_NOT_CONFIGURED' ? 'No Proxy URL' :
                          row.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No Option Chain' :
                          row.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No Budget Match' :
                          row.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'No Lot Size' :
@@ -2940,6 +2941,7 @@ export default function ScannerClient() {
                               <span>⚠️</span>
                               <span>
                                 {drawerStock.optionSuggestion.error === 'TOKEN_EXPIRED' ? 'Fyers token expired. Re-authenticate via Settings.' :
+                                 drawerStock.optionSuggestion.error === 'PROXY_NOT_CONFIGURED' ? 'Fyers proxy URL not configured in environment.' :
                                  drawerStock.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No option chain data available for this symbol.' :
                                  drawerStock.optionSuggestion.error === 'NO_VIABLE_STRIKES' ? 'No viable ITM strike found (chain may lack OI/volume data).' :
                                  drawerStock.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'Stock lot size is missing from symbol master.' :

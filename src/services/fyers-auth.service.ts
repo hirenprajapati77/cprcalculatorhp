@@ -69,20 +69,25 @@ export class FyersAuthService {
       const { encrypt } = await import('@/lib/crypto');
       const encryptedToken = encrypt(token);
       const prisma = await getPrisma();
-      await prisma.brokerToken.upsert({
-        where: { id: 1 },
-        update: {
-          accessToken: encryptedToken,
-          expiresAt: expiresAt,
-          updatedAt: new Date()
-        },
-        create: {
-          id: 1,
-          broker: 'fyers',
-          accessToken: encryptedToken,
-          expiresAt: expiresAt
-        }
-      });
+      const existing = await prisma.brokerToken.findFirst({ where: { broker: 'fyers' } });
+      if (existing) {
+        await prisma.brokerToken.update({
+          where: { id: existing.id },
+          data: {
+            accessToken: encryptedToken,
+            expiresAt: expiresAt,
+            updatedAt: new Date()
+          }
+        });
+      } else {
+        await prisma.brokerToken.create({
+          data: {
+            broker: 'fyers',
+            accessToken: encryptedToken,
+            expiresAt: expiresAt
+          }
+        });
+      }
       console.log('[FyersAuthService] Token saved successfully in DB.');
     } catch (err) {
       console.error('[FyersAuthService] Error saving token to database:', err);
@@ -92,13 +97,16 @@ export class FyersAuthService {
   public static async clearToken(): Promise<void> {
     try {
       const prisma = await getPrisma();
-      await prisma.brokerToken.update({
-        where: { id: 1 },
-        data: {
-          expiresAt: new Date(0) // Expire immediately
-        }
-      });
-      console.log('[FyersAuthService] Token cleared explicitly (e.g. due to 401 response).');
+      const existing = await prisma.brokerToken.findFirst({ where: { broker: 'fyers' } });
+      if (existing) {
+        await prisma.brokerToken.update({
+          where: { id: existing.id },
+          data: {
+            expiresAt: new Date(0) // Expire immediately
+          }
+        });
+        console.log('[FyersAuthService] Token cleared explicitly (e.g. due to 401 response).');
+      }
     } catch (err) {
       console.error('[FyersAuthService] Error clearing token from database:', err);
     }
