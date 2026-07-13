@@ -34,7 +34,7 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
   const originalGetCredentials = FyersAuthService.getCredentials;
   const originalGet = CacheService.get;
   const originalSet = CacheService.set;
-  // @ts-ignore
+  // @ts-expect-error
   const originalFetchWithRetry = OptionChainService.fetchWithRetry;
 
   FyersAuthService.getAccessToken = async () => 'dummy_token';
@@ -42,14 +42,14 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
   CacheService.get = async () => null; // Always miss cache
 
   const cacheKeysSet: string[] = [];
-  CacheService.set = async (key, val, ttl) => {
+  CacheService.set = async (key: string) => {
     cacheKeysSet.push(key);
   };
 
-  let fetchCallCount = 0;
-  // @ts-ignore
-  OptionChainService.fetchWithRetry = async (url) => {
-    fetchCallCount++;
+
+  // @ts-expect-error
+  OptionChainService.fetchWithRetry = async (url: string) => {
+
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -99,7 +99,7 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
     FyersAuthService.getCredentials = originalGetCredentials;
     CacheService.get = originalGet;
     CacheService.set = originalSet;
-    // @ts-ignore
+    // @ts-expect-error
     OptionChainService.fetchWithRetry = originalFetchWithRetry;
   }
 });

@@ -122,7 +122,7 @@ test('TradeJournalService Phase 3', async (t) => {
     const originalGetOptionChain = OptionChainService.getOptionChain;
     
     let allowRolloverPassed = true;
-    // @ts-ignore
+    // @ts-expect-error
     OptionChainService.getOptionChain = async (sym: string, allowRollover: boolean) => {
       allowRolloverPassed = allowRollover;
       return { optionsChain: [{ symbol: 'NSE:TEST24OCT25000CE', strikePrice: 25000, optionType: 'CE', ltp: 100 }], method: 'direct' };
@@ -140,7 +140,7 @@ test('TradeJournalService Phase 3', async (t) => {
     const { OptionChainService } = await import('../services/option-chain.service');
     const originalGetOptionChain = OptionChainService.getOptionChain;
     
-    // @ts-ignore
+    // @ts-expect-error
     OptionChainService.getOptionChain = async () => {
       // Returns an option with expiry 24NOV
       return { optionsChain: [{ symbol: 'NSE:TEST24NOV25000CE', strikePrice: 25000, optionType: 'CE', ltp: 100 }], method: 'direct' };
