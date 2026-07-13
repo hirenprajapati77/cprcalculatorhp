@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import type { TradeJournal } from '@prisma/client';
+import { getISTTime } from '@/lib/market-hours';
 
 
 export class TradeJournalService {
@@ -195,16 +196,15 @@ export class TradeJournalService {
 
   /**
    * Called by snapshot cron at 9:16, 9:30, 9:45, 10:00 AM IST (Day D+1).
-   * Uses yesterdayMidnightIST() because signals are logged on Day D at 3:15 PM,
+   * Uses previousTradingDayMidnightIST() because signals are logged on Day D at 3:15 PM,
    * and snapshots fire the next morning — both must resolve to the same IST date key.
    * At 10:00 AM auto-closes entries that have no manual exit yet.
    */
-  static async captureSnapshot(
-    timeSlot: '916' | '930' | '945' | '1000'
-  ): Promise<void> {
+  static async captureSnapshot(timeSlot: '916' | '930' | '945' | '1000', forDate?: Date): Promise<void> {
     try {
-      // Snapshots run on D+1 — query entries logged on D (yesterday IST)
-      const signalDate = TradeJournalService.yesterdayMidnightIST();
+      // Snapshots run on D+1 — query entries logged on D, the previous TRADING day (not
+      // just "yesterday" — see previousTradingDayMidnightIST() for why that distinction matters)
+      const signalDate = forDate || TradeJournalService.previousTradingDayMidnightIST();
 
       const fieldMap = {
         '916':  'cmp916',
@@ -397,23 +397,37 @@ export class TradeJournalService {
   }
 
   /**
-   * Returns the UTC timestamp corresponding to midnight IST for YESTERDAY.
-   * Used by captureSnapshot() — snapshots fire at 9:16–10:00 AM IST on Day D+1,
-   * but must query entries logged on Day D (the previous IST calendar day).
+   * Returns the UTC timestamp corresponding to midnight IST for the PREVIOUS TRADING DAY
+   * (not just "yesterday"). Used by captureSnapshot() — snapshots fire at 9:16–10:00 AM IST
+   * on Day D+1, and must query entries logged on Day D, the previous *trading* day, which is
+   * NOT always 24 hours back (weekends, NSE holidays).
    *
-   * Example: snapshots on Jun 26 morning → query Jun 25 IST = Jun 24 18:30 UTC
+   * BUG THIS REPLACES: the old flat "now - 24h" version resolved Monday's "yesterday" to
+   * Sunday instead of Friday, so any signal logged the Friday before a weekend was silently
+   * orphaned — its snapshot columns stayed null forever with no retry. Same failure mode after
+   * any single NSE holiday. Walking backwards through getISTTime().isTradingDay fixes both.
+   *
+   * Example: snapshots on Mon Jun 29 morning → previous trading day is Fri Jun 26,
+   * not Sun Jun 28 → query Jun 26 IST = Jun 25 18:30 UTC
    */
-  private static yesterdayMidnightIST(): Date {
-    const now = new Date();
-    // Shift back 24 hours before computing IST date string
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const istStr = yesterday.toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Kolkata',
-    }); // → "2026-06-24"
-    const [y, m, d] = istStr.split('-').map(Number);
-    const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-    midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
-    return midnightUTC;
+  private static previousTradingDayMidnightIST(now: Date = new Date()): Date {
+    let candidate = new Date(now.getTime());
+    for (let i = 1; i <= 10; i++) {
+      candidate = new Date(candidate.getTime() - 24 * 60 * 60 * 1000);
+      const { isTradingDay, dateString } = getISTTime(candidate);
+      if (isTradingDay) {
+        const [y, m, d] = dateString.split('-').map(Number);
+        const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+        midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
+        return midnightUTC;
+      }
+    }
+    // Should be unreachable in practice (would need 10 consecutive non-trading days) —
+    // fail loudly instead of silently returning a wrong date.
+    throw new Error(
+      '[TradeJournal] previousTradingDayMidnightIST: no trading day found within 10 days. ' +
+      'Check NSE_HOLIDAYS_BY_YEAR in market-hours.ts is populated for the current year.'
+    );
   }
 
   private static istDateStringToMidnightUTC(dateStr: string): Date {

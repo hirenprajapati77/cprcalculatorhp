@@ -38,13 +38,20 @@ export class OvernightRiskService {
     }
 
     // 3. Sector Risk Factor (deterministic based on sector name)
-    const sector = stock.sector.toLowerCase();
+    const sector = stock.sector.trim().toLowerCase();
     let sectorRisk = 1.0;
-    if (sector.includes('it') || sector.includes('technology') || sector.includes('energy') || sector.includes('metal')) {
+    // Exact-match whitelist (not substring .includes()) — a naive substring check on 'it'
+    // previously matched "Capital Goods" (cap-IT-al) and would also match "Utilities" if that
+    // sector is ever added, silently mis-tagging them as high-risk IT/Energy/Metal names.
+    const HIGH_RISK_SECTORS = new Set(['it', 'technology', 'energy', 'metals', 'metal']);
+    const RATE_SENSITIVE_SECTORS = new Set(['financial services', 'finance', 'banking', 'bank']);
+    const DEFENSIVE_SECTORS = new Set(['healthcare', 'pharma', 'pharmaceuticals', 'fmcg', 'consumer goods', 'consumer']);
+
+    if (HIGH_RISK_SECTORS.has(sector)) {
       sectorRisk = 1.3; // High risk
-    } else if (sector.includes('finance') || sector.includes('bank')) {
+    } else if (RATE_SENSITIVE_SECTORS.has(sector)) {
       sectorRisk = 1.2;
-    } else if (sector.includes('pharma') || sector.includes('healthcare') || sector.includes('fmcg') || sector.includes('consumer')) {
+    } else if (DEFENSIVE_SECTORS.has(sector)) {
       sectorRisk = 0.8; // Defensive / Low risk
     }
 
