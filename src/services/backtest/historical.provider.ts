@@ -1,4 +1,5 @@
 import { CacheService } from '../cache.service';
+import { getISTTime } from '../../lib/market-hours';
 
 export interface OHLC {
   date: string; // YYYY-MM-DD
@@ -146,10 +147,25 @@ export class HistoricalProvider {
         if (!quotes) throw new Error('Live fetch returned empty data');
 
         const ohlc: OHLC[] = [];
+        const { dateString: todayIST } = getISTTime();
+
         for (let i = 0; i < timestamps.length; i++) {
           if (quotes.open[i] !== null) {
+            // Yahoo returns dates anchored to 00:00 UTC or 03:45 UTC, safe to extract the local YYYY-MM-DD
+            // However, doing timezone mapping safely:
+            // Since Yahoo timestamps for NSE are typically 03:45:00 UTC (09:15 IST), 
+            // creating a Date and getting ISOString split by T gives the correct IST date string.
+            const candleDate = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+            
+            // Exclude live/in-progress bars. Confirmed via check_yahoo_partial_bar.ts on 2026-07-13:
+            // Yahoo's v8 chart interval=1d endpoint returns a bar for the current session whose close/volume 
+            // actively update intraday, tracking meta.regularMarketPrice — it is NOT a finalized candle.
+            if (candleDate === todayIST) {
+              continue;
+            }
+
             ohlc.push({
-              date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+              date: candleDate,
               open: quotes.open[i],
               high: quotes.high[i],
               low: quotes.low[i],
