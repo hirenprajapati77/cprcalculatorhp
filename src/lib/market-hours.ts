@@ -51,6 +51,11 @@ export function getISTTime(date: Date = new Date()) {
   const dateString = `${year}-${month}-${day}`;
   
   if (!NSE_HOLIDAYS_BY_YEAR[year]) {
+    // Every trading-day check in the app (BTST execution window, journal snapshot
+    // backfill, overnight signal freeze state) silently degrades to "every day is a
+    // trading day" when this fires. NSE typically publishes next year's holiday circular
+    // in Nov/Dec of the prior year — check https://www.nseindia.com/resources/exchange-communication-holidays
+    // and add a new entry to NSE_HOLIDAYS_BY_YEAR above when it's out.
     console.warn(`[WARNING] No holiday list defined for year ${year}. Holiday calculations will be inaccurate.`);
   }
   const holidays = NSE_HOLIDAYS_BY_YEAR[year] || [];

@@ -11,7 +11,7 @@ import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString, getISTTime } from '@/lib/market-hours';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -59,35 +59,15 @@ export class BtstService {
       return true;
     }
 
-    const istDateStr = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      weekday: 'long'
-    }).format(now);
-    
-    const isWeekend = istDateStr === 'Saturday' 
-                   || istDateStr === 'Sunday';
-    
-    if (isWeekend) return false;
+    // Delegates to the shared getISTTime() helper (same source of truth used by
+    // previousTradingDayMidnightIST() and OvernightService.determineState()) instead of
+    // reimplementing IST weekday parsing here. The old version only checked Sat/Sun and
+    // never consulted NSE_HOLIDAYS_BY_YEAR, so any weekday NSE holiday during 15:10-15:25 IST
+    // caused /api/btst to run and cache a "live" scan against a closed market.
+    const { isTradingDay, hour, minute } = getISTTime(now);
+    if (!isTradingDay) return false;
 
-    // Get time in IST
-    const istOptions = { timeZone: 'Asia/Kolkata', hour12: false, hour: 'numeric', minute: 'numeric' } as const;
-    const parts = new Intl.DateTimeFormat('en-US', istOptions).formatToParts(now);
-    const hourPart = parts.find(p => p.type === 'hour')?.value;
-    const minutePart = parts.find(p => p.type === 'minute')?.value;
-
-    if (hourPart && minutePart) {
-      const istHour = parseInt(hourPart, 10);
-      const istMin = parseInt(minutePart, 10);
-      return istHour === 15 && istMin >= 10 && istMin <= 25;
-    }
-
-    // Fallback if formatting fails for some reason
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const istTime = new Date(utcTime + istOffset);
-    const hour = istTime.getHours();
-    const min = istTime.getMinutes();
-    return hour === 15 && min >= 10 && min <= 25;
+    return hour === 15 && minute >= 10 && minute <= 25;
   }
 
   /**
