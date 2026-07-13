@@ -292,5 +292,26 @@ describe('BTST Scoring Engine Tests', () => {
     // Bypass check
     assert.strictEqual(BtstService.isExecutionWindowOpen(true, createDate(15, 9)), true, 'bypassQuery=true should be open');
   });
+
+  test('isExecutionWindowOpen() returns false on an NSE holiday even on a weekday, in-window', () => {
+    // 2026-03-03 is Holi — a Tuesday, and a confirmed entry in NSE_HOLIDAYS_BY_YEAR['2026'].
+    // Old bug: this returned true, because the function only checked Sat/Sun.
+    const holidayInWindow = new Date('2026-03-03T15:15:00+05:30');
+    assert.strictEqual(
+      BtstService.isExecutionWindowOpen(false, holidayInWindow),
+      false,
+      'NSE holiday during 15:10-15:25 IST should report window closed'
+    );
+  });
+
+  test('isExecutionWindowOpen() still returns true on an ordinary weekday in-window', () => {
+    // 2026-03-04 (day after the Holi holiday above) is a normal Wednesday trading day.
+    const ordinaryDayInWindow = new Date('2026-03-04T15:15:00+05:30');
+    assert.strictEqual(
+      BtstService.isExecutionWindowOpen(false, ordinaryDayInWindow),
+      true,
+      'Ordinary trading day during 15:10-15:25 IST should report window open'
+    );
+  });
 });
 
