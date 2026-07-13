@@ -151,11 +151,10 @@ export class HistoricalProvider {
 
         for (let i = 0; i < timestamps.length; i++) {
           if (quotes.open[i] !== null) {
-            // Yahoo returns dates anchored to 00:00 UTC or 03:45 UTC, safe to extract the local YYYY-MM-DD
-            // However, doing timezone mapping safely:
-            // Since Yahoo timestamps for NSE are typically 03:45:00 UTC (09:15 IST), 
-            // creating a Date and getting ISOString split by T gives the correct IST date string.
-            const candleDate = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+            // Yahoo returns dates anchored to 00:00 UTC or 03:45 UTC.
+            // Using getISTTime ensures we safely map any timestamp into its correct local trading day,
+            // avoiding silent breakage if Yahoo ever changes its anchor time or timezone.
+            const candleDate = getISTTime(new Date(timestamps[i] * 1000)).dateString;
             
             // Exclude live/in-progress bars. Confirmed via check_yahoo_partial_bar.ts on 2026-07-13:
             // Yahoo's v8 chart interval=1d endpoint returns a bar for the current session whose close/volume 
