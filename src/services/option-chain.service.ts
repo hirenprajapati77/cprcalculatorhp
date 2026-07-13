@@ -35,9 +35,9 @@ export class OptionChainService {
   }
 
 
-  public static async getOptionChain(symbol: string): Promise<OptionChainResult | { error: string }> {
+  public static async getOptionChain(symbol: string, allowRollover: boolean = true): Promise<OptionChainResult | { error: string }> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
-    const cacheKey = `option_chain_${cleanSym}`;
+    const cacheKey = allowRollover ? `option_chain_${cleanSym}_rollover` : `option_chain_${cleanSym}_current`;
 
     try {
       const cached = await CacheService.get<OptionChainResult>(cacheKey);
@@ -96,37 +96,40 @@ export class OptionChainService {
               const currentExpiryStr = typeof currentExpiryObj === 'string' ? currentExpiryObj : (currentExpiryObj.date || currentExpiryObj.expiryDate || currentExpiryObj.expiry);
               
               if (currentExpiryStr) {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                
                 let isExpiredOrToday = false;
                 let parsedExpiryDate: Date | null = null;
+                const { getISTTime } = await import('@/lib/market-hours');
+                const { dateString } = getISTTime();
+                const [ty, tm, td] = dateString.split('-').map(Number);
+                const todayISTMidnight = new Date(Date.UTC(ty, tm - 1, td));
                 
                 if (currentExpiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  parsedExpiryDate = new Date(currentExpiryStr);
+                  const [ey, em, ed] = currentExpiryStr.split('-').map(Number);
+                  parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
                 } else if (currentExpiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                  const [d, m, y] = currentExpiryStr.split('-');
-                  parsedExpiryDate = new Date(`${y}-${m}-${d}`);
+                  const [ed, em, ey] = currentExpiryStr.split('-').map(Number);
+                  parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
                 } else {
                   const d = new Date(currentExpiryStr);
-                  if (!isNaN(d.getTime())) parsedExpiryDate = d;
+                  if (!isNaN(d.getTime())) {
+                    parsedExpiryDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                  }
                 }
                 
-                if (parsedExpiryDate && !isNaN(parsedExpiryDate.getTime())) {
-                  parsedExpiryDate.setHours(0, 0, 0, 0);
-                  const diffTime = parsedExpiryDate.getTime() - today.getTime();
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (parsedExpiryDate) {
+                  const diffTime = parsedExpiryDate.getTime() - todayISTMidnight.getTime();
+                  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
                   isExpiredOrToday = diffDays <= 0;
                 } else {
                   // Fallback string matching just in case
                   const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
-                  const todayStr1 = today.toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-');
+                  const todayStr1 = new Date().toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-');
                   isExpiredOrToday = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase();
                 }
                 
-                console.log(`[OptionChain] Rollover check for ${cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${today}, isExpiredOrToday: ${isExpiredOrToday}`);
+                console.log(`[OptionChain] Rollover check for ${cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${todayISTMidnight}, isExpiredOrToday: ${isExpiredOrToday}`);
                 
-                if (isExpiredOrToday) {
+                if (allowRollover && isExpiredOrToday) {
                   const nextExpiryObj = data.data.expiryData[1];
                   const nextExpiryTimestamp = typeof nextExpiryObj === 'string' ? null : nextExpiryObj?.expiry;
                   const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj?.date || nextExpiryObj?.expiryDate || nextExpiryObj?.expiry);

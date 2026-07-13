@@ -117,12 +117,13 @@ export class TradeJournalService {
     symbol: string,
     strike: number,
     optionType: 'CE' | 'PE',
-    entryDbId?: string
+    entryDbId?: string,
+    tradeExpiryStr?: string
   ): Promise<number | null> {
     try {
       const { OptionChainService } = await import('@/services/option-chain.service');
       const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
-      const chainRes = await OptionChainService.getOptionChain(cleanSym);
+      const chainRes = await OptionChainService.getOptionChain(cleanSym, false);
       if ('error' in chainRes) {
         throw new Error(`Failed to fetch option chain: ${chainRes.error}`);
       }
@@ -156,17 +157,23 @@ export class TradeJournalService {
         throw new Error(`Option not found in chain for strike ${strike} and type ${optionType}`);
       }
 
+      let expiryStr = '';
+      const prefix = `NSE:${cleanSym}`;
+      if (option.symbol.startsWith(prefix)) {
+        const remainder = option.symbol.substring(prefix.length);
+        const suffixStr = `${option.strikePrice}${optionType}`;
+        if (remainder.endsWith(suffixStr)) {
+          expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
+        }
+      }
+
+      if (tradeExpiryStr && expiryStr && tradeExpiryStr !== expiryStr) {
+        console.error(`[TradeJournal] Expiry mismatch! Trade recorded as ${tradeExpiryStr}, but chain returned ${expiryStr} for ${symbol} ${strike} ${optionType}`);
+        return null;
+      }
+
       if (wasAdjusted && entryDbId) {
         try {
-          let expiryStr = '';
-          const prefix = `NSE:${cleanSym}`;
-          if (option.symbol.startsWith(prefix)) {
-            const remainder = option.symbol.substring(prefix.length);
-            const suffixStr = `${option.strikePrice}${optionType}`;
-            if (remainder.endsWith(suffixStr)) {
-              expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
-            }
-          }
           const finalFormattedName = expiryStr 
             ? `${expiryStr} ${option.strikePrice} ${optionType}` 
             : `${option.strikePrice} ${optionType}`;
@@ -233,7 +240,8 @@ export class TradeJournalService {
           entry.symbol,
           entry.optionStrike,
           entry.optionType as 'CE' | 'PE',
-          entry.id
+          entry.id,
+          entry.optionContract ? entry.optionContract.split(' ')[0] : undefined
         );
 
         if (!cmp) {
