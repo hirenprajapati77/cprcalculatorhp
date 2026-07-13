@@ -403,7 +403,10 @@ export class MarketService {
     if (dataMode === 'live') {
       try {
         const res = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`,
+          // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
+          // which 1mo (~22 candles) can never supply. history[] fed to ATR/CPR is truncated back
+          // to a ~1mo window further down so this does NOT change ATR/CPR-width behavior.
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`,
           {
             cache: 'no-store', // Disable Next.js fetch cache. CacheService handles it.
             headers: {
@@ -478,7 +481,7 @@ export class MarketService {
             const ltp = (meta.regularMarketPrice as number) || prevClose;
 
             // Map history candles
-            const history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
+            let history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
             for (let i = 0; i < len; i++) {
               const h = quote.high[i];
               const l = quote.low[i];
@@ -511,20 +514,26 @@ export class MarketService {
               });
             }
 
-            const closes = history.map(c => c.close);
+            // Slopes computed from the FULL 6mo closes array (needs up to 100 candles).
+            const closesForSlopes = history.map(c => c.close);
             let sma20Slope = 0, sma50Slope = 0;
             // Non-overlapping prior windows: sma20prev uses days -40 to -20 (no shared bars with sma20)
-            if (closes.length >= 40) {
-              const sma20 = closes.slice(-20).reduce((a,b)=>a+b,0)/20;
-              const sma20prev = closes.slice(-40,-20).reduce((a,b)=>a+b,0)/20;
+            if (closesForSlopes.length >= 40) {
+              const sma20 = closesForSlopes.slice(-20).reduce((a,b)=>a+b,0)/20;
+              const sma20prev = closesForSlopes.slice(-40,-20).reduce((a,b)=>a+b,0)/20;
               sma20Slope = sma20 - sma20prev;
             }
             // Non-overlapping prior windows: sma50prev uses days -100 to -50 (no shared bars with sma50)
-            if (closes.length >= 100) {
-              const sma50 = closes.slice(-50).reduce((a,b)=>a+b,0)/50;
-              const sma50prev = closes.slice(-100,-50).reduce((a,b)=>a+b,0)/50;
+            if (closesForSlopes.length >= 100) {
+              const sma50 = closesForSlopes.slice(-50).reduce((a,b)=>a+b,0)/50;
+              const sma50prev = closesForSlopes.slice(-100,-50).reduce((a,b)=>a+b,0)/50;
               sma50Slope = sma50 - sma50prev;
             }
+
+            // Truncate history back to a ~1mo window (last 22 trading days) before it's used
+            // by ATR / CPR calculations or returned to callers. This preserves existing
+            // ATR/CPR-width behavior exactly as before the 1mo -> 6mo range widening above.
+            history = history.slice(-22);
 
             // -- Fetch 15m intraday data for VWAP and candle15m --
             let vwap = (prevHigh + prevLow + prevClose) / 3;

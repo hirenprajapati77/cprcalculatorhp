@@ -102,4 +102,18 @@ test('TradeJournalService Phase 3', async (t) => {
     prisma.tradeJournal.count = originalCount;
     prisma.tradeJournal.findMany = originalFindMany;
   });
+
+  await t.test('previousTradingDayMidnightIST resolves Monday to prior Friday', async () => {
+    // 2026-06-29 is a Monday
+    const monday = new Date(Date.UTC(2026, 5, 29, 6, 0, 0)); // 11:30 AM IST
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = (TradeJournalService as any).previousTradingDayMidnightIST(monday) as Date;
+    
+    // Should resolve to 2026-06-26 (Friday) midnight IST, which is 2026-06-25 18:30:00 UTC
+    assert.strictEqual(result.getUTCFullYear(), 2026);
+    assert.strictEqual(result.getUTCMonth(), 5); // 0-indexed, so 5 = June
+    assert.strictEqual(result.getUTCDate(), 25);
+    assert.strictEqual(result.getUTCHours(), 18);
+    assert.strictEqual(result.getUTCMinutes(), 30);
+  });
 });
