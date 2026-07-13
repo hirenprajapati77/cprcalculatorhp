@@ -32,7 +32,7 @@ function istDateStringToMidnightUTC(dateStr: string): Date {
 
 async function findOrphanedDates(): Promise<Date[]> {
   const rows = await prisma.tradeJournal.findMany({
-    where: { entryCmp: { not: null }, cmp916: null },
+    where: { cmp916: null },
     select: { tradeDate: true },
     distinct: ['tradeDate'],
   });
