@@ -27,7 +27,7 @@ export class RegimeService {
 
       const history = await HistoricalProvider.getHistory('^NSEI', startDateObj, endDateObj);
       
-      if (!history || history.length < 20) {
+      if (!history || history.length < 21) {
         // Fallback if data is missing
         return this.getDefaultRegime();
       }
