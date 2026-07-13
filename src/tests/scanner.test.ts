@@ -221,7 +221,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
   // Use IST-aware date to match signal.service.ts candle classification logic
   const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days', () => {
+  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days and PDL is respected', () => {
     const mockStock: MarketStockData = {
       symbol: 'ASCSTOCK',
       market: 'NSE',
@@ -247,7 +247,32 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
   });
 
-  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days', () => {
+  await t.test('KGS_ASC_CPR is invalidated when close breaks below PDL', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'ASC_INVALID',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 95,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 95, // today close < yesterday low (98)
+      history: [
+        { date: '3-days-ago', open: 80, high: 82, low: 78, close: 80, volume: 100000 },
+        { date: '2-days-ago', open: 90, high: 92, low: 88, close: 90, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 110, high: 112, low: 90, close: 95, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be invalidated if close < PDL');
+  });
+
+  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days and PDH is respected', () => {
     const mockStock: MarketStockData = {
       symbol: 'DESCSTOCK',
       market: 'NSE',
@@ -271,6 +296,114 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     const scanResult = ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_DESC_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
+  });
+
+  await t.test('KGS_DESC_CPR is invalidated when close breaks above PDH', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'DESC_INVALID',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 105,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 105, // today close > yesterday high (102)
+      history: [
+        { date: '3-days-ago', open: 120, high: 122, low: 118, close: 120, volume: 100000 },
+        { date: '2-days-ago', open: 110, high: 112, low: 108, close: 110, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 90, high: 108, low: 88, close: 105, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be invalidated if close > PDH');
+  });
+
+  await t.test('KGS_ASC_REVERSAL fires when valid ASC setup yesterday is broken below PDL today', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'ASC_REV_VALID',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 95,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 95, // today close (95) < yesterday low (98) => Reversal
+      history: [
+        { date: '4-days-ago', open: 70, high: 72, low: 68, close: 70, volume: 100000 },
+        { date: '3-days-ago', open: 80, high: 82, low: 78, close: 80, volume: 100000 },
+        { date: '2-days-ago', open: 90, high: 92, low: 88, close: 90, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 110, high: 112, low: 90, close: 95, volume: 100000 }
+      ]
+    };
+    // 3-day rising TC up to yesterday: d0(70) < d1(80) < d2(90).
+    // Yesterday close (100) >= dayBeforeYesterday low (88). => Valid ASC yesterday.
+    // Today close (95) < yesterday low (98). => Reversal.
+
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_ASC_REVERSAL'), 'KGS_ASC_REVERSAL should fire');
+    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be mutually exclusive');
+  });
+
+  await t.test('KGS_ASC_REVERSAL does NOT fire if yesterday was only a 2-leg match', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'ASC_REV_INVALID_SETUP',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 95,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 95,
+      history: [
+        { date: '4-days-ago', open: 120, high: 122, low: 118, close: 120, volume: 100000 }, // d0 is higher, breaking 3-leg sequence
+        { date: '3-days-ago', open: 80, high: 82, low: 78, close: 80, volume: 100000 }, // d1
+        { date: '2-days-ago', open: 90, high: 92, low: 88, close: 90, volume: 100000 }, // d2
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 }, // d3
+        { date: todayStr, open: 110, high: 112, low: 90, close: 95, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(!scanResult.signals.includes('KGS_ASC_REVERSAL'), 'Should not fire if setup was invalid');
+  });
+
+  await t.test('KGS_DESC_REVERSAL fires when valid DESC setup yesterday is broken above PDH today', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'DESC_REV_VALID',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 105,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 100000,
+      ltp: 105, // today close (105) > yesterday high (102) => Reversal
+      history: [
+        { date: '4-days-ago', open: 130, high: 132, low: 128, close: 130, volume: 100000 },
+        { date: '3-days-ago', open: 120, high: 122, low: 118, close: 120, volume: 100000 },
+        { date: '2-days-ago', open: 110, high: 112, low: 108, close: 110, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 102, low: 98, close: 100, volume: 100000 },
+        { date: todayStr, open: 90, high: 108, low: 88, close: 105, volume: 100000 }
+      ]
+    };
+
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_DESC_REVERSAL'), 'KGS_DESC_REVERSAL should fire');
+    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be mutually exclusive');
   });
 
   await t.test('KGS_INSIDE_CPR fires when today fully inside yesterday', () => {
