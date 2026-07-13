@@ -17,6 +17,11 @@ export class RankingService {
    * Category D — Hot Zone & RTP (max 10):
    *   HOT_ZONE: +5, NARROW + KGS_RTP: +5
    *
+   * Zero Weight (Evaluated but unscored for testing/logging):
+   *   KGS_ASC_REVERSAL: 0
+   *   KGS_DESC_REVERSAL: 0
+   *   KGS_HP_RTP: 0
+   *
    * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, KGS_OUTSIDE_CPR
    */
   static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {

@@ -2343,6 +2343,7 @@ export default function ScannerClient() {
                       <option value="KGS_ASC_CPR">KGS Ascending CPR</option>
                       <option value="KGS_DESC_CPR">KGS Descending CPR</option>
                       <option value="KGS_RTP">KGS RTP (Slope Match)</option>
+                      <option value="KGS_HP_RTP">KGS HP-RTP (200 SMA Cross)</option>
                     </select>
                   </div>
 
@@ -2849,7 +2850,10 @@ export default function ScannerClient() {
                             KGS_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
                             KGS_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
                             KGS_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
-                            KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR."
+                            KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
+                            KGS_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
+                            KGS_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
+                            KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed."
                           };
                           const expl = explMap[sig];
                           if (!expl) return null;

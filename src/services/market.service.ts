@@ -27,6 +27,7 @@ export interface MarketStockData {
   candle15m?: { open: number; high: number; low: number; close: number; volume: number } | null;
   sma20Slope?: number;
   sma50Slope?: number;
+  sma200?: number;
 }
 
 export interface LiveStatus {
@@ -390,7 +391,18 @@ export class MarketService {
     const dataMode = process.env.MARKET_DATA_MODE || 'live';
     const cacheKey = `stock_data_${cleanSymbol}_${market}_${dataMode}`;
     const cached = await CacheService.get<MarketStockData>(cacheKey);
-    if (cached) return cached;
+    
+    // Unconditional lookup for sma200, so it's attached even on primary cache hits
+    const sma200 = await CacheService.get<number>(`sma200:${cleanSymbol}`) ?? undefined;
+
+    if (cached) {
+      if (sma200 !== undefined) {
+        cached.sma200 = sma200;
+      } else {
+        delete cached.sma200;
+      }
+      return cached;
+    }
 
     const ticker = market === 'NSE' ? `${cleanSymbol}.NS` : `${cleanSymbol}.BO`;
 
@@ -590,7 +602,7 @@ export class MarketService {
               // Fallback handled by initial vwap assignment
             }
 
-            const resultData = {
+            const resultData: MarketStockData = {
               symbol: cleanSymbol,
               market,
               sector,
@@ -608,6 +620,9 @@ export class MarketService {
               sma20Slope,
               sma50Slope
             };
+            if (sma200 !== undefined) {
+              resultData.sma200 = sma200;
+            }
             await CacheService.set(cacheKey, resultData, 60);
             return resultData;
           }
@@ -681,9 +696,66 @@ export class MarketService {
       });
     }
 
-    const resultData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history, sma20Slope: 0, sma50Slope: 0 };
+    const sma200Mock = await CacheService.get<number>(`sma200:${cleanSymbol}`);
+    const resultData: MarketStockData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history, sma20Slope: 0, sma50Slope: 0 };
+    if (sma200Mock !== undefined && sma200Mock !== null) {
+      resultData.sma200 = sma200Mock;
+    }
     await CacheService.set(cacheKey, resultData, 60);
     return resultData;
+  }
+
+  /**
+   * Fetches 1y history for the provided universe and caches the 200 SMA values in Redis.
+   * This is intended to be called by a low-frequency daily cron job (including weekends).
+   */
+  static async cache200SMA(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST'): Promise<{ success: number; failed: number }> {
+    const symbols = this.getUniverse(universe).map(s => s.symbol.trim());
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const sym of symbols) {
+      try {
+        const ticker = `${sym}.NS`;
+        const res = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`,
+          {
+            cache: 'no-store',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'application/json',
+            },
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Yahoo Finance HTTP ${res.status}`);
+        }
+
+        const json = await res.json();
+        const quote = json?.chart?.result?.[0]?.indicators?.quote?.[0];
+
+        if (!quote || !quote.close || !Array.isArray(quote.close)) {
+          throw new Error(`Invalid quote data`);
+        }
+
+        const validCloses = quote.close.filter((c: number | null): c is number => c !== null && !isNaN(c));
+        
+        if (validCloses.length >= 200) {
+          const last200 = validCloses.slice(-200);
+          const sma200 = last200.reduce((sum: number, val: number) => sum + val, 0) / 200;
+          await CacheService.set(`sma200:${sym}`, sma200, 24 * 60 * 60); // 24h TTL
+          successCount++;
+        } else {
+          failedCount++;
+        }
+      } catch (err) {
+        console.warn(`[MarketService] 200 SMA caching failed for ${sym}:`, err instanceof Error ? err.message : String(err));
+        failedCount++;
+      }
+    }
+
+    return { success: successCount, failed: failedCount };
   }
 }
 
