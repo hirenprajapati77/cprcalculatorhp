@@ -57,6 +57,7 @@ export class SignalService {
     // signals that depend on them are skipped rather than fabricated.
     let dayBeforeYesterdayCandle: { high: number; low: number; close: number } | null = null;
     let threeDaysAgoCandle: { high: number; low: number; close: number } | null = null;
+    let fourDaysAgoCandle: { high: number; low: number; close: number } | null = null;
 
     if (stock.history && stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
@@ -84,6 +85,10 @@ export class SignalService {
       threeDaysAgoCandle = isTodayCandleFinal
         ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null)
         : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null);
+
+      fourDaysAgoCandle = isTodayCandleFinal
+        ? (stock.history.length >= 5 ? stock.history[stock.history.length - 5] : null)
+        : (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null);
     }
 
     // ── ATR% ──────────────────────────────────────────────────────────────────
@@ -154,8 +159,42 @@ export class SignalService {
       const d2 = cprYesterday;
       const d3 = cprToday;
 
-      if (d3.tc > d2.tc && d2.tc > d1.tc) signals.push('KGS_ASC_CPR');
-      if (d3.tc < d2.tc && d2.tc < d1.tc) signals.push('KGS_DESC_CPR');
+      // KGS Rule: For Ascending CPR, "PDL will not be broken; if broken and market closes below PDL, expect trend reversal"
+      // Therefore, if today's close is below yesterday's low, the expected ASC trend is invalidated.
+      if (d3.tc > d2.tc && d2.tc > d1.tc) {
+        if (todayCandle.close >= yesterdayCandle.low) {
+          signals.push('KGS_ASC_CPR');
+        }
+      }
+      
+      // Mirror rule: For Descending CPR, if today's close is above yesterday's high, the DESC trend is invalidated.
+      if (d3.tc < d2.tc && d2.tc < d1.tc) {
+        if (todayCandle.close <= yesterdayCandle.high) {
+          signals.push('KGS_DESC_CPR');
+        }
+      }
+
+      // Reversals: evaluate whether yesterday triggered a valid ASC/DESC setup, and today's action rejected it.
+      if (fourDaysAgoCandle && dayBeforeYesterdayCandle) {
+        const d0 = calculateCPR(
+          { high: fourDaysAgoCandle.high, low: fourDaysAgoCandle.low, close: fourDaysAgoCandle.close },
+          atrPct
+        );
+
+        // Yesterday's ASC CPR was valid: 3-day rising TC sequence leading up to yesterday, and yesterday's close respected its PDL.
+        const yesterdayValidAsc = d2.tc > d1.tc && d1.tc > d0.tc && yesterdayCandle.close >= dayBeforeYesterdayCandle.low;
+        // Today's rejection: close breaks below yesterday's low.
+        if (yesterdayValidAsc && todayCandle.close < yesterdayCandle.low) {
+          signals.push('KGS_ASC_REVERSAL');
+        }
+
+        // Yesterday's DESC CPR was valid: 3-day falling TC sequence leading up to yesterday, and yesterday's close respected its PDH.
+        const yesterdayValidDesc = d2.tc < d1.tc && d1.tc < d0.tc && yesterdayCandle.close <= dayBeforeYesterdayCandle.high;
+        // Today's rejection: close breaks above yesterday's high.
+        if (yesterdayValidDesc && todayCandle.close > yesterdayCandle.high) {
+          signals.push('KGS_DESC_REVERSAL');
+        }
+      }
     }
 
     // KGS Inside/Outside CPR: requires cprYesterday.
