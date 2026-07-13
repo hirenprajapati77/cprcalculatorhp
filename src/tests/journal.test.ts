@@ -104,16 +104,54 @@ test('TradeJournalService Phase 3', async (t) => {
   });
 
   await t.test('previousTradingDayMidnightIST resolves Monday to prior Friday', async () => {
-    // 2026-06-29 is a Monday
-    const monday = new Date(Date.UTC(2026, 5, 29, 6, 0, 0)); // 11:30 AM IST
+    // 2026-07-13 is a Monday
+    const monday = new Date(Date.UTC(2026, 6, 13, 6, 0, 0)); // 11:30 AM IST
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (TradeJournalService as any).previousTradingDayMidnightIST(monday) as Date;
     
-    // Should resolve to 2026-06-26 (Friday) midnight IST, which is 2026-06-25 18:30:00 UTC
+    // Should resolve to 2026-07-10 (Friday) midnight IST, which is 2026-07-09 18:30:00 UTC
     assert.strictEqual(result.getUTCFullYear(), 2026);
-    assert.strictEqual(result.getUTCMonth(), 5); // 0-indexed, so 5 = June
-    assert.strictEqual(result.getUTCDate(), 25);
+    assert.strictEqual(result.getUTCMonth(), 6); // 0-indexed, so 6 = July
+    assert.strictEqual(result.getUTCDate(), 9);
     assert.strictEqual(result.getUTCHours(), 18);
     assert.strictEqual(result.getUTCMinutes(), 30);
+  });
+
+  await t.test('fetchOptionCmp calls getOptionChain with allowRollover=false', async () => {
+    const { OptionChainService } = await import('../services/option-chain.service');
+    const originalGetOptionChain = OptionChainService.getOptionChain;
+    
+    let allowRolloverPassed = true;
+    // @ts-ignore
+    OptionChainService.getOptionChain = async (sym: string, allowRollover: boolean) => {
+      allowRolloverPassed = allowRollover;
+      return { optionsChain: [{ symbol: 'NSE:TEST24OCT25000CE', strikePrice: 25000, optionType: 'CE', ltp: 100 }], method: 'direct' };
+    };
+
+    try {
+      await TradeJournalService.fetchOptionCmp('TEST', 25000, 'CE');
+      assert.strictEqual(allowRolloverPassed, false, 'Journal should explicitly opt out of rollover');
+    } finally {
+      OptionChainService.getOptionChain = originalGetOptionChain;
+    }
+  });
+
+  await t.test('fetchOptionCmp rejects mismatched expiry', async () => {
+    const { OptionChainService } = await import('../services/option-chain.service');
+    const originalGetOptionChain = OptionChainService.getOptionChain;
+    
+    // @ts-ignore
+    OptionChainService.getOptionChain = async () => {
+      // Returns an option with expiry 24NOV
+      return { optionsChain: [{ symbol: 'NSE:TEST24NOV25000CE', strikePrice: 25000, optionType: 'CE', ltp: 100 }], method: 'direct' };
+    };
+
+    try {
+      // We expect expiry 24OCT but chain returns 24NOV
+      const cmp = await TradeJournalService.fetchOptionCmp('TEST', 25000, 'CE', undefined, '24OCT');
+      assert.strictEqual(cmp, null, 'Should return null when expiry does not match');
+    } finally {
+      OptionChainService.getOptionChain = originalGetOptionChain;
+    }
   });
 });
