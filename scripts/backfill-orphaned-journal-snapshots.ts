@@ -1,7 +1,9 @@
 /**
- * One-off backfill for TradeJournal rows orphaned by the weekend/holiday snapshot bug
- * (see AGENT_BRIEFING_journal-weekend-orphan.md). Not wired into any API route or cron —
- * run manually, locally or via SSH on the Oracle box, with direct DB access.
+ * One-off backfill for TradeJournal rows orphaned by the weekend/holiday snapshot bug.
+ * (Context: Friday-before-weekend/holiday journal snapshots were permanently orphaned 
+ * under the old "now - 24h" logic. The previousTradingDayMidnightIST fix resolved this).
+ * Not wired into any API route or cron — run manually, locally or via SSH on the 
+ * Oracle box, with direct DB access.
  *
  * Usage:
  *   npx tsx scripts/backfill-orphaned-journal-snapshots.ts                 # dry run, auto-detect
@@ -32,7 +34,7 @@ function istDateStringToMidnightUTC(dateStr: string): Date {
 
 async function findOrphanedDates(): Promise<Date[]> {
   const rows = await prisma.tradeJournal.findMany({
-    where: { cmp916: null },
+    where: { cmp916: null, entryCmp: { not: null } },
     select: { tradeDate: true },
     distinct: ['tradeDate'],
   });

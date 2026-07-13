@@ -34,7 +34,7 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
   const originalGetCredentials = FyersAuthService.getCredentials;
   const originalGet = CacheService.get;
   const originalSet = CacheService.set;
-  // @ts-expect-error
+  // @ts-expect-error test mock
   const originalFetchWithRetry = OptionChainService.fetchWithRetry;
 
   FyersAuthService.getAccessToken = async () => 'dummy_token';
@@ -47,7 +47,7 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
   };
 
 
-  // @ts-expect-error
+  // @ts-expect-error test mock
   OptionChainService.fetchWithRetry = async (url: string) => {
 
     const today = new Date();
@@ -99,7 +99,7 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
     FyersAuthService.getCredentials = originalGetCredentials;
     CacheService.get = originalGet;
     CacheService.set = originalSet;
-    // @ts-expect-error
+    // @ts-expect-error test mock
     OptionChainService.fetchWithRetry = originalFetchWithRetry;
   }
 });
