@@ -214,6 +214,25 @@ export class SignalService {
       Math.sign(stock.sma20Slope) === Math.sign(stock.sma50Slope);
     if (hasRTP) signals.push('KGS_RTP');
 
+    // KGS High Probability RTP (HP-RTP)
+    // 1. Guard: sma200 must be present
+    if (stock.sma200 !== undefined && todayCandle && yesterdayCandle) {
+      // 2. Precondition: RTP must be active
+      if (hasRTP && stock.sma20Slope !== undefined) {
+        const sma200 = stock.sma200; // Using today's cached sma200 as a stand-in for yesterday's 200 SMA level since it is extremely slow-moving
+
+        // 3. Crossing Event & 4. Direction Match
+        const isBullishCross = yesterdayCandle.close <= sma200 && todayCandle.close > sma200;
+        const isBearishCross = yesterdayCandle.close >= sma200 && todayCandle.close < sma200;
+
+        if (isBullishCross && stock.sma20Slope > 0) {
+          signals.push('KGS_HP_RTP');
+        } else if (isBearishCross && stock.sma20Slope < 0) {
+          signals.push('KGS_HP_RTP');
+        }
+      }
+    }
+
     // ── Hot Zone (Confluence Zone) ────────────────────────────────────────────
     // safeRatio returns 1 (far) when pivot is 0, preventing hotZone from firing on bad data.
     const closeDistance = safeRatio(Math.abs(stock.ltp - pivot), pivot, 1);

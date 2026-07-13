@@ -478,6 +478,94 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(scanResult.signals.includes('KGS_RTP'));
   });
 
+  await t.test('KGS_HP_RTP (a) valid crossing matching RTP direction fires', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'HP_RTP_STOCK', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
+      volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
+      sma20Slope: 1.5, sma50Slope: 0.8, sma200: 200,
+      history: [
+        { date: 'yesterday', open: 180, high: 195, low: 180, close: 190, volume: 1000 },
+        { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
+      ]
+    };
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with positive RTP slope should fire');
+  });
+
+  await t.test('KGS_HP_RTP (b) static position above/below 200 without crossing does not fire', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'HP_RTP_STATIC', market: 'NSE', sector: 'Tech', open: 205, high: 220, low: 205, close: 210,
+      volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
+      sma20Slope: 1.5, sma50Slope: 0.8, sma200: 200,
+      history: [
+        { date: 'yesterday', open: 202, high: 210, low: 201, close: 208, volume: 1000 },
+        { date: todayStr, open: 205, high: 220, low: 205, close: 210, volume: 1000 }
+      ]
+    };
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active');
+    assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Static position above 200 should not fire HP_RTP');
+  });
+
+  await t.test('KGS_HP_RTP (c) crossing opposite RTP slope does not fire', () => {
+    const mockStock: MarketStockData = {
+      symbol: 'HP_RTP_CONFLICT', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
+      volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
+      sma20Slope: -1.5, sma50Slope: -0.8, sma200: 200,
+      history: [
+        { date: 'yesterday', open: 180, high: 195, low: 180, close: 190, volume: 1000 },
+        { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
+      ]
+    };
+    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active (both negative)');
+    assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with negative RTP slope should not fire');
+  });
+
+  await t.test('KGS_HP_RTP (d) missing sma200 or absent RTP correctly blocks it', () => {
+    const mockStockNo200: MarketStockData = {
+      symbol: 'HP_RTP_NO200', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
+      volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
+      sma20Slope: 1.5, sma50Slope: 0.8, // sma200 undefined
+      history: [
+        { date: 'yesterday', open: 180, high: 195, low: 180, close: 190, volume: 1000 },
+        { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
+      ]
+    };
+    const mockStockNoRTP: MarketStockData = {
+      symbol: 'HP_RTP_NORTP', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
+      volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
+      sma20Slope: 1.5, sma50Slope: -0.8, sma200: 200, // Conflicting slopes = no RTP
+      history: [
+        { date: 'yesterday', open: 180, high: 195, low: 180, close: 190, volume: 1000 },
+        { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
+      ]
+    };
+    
+    const res1 = ScannerService.scanStock(mockStockNo200, todayStr);
+    const res2 = ScannerService.scanStock(mockStockNoRTP, todayStr);
+    
+    assert.ok(!res1.signals.includes('KGS_HP_RTP'), 'Missing sma200 should block HP_RTP');
+    assert.ok(!res2.signals.includes('KGS_HP_RTP'), 'Missing RTP should block HP_RTP');
+  });
+
+  await t.test('KGS_HP_RTP (e) fires correctly on live in-progress crossing', () => {
+    const mockStockLive: MarketStockData = {
+      symbol: 'HP_RTP_LIVE', market: 'NSE', sector: 'Tech', 
+      open: 195, high: 215, low: 190, close: 195, // close is irrelevant for live
+      volume: 1000, avgVolume: 1000, marketCap: 1000, 
+      ltp: 210, // Live crossing 200 SMA
+      sma20Slope: 1.5, sma50Slope: 0.8, sma200: 200,
+      history: [
+        { date: 'dayBeforeYesterday', open: 180, high: 195, low: 180, close: 185, volume: 1000 },
+        { date: 'yesterday', open: 185, high: 198, low: 182, close: 195, volume: 1000 } // Last closed candle
+        // todayStr is not in history yet
+      ]
+    };
+    const scanResult = ScannerService.scanStock(mockStockLive, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with live ltp should fire');
+  });
+
   await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', () => {
     const mockStock: MarketStockData = {
       symbol: 'INSIDEVAL',
