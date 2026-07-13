@@ -413,11 +413,11 @@ describe('Overnight Engine Tests', () => {
     }
   });
 
-  test('discover() handles NEUTRAL_CONFLICT boundary (diff 9, 10, 11) and skips persistence', async () => {
+  test('discover() handles NEUTRAL_CONFLICT boundary (diff 9, 10, 11) and records conflict properly', async () => {
     const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
     const baseStock = { market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
     
-    // diff = 9 (conflict) -> skipped
+    // diff = 9 (conflict) -> persisted with NEUTRAL_CONFLICT, direction LONG
     const stockDiff9 = { ...baseStock, symbol: 'DIFF9', longScoreOverride: 80, shortScoreOverride: 71 };
     // diff = 10 (not conflict) -> upserted
     const stockDiff10 = { ...baseStock, symbol: 'DIFF10', longScoreOverride: 80, shortScoreOverride: 70 };
@@ -431,9 +431,9 @@ describe('Overnight Engine Tests', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
 
-    const upserted: string[] = [];
-    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
-      upserted.push(args.create.symbol);
+    const upserted: any[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: any }) => {
+      upserted.push(args.create);
       return args.create;
     }) as unknown as typeof originalUpsert;
     process.env.HISTORICAL_MODE = 'mock';
@@ -443,9 +443,17 @@ describe('Overnight Engine Tests', () => {
        
       await OvernightService.discover('BOTH', date, [stockDiff9 as any, stockDiff10 as any, stockDiff11 as any]);
 
-      assert.strictEqual(upserted.includes('DIFF9'), false, 'Diff 9 (conflict) should be skipped from persistence');
-      assert.strictEqual(upserted.includes('DIFF10'), true, 'Diff 10 should be persisted');
-      assert.strictEqual(upserted.includes('DIFF11'), true, 'Diff 11 should be persisted');
+      const diff9 = upserted.find(u => u.symbol === 'DIFF9');
+      assert.strictEqual(!!diff9, true, 'Diff 9 (conflict) should be persisted');
+      assert.strictEqual(diff9.classification, 'NEUTRAL_CONFLICT', 'Diff 9 should be classified as NEUTRAL_CONFLICT');
+      assert.strictEqual(diff9.direction, 'LONG', 'Diff 9 should keep LONG direction as it is marginally higher');
+      
+      const diff10 = upserted.find(u => u.symbol === 'DIFF10');
+      assert.strictEqual(!!diff10, true, 'Diff 10 should be persisted');
+      assert.notStrictEqual(diff10.classification, 'NEUTRAL_CONFLICT');
+      
+      const diff11 = upserted.find(u => u.symbol === 'DIFF11');
+      assert.strictEqual(!!diff11, true, 'Diff 11 should be persisted');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       process.env.HISTORICAL_MODE = originalHistMode;

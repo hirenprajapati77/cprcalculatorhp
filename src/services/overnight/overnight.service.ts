@@ -414,12 +414,12 @@ export class OvernightService {
 
         if (longSig && shortSig) {
           const diff = Math.abs((longSig.score || 0) - (shortSig.score || 0));
+          if ((longSig.score || 0) >= (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
+          else { finalDir = 'SHORT'; finalSig = shortSig; }
+          
           if (diff < 10) {
-            console.warn(`[OvernightScan] ${fullStock.symbol} skipped: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
-            continue;
-          } else {
-            if ((longSig.score || 0) > (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
-            else { finalDir = 'SHORT'; finalSig = shortSig; }
+            console.warn(`[OvernightScan] ${fullStock.symbol}: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
+            finalCls = 'NEUTRAL_CONFLICT';
           }
         } else if (longSig) {
           finalDir = 'LONG'; finalSig = longSig;
@@ -432,7 +432,9 @@ export class OvernightService {
           const conf = gapMetrics ? gapMetrics.gapConfidence : 50;
           const expGap = gapMetrics ? gapMetrics.expectedGap : 0;
           
-          if (finalCls === 'IGNORE') finalCls = finalSig.cls;
+          if (finalCls !== 'NEUTRAL_CONFLICT') {
+            finalCls = finalSig.cls;
+          }
 
           if (finalCls === 'IGNORE' && process.env.SAVE_IGNORE_SIGNALS !== 'true') {
             continue;
