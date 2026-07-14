@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
-import { getISTTime, isMarketOpen } from '@/lib/market-hours';
+import { isMarketOpen } from '@/lib/market-hours';
 
 export async function POST(request: NextRequest) {
   try {
