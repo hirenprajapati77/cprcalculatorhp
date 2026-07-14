@@ -73,22 +73,22 @@ export class SignalService {
         ? lastCandle
         : { high: stock.high, low: stock.low, close: stock.ltp };
 
-      yesterdayCandle = isTodayCandleFinal
+      yesterdayCandle = isLastToday
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
 
       // Only assign when a genuinely distinct (older) candle exists.
       // Previously these fell back to yesterdayCandle, which could fabricate
       // fake ascending/descending CPR patterns on short history.
-      dayBeforeYesterdayCandle = isTodayCandleFinal
+      dayBeforeYesterdayCandle = isLastToday
         ? (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null)
         : (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : null);
 
-      threeDaysAgoCandle = isTodayCandleFinal
+      threeDaysAgoCandle = isLastToday
         ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null)
         : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null);
 
-      fourDaysAgoCandle = isTodayCandleFinal
+      fourDaysAgoCandle = isLastToday
         ? (stock.history.length >= 5 ? stock.history[stock.history.length - 5] : null)
         : (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null);
     }

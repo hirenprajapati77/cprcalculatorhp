@@ -34,7 +34,6 @@ export class DatabaseCircuitBreaker {
       if (
         error instanceof Error && 
         (error.name === 'PrismaClientInitializationError' || 
-         error.name === 'PrismaClientKnownRequestError' ||
          error.message.includes('ECONNREFUSED'))
       ) {
         this.state = CircuitState.OPEN;
