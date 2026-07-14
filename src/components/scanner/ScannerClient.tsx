@@ -717,6 +717,7 @@ export default function ScannerClient() {
   const [executionWindowOpen, setExecutionWindowOpen] = useState<boolean>(true);
   const [cachedResult, setCachedResult] = useState<boolean>(false);
   const [scannedAt, setScannedAt] = useState<string>('');
+  const [isDegraded, setIsDegraded] = useState<boolean>(false);
 
   const isWeekend = useMemo(() => {
     return ['Saturday', 'Sunday'].includes(
@@ -1076,6 +1077,7 @@ export default function ScannerClient() {
         setExecutionWindowOpen(data.executionWindowOpen ?? true);
         setCachedResult(data.cachedResult ?? false);
         setScannedAt(data.scannedAt || '');
+        setIsDegraded(!!data.degraded);
 
         // Filter by direction based on scannerMode
         const allResults: Array<{
@@ -1231,7 +1233,6 @@ export default function ScannerClient() {
 
       const data = await res.json();
       if (data.success) {
-        setIsDegraded(!!data.degraded);
         if (requestId !== activeRequestRef.current) return;
 
         setExecutionWindowOpen(true);
@@ -1815,6 +1816,14 @@ export default function ScannerClient() {
               Auto-scans indices, evaluates 11 critical CPR rules, and ranks targets dynamically using dynamic filters, heatmap matrixes, and V3 scoring calibrations.
             </p>
           </div>
+          {isDegraded && (
+            <div className="flex items-center">
+              <Badge variant="amber" className="gap-1 animate-pulse border-amber-500/30 text-amber-500 bg-amber-500/10">
+                <AlertTriangle className="h-3 w-3" />
+                Data Degraded (DB Offline)
+              </Badge>
+            </div>
+          )}
           
           <div className="flex flex-wrap items-center gap-2">
             {/* Auto refresh display countdown info */}
