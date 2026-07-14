@@ -1157,12 +1157,11 @@ export default function ScannerClient() {
             ...(sig.scoreBreakdown !== undefined && { scoreBreakdown: sig.scoreBreakdown }),
             ...(sig.optionSuggestion !== undefined && { optionSuggestion: sig.optionSuggestion }),
           };
-          // Only set direction when it is defined (exactOptionalPropertyTypes safe)
-          if (sig.tag === 'LONG') return { ...base, direction: 'LONG' as const };
-          if (sig.tag === 'SHORT') return { ...base, direction: 'SHORT' as const };
-          return base as ScannedStock;
+          // Always set a direction based on dominant score so the UI has a clear stance
+          // for SL/Target generation even if the system tags it as NEUTRAL_CONFLICT
+          const direction = sig.longScore >= sig.shortScore ? 'LONG' : 'SHORT';
+          return { ...base, direction: direction as 'LONG' | 'SHORT' };
         });
-
         // Apply watchlist Pinned priority layout & dynamic column sorting client-side
         mapped.sort((a, b) => {
           const pinA = watchlist[a.symbol]?.pinned ? 1 : 0;

@@ -448,7 +448,9 @@ export class BtstService {
       finalSignals = shortCalc.signals;
     }
 
-    if (tag === 'LONG') {
+    const dominantDirection = longScore >= shortScore ? 'LONG' : 'SHORT';
+
+    if (dominantDirection === 'LONG') {
       sl = stock.low;
       target = entry + (entry - sl) * 2;
       
@@ -463,7 +465,7 @@ export class BtstService {
           else                  { target = entry + risk * 2.0; rrStr = '1:2.0'; }
         }
       }
-    } else if (tag === 'SHORT') {
+    } else {
       sl = stock.high;
       target = entry - (sl - entry) * 2;
 
