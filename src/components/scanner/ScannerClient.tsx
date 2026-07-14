@@ -479,7 +479,7 @@ const StockRow = React.memo(({
                     </div>
                   ) : (
                     <>
-                      <div className="flex justify-between items-center gap-1.5 text-[9px]">
+                      <div className="flex items-center gap-2 text-[9px]">
                         <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
                           {row.optionSuggestion.formattedName ? row.optionSuggestion.formattedName.split(' ').slice(1).join(' ') : '—'}
                         </span>
