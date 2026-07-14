@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
-import { getISTTime } from '@/lib/market-hours';
+import { getISTTime, isMarketOpen } from '@/lib/market-hours';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,9 +20,7 @@ export async function POST(request: NextRequest) {
     // Run the scan synchronously for immediate client feedback
     const results = await ScannerController.runFullScan(universe, market);
 
-    const { isTradingDay } = getISTTime();
-    
-    if (isTradingDay) {
+    if (isMarketOpen()) {
       // Fire-and-forget breakout alert — never blocks scan response
       BreakoutWatcherService.detectNewBreakouts(
       results.map(r => ({
