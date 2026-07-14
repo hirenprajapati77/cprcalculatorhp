@@ -7,6 +7,7 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 ## ⚡ Features
 
 - **Overnight Validation Engine:** High-fidelity BTST/STBT signal generation with parallel tracking of live expectations vs executed reality.
+- **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and fine-grained relationship matching (`OUTSIDE_VALUE`, `OVERLAPPING_HIGHER`) with visual badges.
 - **Strict Quality Gates:** Filters low-probability setups utilizing broader market regime alignment (NIFTY 50 trend), structural liquidity rules, and 15-day ATR momentum histories.
 - **Event-Risk Profiling:** Automatically cross-references setups against corporate (Earnings/Dividends) and macro events, applying a hard fallback if calendar data goes stale.
 - **Server-Side Journaling:** Immutable signal metadata snapshots (V2 Score, Regime, Event Risk) bound to every generated trade for off-line divergence analysis.
