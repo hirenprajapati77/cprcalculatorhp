@@ -437,28 +437,29 @@ const StockRow = React.memo(({
         <td className={cellPadding}>
           {row.entry > 0 ? (
             <div className="flex flex-col gap-1 font-mono text-[10px] leading-tight text-left">
-              <div className="flex justify-between gap-3">
+              <div className="flex items-center gap-2">
                 <span className="text-text-tertiary">Entry</span>
                 <span className="font-bold text-text-primary">₹{fmt(row.entry)}</span>
               </div>
               {densityMode === 'detailed' ? (
                 <>
-                  <div className="flex justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <span className="text-text-tertiary">SL</span>
                     <span className="font-bold text-accent-red">₹{fmt(row.sl)}</span>
                   </div>
-                  <div className="flex justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <span className="text-text-tertiary">Target</span>
                     <span className="font-bold text-accent-green">₹{fmt(row.target)}</span>
                   </div>
-                  <div className="flex justify-between gap-3 border-t border-border-primary/50 pt-0.5 mt-0.5">
+                  <div className="flex items-center gap-2 pt-0.5 mt-0.5">
                     <span className="text-text-tertiary">RR</span>
                     <span className="font-bold text-accent-blue">{row.rr}</span>
                   </div>
                 </>
               ) : (
-                <div className="flex justify-between gap-3 text-[9px] text-text-secondary">
+                <div className="flex items-center gap-2 text-[9px] text-text-secondary">
                   <span>T: ₹{fmt(row.target)}</span>
+                  <span className="opacity-50">|</span>
                   <span>RR: {row.rr}</span>
                 </div>
               )}
@@ -1171,6 +1172,9 @@ export default function ScannerClient() {
           let comparison = 0;
           if (sortField === 'score') {
             comparison = a.score - b.score;
+            if (comparison === 0) {
+              comparison = (a.confidence ?? 0) - (b.confidence ?? 0);
+            }
           } else if (sortField === 'symbol') {
             comparison = a.symbol.localeCompare(b.symbol);
           } else if (sortField === 'ltp') {
@@ -1258,6 +1262,9 @@ export default function ScannerClient() {
           let comparison = 0;
           if (sortField === 'score') {
             comparison = a.score - b.score;
+            if (comparison === 0) {
+              comparison = (a.confidence ?? 0) - (b.confidence ?? 0);
+            }
           } else if (sortField === 'symbol') {
             comparison = a.symbol.localeCompare(b.symbol);
           } else if (sortField === 'ltp') {
