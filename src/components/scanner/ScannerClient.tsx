@@ -2636,7 +2636,7 @@ export default function ScannerClient() {
                         {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
                         {visibleColumns.includes('score') && (
                           <th className="p-2.5 cursor-pointer hover:text-text-primary w-28" onClick={() => handleSort('score')}>
-                            <div className="flex items-center gap-1">Score & Freq <ArrowUpDown size={11} /></div>
+                            <div className="flex items-center gap-1">Score & Win Rate <ArrowUpDown size={11} /></div>
                           </th>
                         )}
                         {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
@@ -2652,7 +2652,7 @@ export default function ScannerClient() {
                         )}
                         {visibleColumns.includes('confidence') && (
                           <th className="p-2.5 cursor-pointer hover:text-text-primary w-24" onClick={() => handleSort('confidence')}>
-                            <div className="flex items-center gap-1">Gap Freq % <ArrowUpDown size={11} /></div>
+                            <div className="flex items-center gap-1">Gap Win Rate % <ArrowUpDown size={11} /></div>
                           </th>
                         )}
                         {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
@@ -2860,7 +2860,7 @@ export default function ScannerClient() {
                             <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
                           </div>
                           <div className="flex items-center gap-2">
-                             <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Gap Freq {drawerStock.confidence}%</span>
+                             <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Win Rate {drawerStock.confidence}%</span>
                             {getRatingBadge(drawerStock.score)}
                           </div>
                         </div>
