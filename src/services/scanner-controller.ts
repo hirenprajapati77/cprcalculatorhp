@@ -78,7 +78,7 @@ export class ScannerController {
           if (data) {
             // Reset failure count on success
             PERSISTENT_FAILURES.delete(stockMeta.symbol);
-            return ScannerService.scanStock(data);
+            return await ScannerService.scanStock(data);
           }
         } catch (err) {
           const sym = stockMeta.symbol;

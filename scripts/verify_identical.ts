@@ -25,7 +25,7 @@ async function run() {
     for (const sym of symbols) {
       if (!data[sym]) continue;
       // We must pass the raw data through scanStock
-      results[sym] = ScannerService.scanStock(data[sym]);
+      results[sym] = await ScannerService.scanStock(data[sym]);
     }
     fs.writeFileSync(path.resolve(__dirname, `../${mode}_results.json`), JSON.stringify(results, null, 2));
     console.log(`Saved ${mode}_results.json`);
