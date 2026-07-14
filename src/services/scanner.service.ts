@@ -34,7 +34,7 @@ export interface ScannerSignalResult extends MarketStockData {
   degenerateData?: boolean;
   distPivot?: number;
   cprCompression?: CprCompressionStats | null;
-  cprQuality?: 'A+' | 'A' | 'B' | 'C' | undefined;
+  
 }
 
 
@@ -128,42 +128,6 @@ export class ScannerService {
     // Advanced CPR Analytics
     const cprCompression = await CprCompressionService.getStats(stock);
     const distPivot = ((ltp - cprToday.pivot) / cprToday.pivot) * 100;
-
-    let cprQuality: 'A+' | 'A' | 'B' | 'C' | undefined = undefined;
-
-    // Feature Flag: Experimental CPR Quality Alignment Proxy
-    if (env.ENABLE_EXPERIMENTAL_CPR_QUALITY === 'true') {
-      // CPR Quality Score (Max 100)
-      let cprScore = 0;
-      // 1. Width (35%)
-      if (cprToday.classification === 'NARROW') cprScore += 35;
-      else if (cprToday.classification === 'NORMAL') cprScore += 17.5;
-      // 2. Relationship (30%)
-      const rel = compareCpr(cprToday, cprTomorrow);
-      if (rel.isHigherValue || rel.isLowerValue) cprScore += 30;
-      else if (rel.isInsideValue || rel.displayValue === 'OUTSIDE_VALUE') cprScore += 24; // 80% of 30
-      else if (rel.isOverlappingValue) cprScore += 15; // 50% of 30
-      // 3. Virgin (15%)
-      const isVirgin = signals.includes('VIRGIN');
-      if (isVirgin) cprScore += 15;
-      // 4. Alignment (20%) - Proxied via last 5 days
-      let weeklyTrend = cprToday.trend;
-      if (stock.history && stock.history.length >= 5) {
-        const slice = stock.history.slice(-5);
-        const wHigh = Math.max(...slice.map(s => s.high));
-        const wLow = Math.min(...slice.map(s => s.low));
-        const wClose = slice[slice.length - 1].close;
-        const wCpr = calculateCPR({ high: wHigh, low: wLow, close: wClose }, atrPct);
-        weeklyTrend = wCpr.trend;
-      }
-      if (cprToday.trend === weeklyTrend) cprScore += 20;
-      else if (cprToday.trend === 'Balanced' || weeklyTrend === 'Balanced') cprScore += 10;
-      
-      cprQuality = 'C';
-      if (cprScore >= CPR_THRESHOLDS.QUALITY_A_PLUS) cprQuality = 'A+';
-      else if (cprScore >= CPR_THRESHOLDS.QUALITY_A) cprQuality = 'A';
-      else if (cprScore >= CPR_THRESHOLDS.QUALITY_B) cprQuality = 'B';
-    }
 
     // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
     let entry = 0;
@@ -284,8 +248,7 @@ export class ScannerService {
       tomorrowCPRProvisional: !isTodayCandleFinal,
       degenerateData,
       distPivot: Number(distPivot.toFixed(2)),
-      cprCompression,
-      cprQuality
+      cprCompression
     };
   }
 

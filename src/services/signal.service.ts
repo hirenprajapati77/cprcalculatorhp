@@ -140,15 +140,7 @@ export class SignalService {
     if (lowerValue)      signals.push('LOWER_VALUE');
     if (overlappingValue) signals.push('OVERLAPPING_VALUE');
 
-    // We can also push the fine-grained display value for the UI if it's different,
-    // but prefixed to avoid breaking legacy score logic that might count raw signals.
-    // Actually, UI is currently looking for OUTSIDE_VALUE in signals.
-    // But to ensure 100% BTST score identicality, we must not change the core signals array.
-    // Let's push the new classification with a prefix so the backend scoring ignores it
-    // and frontend can parse it.
-    if (rel.displayValue === 'OUTSIDE_VALUE' || rel.displayValue === 'OVERLAPPING_HIGHER' || rel.displayValue === 'OVERLAPPING_LOWER') {
-      signals.push(`CPR_REL_${rel.displayValue}`);
-    }
+
 
     // ── Virgin CPR ───────────────────────────────────────────────────────────
     // Skip when cprYesterday is unavailable (insufficient history).

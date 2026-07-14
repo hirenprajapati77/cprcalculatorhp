@@ -64,7 +64,6 @@ export async function GET(request: NextRequest) {
     const minWidth = searchParams.get('minWidth') ? parseFloat(searchParams.get('minWidth')!) : undefined;
     const maxWidth = searchParams.get('maxWidth') ? parseFloat(searchParams.get('maxWidth')!) : undefined;
     
-    const cprQuality = searchParams.get('cprQuality') || 'ALL';
     const cprRelationship = searchParams.get('cprRelationship') || 'ALL';
     const virginCpr = searchParams.get('virginCpr') === 'true';
     const narrowCpr = searchParams.get('narrowCpr') === 'true';
@@ -221,9 +220,6 @@ export async function GET(request: NextRequest) {
     // Filter by Active Signal modes
     if (mode !== 'ALL') {
       andConditions.push({ signalSummary: { contains: mode } });
-    }
-    if (cprQuality !== 'ALL') {
-      andConditions.push({ signalSummary: { contains: `CPR_QUALITY_${cprQuality}` } });
     }
     if (cprRelationship !== 'ALL') {
       andConditions.push({ signalSummary: { contains: cprRelationship } });
