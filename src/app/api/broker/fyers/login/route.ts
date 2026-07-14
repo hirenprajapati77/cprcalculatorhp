@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextResponse } from 'next/server';
 import { FyersAuthService } from '@/services/fyers-auth.service';
 
@@ -13,7 +14,7 @@ export async function GET() {
     const response = NextResponse.redirect(loginUrl);
     // secure:true only if actually serving HTTPS — NOT based on NODE_ENV,
     // because production can run on plain HTTP (e.g. IP-based without TLS).
-    const isHttps = (process.env.NEXT_PUBLIC_BASE_URL || '').startsWith('https://');
+    const isHttps = (env.NEXT_PUBLIC_BASE_URL || '').startsWith('https://');
     response.cookies.set('oauth_state', state, {
       httpOnly: true,
       secure: isHttps,

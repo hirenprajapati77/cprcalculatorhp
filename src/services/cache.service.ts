@@ -1,9 +1,10 @@
+import { env } from '@/config/env';
 import Redis from 'ioredis';
 import { LRUCache } from 'lru-cache';
 
 export type CacheProviderType = 'redis' | 'memory' | 'auto';
 
-const CACHE_PROVIDER = (process.env.CACHE_PROVIDER as CacheProviderType) || 'auto';
+const CACHE_PROVIDER = (env.CACHE_PROVIDER as CacheProviderType) || 'auto';
 
 // LRU Memory Cache fallback
 const memoryCache = new LRUCache<string, NonNullable<unknown>>({
@@ -29,7 +30,7 @@ class CacheServiceImpl {
   private init() {
     if (CACHE_PROVIDER === 'redis' || CACHE_PROVIDER === 'auto') {
       try {
-        this.redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+        this.redisClient = new Redis(env.REDIS_URL || 'redis://localhost:6379', {
           maxRetriesPerRequest: 1,
           retryStrategy: (times) => {
             if (times > 3) {

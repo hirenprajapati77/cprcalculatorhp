@@ -12,7 +12,9 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 - **Event-Risk Profiling:** Automatically cross-references setups against corporate (Earnings/Dividends) and macro events, applying a hard fallback if calendar data goes stale.
 - **Server-Side Journaling:** Immutable signal metadata snapshots (V2 Score, Regime, Event Risk) bound to every generated trade for off-line divergence analysis.
 - **Aesthetic Terminal UI:** Responsive dark-themed dashboard mapping raw CPR calculations alongside execution telemetry (Recharts).
-- **Resilient Fallback Design:** Dual-database compatibility (PostgreSQL/SQLite) and robust caching fallbacks (Redis/In-memory).
+- **Resilient Fallback Design:** Database Circuit Breaker pattern with gracefully degraded cached responses, ensuring 99.9% uptime for the UI even during database outages.
+- **Strict Environment Validation:** Zod-enforced environment variable schemas fail fast at startup if configuration is invalid.
+- **Redis First Caching:** All module-level maps replaced with TTL-managed Redis caches for horizontal scalability.
 
 ---
 

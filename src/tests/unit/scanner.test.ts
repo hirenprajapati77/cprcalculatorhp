@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { ScannerService } from '../services/scanner.service';
-import { RankingService } from '../services/ranking.service';
-import { MarketStockData } from '../services/market.service';
+import { ScannerService } from '../../services/scanner.service';
+import { RankingService } from '../../services/ranking.service';
+import { MarketStockData } from '../../services/market.service';
 
 test('Scanner Service Signals Evaluation', async (t) => {
   await t.test('evaluates NORMAL and BULLISH signals correctly', async () => {

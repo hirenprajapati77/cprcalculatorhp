@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
@@ -54,7 +55,7 @@ export class CalculationService {
           continue;
         }
 
-        const isProd = process.env.NODE_ENV === 'production';
+        const isProd = env.NODE_ENV === 'production';
         if (isProd) {
           console.error('[CalculationService] Database write failed in production:', err);
         } else {

@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
@@ -54,7 +55,7 @@ export default function RootLayout({
       >
         <Providers>
           <ToastProvider>
-            {process.env.EXECUTION_MODE === 'SHADOW' && (
+            {env.EXECUTION_MODE === 'SHADOW' && (
               <div className="w-full bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-center gap-2 text-amber-500 text-xs font-medium tracking-wide z-50 relative">
                 <span className="flex h-2 w-2 relative">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>

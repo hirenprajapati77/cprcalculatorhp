@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
@@ -6,8 +7,8 @@ import { decrypt } from '../../lib/crypto';
 
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
-    let token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
-    let resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
+    let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
+    let resolvedChatId = chatId || env.TELEGRAM_CHAT_ID;
 
     if (!token || !resolvedChatId) {
       try {
@@ -147,8 +148,8 @@ export class TelegramService {
   ): Promise<{ ok: boolean; reason?: string }> {
     if (!stocks.length) return { ok: false, reason: 'no_breakouts' };
 
-    let chatId = overrideChatId || process.env.TELEGRAM_GROUP_CHAT_ID;
-    let token = overrideToken || process.env.TELEGRAM_BOT_TOKEN;
+    let chatId = overrideChatId || env.TELEGRAM_GROUP_CHAT_ID;
+    let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
 
     if (!chatId || !token) {
       try {

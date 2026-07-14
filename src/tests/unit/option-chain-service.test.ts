@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { OptionChainService } from '../services/option-chain.service';
-import { CacheService } from '../services/cache.service';
-import { FyersAuthService } from '../services/fyers-auth.service';
+import { OptionChainService } from '../../services/option-chain.service';
+import { CacheService } from '../../services/cache.service';
+import { FyersAuthService } from '../../services/fyers-auth.service';
 
 test('OptionChainService fetchOptionQuote regex supports &', async (_t) => {
   let fetchedSymbol = '';

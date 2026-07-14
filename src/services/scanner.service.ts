@@ -1,5 +1,7 @@
+import { env } from '@/config/env';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { CPR_THRESHOLDS, VOLUME_THRESHOLDS } from '../config/trading-constants';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
@@ -130,7 +132,7 @@ export class ScannerService {
     let cprQuality: 'A+' | 'A' | 'B' | 'C' | undefined = undefined;
 
     // Feature Flag: Experimental CPR Quality Alignment Proxy
-    if (process.env.ENABLE_EXPERIMENTAL_CPR_QUALITY === 'true') {
+    if (env.ENABLE_EXPERIMENTAL_CPR_QUALITY === 'true') {
       // CPR Quality Score (Max 100)
       let cprScore = 0;
       // 1. Width (35%)
@@ -158,9 +160,9 @@ export class ScannerService {
       else if (cprToday.trend === 'Balanced' || weeklyTrend === 'Balanced') cprScore += 10;
       
       cprQuality = 'C';
-      if (cprScore >= 90) cprQuality = 'A+';
-      else if (cprScore >= 75) cprQuality = 'A';
-      else if (cprScore >= 50) cprQuality = 'B';
+      if (cprScore >= CPR_THRESHOLDS.QUALITY_A_PLUS) cprQuality = 'A+';
+      else if (cprScore >= CPR_THRESHOLDS.QUALITY_A) cprQuality = 'A';
+      else if (cprScore >= CPR_THRESHOLDS.QUALITY_B) cprQuality = 'B';
     }
 
     // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
@@ -294,10 +296,10 @@ export class ScannerService {
     let confidence = 50; // base
 
     // 1. Liquidity / Volume Ratio (Max 20)
-    if (volumeRatio >= 1.5) {
+    if (volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO) {
       confidence += 20;
-    } else if (volumeRatio >= 1.2) {
-      confidence += 12;
+    } else if (volumeRatio >= VOLUME_THRESHOLDS.STRONG_RATIO) {
+      confidence += 10;
     } else if (volumeRatio >= 1.0) {
       confidence += 6;
     }

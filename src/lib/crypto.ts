@@ -1,10 +1,11 @@
+import { env } from '@/config/env';
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 
 function getKey(): Buffer {
-  const secret = process.env.TOKEN_ENCRYPTION_KEY;
+  const secret = env.TOKEN_ENCRYPTION_KEY;
   if (!secret) {
     throw new Error('TOKEN_ENCRYPTION_KEY environment variable is missing.');
   }
@@ -47,7 +48,7 @@ export function decrypt(ciphertext: string): string {
 }
 
 export function isValidCronSecret(header: string | null): boolean {
-  const secret = process.env.CRON_SECRET;
+  const secret = env.CRON_SECRET;
   if (!secret || !header) {
     return false;
   }

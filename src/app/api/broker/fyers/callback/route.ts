@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { FyersAuthService } from '@/services/fyers-auth.service';
 
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   const authCode = searchParams.get('auth_code') || searchParams.get('code');
   const state = searchParams.get('state');
   
-  const baseUrl = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const baseUrl = env.APP_BASE_URL || env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
   const cookieState = request.cookies.get('oauth_state')?.value;
   if (!state || state !== cookieState) {

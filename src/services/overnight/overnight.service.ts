@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 /**
  * ADVANCED ENGINE — NOT YET CONNECTED TO UI OR CRON. Used only by /api/overnight and
  * /refresh endpoints for manual/debugging use. Max score 130. Intended
@@ -8,8 +9,9 @@
  * See project audit notes.
  */
 import { OvernightSignal, Prisma } from '@prisma/client';
+import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
 import { prisma } from '@/lib/db';
-import { calculateCPR } from '@/lib/cpr-engine';
+import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
@@ -85,8 +87,8 @@ export class OvernightService {
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
     const bypassAllowed = 
-      process.env.NODE_ENV !== 'production' &&
-      process.env.BTST_BYPASS_WINDOW === 'true';
+      env.NODE_ENV !== 'production' &&
+      env.BTST_BYPASS_WINDOW === 'true';
 
     if (bypassAllowed) {
       return 'ACTIVE';
@@ -115,7 +117,7 @@ export class OvernightService {
    * Fetches/simulates intraday 5m candle data to compute VWAP and 15m high/low.
    */
   static async getIntradayData(stock: MarketStockData, currentTime: Date): Promise<OvernightIntradayMetrics> {
-    const mode = process.env.HISTORICAL_MODE || 'mock';
+    const mode = env.HISTORICAL_MODE || 'mock';
 
     if (mode === 'live') {
       const symbol = stock.symbol;
@@ -436,7 +438,7 @@ export class OvernightService {
             finalCls = finalSig.cls;
           }
 
-          if (finalCls === 'IGNORE' && process.env.SAVE_IGNORE_SIGNALS !== 'true') {
+          if (finalCls === 'IGNORE' && env.SAVE_IGNORE_SIGNALS !== 'true') {
             continue;
           }
 

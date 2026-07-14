@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { BtstService } from '../services/backtest/btst.service';
-import { MarketService, MarketStockData } from '../services/market.service';
+import { BtstService } from '../../services/backtest/btst.service';
+import { MarketService, MarketStockData } from '../../services/market.service';
 
 describe('BTST Scoring Engine Tests', () => {
   const baseHistory = [

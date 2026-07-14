@@ -1,4 +1,5 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
+import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
@@ -271,11 +272,11 @@ export class SignalService {
     else if (stock.open < yesterdayCandle.low)  signals.push('GAP_DOWN');
 
     // ── Volume Spike ──────────────────────────────────────────────────────────
-    if (volumeRatio >= 2.0) signals.push('VOLUME_SPIKE');
+    if (volumeRatio >= VOLUME_THRESHOLDS.SPIKE_RATIO) signals.push('VOLUME_SPIKE');
 
     // ── Breakout / Breakdown ──────────────────────────────────────────────────
-    if (volumeRatio >= 1.5 && ltp > tc) signals.push('BREAKOUT');
-    if (volumeRatio >= 1.5 && ltp < bc) signals.push('BREAKDOWN');
+    if (volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO && ltp > tc) signals.push('BREAKOUT');
+    if (volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO && ltp < bc) signals.push('BREAKDOWN');
 
     // ── Momentum ──────────────────────────────────────────────────────────────
     if (ltp > cprToday.r1 || ltp < cprToday.s1) signals.push('MOMENTUM');
@@ -285,11 +286,11 @@ export class SignalService {
     // propagating into build/unwind threshold comparisons.
     const priceChangePct = safeRatio(ltp - stock.close, stock.close, 0);
     // PROVISIONAL: thresholds derived from assumed 2% avg ATR, pending backtest confirmation.
-    const buildThreshold  = 0.75 * atrPct;
+    const buildThreshold  = ATR.BUILD_MULTIPLIER * atrPct;
     const unwindThreshold = 0.50 * atrPct;
 
-    if (priceChangePct > buildThreshold && volumeRatio >= 1.5)        signals.push('LONG_BUILD');
-    else if (priceChangePct < -buildThreshold && volumeRatio >= 1.5)  signals.push('SHORT_BUILD');
+    if (priceChangePct > buildThreshold && volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO)        signals.push('LONG_BUILD');
+    else if (priceChangePct < -buildThreshold && volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO)  signals.push('SHORT_BUILD');
     else if (priceChangePct < -unwindThreshold && volumeRatio < 1.0)  signals.push('LONG_UNWIND');
     else if (priceChangePct > unwindThreshold && volumeRatio < 1.0)   signals.push('SHORT_COVER');
 

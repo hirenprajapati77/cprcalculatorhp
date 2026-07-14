@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { TradeEngineService } from '../services/backtest/trade-engine.service';
-import { BacktestService } from '../services/backtest/backtest.service';
+import { TradeEngineService } from '../../services/backtest/trade-engine.service';
+import { BacktestService } from '../../services/backtest/backtest.service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -163,7 +163,7 @@ test('Backtest — no overlapping same-symbol trades within holding window', asy
   });
 });
 
-import { MetricsService } from '../services/backtest/metrics.service';
+import { MetricsService } from '../../services/backtest/metrics.service';
 
 test('Metrics Service — Signal Bucketing', async (t) => {
   await t.test('groups trades with the same stable signal key into a single signalSuccess bucket', () => {

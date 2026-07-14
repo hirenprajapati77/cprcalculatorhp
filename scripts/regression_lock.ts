@@ -1,12 +1,42 @@
 import fs from 'fs';
 import path from 'path';
 import { ScannerService } from '../src/services/scanner.service';
+import { calculateCPR } from '../src/lib/cpr-engine';
+import { performance } from 'perf_hooks';
+import crypto from 'crypto';
+import * as Constants from '../src/config/trading-constants';
 
 const BASELINE_PATH = path.resolve(__dirname, '../baseline_snapshot.json');
 const MOCK_DATA_PATH = path.resolve(__dirname, '../mock_data.json');
 
 async function runRegressionLock() {
   console.log('🔒 Starting Regression Lock Verification...');
+
+  // 1. CONSTANTS LOCK
+  const constantsString = JSON.stringify(Constants);
+  const constantsHash = crypto.createHash('sha256').update(constantsString).digest('hex');
+  const EXPECTED_HASH = '8d0ecc727a99da11a2802b9db4360a3cb1d08eb918eaffda7637041352d48a2a'; 
+  
+  if (constantsHash !== EXPECTED_HASH) {
+     console.error(`❌ Constants Regression! Trading constants have mutated.\nExpected: ${EXPECTED_HASH}\nGot: ${constantsHash}`);
+     process.exit(1);
+  }
+  console.log(`✅ Constants Hash Verified: ${constantsHash}`);
+  
+  // 2. PERFORMANCE BENCHMARK (CORE MATH)
+  const perfStart = performance.now();
+  for (let i = 0; i < 5000; i++) {
+    calculateCPR(100 + i, 110 + i, 90 + i, 105 + i);
+  }
+  const perfEnd = performance.now();
+  const perfDuration = perfEnd - perfStart;
+  console.log(`⏱️ Math Core Benchmark (5000x calculateCPR): ${perfDuration.toFixed(2)}ms`);
+  
+  const MAX_ALLOWED_DURATION_MS = 50; // Threshold for 5000 iterations of simple math
+  if (perfDuration > MAX_ALLOWED_DURATION_MS) {
+     console.error(`❌ Performance Regression! Math core took ${perfDuration.toFixed(2)}ms (Limit: ${MAX_ALLOWED_DURATION_MS}ms)`);
+     process.exit(1);
+  }
 
   if (!fs.existsSync(BASELINE_PATH) || !fs.existsSync(MOCK_DATA_PATH)) {
     console.error('❌ Missing baseline_snapshot.json or mock_data.json');

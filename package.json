@@ -9,8 +9,14 @@
     "start": "next start",
     "lint": "eslint",
     "regression-lock": "tsx scripts/regression_lock.ts",
-    "release:check": "tsc --noEmit && npm run lint && npm test && npm run regression-lock && npm run build:clean",
-    "test": "tsc --noEmit && node --test -r tsx src/tests/**/*.test.ts"
+    "release:check": "tsc --noEmit && npm run lint && npm run test:unit && npm run test:coverage:core && npm run test:coverage:services && npm run regression-lock && npm run security:check && npm run build:clean",
+    "test": "npm run test:unit",
+    "test:unit": "node --test -r tsx src/tests/unit/**/*.test.ts",
+    "test:integration": "node --test -r tsx src/tests/integration/**/*.test.ts",
+    "test:e2e": "echo \"No E2E tests yet\"",
+    "test:coverage:core": "c8 --check-coverage --lines 95 --include src/lib/** --include src/services/backtest/** node --test -r tsx src/tests/unit/**/*.test.ts",
+    "test:coverage:services": "c8 --check-coverage --lines 85 --include src/services/** --exclude src/services/backtest/** node --test -r tsx src/tests/unit/**/*.test.ts",
+    "security:check": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -20,7 +26,6 @@
     "bullmq": "^5.78.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^12.40.0",
-    "html-to-image": "^1.11.13",
     "ioredis": "^5.11.1",
     "lightweight-charts": "^5.2.0",
     "lru-cache": "^11.5.1",
@@ -30,7 +35,6 @@
     "react-dom": "19.1.0",
     "react-hook-form": "^7.77.0",
     "recharts": "^3.8.1",
-    "swr": "^2.4.1",
     "yahoo-finance2": "^3.15.3",
     "zod": "^4.4.3"
   },
@@ -41,6 +45,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "c8": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.19",
     "prisma": "^6.19.3",

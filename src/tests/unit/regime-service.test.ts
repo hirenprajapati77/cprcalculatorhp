@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { RegimeService } from '../services/overnight/regime.service';
-import { HistoricalProvider } from '../services/backtest/historical.provider';
+import { RegimeService } from '../../services/overnight/regime.service';
+import { HistoricalProvider } from '../../services/backtest/historical.provider';
 
 test('RegimeService - EMA Edge Case Fix', async (t) => {
   const originalGetHistory = HistoricalProvider.getHistory;

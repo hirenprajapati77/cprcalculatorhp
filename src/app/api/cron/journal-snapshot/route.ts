@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { getISTTime } from '@/lib/market-hours';
@@ -15,9 +16,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  const bypassWindow = process.env.NODE_ENV !== 'production' &&
+  const bypassWindow = env.NODE_ENV !== 'production' &&
                        req.nextUrl.searchParams.get('bypassWindow') === 'true' &&
-                       req.nextUrl.searchParams.get('bypassSecret') === process.env.CRON_SECRET;
+                       req.nextUrl.searchParams.get('bypassSecret') === env.CRON_SECRET;
 
   // Determine which snapshot slot based on current IST time
   let slot: '916' | '930' | '945' | '1000' | null = null;

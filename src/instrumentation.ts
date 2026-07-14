@@ -1,13 +1,14 @@
+import { env } from '@/config/env';
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
+  if (env.NEXT_RUNTIME === 'nodejs') {
     const { prisma } = await import('@/lib/db');
     const { default: redis } = await import('@/lib/redis');
     // We only want this to run once on the server startup
     console.log('==================================================');
     console.log('🚀 CPR Calculator Platform - Node Startup Initialized');
     
-    const appVersion = process.env.APP_VERSION || process.env.npm_package_version || 'unknown';
-    const execMode = process.env.EXECUTION_MODE || 'SHADOW';
+    const appVersion = env.APP_VERSION || process.env.npm_package_version || 'unknown';
+    const execMode = env.EXECUTION_MODE || 'SHADOW';
     console.log(`📦 VERSION: ${appVersion}`);
     console.log(`⚙️  MODE:    ${execMode}`);
 

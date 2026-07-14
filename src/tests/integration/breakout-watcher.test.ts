@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { prisma } from '../lib/db';
-import { BreakoutWatcherService } from '../services/alert/breakout-watcher.service';
+import { prisma } from '../../lib/db';
+import { BreakoutWatcherService } from '../../services/alert/breakout-watcher.service';
 
 // ─── In-process deduplication logic (mirrors BreakoutWatcherService) ──────────
 // We test the pure logic without hitting Prisma (which needs a live DB connection).

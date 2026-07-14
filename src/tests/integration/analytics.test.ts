@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { NextRequest } from 'next/server';
-import { GET } from '../app/api/analytics/route';
-import { prisma } from '../lib/db';
+import { GET } from '../../app/api/analytics/route';
+import { prisma } from '../../lib/db';
 
 test('Analytics API Route Logic', async (t) => {
   await t.test('Breakeven classification and winRate math is correct', async () => {

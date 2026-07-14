@@ -1,9 +1,10 @@
+import { env } from '@/config/env';
 import { Queue, QueueOptions } from 'bullmq';
 
 
 const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: env.REDIS_HOST || 'localhost',
+  port: parseInt(env.REDIS_PORT || '6379'),
 };
 
 const defaultQueueOptions: QueueOptions = {
@@ -25,7 +26,7 @@ const defaultQueueOptions: QueueOptions = {
   },
 };
 
-const isQueueEnabled = process.env.ENABLE_QUEUE !== 'false';
+const isQueueEnabled = env.ENABLE_QUEUE !== 'false';
 
 class QueueServiceImpl {
   public scannerQueue: Queue | null = null;

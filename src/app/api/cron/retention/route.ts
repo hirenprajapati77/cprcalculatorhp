@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { RetentionService } from '@/services/retention/retention.service';
 import { isValidCronSecret } from '@/lib/crypto';
@@ -10,8 +11,8 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const dryRun = searchParams.get('dryRun') === 'true' || process.env.RETENTION_DRY_RUN === 'true';
-  const limitStr = searchParams.get('limit') || process.env.RETENTION_LIMIT || '250';
+  const dryRun = searchParams.get('dryRun') === 'true' || env.RETENTION_DRY_RUN === 'true';
+  const limitStr = searchParams.get('limit') || env.RETENTION_LIMIT?.toString() || '250';
   const limit = Math.min(parseInt(limitStr, 10), 1000);
 
   try {

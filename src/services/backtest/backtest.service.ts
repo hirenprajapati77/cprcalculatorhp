@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { MarketService, MarketStockData } from '../market.service';
 import { Queue } from 'bullmq';
 import { TradeEngineService } from './trade-engine.service';
@@ -10,15 +11,15 @@ import { BtstService } from './btst.service';
 import { prisma } from '@/lib/db';
 
 const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: env.REDIS_HOST || 'localhost',
+  port: parseInt(env.REDIS_PORT || '6379'),
 };
 
 export class BacktestService {
   private static queueInstance: Queue | null = null;
 
   static getQueue() {
-    if (process.env.BACKTEST_EXECUTION_MODE !== 'queue') return null;
+    if (env.BACKTEST_EXECUTION_MODE !== 'queue') return null;
     if (!this.queueInstance) {
       try {
         this.queueInstance = new Queue('backtest.queue', { connection });
@@ -45,7 +46,7 @@ export class BacktestService {
     riskValue?: number;
     strategyMode?: string;
   }) {
-    const mode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
+    const mode = env.BACKTEST_EXECUTION_MODE || 'queue';
     
     if (mode === 'disabled') {
       return {
