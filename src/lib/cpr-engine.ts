@@ -88,3 +88,12 @@ export function classifyCprWidth(widthPct: number, atrPct?: number): 'NARROW' | 
   const normalThresh = atrPct ? (0.40 * atrPct * 100) : 0.8;
   return widthPct < narrowThresh ? 'NARROW' : widthPct < normalThresh ? 'NORMAL' : 'WIDE';
 }
+
+/**
+ * Calculates the ATR Compression Ratio.
+ * A ratio < 0.15 is generally considered a narrow CPR.
+ */
+export function calculateAtrCompressionRatio(widthPct: number, atrPct?: number): number | undefined {
+  if (!atrPct || atrPct === 0) return undefined;
+  return widthPct / (atrPct * 100);
+}

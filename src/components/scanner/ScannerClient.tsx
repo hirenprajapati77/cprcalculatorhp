@@ -400,12 +400,23 @@ const StockRow = React.memo(({
 
       {visibleColumns.includes('distance') && (
         <td className={`${cellPadding} font-medium max-md:hidden`}>
-          <span className={distTC >= 0 ? 'text-accent-green' : 'text-text-secondary'}>
-            TC: {distTC >= 0 ? '+' : ''}{distTC.toFixed(2)}%
-          </span>
-          <span className={`block text-[9px] mt-0.5 ${distBC >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-            BC: {distBC >= 0 ? '+' : ''}{distBC.toFixed(2)}%
-          </span>
+          <div className="flex gap-2">
+            <div>
+              <span className={distTC >= 0 ? 'text-accent-green' : 'text-text-secondary'}>
+                TC: {distTC >= 0 ? '+' : ''}{distTC.toFixed(2)}%
+              </span>
+              <span className={`block text-[9px] mt-0.5 ${distBC >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                BC: {distBC >= 0 ? '+' : ''}{distBC.toFixed(2)}%
+              </span>
+            </div>
+            {row.distPivot !== undefined && (
+              <div className="border-l border-border-primary/50 pl-2">
+                <span className={`text-[9px] ${row.distPivot >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                  P: {row.distPivot >= 0 ? '+' : ''}{row.distPivot}%
+                </span>
+              </div>
+            )}
+          </div>
         </td>
       )}
 
@@ -497,20 +508,32 @@ const StockRow = React.memo(({
       {visibleColumns.includes('signals') && (
         <td className={cellPadding}>
           <div className="flex flex-wrap gap-1 max-w-[180px]">
-            {row.signals.slice(0, densityMode === 'compact' ? 1 : 3).map((sig) => (
+            {row.signals.slice(0, densityMode === 'compact' ? 2 : 5).map((sig) => {
+              // Extract CPR Quality A+/A/B/C from internal tag
+              if (sig.startsWith('CPR_QUALITY_')) {
+                const grade = sig.split('_')[2];
+                return (
+                  <span key={sig} className="text-[8px] font-bold px-1 rounded-sm bg-accent-blue/20 text-accent-blue border border-accent-blue/30">
+                    ⭐ Q:{grade}
+                  </span>
+                );
+              }
+              
+              return (
               <span
                 key={sig}
                 className={`text-[8px] font-bold px-1 rounded-sm ${
                   sig === 'BREAKOUT' ? 'bg-accent-green/15 text-accent-green' :
-                  sig === 'BULLISH' ? 'bg-accent-blue/15 text-accent-blue' :
-                  sig === 'BEARISH' ? 'bg-accent-red/15 text-accent-red' :
-                  sig === 'NARROW' ? 'bg-accent-amber/15 text-accent-amber' :
+                  sig === 'BULLISH' || sig === 'HIGHER_VALUE' ? 'bg-accent-blue/15 text-accent-blue' :
+                  sig === 'BEARISH' || sig === 'LOWER_VALUE' ? 'bg-accent-red/15 text-accent-red' :
+                  sig === 'NARROW' || sig === 'VIRGIN' ? 'bg-accent-amber/15 text-accent-amber' :
+                  sig === 'OUTSIDE_VALUE' || sig.startsWith('OVERLAPPING') ? 'bg-purple-500/15 text-purple-400' :
                   'bg-bg-tertiary text-text-secondary border border-border-primary/50'
                 }`}
               >
-                {sig}
+                {sig === 'VIRGIN' ? '🔥 VIRGIN' : sig}
               </span>
-            ))}
+            )})}
           </div>
         </td>
       )}
@@ -762,6 +785,13 @@ export default function ScannerClient() {
   const [maxScore, setMaxScore] = useState<string>('');
   const [minWidth, setMinWidth] = useState<string>('');
   const [maxWidth, setMaxWidth] = useState<string>('');
+
+  // Advanced CPR Filters
+  const [advancedCprCollapsed, setAdvancedCprCollapsed] = useState<boolean>(true);
+  const [cprQualityFilter, setCprQualityFilter] = useState<string>('ALL'); // ALL, A+, A, B, C
+  const [cprRelationshipFilter, setCprRelationshipFilter] = useState<string>('ALL'); // ALL, HIGHER_VALUE, LOWER_VALUE, INSIDE_VALUE, OUTSIDE_VALUE, OVERLAPPING
+  const [virginCprOnly, setVirginCprOnly] = useState<boolean>(false);
+  const [narrowCprOnly, setNarrowCprOnly] = useState<boolean>(false);
 
   // Table Configs: Density Mode & Column Visibility Show/Hide
   const [densityMode, setDensityMode] = useState<'compact' | 'detailed'>('detailed');
@@ -1185,6 +1215,10 @@ export default function ScannerClient() {
         ...(maxScore && { maxScore }),
         ...(minWidth && { minWidth }),
         ...(maxWidth && { maxWidth }),
+        ...(cprQualityFilter !== 'ALL' && { cprQuality: cprQualityFilter }),
+        ...(cprRelationshipFilter !== 'ALL' && { cprRelationship: cprRelationshipFilter }),
+        ...(virginCprOnly && { virginCpr: 'true' }),
+        ...(narrowCprOnly && { narrowCpr: 'true' }),
       });
       if (debouncedSearchQuery.trim()) {
         queryParams.set('search', debouncedSearchQuery.trim());
@@ -1246,7 +1280,7 @@ export default function ScannerClient() {
         setIsLoading(false);
       }
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprQualityFilter, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {
@@ -2361,6 +2395,76 @@ export default function ScannerClient() {
                       Starred Only
                     </button>
                   </div>
+                </div>
+
+                {/* Advanced CPR Filters */}
+                <div className="mt-4 border border-border-primary/50 rounded overflow-hidden">
+                  <button 
+                    className="w-full flex items-center justify-between p-3 bg-bg-secondary/30 hover:bg-bg-secondary/50 text-text-primary text-sm font-semibold transition-colors"
+                    onClick={() => setAdvancedCprCollapsed(!advancedCprCollapsed)}
+                  >
+                    <span>Advanced CPR</span>
+                    <span className="text-text-tertiary text-xs">
+                      {advancedCprCollapsed ? '▼ Show' : '▲ Hide'}
+                    </span>
+                  </button>
+                  
+                  {!advancedCprCollapsed && (
+                    <div className="p-3 bg-bg-secondary/10 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-border-primary/50">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] text-text-tertiary uppercase font-semibold">CPR Quality</label>
+                        <select 
+                          className="w-full bg-bg-tertiary border border-border-primary rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary"
+                          value={cprQualityFilter}
+                          onChange={(e) => setCprQualityFilter(e.target.value)}
+                        >
+                          <option value="ALL">All Grades</option>
+                          <option value="A+">A+ Grade</option>
+                          <option value="A">A Grade</option>
+                          <option value="B">B Grade</option>
+                          <option value="C">C Grade</option>
+                        </select>
+                      </div>
+                      
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] text-text-tertiary uppercase font-semibold">Value Relationship</label>
+                        <select 
+                          className="w-full bg-bg-tertiary border border-border-primary rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary"
+                          value={cprRelationshipFilter}
+                          onChange={(e) => setCprRelationshipFilter(e.target.value)}
+                        >
+                          <option value="ALL">All Relationships</option>
+                          <option value="HIGHER_VALUE">Higher Value</option>
+                          <option value="LOWER_VALUE">Lower Value</option>
+                          <option value="INSIDE_VALUE">Inside Value</option>
+                          <option value="OUTSIDE_VALUE">Outside Value</option>
+                          <option value="OVERLAPPING">Overlapping</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-5">
+                        <input 
+                          type="checkbox" 
+                          id="virginCpr"
+                          className="rounded border-border-primary bg-bg-tertiary text-brand-primary focus:ring-brand-primary focus:ring-1"
+                          checked={virginCprOnly}
+                          onChange={(e) => setVirginCprOnly(e.target.checked)}
+                        />
+                        <label htmlFor="virginCpr" className="text-xs text-text-primary cursor-pointer">Virgin CPR Only</label>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-5">
+                        <input 
+                          type="checkbox" 
+                          id="narrowCpr"
+                          className="rounded border-border-primary bg-bg-tertiary text-brand-primary focus:ring-brand-primary focus:ring-1"
+                          checked={narrowCprOnly}
+                          onChange={(e) => setNarrowCprOnly(e.target.checked)}
+                        />
+                        <label htmlFor="narrowCpr" className="text-xs text-text-primary cursor-pointer">Narrow CPR Only</label>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -9,6 +9,7 @@
 import { MarketStockData, MarketService } from '../market.service';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
 import { isMarketOpen, isTodayCandleClosed, getISTDateString, getISTTime } from '@/lib/market-hours';
@@ -213,9 +214,9 @@ export class BtstService {
     const signals: string[] = [];
 
     // +20 Value Relationship: higherValue === true
-    const higherValue = tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc;
+    const { isHigherValue } = compareCpr(todayCpr, tomorrowCpr);
     const isClvVariant = strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid';
-    if (higherValue && !isClvVariant) {
+    if (isHigherValue && !isClvVariant) {
       score += 20;
       signals.push('HIGHER_VALUE');
     }
@@ -299,9 +300,9 @@ export class BtstService {
     const signals: string[] = [];
 
     // +20 Value Relationship: lowerValue === true
-    const lowerValue = tomorrowCpr.bc < todayCpr.bc && tomorrowCpr.tc < todayCpr.tc;
+    const { isLowerValue } = compareCpr(todayCpr, tomorrowCpr);
     const isClvVariant = strategyVariant === 'clv_continuous' || strategyVariant === 'clv_hybrid';
-    if (lowerValue && !isClvVariant) {
+    if (isLowerValue && !isClvVariant) {
       score += 20;
       signals.push('LOWER_VALUE');
     }
