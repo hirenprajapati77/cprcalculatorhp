@@ -42,6 +42,14 @@ async function runRegressionLock() {
     const currentWidth = Number(current.width).toFixed(4);
     const legacyClass = legacy.classification;
     const currentClass = current.classification;
+    const legacyRR = Number(legacy.rr || 0).toFixed(2);
+    const currentRR = Number(current.rr || 0).toFixed(2);
+    const legacyTrend = legacy.trend || '';
+    const currentTrend = current.trend || '';
+    const legacySignals = legacy.signals.join(',');
+    // The new signals array might contain experimental tags, so we filter them out for a stable comparison if needed, or just compare raw.
+    // Since experimental is off by default, raw comparison is fine.
+    const currentSignals = current.signals.join(',');
 
     // Relationship parsing
     const relLegacy = legacy.signals.find((s: string) => s.includes('VALUE')) || 'NONE';
@@ -54,6 +62,9 @@ async function runRegressionLock() {
       legacyTarget === currentTarget &&
       legacyWidth === currentWidth &&
       legacyClass === currentClass &&
+      legacyRR === currentRR &&
+      legacyTrend === currentTrend &&
+      legacySignals === currentSignals &&
       relLegacy === relNew;
 
     if (!isMatch) {
@@ -65,6 +76,9 @@ async function runRegressionLock() {
       console.error(`   Width: ${legacyWidth} vs ${currentWidth}`);
       console.error(`   Class: ${legacyClass} vs ${currentClass}`);
       console.error(`   Rel:   ${relLegacy} vs ${relNew}`);
+      console.error(`   RR:    ${legacyRR} vs ${currentRR}`);
+      console.error(`   Trend: ${legacyTrend} vs ${currentTrend}`);
+      console.error(`   Signals: ${legacySignals} vs ${currentSignals}`);
     } else {
       console.log(`✅ ${sym} - MATCH`);
     }
