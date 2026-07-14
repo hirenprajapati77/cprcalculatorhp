@@ -159,6 +159,8 @@ const BtstStateBanner = () => {
 };
 
 interface ScannedStock {
+  distPivot?: number;
+  cprQuality?: "A+" | "A" | "B" | "C";
   id: string;
   direction?: 'LONG' | 'SHORT';
   symbol: string;

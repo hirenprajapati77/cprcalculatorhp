@@ -32,7 +32,7 @@ export interface ScannerSignalResult extends MarketStockData {
   degenerateData?: boolean;
   distPivot?: number;
   cprCompression?: CprCompressionStats | null;
-  cprQuality?: 'A+' | 'A' | 'B' | 'C';
+  cprQuality?: 'A+' | 'A' | 'B' | 'C' | undefined;
 }
 
 

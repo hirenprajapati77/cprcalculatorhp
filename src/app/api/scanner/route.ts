@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       date: today,
     };
 
-    const andConditions: any[] = [];
+    const andConditions: Record<string, unknown>[] = [];
 
     // Filter by Active Signal modes
     if (mode !== 'ALL') {
@@ -216,7 +216,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (andConditions.length > 0) {
-      (where as any).AND = andConditions;
+      (where as unknown as { AND: unknown[] }).AND = andConditions;
     }
 
     // Price Filter

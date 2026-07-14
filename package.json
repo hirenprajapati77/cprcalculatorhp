@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "regression-lock": "tsx scripts/regression_lock.ts",
+    "release:check": "tsc --noEmit && npm run lint && npm test && npm run regression-lock && npm run build:clean",
     "test": "tsc --noEmit && node --test -r tsx src/tests/**/*.test.ts"
   },
   "dependencies": {

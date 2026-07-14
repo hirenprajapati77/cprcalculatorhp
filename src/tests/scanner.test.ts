@@ -5,7 +5,7 @@ import { RankingService } from '../services/ranking.service';
 import { MarketStockData } from '../services/market.service';
 
 test('Scanner Service Signals Evaluation', async (t) => {
-  await t.test('evaluates NORMAL and BULLISH signals correctly', () => {
+  await t.test('evaluates NORMAL and BULLISH signals correctly', async () => {
     const mockStock: MarketStockData = {
       symbol: 'TESTSTOCK',
       market: 'NSE',
@@ -27,7 +27,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
     assert.ok(scanResult.signals.includes('BULLISH'));
   });
 
-  await t.test('evaluates BREAKDOWN signal correctly on high-volume move below bc', () => {
+  await t.test('evaluates BREAKDOWN signal correctly on high-volume move below bc', async () => {
     const mockStock: MarketStockData = {
       symbol: 'TESTSTOCK2',
       market: 'NSE',
@@ -46,7 +46,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
     assert.ok(scanResult.signals.includes('BREAKDOWN'), 'Missing BREAKDOWN signal');
   });
 
-  await t.test('detects GAPS and VIRGIN CPR correctly', () => {
+  await t.test('detects GAPS and VIRGIN CPR correctly', async () => {
     // Use IST-aware date to match signal.service.ts candle classification logic
     const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
     const mockStock: MarketStockData = {
@@ -97,7 +97,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
 });
 
 test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async (t) => {
-  await t.test('calculates correct trade setups for BULLISH bias', () => {
+  await t.test('calculates correct trade setups for BULLISH bias', async () => {
     // BULLISH: LTP > TC. Entry = TC, SL = min(dayLow, entry×0.995), Target = entry + 2×slDist, RR = 1:2.0
     const mockStock: MarketStockData = {
       symbol: 'BULLSTOCK',
@@ -127,7 +127,7 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
     assert.ok(rrNum >= 1.5, 'RR should be at least 1:1.5 for BULLISH');
   });
 
-  await t.test('calculates correct trade setups for BEARISH bias', () => {
+  await t.test('calculates correct trade setups for BEARISH bias', async () => {
     // BEARISH: LTP < BC. Entry = BC, SL = max(dayHigh, entry×1.005), Target = entry - 2×slDist, RR = 1:2.0
     const mockStock: MarketStockData = {
       symbol: 'BEARSTOCK',
@@ -159,7 +159,7 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
 });
 
 test('Ranking Service V2 Scoring & Classifications', async (t) => {
-  await t.test('assigns correct classification labels based on score ranges', () => {
+  await t.test('assigns correct classification labels based on score ranges', async () => {
     assert.strictEqual(RankingService.getClassification(95), 'A+');
     assert.strictEqual(RankingService.getClassification(80), 'A+');
     assert.strictEqual(RankingService.getClassification(75), 'A+');
@@ -174,7 +174,7 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
     assert.strictEqual(RankingService.getClassification(10), 'Ignore');
   });
 
-  await t.test('calculates correct score sum and caps at 100', () => {
+  await t.test('calculates correct score sum and caps at 100', async () => {
     // Category A: NARROW (15) + HIGHER_VALUE (10) + BREAKOUT (10) + KGS_INSIDE_CPR (10) = 45 (capped at 45)
     // Category B: Vol Ratio >= 1.5 (15) + Vol Ratio >= 1.2 (10) = 25
     // Category C: MOMENTUM (10) + NORMAL & BULLISH (10) = 20
@@ -221,7 +221,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
   // Use IST-aware date to match signal.service.ts candle classification logic
   const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days and PDL is respected', () => {
+  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days and PDL is respected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASCSTOCK',
       market: 'NSE',
@@ -247,7 +247,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
   });
 
-  await t.test('KGS_ASC_CPR is invalidated when close breaks below PDL', () => {
+  await t.test('KGS_ASC_CPR is invalidated when close breaks below PDL', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_INVALID',
       market: 'NSE',
@@ -272,7 +272,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be invalidated if close < PDL');
   });
 
-  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days and PDH is respected', () => {
+  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days and PDH is respected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESCSTOCK',
       market: 'NSE',
@@ -298,7 +298,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
   });
 
-  await t.test('KGS_DESC_CPR is invalidated when close breaks above PDH', () => {
+  await t.test('KGS_DESC_CPR is invalidated when close breaks above PDH', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESC_INVALID',
       market: 'NSE',
@@ -323,7 +323,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be invalidated if close > PDH');
   });
 
-  await t.test('KGS_ASC_REVERSAL fires when valid ASC setup yesterday is broken below PDL today', () => {
+  await t.test('KGS_ASC_REVERSAL fires when valid ASC setup yesterday is broken below PDL today', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_REV_VALID',
       market: 'NSE',
@@ -353,7 +353,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be mutually exclusive');
   });
 
-  await t.test('KGS_ASC_REVERSAL does NOT fire if yesterday was only a 2-leg match', () => {
+  await t.test('KGS_ASC_REVERSAL does NOT fire if yesterday was only a 2-leg match', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_REV_INVALID_SETUP',
       market: 'NSE',
@@ -379,7 +379,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_ASC_REVERSAL'), 'Should not fire if setup was invalid');
   });
 
-  await t.test('KGS_DESC_REVERSAL fires when valid DESC setup yesterday is broken above PDH today', () => {
+  await t.test('KGS_DESC_REVERSAL fires when valid DESC setup yesterday is broken above PDH today', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESC_REV_VALID',
       market: 'NSE',
@@ -406,7 +406,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be mutually exclusive');
   });
 
-  await t.test('KGS_INSIDE_CPR fires when today fully inside yesterday', () => {
+  await t.test('KGS_INSIDE_CPR fires when today fully inside yesterday', async () => {
     const mockStock: MarketStockData = {
       symbol: 'INSIDECPR',
       market: 'NSE',
@@ -431,7 +431,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_OUTSIDE_CPR'));
   });
 
-  await t.test('KGS_OUTSIDE_CPR fires when today fully contains yesterday', () => {
+  await t.test('KGS_OUTSIDE_CPR fires when today fully contains yesterday', async () => {
     const mockStock: MarketStockData = {
       symbol: 'OUTSIDECPR',
       market: 'NSE',
@@ -456,7 +456,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_INSIDE_CPR'));
   });
 
-  await t.test('KGS_RTP fires when SMA20/SMA50 slopes match sign', () => {
+  await t.test('KGS_RTP fires when SMA20/SMA50 slopes match sign', async () => {
     const mockStock: MarketStockData = {
       symbol: 'RTPSTOCK',
       market: 'NSE',
@@ -478,7 +478,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(scanResult.signals.includes('KGS_RTP'));
   });
 
-  await t.test('KGS_HP_RTP (a) valid crossing matching RTP direction fires', () => {
+  await t.test('KGS_HP_RTP (a) valid crossing matching RTP direction fires', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_STOCK', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -492,7 +492,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with positive RTP slope should fire');
   });
 
-  await t.test('KGS_HP_RTP (b) static position above/below 200 without crossing does not fire', () => {
+  await t.test('KGS_HP_RTP (b) static position above/below 200 without crossing does not fire', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_STATIC', market: 'NSE', sector: 'Tech', open: 205, high: 220, low: 205, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -507,7 +507,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Static position above 200 should not fire HP_RTP');
   });
 
-  await t.test('KGS_HP_RTP (c) crossing opposite RTP slope does not fire', () => {
+  await t.test('KGS_HP_RTP (c) crossing opposite RTP slope does not fire', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_CONFLICT', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -522,7 +522,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with negative RTP slope should not fire');
   });
 
-  await t.test('KGS_HP_RTP (d) missing sma200 or absent RTP correctly blocks it', () => {
+  await t.test('KGS_HP_RTP (d) missing sma200 or absent RTP correctly blocks it', async () => {
     const mockStockNo200: MarketStockData = {
       symbol: 'HP_RTP_NO200', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -549,7 +549,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(!res2.signals.includes('KGS_HP_RTP'), 'Missing RTP should block HP_RTP');
   });
 
-  await t.test('KGS_HP_RTP (e) fires correctly on live in-progress crossing', () => {
+  await t.test('KGS_HP_RTP (e) fires correctly on live in-progress crossing', async () => {
     const mockStockLive: MarketStockData = {
       symbol: 'HP_RTP_LIVE', market: 'NSE', sector: 'Tech', 
       open: 195, high: 215, low: 190, close: 195, // close is irrelevant for live
@@ -566,7 +566,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with live ltp should fire');
   });
 
-  await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', () => {
+  await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'INSIDEVAL',
       market: 'NSE',
@@ -620,7 +620,7 @@ test('SMA Slope — non-overlapping windows produce meaningful slope', async (t)
     return { sma20Slope, sma50Slope };
   }
 
-  await t.test('rising price series produces sma20Slope > 10 with 40 closes', () => {
+  await t.test('rising price series produces sma20Slope > 10 with 40 closes', async () => {
     const closes = Array.from({ length: 40 }, (_, i) => 100 + i);
     const { sma20Slope } = computeSmaSlopes(closes);
     assert.ok(sma20Slope > 0, `Expected sma20Slope > 0, got ${sma20Slope}`);
@@ -628,19 +628,19 @@ test('SMA Slope — non-overlapping windows produce meaningful slope', async (t)
     assert.ok(sma20Slope >= 10, `Expected sma20Slope >= 10, got ${sma20Slope}`);
   });
 
-  await t.test('falling price series produces negative sma20Slope', () => {
+  await t.test('falling price series produces negative sma20Slope', async () => {
     const closes = Array.from({ length: 40 }, (_, i) => 139 - i);
     const { sma20Slope } = computeSmaSlopes(closes);
     assert.ok(sma20Slope < 0, `Expected sma20Slope < 0, got ${sma20Slope}`);
   });
 
-  await t.test('insufficient history (< 40 bars) returns sma20Slope = 0', () => {
+  await t.test('insufficient history (< 40 bars) returns sma20Slope = 0', async () => {
     const closes = Array.from({ length: 25 }, (_, i) => 100 + i);
     const { sma20Slope } = computeSmaSlopes(closes);
     assert.strictEqual(sma20Slope, 0, 'Should return 0 when history < 40 bars');
   });
 
-  await t.test('flat price series produces sma20Slope = 0', () => {
+  await t.test('flat price series produces sma20Slope = 0', async () => {
     const closes = Array.from({ length: 40 }, () => 100);
     const { sma20Slope } = computeSmaSlopes(closes);
     assert.strictEqual(sma20Slope, 0, 'Flat series should produce slope of 0');
@@ -690,7 +690,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
     ]
   };
 
-  await t.test('scanStock(stock, "2026-06-03") forwards asOfDate, triggers SignalService-only GAP_UP signal', () => {
+  await t.test('scanStock(stock, "2026-06-03") forwards asOfDate, triggers SignalService-only GAP_UP signal', async () => {
     const res = await ScannerService.scanStock({
       ...mockStock,
       open: 110,
@@ -704,7 +704,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
     assert.ok(res.signals.includes('GAP_UP'), 'Should include GAP_UP signal when asOfDate aligns to Day 3');
   });
 
-  await t.test('scanStock(stock, "2026-06-02") does not trigger GAP_UP', () => {
+  await t.test('scanStock(stock, "2026-06-02") does not trigger GAP_UP', async () => {
     const res = await ScannerService.scanStock({
       ...mockStock,
       open: 100,
@@ -717,7 +717,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
     assert.ok(!res.signals.includes('GAP_UP'), 'Should not include GAP_UP when asOfDate is Day 2');
   });
 
-  await t.test('scanStock(stock) with no asOfDate defaults to real system date (no GAP_UP)', () => {
+  await t.test('scanStock(stock) with no asOfDate defaults to real system date (no GAP_UP)', async () => {
     const res = await ScannerService.scanStock({
       ...mockStock,
       open: 110,
