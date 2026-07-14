@@ -124,8 +124,13 @@ export class RankingService {
       };
     });
 
-    // Sort descending by score
-    return scored.sort((a, b) => b.score - a.score);
+    // Sort descending by score, tie-break by symbol ascending for deterministic output
+    return scored.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return a.symbol.localeCompare(b.symbol);
+    });
   }
 }
 

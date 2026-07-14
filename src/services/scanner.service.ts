@@ -71,7 +71,7 @@ export class ScannerService {
         degenerateData = true;
       }
       
-      yesterdayCandle = isTodayCandleFinal 
+      yesterdayCandle = isLastToday 
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
         : lastCandle;
     }

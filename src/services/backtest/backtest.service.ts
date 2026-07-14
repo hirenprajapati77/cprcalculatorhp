@@ -520,8 +520,9 @@ export class BacktestService {
                 } else {
                   // Non-gap intraday touch of TC — require EOD close confirmation:
                   // close > TC (day held above TC) AND close > open (bullish body, not wick rejection)
-                  // Models BTST-style confirmed breakout on daily data; entry at TC price.
+                  // Strategy: Daily confirmed breakout. Entry: Market-on-close after confirmation.
                   if (today.close <= cpr.tc || today.close <= today.open) continue;
+                  entryPrice = today.close;
                   entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 }
 
@@ -554,7 +555,9 @@ export class BacktestService {
                 } else {
                   // Non-gap intraday touch of BC — require EOD close confirmation:
                   // close < BC (day held below BC) AND close < open (bearish body, not wick rejection)
+                  // Strategy: Daily confirmed breakdown. Entry: Market-on-close after confirmation.
                   if (today.close >= cpr.bc || today.close >= today.open) continue;
+                  entryPrice = today.close;
                   entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
                 }
 

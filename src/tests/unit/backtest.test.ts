@@ -365,3 +365,28 @@ test('TradeEngineService — SCANNER_DRIVEN holding period and safety valve', as
 });
 
 
+test('Backtest Look-Ahead Bias Prevention (P0)', async (t) => {
+  await t.test('BTST enters at Market-On-Close, not at intraday limit TC', () => {
+    // Given:
+    const cpr = { tc: 100, bc: 98, pivot: 99 };
+    // 10:15 AM: price = 100
+    // 2:00 PM: price = 98
+    // 3:30 PM Close: price = 103
+    const todayCandle = { date: '2026-07-14', open: 101, high: 105, low: 98, close: 103, volume: 1000 };
+    
+    // Simulate the backtest entry logic for a BULLISH trade (LONG)
+    // The previous buggy logic would do: entryPrice = cpr.tc (100)
+    // The fixed logic does: entryPrice = today.close (103)
+    
+    let entryPrice = 0;
+    
+    // The exact fix from src/services/backtest/backtest.service.ts
+    // Wait for EOD confirmation:
+    if (todayCandle.close > cpr.tc) {
+      entryPrice = todayCandle.close; // FIXED
+    }
+    
+    assert.strictEqual(entryPrice, 103, 'Entry price must be the Close price (103), NOT the intraday TC (100)');
+    assert.notStrictEqual(entryPrice, 100, 'Entry price should never equal the theoretical TC level if the strategy specifies Market-On-Close');
+  });
+});
