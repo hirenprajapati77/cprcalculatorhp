@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { BtstService } from '@/services/backtest/btst.service';
 import { MarketService } from '@/services/market.service';
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const bypassWindow = process.env.NODE_ENV !== 'production' && 
+  const bypassWindow = env.NODE_ENV !== 'production' && 
                        searchParams.get('bypassWindow') === 'true';
 
   const { hour, minute, isTradingDay } = getISTTime();

@@ -1,10 +1,11 @@
+import { env } from '@/config/env';
 import test from 'node:test';
 import assert from 'node:assert';
-import redisClient, { cache } from '../lib/redis';
+import redisClient, { cache } from '../../lib/redis';
 
 test('Redis Cache Client Tests', async (t) => {
   await t.test('Initial state or ready state check', async () => {
-    if (!process.env.REDIS_URL) {
+    if (!env.REDIS_URL) {
       assert.strictEqual(redisClient, null);
       await cache.set('test_key', 'test_value', 10);
       const val = await cache.get('test_key');

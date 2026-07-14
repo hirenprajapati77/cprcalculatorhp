@@ -1,8 +1,9 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { OvernightService } from '@/services/overnight/overnight.service';
 
 export async function POST(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = env.CRON_SECRET;
   const authHeader = req.headers.get('x-cron-secret');
 
   if (!cronSecret || authHeader !== cronSecret) {
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     const mockTime = searchParams.get('mockTime'); // Support testing different times
 
     let dateOverride: Date | undefined;
-    if (mockTime && process.env.NODE_ENV !== 'production') {
+    if (mockTime && env.NODE_ENV !== 'production') {
       dateOverride = new Date(mockTime);
     }
 

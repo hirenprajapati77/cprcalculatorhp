@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'assert';
-import { getISTDateString, getISTTime, isTodayCandleClosed, isMarketOpen } from '../lib/market-hours';
+import { getISTDateString, getISTTime, isTodayCandleClosed, isMarketOpen } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
   describe('getISTDateString', () => {

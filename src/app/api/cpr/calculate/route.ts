@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { CPRInputSchema } from '@/utils/validate';
 import { CalculationService } from '@/services/calculation.service';
@@ -7,7 +8,7 @@ async function checkRateLimit(request: NextRequest): Promise<boolean> {
   let ip = '127.0.0.1';
   // Only trust x-forwarded-for if explicitly enabled via environment variable
   // indicating we are behind a trusted proxy
-  if (process.env.TRUST_PROXY === 'true') {
+  if (env.TRUST_PROXY === 'true') {
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
       ip = forwardedFor.split(',')[0].trim();
@@ -21,8 +22,8 @@ async function checkRateLimit(request: NextRequest): Promise<boolean> {
   // so we default to a shared bucket or the server IP unless proxy is trusted.
   // In production, TRUST_PROXY should be set to true if behind NGINX/Cloudflare.
 
-  const limit = Number(process.env.RATE_LIMIT_MAX) || 60;
-  const windowMs = Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000;
+  const limit = Number(env.RATE_LIMIT_MAX) || 60;
+  const windowMs = Number(env.RATE_LIMIT_WINDOW_MS) || 60000;
   const ttlSeconds = Math.ceil(windowMs / 1000);
   const cacheKey = `rate_limit:${ip}`;
 

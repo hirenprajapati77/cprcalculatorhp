@@ -1,11 +1,11 @@
+import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
 import { CacheService } from './cache.service';
 import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
 
-// Module-level failure tracker — persists across scan runs within the same process
-const PERSISTENT_FAILURES = new Map<string, number>();
+// Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
 export class ScannerController {
   /**
@@ -36,8 +36,8 @@ export class ScannerController {
       stocks = MarketService.getUniverse(universeName);
     }
 
-    const execMode = process.env.EXECUTION_MODE || 'auto';
-    const queueThreshold = parseInt(process.env.SCAN_QUEUE_THRESHOLD || '75', 10);
+    const execMode = env.EXECUTION_MODE || 'auto';
+    const queueThreshold = parseInt(env.SCAN_QUEUE_THRESHOLD?.toString() || '75', 10);
     
     const shouldQueue = 
       execMode === 'queue' || 
@@ -71,19 +71,22 @@ export class ScannerController {
       
       const batchPromises = batch.map(async (stockMeta) => {
         // Skip blacklisted symbols (3+ consecutive fetch failures)
-        if ((PERSISTENT_FAILURES.get(stockMeta.symbol) || 0) >= 3) return null;
+        const failureCacheKey = `failure_count_${stockMeta.symbol}`;
+        const prevFailures = await CacheService.get<number>(failureCacheKey) || 0;
+        if (prevFailures >= 3) return null;
 
         try {
           const data = await MarketService.getStockData(stockMeta.symbol, market);
           if (data) {
             // Reset failure count on success
-            PERSISTENT_FAILURES.delete(stockMeta.symbol);
+            await CacheService.delete(`failure_count_${stockMeta.symbol}`);
             return await ScannerService.scanStock(data);
           }
         } catch (err) {
           const sym = stockMeta.symbol;
-          const failCount = (PERSISTENT_FAILURES.get(sym) || 0) + 1;
-          PERSISTENT_FAILURES.set(sym, failCount);
+          const failureCacheKey = `failure_count_${sym}`;
+          const failCount = (await CacheService.get<number>(failureCacheKey) || 0) + 1;
+          await CacheService.set(failureCacheKey, failCount, 86400); // Persist failure count for a day
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[SKIP] ${sym} - fetch failed: ${errMsg}`);
           if (failCount >= 3) {
@@ -216,7 +219,7 @@ export class ScannerController {
 
     // Cache the filtered list for 5 minutes (300 seconds)
     const cacheKey = `list:${universeName}:${market}`;
-    await CacheService.set(cacheKey, filtered, 300);
+    await CacheService.set(cacheKey, filtered, 120);
 
     return filtered;
   }

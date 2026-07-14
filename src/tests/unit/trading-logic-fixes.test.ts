@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { MetricsService } from '../services/backtest/metrics.service';
-import { calculateCPR } from '../lib/cpr-engine';
+import { MetricsService } from '../../services/backtest/metrics.service';
+import { calculateCPR } from '../../lib/cpr-engine';
 
 test('Quantitative Trading Logic Fixes', async (t) => {
   await t.test('Short return calculation math in computeMetricsFromTrades', () => {

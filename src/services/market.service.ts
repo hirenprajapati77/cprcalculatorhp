@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
 
@@ -337,7 +338,7 @@ export class MarketService {
    * Returns the current data mode (live/mock/paper) for the UI status badge.
    */
   static getLiveStatus(): LiveStatus {
-    const dataMode = process.env.MARKET_DATA_MODE || 'live';
+    const dataMode = env.MARKET_DATA_MODE || 'live';
     if (dataMode === 'live') return { mode: 'live', source: 'Yahoo Finance (Real-time)' };
     if (dataMode === 'paper') return { mode: 'paper', source: 'Paper Trading (Simulated)' };
     return { mode: 'mock', source: 'Mock Data (Static)' };
@@ -388,7 +389,7 @@ export class MarketService {
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
     const cleanSymbol = symbol.trim();
-    const dataMode = process.env.MARKET_DATA_MODE || 'live';
+    const dataMode = env.MARKET_DATA_MODE || 'live';
     const cacheKey = `stock_data_${cleanSymbol}_${market}_${dataMode}`;
     const cached = await CacheService.get<MarketStockData>(cacheKey);
     

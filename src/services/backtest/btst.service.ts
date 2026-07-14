@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 /**
  * SIMPLE ENGINE — AUTHORITATIVE. Currently used by /api/btst, ScannerClient UI tabs
  * (BTST/STBT/OVERNIGHT), and the Telegram cron alert. Max score 100.
@@ -7,8 +8,9 @@
  * See project audit notes.
  */
 import { MarketStockData, MarketService } from '../market.service';
+import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
-import { getAtrPct } from '@/lib/atr';
+import { getAtrPct, calculateATR } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
@@ -53,8 +55,8 @@ export class BtstService {
   static isExecutionWindowOpen(bypassQuery?: boolean, now: Date = new Date()): boolean {
     const bypassAllowed = 
       bypassQuery ||
-      (process.env.NODE_ENV !== 'production' &&
-      process.env.BTST_BYPASS_WINDOW === 'true');
+      (env.NODE_ENV !== 'production' &&
+      env.BTST_BYPASS_WINDOW === 'true');
 
     if (bypassAllowed) {
       return true;
@@ -87,8 +89,8 @@ export class BtstService {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stockResults: { stockMeta: any; stock: any }[] = [];
-    const batchSize = Number(process.env.YAHOO_BATCH_SIZE || 10);
-    const maxRetries = Number(process.env.YAHOO_MAX_RETRIES || 3);
+    const batchSize = Number(env.YAHOO_BATCH_SIZE || 10);
+    const maxRetries = Number(env.YAHOO_MAX_RETRIES || 3);
 
     for (let i = 0; i < stocks.length; i += batchSize) {
       const batch = stocks.slice(i, i + batchSize);
@@ -236,7 +238,7 @@ export class BtstService {
         signals.push('CLV_SCORED');
         return { score, signals };
       } else {
-        score = Math.round(((clv + 1) / 2) * 75);
+        score = Math.round(((clv + 1) / 2) * BTST_SCORING.CLV_BASE_MULTIPLIER);
         signals.push('CLV_HYBRID_BASE');
       }
     }
@@ -322,7 +324,7 @@ export class BtstService {
         signals.push('CLV_SCORED');
         return { score, signals };
       } else {
-        score = Math.round(((-clv + 1) / 2) * 75);
+        score = Math.round(((-clv + 1) / 2) * BTST_SCORING.CLV_BASE_MULTIPLIER);
         signals.push('CLV_HYBRID_BASE');
       }
     }
@@ -490,7 +492,7 @@ export class BtstService {
         const close = stock.ltp;
         const clv = ((close - low) - (high - close)) / (high - low);
         const factor = isLong ? clv : -clv;
-        const multiplier = strategyVariant === 'clv_continuous' ? 100 : 75;
+        const multiplier = strategyVariant === 'clv_continuous' ? BTST_SCORING.CLV_CONTINUOUS_MULTIPLIER : BTST_SCORING.CLV_BASE_MULTIPLIER;
         clvScore = Math.round(((factor + 1) / 2) * multiplier);
       }
     }
@@ -506,7 +508,7 @@ export class BtstService {
 
     if (strategyVariant === 'no_vdu_weighted') {
       vduPoints = 0;
-      const cprWeight = process.env.CPR_WEIGHT ? parseInt(process.env.CPR_WEIGHT, 10) : 35;
+      const cprWeight = env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : 35;
       cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? cprWeight : 0;
     }
 
@@ -617,9 +619,9 @@ export class BtstService {
     // 2. Scoring
     let clvScore = 0;
     if (direction === 'LONG') {
-      clvScore = Math.round(((clv + 1) / 2) * 75);
+      clvScore = Math.round(((clv + 1) / 2) * BTST_SCORING.CLV_BASE_MULTIPLIER);
     } else if (direction === 'SHORT') {
-      clvScore = Math.round(((-clv + 1) / 2) * 75);
+      clvScore = Math.round(((-clv + 1) / 2) * BTST_SCORING.CLV_BASE_MULTIPLIER);
     } else {
       clvScore = 0;
     }

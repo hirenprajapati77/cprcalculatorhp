@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { FyersAuthService } from '../services/fyers-auth.service';
-import { OptionChainService } from '../services/option-chain.service';
-import { OptionSuggestionService } from '../services/option-suggestion.service';
+import { FyersAuthService } from '../../services/fyers-auth.service';
+import { OptionChainService } from '../../services/option-chain.service';
+import { OptionSuggestionService } from '../../services/option-suggestion.service';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 

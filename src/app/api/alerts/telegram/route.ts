@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/alert/telegram.service';
 
@@ -7,8 +8,8 @@ export async function POST(req: NextRequest) {
     const { test, chatId, token } = body;
 
     if (test) {
-      const resolvedToken = token || process.env.TELEGRAM_BOT_TOKEN;
-      const resolvedChatId = chatId || process.env.TELEGRAM_CHAT_ID;
+      const resolvedToken = token || env.TELEGRAM_BOT_TOKEN;
+      const resolvedChatId = chatId || env.TELEGRAM_CHAT_ID;
       
       if (!resolvedToken || !resolvedChatId) {
          return NextResponse.json({ success: false, message: 'Bot Token or Chat ID not configured' }, { status: 400 });

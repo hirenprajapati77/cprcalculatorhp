@@ -13,7 +13,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { TradeEngineService } from '../services/backtest/trade-engine.service';
+import { TradeEngineService } from '../../services/backtest/trade-engine.service';
 
 const BASE_CONFIG = {
   capital: 100000,

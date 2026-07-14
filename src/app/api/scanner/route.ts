@@ -4,6 +4,7 @@ import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
 import { isMarketOpen } from '@/lib/market-hours';
+import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 
 export const dynamic = 'force-dynamic';
 
@@ -133,6 +134,25 @@ export async function GET(request: NextRequest) {
     }
 
 
+
+    // If circuit is open, fallback to cache immediately
+    if (DatabaseCircuitBreaker.isOpen()) {
+      const { CacheService } = await import('@/services/cache.service');
+      const cached = await CacheService.get('AUTO_SCAN_RESULT');
+      if (cached && typeof cached === 'object' && 'data' in cached) {
+        const cachedData = cached as { data: any[]; timestamp?: string };
+        return NextResponse.json({
+          success: true,
+          degraded: true,
+          message: 'Serving cached data because the database is temporarily unavailable.',
+          cachedAt: cachedData.timestamp,
+          results: cachedData.data,
+          fromCache: true
+        });
+      }
+      return NextResponse.json({ success: false, degraded: true, message: 'Database is unavailable and no cache is available', results: [] }, { status: 503 });
+    }
+
     // 1. Auto-initialize today's database records if empty
     try {
       const todayCount = await prisma.scannerResult.count({
@@ -243,7 +263,7 @@ export async function GET(request: NextRequest) {
     // 5. Query Database
     const offset = isAll ? undefined : (page - 1) * limit!;
     
-    const [results, total, fullStats] = await Promise.all([
+    const [results, total, fullStats] = await DatabaseCircuitBreaker.execute(() => Promise.all([
       prisma.scannerResult.findMany({
         where,
         orderBy: {
@@ -257,7 +277,7 @@ export async function GET(request: NextRequest) {
         where,
         select: { score: true, signalSummary: true }
       })
-    ]);
+    ]));
 
     let strongBuyCount = 0;
     let breakoutReadyCount = 0;

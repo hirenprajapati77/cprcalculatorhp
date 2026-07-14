@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import 'dotenv/config';
 import crypto from 'crypto';
 
@@ -8,9 +9,9 @@ async function getPrisma() {
 
 export class FyersAuthService {
   public static getCredentials() {
-    const appId = process.env.FYERS_APP_ID;
-    const secretId = process.env.FYERS_SECRET_ID;
-    const redirectUrl = process.env.FYERS_REDIRECT_URL;
+    const appId = env.FYERS_APP_ID;
+    const secretId = env.FYERS_SECRET_ID;
+    const redirectUrl = env.FYERS_REDIRECT_URL;
     if (!appId || !secretId || !redirectUrl) {
       throw new Error('Fyers credentials missing from environment variables');
     }
@@ -191,7 +192,7 @@ export class FyersAuthService {
       }
 
       // 2. Fallback to Cloudflare Worker Proxy
-      const authProxyUrl = process.env.FYERS_AUTH_PROXY_URL;
+      const authProxyUrl = env.FYERS_AUTH_PROXY_URL;
       if (!authProxyUrl) {
         return { success: false, message: 'Direct Fyers token exchange failed and no trusted proxy is configured.' };
       }

@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { CacheService } from '../cache.service';
 import { getISTTime } from '../../lib/market-hours';
 
@@ -19,7 +20,7 @@ export interface HistoricalMetadata {
 
 export class HistoricalProvider {
   static getMode(): string {
-    return process.env.HISTORICAL_MODE || 'mock'; // mock | cached | live
+    return env.HISTORICAL_MODE || 'mock'; // mock | cached | live
   }
 
   static async getHistory(symbol: string, startDate: Date, endDate: Date): Promise<OHLC[]> {

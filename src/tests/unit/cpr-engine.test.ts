@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { calculateCPR } from '../lib/cpr-engine';
-import { CPRInputSchema } from '../utils/validate';
+import { calculateCPR } from '../../lib/cpr-engine';
+import { CPRInputSchema } from '../../utils/validate';
 
 test('CPR Engine Calculations', async (t) => {
   await t.test('calculates correct levels with balanced inputs', () => {

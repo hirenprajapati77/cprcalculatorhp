@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
 
 export interface EventRiskResult {
@@ -59,7 +60,7 @@ export class EventCalendarService {
         select: { createdAt: true }
       });
       
-      const isHistoricalMode = process.env.HISTORICAL_MODE === 'mock' || process.env.HISTORICAL_MODE === 'db';
+      const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
       
       let isCalendarStale = false;
       if (!isHistoricalMode) {
@@ -158,7 +159,7 @@ export class EventCalendarService {
         select: { createdAt: true }
       });
       
-      const isHistoricalMode = process.env.HISTORICAL_MODE === 'mock' || process.env.HISTORICAL_MODE === 'db';
+      const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
       
       let isCalendarStale = false;
       if (!isHistoricalMode) {

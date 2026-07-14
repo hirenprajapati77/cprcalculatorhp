@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { prisma } from '../lib/db';
-import { TradeJournalService } from '../services/journal/trade-journal.service';
+import { prisma } from '../../lib/db';
+import { TradeJournalService } from '../../services/journal/trade-journal.service';
 
 test('TradeJournalService Phase 3', async (t) => {
   await t.test('Classifies EXECUTION_SLIPPAGE correctly', async () => {
@@ -118,7 +118,7 @@ test('TradeJournalService Phase 3', async (t) => {
   });
 
   await t.test('fetchOptionCmp calls getOptionChain with allowRollover=false', async () => {
-    const { OptionChainService } = await import('../services/option-chain.service');
+    const { OptionChainService } = await import('../../services/option-chain.service');
     const originalGetOptionChain = OptionChainService.getOptionChain;
     
     let allowRolloverPassed = true;
@@ -137,7 +137,7 @@ test('TradeJournalService Phase 3', async (t) => {
   });
 
   await t.test('fetchOptionCmp rejects mismatched expiry', async () => {
-    const { OptionChainService } = await import('../services/option-chain.service');
+    const { OptionChainService } = await import('../../services/option-chain.service');
     const originalGetOptionChain = OptionChainService.getOptionChain;
     
     // @ts-expect-error test mock

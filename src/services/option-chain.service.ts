@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { FyersAuthService } from './fyers-auth.service';
 import { CacheService } from './cache.service';
 
@@ -179,7 +180,7 @@ export class OptionChainService {
               method: 'direct'
             };
             console.log(`[OptionChain] Direct fetch succeeded for ${cleanSym}.`);
-            await CacheService.set(cacheKey, result, 60);
+            await CacheService.set(cacheKey, result, 600);
             return result;
           }
         }
@@ -189,7 +190,7 @@ export class OptionChainService {
       }
 
       // 2. FALLBACK to Cloudflare proxy worker
-      const proxyUrl = process.env.FYERS_AUTH_PROXY_URL;
+      const proxyUrl = env.FYERS_AUTH_PROXY_URL;
       if (!proxyUrl) {
         console.warn(`[OptionChain] Direct call failed and FYERS_AUTH_PROXY_URL is not set. Aborting proxy fallback.`);
         return { error: 'PROXY_NOT_CONFIGURED' };
@@ -228,7 +229,7 @@ export class OptionChainService {
             method: 'proxy'
           };
           console.log(`[OptionChain] Proxy fetch succeeded for ${cleanSym}.`);
-          await CacheService.set(cacheKey, result, 60);
+          await CacheService.set(cacheKey, result, 600);
           return result;
         }
       }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { MarketService, MarketStockData } from '../services/market.service';
-import { CacheService } from '../services/cache.service';
+import { MarketService, MarketStockData } from '../../services/market.service';
+import { CacheService } from '../../services/cache.service';
 
 test('Market Service - 200 SMA Plumbing', async (t) => {
 

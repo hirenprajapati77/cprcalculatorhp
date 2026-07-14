@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
@@ -10,12 +11,12 @@ export async function GET() {
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
   
-  const backtestMode = process.env.BACKTEST_EXECUTION_MODE || 'queue';
-  const isProd = process.env.NODE_ENV === 'production';
-  const historicalMode = process.env.HISTORICAL_MODE || 'mock';
+  const backtestMode = env.BACKTEST_EXECUTION_MODE || 'queue';
+  const isProd = env.NODE_ENV === 'production';
+  const historicalMode = env.HISTORICAL_MODE || 'mock';
   const hasMisconfig = isProd && historicalMode !== 'live';
-  const executionMode = process.env.EXECUTION_MODE || 'SHADOW';
-  const appVersion = process.env.APP_VERSION || process.env.npm_package_version || 'v1.0.0-rc.1';
+  const executionMode = env.EXECUTION_MODE || 'SHADOW';
+  const appVersion = env.APP_VERSION || process.env.npm_package_version || 'v1.0.0-rc.1';
 
   let dbStatus = 'healthy';
   let dbError = null;
@@ -93,8 +94,8 @@ export async function GET() {
     status: isHealthy ? 'healthy' : 'degraded',
     ...(hasMisconfig ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` } : {}),
     version: appVersion,
-    build: process.env.BUILD_TIMESTAMP || new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    build: env.BUILD_TIMESTAMP || new Date().toISOString(),
+    environment: env.NODE_ENV || 'development',
     executionMode,
     checks: {
       database: dbStatus,

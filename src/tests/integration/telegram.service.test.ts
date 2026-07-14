@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { TelegramService } from '../services/alert/telegram.service';
-import { prisma } from '../lib/db';
-import { encrypt } from '../lib/crypto';
+import { TelegramService } from '../../services/alert/telegram.service';
+import { prisma } from '../../lib/db';
+import { encrypt } from '../../lib/crypto';
 
 describe('TelegramService', () => {
   let originalFetch: typeof global.fetch;

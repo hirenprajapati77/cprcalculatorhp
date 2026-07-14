@@ -1,4 +1,6 @@
 import { ScannerSignalResult } from './scanner.service';
+import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
+import { MarketStockData } from './market.service';
 
 export class RankingService {
   /**
@@ -55,10 +57,10 @@ export class RankingService {
 
     // Category B: Volume & Liquidity (Max 25, Additive)
     let catBSum = 0;
-    if (signals.includes('VOLUME_SPIKE') || volumeRatio >= 1.5) {
+    if (signals.includes('VOLUME_SPIKE') || volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO) {
       catBSum += 15;
     }
-    if (volumeRatio >= 1.2) {
+    if (volumeRatio >= VOLUME_THRESHOLDS.STRONG_RATIO) {
       catBSum += 10;
     }
     const catB = Math.min(25, catBSum);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { CacheService } from '../services/cache.service';
+import { CacheService } from '../../services/cache.service';
 
 test('CacheService Falsy values', async (_t) => {
   const metricsBefore = await CacheService.getMetrics();

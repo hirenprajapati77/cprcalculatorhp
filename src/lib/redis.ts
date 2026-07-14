@@ -1,10 +1,11 @@
+import { env } from '@/config/env';
 import Redis from 'ioredis';
 
 let redis: Redis | null = null;
 
-if (process.env.REDIS_URL) {
+if (env.REDIS_URL) {
   try {
-    redis = new Redis(process.env.REDIS_URL, {
+    redis = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: 1,
       lazyConnect: true, // Do not block application startup
       connectTimeout: 2000, // Fast timeout
@@ -17,7 +18,7 @@ if (process.env.REDIS_URL) {
       // Log silently to avoid flooding console in environment without Redis
       const now = Date.now();
       if (now - lastErrorLogTime > ERROR_LOG_THROTTLE_MS) {
-        if (process.env.NODE_ENV === 'development') {
+        if (env.NODE_ENV === 'development') {
           console.warn('Redis connection issue, using memory cache fallback:', err.message);
         }
         lastErrorLogTime = now;
@@ -31,7 +32,7 @@ if (process.env.REDIS_URL) {
     console.warn('Failed to initialize Redis client:', err);
   }
 } else {
-  if (process.env.NODE_ENV === 'production') {
+  if (env.NODE_ENV === 'production') {
     console.warn('WARNING: REDIS_URL is not set in production. Rate limiting and caching will fall back to an in-memory map which is NOT shared across multiple workers or instances!');
   }
 }
