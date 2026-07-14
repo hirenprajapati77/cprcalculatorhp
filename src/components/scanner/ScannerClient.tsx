@@ -1705,7 +1705,7 @@ export default function ScannerClient() {
     let ready = 0, strong = 0, gapSum = 0, confSum = 0;
     results.forEach(r => {
       ready++;
-      if (r.btstClassification === 'STRONG_BTST') strong++;
+      if (r.score >= 75 || r.btstClassification === 'STRONG_BTST') strong++;
       gapSum += r.expectedGap || 0;
       confSum += r.confidence || 0;
     });
