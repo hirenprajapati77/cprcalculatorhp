@@ -181,7 +181,7 @@ export class BacktestService {
               };
 
               // 2. Call scanStock
-              const scanResult = ScannerService.scanStock(stock, today.date);
+              const scanResult = await ScannerService.scanStock(stock, today.date);
               const { entry, sl, target, score, confidence, signals } = scanResult;
               const bias = signals.includes('BULLISH') ? 'BULLISH'
                          : signals.includes('BEARISH') ? 'BEARISH'

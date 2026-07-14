@@ -1,4 +1,4 @@
-import { CPRResult } from './cpr-engine';
+import { CPRResult } from '@/types/cpr.types';
 
 export interface CprRelationship {
   /** Exact match to legacy logic for BTST compatibility */
