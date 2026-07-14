@@ -23,14 +23,14 @@ export class JournalReportService {
       },
     });
 
-    const groups: Record<string, { count: number; wins: number; totalPnlPct: number }> = {};
+    const groups: Record<string, { count: number; wins: number; losses: number; totalPnlPct: number }> = {};
 
     for (const trade of closedTrades) {
       const val = (trade as Record<string, unknown>)[field];
       const key = typeof val === 'string' && val.trim() !== '' ? val : 'UNKNOWN';
 
       if (!groups[key]) {
-        groups[key] = { count: 0, wins: 0, totalPnlPct: 0 };
+        groups[key] = { count: 0, wins: 0, losses: 0, totalPnlPct: 0 };
       }
       
       const pnl = trade.pnl ?? 0;
@@ -40,15 +40,20 @@ export class JournalReportService {
       groups[key].totalPnlPct += pnlPct;
       if (pnl > 0) {
         groups[key].wins += 1;
+      } else if (pnl < 0) {
+        groups[key].losses += 1;
       }
     }
 
-    return Object.entries(groups).map(([groupValue, stats]) => ({
-      groupValue,
-      count: stats.count,
-      winRate: stats.count > 0 ? (stats.wins / stats.count) * 100 : 0,
-      avgPnlPct: stats.count > 0 ? (stats.totalPnlPct / stats.count) : 0,
-    })).sort((a, b) => b.count - a.count);
+    return Object.entries(groups).map(([groupValue, stats]) => {
+      const decisive = stats.wins + stats.losses;
+      return {
+        groupValue,
+        count: stats.count,
+        winRate: decisive > 0 ? (stats.wins / decisive) * 100 : 0,
+        avgPnlPct: stats.count > 0 ? (stats.totalPnlPct / stats.count) : 0,
+      };
+    }).sort((a, b) => b.count - a.count);
   }
 
   static async getQualityBucketStats(): Promise<GroupedStat[]> {

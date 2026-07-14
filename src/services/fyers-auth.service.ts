@@ -70,19 +70,25 @@ export class FyersAuthService {
       const { encrypt } = await import('@/lib/crypto');
       const encryptedToken = encrypt(token);
       const prisma = await getPrisma();
-      await prisma.brokerToken.upsert({
-        where: { broker: 'fyers' },
-        update: {
-          accessToken: encryptedToken,
-          expiresAt: expiresAt,
-          updatedAt: new Date()
-        },
-        create: {
-          broker: 'fyers',
-          accessToken: encryptedToken,
-          expiresAt: expiresAt
-        }
-      });
+      const existing = await prisma.brokerToken.findFirst({ where: { broker: 'fyers' } });
+      if (existing) {
+        await prisma.brokerToken.update({
+          where: { id: existing.id },
+          data: {
+            accessToken: encryptedToken,
+            expiresAt: expiresAt,
+            updatedAt: new Date()
+          }
+        });
+      } else {
+        await prisma.brokerToken.create({
+          data: {
+            broker: 'fyers',
+            accessToken: encryptedToken,
+            expiresAt: expiresAt
+          }
+        });
+      }
       console.log('[FyersAuthService] Token saved successfully in DB.');
     } catch (err) {
       console.error('[FyersAuthService] Error saving token to database:', err);
