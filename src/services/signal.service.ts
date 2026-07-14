@@ -1,4 +1,5 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
+import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
@@ -126,21 +127,27 @@ export class SignalService {
     const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
     // ── Value Relationships ───────────────────────────────────────────────────
-    let insideValue = false;
-    let higherValue = false;
-    let lowerValue = false;
-    let overlappingValue = false;
+    const rel = compareCpr(cprToday, cprTomorrow);
 
-    insideValue = cprTomorrow.bc >= cprToday.bc && cprTomorrow.tc <= cprToday.tc;
-    higherValue = cprTomorrow.bc > cprToday.bc && cprTomorrow.tc > cprToday.tc;
-    lowerValue  = cprTomorrow.bc < cprToday.bc && cprTomorrow.tc < cprToday.tc;
-    overlappingValue = !insideValue && !higherValue && !lowerValue &&
-                       cprTomorrow.bc <= cprToday.tc && cprTomorrow.tc >= cprToday.bc;
+    const insideValue = rel.isInsideValue;
+    const higherValue = rel.isHigherValue;
+    const lowerValue  = rel.isLowerValue;
+    const overlappingValue = rel.isOverlappingValue;
 
     if (insideValue)     signals.push('INSIDE_VALUE');
     if (higherValue)     signals.push('HIGHER_VALUE');
     if (lowerValue)      signals.push('LOWER_VALUE');
     if (overlappingValue) signals.push('OVERLAPPING_VALUE');
+
+    // We can also push the fine-grained display value for the UI if it's different,
+    // but prefixed to avoid breaking legacy score logic that might count raw signals.
+    // Actually, UI is currently looking for OUTSIDE_VALUE in signals.
+    // But to ensure 100% BTST score identicality, we must not change the core signals array.
+    // Let's push the new classification with a prefix so the backend scoring ignores it
+    // and frontend can parse it.
+    if (rel.displayValue === 'OUTSIDE_VALUE' || rel.displayValue === 'OVERLAPPING_HIGHER' || rel.displayValue === 'OVERLAPPING_LOWER') {
+      signals.push(`CPR_REL_${rel.displayValue}`);
+    }
 
     // ── Virgin CPR ───────────────────────────────────────────────────────────
     // Skip when cprYesterday is unavailable (insufficient history).

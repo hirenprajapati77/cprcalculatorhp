@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
     const maxScore = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!, 10) : undefined;
     const minWidth = searchParams.get('minWidth') ? parseFloat(searchParams.get('minWidth')!) : undefined;
     const maxWidth = searchParams.get('maxWidth') ? parseFloat(searchParams.get('maxWidth')!) : undefined;
+    
+    const cprQuality = searchParams.get('cprQuality') || 'ALL';
+    const cprRelationship = searchParams.get('cprRelationship') || 'ALL';
+    const virginCpr = searchParams.get('virginCpr') === 'true';
+    const narrowCpr = searchParams.get('narrowCpr') === 'true';
+    
     const search = searchParams.get('search')?.trim() || '';
 
     const today = new Date().toISOString().split('T')[0];
@@ -190,11 +196,27 @@ export async function GET(request: NextRequest) {
       date: today,
     };
 
+    const andConditions: any[] = [];
+
     // Filter by Active Signal modes
     if (mode !== 'ALL') {
-      where.signalSummary = {
-        contains: mode,
-      };
+      andConditions.push({ signalSummary: { contains: mode } });
+    }
+    if (cprQuality !== 'ALL') {
+      andConditions.push({ signalSummary: { contains: `CPR_QUALITY_${cprQuality}` } });
+    }
+    if (cprRelationship !== 'ALL') {
+      andConditions.push({ signalSummary: { contains: cprRelationship } });
+    }
+    if (virginCpr) {
+      andConditions.push({ signalSummary: { contains: 'VIRGIN' } });
+    }
+    if (narrowCpr) {
+      andConditions.push({ classification: 'NARROW' });
+    }
+
+    if (andConditions.length > 0) {
+      (where as any).AND = andConditions;
     }
 
     // Price Filter

@@ -1,0 +1,155 @@
+[
+  {
+    "symbol": "RELIANCE",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_DESC_CPR",
+      "KGS_RTP",
+      "HOT_ZONE",
+      "NARROW",
+      "BULLISH"
+    ],
+    "score": 25,
+    "rr": "1:2.4",
+    "entry": 1297.5833374023437,
+    "sl": 1290,
+    "target": 1315.4333740234374
+  },
+  {
+    "symbol": "TCS",
+    "signals": [
+      "OVERLAPPING_VALUE",
+      "VIRGIN",
+      "KGS_ASC_CPR",
+      "KGS_RTP",
+      "HOT_ZONE",
+      "NARROW",
+      "BULLISH"
+    ],
+    "score": 35,
+    "rr": "1:2.0",
+    "entry": 2203.9666666666662,
+    "sl": 2179,
+    "target": 2252.733333333333
+  },
+  {
+    "symbol": "HDFCBANK",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_DESC_CPR",
+      "HOT_ZONE",
+      "NARROW",
+      "BULLISH"
+    ],
+    "score": 20,
+    "rr": "1:2.4",
+    "entry": 814.6166687011719,
+    "sl": 808.2999877929688,
+    "target": 829.7667236328125
+  },
+  {
+    "symbol": "INFY",
+    "signals": [
+      "OVERLAPPING_VALUE",
+      "KGS_ASC_CPR",
+      "KGS_RTP",
+      "HOT_ZONE",
+      "NARROW",
+      "BULLISH"
+    ],
+    "score": 30,
+    "rr": "1:1.7",
+    "entry": 1103.9999918619792,
+    "sl": 1091.699951171875,
+    "target": 1125.1000325520833
+  },
+  {
+    "symbol": "ICICIBANK",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_RTP",
+      "HOT_ZONE",
+      "NARROW",
+      "BEARISH"
+    ],
+    "score": 35,
+    "rr": "1:2.3",
+    "entry": 1396.4833333333336,
+    "sl": 1403.46575,
+    "target": 1380.7333333333336
+  },
+  {
+    "symbol": "SBIN",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_DESC_CPR",
+      "NORMAL",
+      "BEARISH"
+    ],
+    "score": 25,
+    "rr": "1:2.0",
+    "entry": 1022.5499938964845,
+    "sl": 1033.699951171875,
+    "target": 1000.8000854492188
+  },
+  {
+    "symbol": "BHARTIARTL",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_RTP",
+      "NORMAL",
+      "BULLISH"
+    ],
+    "score": 20,
+    "rr": "1:2.1",
+    "entry": 1921.6166625976562,
+    "sl": 1885,
+    "target": 1999.7666259765624
+  },
+  {
+    "symbol": "ITC",
+    "signals": [
+      "INSIDE_VALUE",
+      "KGS_DESC_CPR",
+      "KGS_RTP",
+      "HOT_ZONE",
+      "NARROW",
+      "BEARISH"
+    ],
+    "score": 40,
+    "rr": "1:1.6",
+    "entry": 279.3749979654948,
+    "sl": 280.77187295532224,
+    "target": 277.1999959309896
+  },
+  {
+    "symbol": "KOTAKBANK",
+    "signals": [
+      "OVERLAPPING_VALUE",
+      "KGS_RTP",
+      "NORMAL",
+      "BEARISH"
+    ],
+    "score": 10,
+    "rr": "1:2.1",
+    "entry": 379.26666870117185,
+    "sl": 383.5,
+    "target": 370.5666870117187
+  },
+  {
+    "symbol": "LT",
+    "signals": [
+      "INSIDE_VALUE",
+      "VIRGIN",
+      "KGS_DESC_CPR",
+      "KGS_RTP",
+      "NARROW",
+      "BEARISH"
+    ],
+    "score": 40,
+    "rr": "1:2.2",
+    "entry": 3869.733317057292,
+    "sl": 3897.89990234375,
+    "target": 3807.633463541667
+  }
+]
