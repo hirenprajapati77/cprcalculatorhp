@@ -8,6 +8,7 @@
     "build:clean": "rm -rf .next && next build",
     "start": "next start",
     "lint": "eslint",
+    "regression-lock": "tsx scripts/regression_lock.ts",
     "test": "tsc --noEmit && node --test -r tsx src/tests/**/*.test.ts"
   },
   "dependencies": {
