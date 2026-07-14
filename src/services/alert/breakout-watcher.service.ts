@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db';
 
+const MIN_BREAKOUT_ALERT_SCORE = 75;
+
 export interface BreakoutScanResult {
   symbol: string;
   signals: string[];
@@ -38,25 +40,31 @@ export class BreakoutWatcherService {
         console.warn(`[BreakoutWatcher] Could not read state for ${result.symbol}:`, err);
       }
 
-      if (hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed) {
+      if (hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed && result.score >= MIN_BREAKOUT_ALERT_SCORE) {
         // Transition: did NOT have BREAKOUT before → NOW has BREAKOUT → alert
         // Skipped entirely if the state read failed, to avoid false "new breakout"
         // spam caused by a DB error rather than a real signal transition.
         newBreakouts.push(result);
       }
 
-      // Always update state to reflect current scan result
+      // Always update state to reflect current scan result.
+      // We only lock the state (hadBreakout = true) if the signal is currently present AND
+      // it either just fired a valid alert (score >= 75) OR was already locked previously.
+      // This allows weak breakouts to wait for 75 without locking, and prevents threshold
+      // oscillation spam (78 -> 71 -> 80) from firing multiple alerts as long as the signal itself never drops.
       try {
-        const isNewAlert = hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed;
+        const isNewAlert = hasBreakoutNow && !hadBreakoutBefore && !stateReadFailed && result.score >= MIN_BREAKOUT_ALERT_SCORE;
+        const newLockState = hasBreakoutNow && (hadBreakoutBefore || result.score >= MIN_BREAKOUT_ALERT_SCORE);
+        
         await prisma.breakoutAlertState.upsert({
           where: { symbol: result.symbol },
           create: {
             symbol: result.symbol,
-            hadBreakout: hasBreakoutNow,
+            hadBreakout: newLockState,
             lastAlerted: isNewAlert ? new Date() : null
           },
           update: {
-            hadBreakout: hasBreakoutNow,
+            hadBreakout: newLockState,
             ...(isNewAlert ? { lastAlerted: new Date() } : {})
           }
         });
