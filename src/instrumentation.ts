@@ -1,6 +1,6 @@
 import { env } from '@/config/env';
 export async function register() {
-  if (env.NEXT_RUNTIME === 'nodejs') {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { prisma } = await import('@/lib/db');
     const { default: redis } = await import('@/lib/redis');
     // We only want this to run once on the server startup

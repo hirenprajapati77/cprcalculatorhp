@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
       const { CacheService } = await import('@/services/cache.service');
       const cached = await CacheService.get('AUTO_SCAN_RESULT');
       if (cached && typeof cached === 'object' && 'data' in cached) {
-        const cachedData = cached as { data: any[]; timestamp?: string };
+        const cachedData = cached as { data: unknown[]; timestamp?: string };
         return NextResponse.json({
           success: true,
           degraded: true,

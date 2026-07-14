@@ -1,7 +1,15 @@
 import { env } from '@/config/env';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { timingSafeStringEqual } from './lib/crypto';
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
@@ -33,9 +41,9 @@ export function middleware(request: NextRequest) {
       const authCookie = request.cookies.get('app_access_token')?.value;
 
       let isAuth = false;
-      if (authHeader && timingSafeStringEqual(authHeader, `Bearer ${expectedToken}`)) {
+      if (authHeader && timingSafeEqual(authHeader, `Bearer ${expectedToken}`)) {
         isAuth = true;
-      } else if (authCookie && timingSafeStringEqual(authCookie, expectedToken)) {
+      } else if (authCookie && timingSafeEqual(authCookie, expectedToken)) {
         isAuth = true;
       }
 
