@@ -20,7 +20,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
       ltp: 102, // LTP > TC => BULLISH
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = await ScannerService.scanStock(mockStock);
     
     assert.strictEqual(scanResult.classification, 'NORMAL');
     assert.ok(scanResult.signals.includes('NORMAL'));
@@ -42,7 +42,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
       ltp: 99, // LTP < BC => BREAKDOWN
     };
 
-    const scanResult = ScannerService.scanStock(mockStock);
+    const scanResult = await ScannerService.scanStock(mockStock);
     assert.ok(scanResult.signals.includes('BREAKDOWN'), 'Missing BREAKDOWN signal');
   });
 
@@ -89,7 +89,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
 
     assert.ok(scanResult.signals.includes('GAP_UP'));
     assert.ok(scanResult.signals.includes('VIRGIN'));
@@ -113,7 +113,7 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
       ltp: 102, // Bullish (ltp > TC)
     };
 
-    const result = ScannerService.scanStock(mockStock);
+    const result = await ScannerService.scanStock(mockStock);
 
     // Entry = tomorrow's TC (approx 101.33)
     assert.ok(Math.abs(result.entry - 101.33) < 0.05, 'entry should be tomorrow TC');
@@ -143,7 +143,7 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
       ltp: 98, // Bearish (ltp < BC)
     };
 
-    const result = ScannerService.scanStock(mockStock);
+    const result = await ScannerService.scanStock(mockStock);
 
     // Entry = tomorrow's BC (approx 98.67)
     assert.ok(Math.abs(result.entry - 98.67) < 0.05, 'entry should be tomorrow BC');
@@ -242,7 +242,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_ASC_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
   });
@@ -268,7 +268,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be invalidated if close < PDL');
   });
 
@@ -293,7 +293,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_DESC_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
   });
@@ -319,7 +319,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be invalidated if close > PDH');
   });
 
@@ -348,7 +348,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     // Yesterday close (100) >= dayBeforeYesterday low (88). => Valid ASC yesterday.
     // Today close (95) < yesterday low (98). => Reversal.
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_ASC_REVERSAL'), 'KGS_ASC_REVERSAL should fire');
     assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be mutually exclusive');
   });
@@ -375,7 +375,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(!scanResult.signals.includes('KGS_ASC_REVERSAL'), 'Should not fire if setup was invalid');
   });
 
@@ -401,7 +401,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_DESC_REVERSAL'), 'KGS_DESC_REVERSAL should fire');
     assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be mutually exclusive');
   });
@@ -426,7 +426,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_INSIDE_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_OUTSIDE_CPR'));
   });
@@ -451,7 +451,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_OUTSIDE_CPR'));
     assert.ok(!scanResult.signals.includes('KGS_INSIDE_CPR'));
   });
@@ -474,7 +474,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: []
     };
 
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_RTP'));
   });
 
@@ -488,7 +488,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with positive RTP slope should fire');
   });
 
@@ -502,7 +502,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         { date: todayStr, open: 205, high: 220, low: 205, close: 210, volume: 1000 }
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active');
     assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Static position above 200 should not fire HP_RTP');
   });
@@ -517,7 +517,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         { date: todayStr, open: 190, high: 215, low: 185, close: 210, volume: 1000 }
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active (both negative)');
     assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with negative RTP slope should not fire');
   });
@@ -542,8 +542,8 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     
-    const res1 = ScannerService.scanStock(mockStockNo200, todayStr);
-    const res2 = ScannerService.scanStock(mockStockNoRTP, todayStr);
+    const res1 = await ScannerService.scanStock(mockStockNo200, todayStr);
+    const res2 = await ScannerService.scanStock(mockStockNoRTP, todayStr);
     
     assert.ok(!res1.signals.includes('KGS_HP_RTP'), 'Missing sma200 should block HP_RTP');
     assert.ok(!res2.signals.includes('KGS_HP_RTP'), 'Missing RTP should block HP_RTP');
@@ -562,7 +562,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         // todayStr is not in history yet
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStockLive, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStockLive, todayStr);
     assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with live ltp should fire');
   });
 
@@ -598,7 +598,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
         }
       ]
     };
-    const scanResult = ScannerService.scanStock(mockStock, todayStr);
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
     assert.ok(scanResult.signals.includes('INSIDE_VALUE'));
   });
 });
@@ -691,7 +691,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
   };
 
   await t.test('scanStock(stock, "2026-06-03") forwards asOfDate, triggers SignalService-only GAP_UP signal', () => {
-    const res = ScannerService.scanStock({
+    const res = await ScannerService.scanStock({
       ...mockStock,
       open: 110,
       high: 115,
@@ -705,7 +705,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
   });
 
   await t.test('scanStock(stock, "2026-06-02") does not trigger GAP_UP', () => {
-    const res = ScannerService.scanStock({
+    const res = await ScannerService.scanStock({
       ...mockStock,
       open: 100,
       high: 102,
@@ -718,7 +718,7 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
   });
 
   await t.test('scanStock(stock) with no asOfDate defaults to real system date (no GAP_UP)', () => {
-    const res = ScannerService.scanStock({
+    const res = await ScannerService.scanStock({
       ...mockStock,
       open: 110,
       high: 115,
@@ -763,7 +763,7 @@ test('ScannerService degenerate single-candle history', async () => {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = ScannerService.scanStock(mockStock as any, todayStr);
+    const res = await ScannerService.scanStock(mockStock as any, todayStr);
     
     assert.strictEqual(res.degenerateData, true, 'degenerateData flag should be true');
     assert.strictEqual(warnCalled, true, 'Should log a warning for degenerate CPR');

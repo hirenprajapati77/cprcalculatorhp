@@ -1,6 +1,7 @@
 import { MarketStockData } from './market.service';
 import { calculateCPR, calculateAtrCompressionRatio } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { CacheService } from './cache.service';
 
 export interface CprCompressionStats {
   avg5: number;
@@ -10,11 +11,19 @@ export interface CprCompressionStats {
 
 export class CprCompressionService {
   /**
-   * Calculates rolling CPR width averages synchronously.
-   * This operates in memory without I/O as the calculation is O(N) where N <= 20.
+   * Calculates rolling CPR width averages.
+   * Utilizes Redis caching (30 hours TTL) to ensure this is calculated only once per day per stock.
    */
-  static getStats(stock: MarketStockData): CprCompressionStats | null {
+  static async getStats(stock: MarketStockData): Promise<CprCompressionStats | null> {
     if (!stock.history || stock.history.length === 0) return null;
+
+    const lastCandle = stock.history[stock.history.length - 1];
+    const cacheKey = `cpr_compression:${stock.symbol}:${lastCandle.date}`;
+    
+    const cached = await CacheService.get(cacheKey);
+    if (cached) {
+      return cached as CprCompressionStats;
+    }
 
     const widths: number[] = [];
     const history = stock.history;
@@ -46,6 +55,11 @@ export class CprCompressionService {
     const avg10 = slice10.reduce((a, b) => a + b, 0) / slice10.length;
     const min20 = Math.min(...slice20);
 
-    return { avg5, avg10, min20 };
+    const stats = { avg5, avg10, min20 };
+    
+    // Cache for 30 hours
+    await CacheService.set(cacheKey, stats, 30 * 60 * 60);
+
+    return stats;
   }
 }
