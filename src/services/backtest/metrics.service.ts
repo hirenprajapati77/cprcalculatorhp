@@ -39,7 +39,7 @@ export class MetricsService {
     let maxDrawdown = 0;
 
     const monthlyPnL: Record<string, number> = {};
-    const signalSuccess: Record<string, { win: number; total: number }> = {};
+    const signalSuccess: Record<string, { win: number; loss: number; total: number }> = {};
 
     // Signal tag & score band stats aggregators
     const signalStats: Record<string, { win: number; total: number; totalRR: number; grossProfit: number; grossLoss: number; winningTrades: number; losingTrades: number }> = {};
@@ -87,10 +87,11 @@ export class MetricsService {
 
       // Signal distribution
       if (!signalSuccess[trade.signal]) {
-        signalSuccess[trade.signal] = { win: 0, total: 0 };
+        signalSuccess[trade.signal] = { win: 0, loss: 0, total: 0 };
       }
       signalSuccess[trade.signal].total++;
       if (pnl > 0) signalSuccess[trade.signal].win++;
+      else if (pnl < 0) signalSuccess[trade.signal].loss++;
 
       // Tag-specific validation
       const tags: string[] = [];
@@ -142,12 +143,15 @@ export class MetricsService {
       }
     }
 
-    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
-    const lossRate = totalTrades > 0 ? (losingTrades / totalTrades) * 100 : 0;
+    const decisiveTrades = winningTrades + losingTrades;
+    const winRate = decisiveTrades > 0 ? (winningTrades / decisiveTrades) * 100 : 0;
+    const lossRate = decisiveTrades > 0 ? (losingTrades / decisiveTrades) * 100 : 0;
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 999 : 0);
     const avgRR = totalTrades > 0 ? totalRR / totalTrades : 0;
     const avgWin  = winningTrades > 0 ? grossProfit / winningTrades : 0;
     const avgLoss = losingTrades > 0 ? grossLoss / losingTrades : 0;
+    // Expectancy calculation relies on winRate and lossRate which are now computed over decisive trades.
+    // Thus, it represents the expected value per *decisive* trade (scratches contribute $0).
     const expectancy = (winRate / 100 * avgWin) - (lossRate / 100 * avgLoss);
     
     const RISK_FREE_DAILY = 0.065 / 252;
@@ -201,8 +205,9 @@ export class MetricsService {
     // Calculate final stats for tags and score bands
     const signalAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number; reliable: boolean }> = {};
     for (const [tag, s] of Object.entries(signalStats)) {
-      const wr = s.total > 0 ? (s.win / s.total) * 100 : 0;
-      const lr = s.total > 0 ? (s.losingTrades / s.total) * 100 : 0;
+      const decisive = s.winningTrades + s.losingTrades;
+      const wr = decisive > 0 ? (s.winningTrades / decisive) * 100 : 0;
+      const lr = decisive > 0 ? (s.losingTrades / decisive) * 100 : 0;
       const ar = s.total > 0 ? s.totalRR / s.total : 0;
       const aw = s.winningTrades > 0 ? s.grossProfit / s.winningTrades : 0;
       const al = s.losingTrades > 0 ? s.grossLoss / s.losingTrades : 0;
@@ -212,8 +217,9 @@ export class MetricsService {
 
     const scoreBandAnalysis: Record<string, { winRate: number; avgRR: number; expectancy: number; total: number; reliable: boolean }> = {};
     for (const [sbName, sb] of Object.entries(scoreBandStats)) {
-      const wr = sb.total > 0 ? (sb.win / sb.total) * 100 : 0;
-      const lr = sb.total > 0 ? (sb.losingTrades / sb.total) * 100 : 0;
+      const decisive = sb.winningTrades + sb.losingTrades;
+      const wr = decisive > 0 ? (sb.winningTrades / decisive) * 100 : 0;
+      const lr = decisive > 0 ? (sb.losingTrades / decisive) * 100 : 0;
       const ar = sb.total > 0 ? sb.totalRR / sb.total : 0;
       const aw = sb.winningTrades > 0 ? sb.grossProfit / sb.winningTrades : 0;
       const al = sb.losingTrades > 0 ? sb.grossLoss / sb.losingTrades : 0;
@@ -257,15 +263,15 @@ export class MetricsService {
     }
 
     // Create Snapshots for Signals (Legacy)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const [signal, stats] of Object.entries(signalSuccess) as any) {
+      const decisive = stats.win + stats.loss;
       await prisma.backtestMetricSnapshot.create({
         data: {
           backtestRunId: runId,
           period: 'ALL',
           metricType: 'SIGNAL_WINRATE',
           metricKey: signal as string,
-          metricValue: stats.total > 0 ? (stats.win / stats.total) * 100 : 0
+          metricValue: decisive > 0 ? (stats.win / decisive) * 100 : 0
         }
       });
     }

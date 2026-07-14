@@ -206,7 +206,7 @@ test('Metrics Service — Signal Bucketing', async (t) => {
     assert.strictEqual(stats.win, 1, 'Bucket should correctly count 1 winner');
   });
 
-  await t.test('excludes breakeven trades (pnl === 0) from losingTrades denominator', () => {
+  await t.test('excludes breakeven trades (pnl === 0) from winRate denominator (computed over decisive trades only)', () => {
     // 3 trades: 1 win (+500), 1 breakeven (0), 1 loss (-200)
     const trades = [
       {
@@ -240,12 +240,12 @@ test('Metrics Service — Signal Bucketing', async (t) => {
 
     const { metrics } = MetricsService.computeMetricsFromTrades(trades, 100000);
 
-    // winRate should be 1 / 3 = 33.333% (approx 33.3)
-    assert.ok(Math.abs(metrics.winRate - 33.33) < 0.1, `Expected winRate ~33.33%, got ${metrics.winRate}%`);
+    // winRate should be computed over decisive trades: 1 win / 2 decisive trades = 50%
+    assert.ok(Math.abs(metrics.winRate - 50) < 0.1, `Expected winRate 50%, got ${metrics.winRate}%`);
+    assert.ok(Math.abs(metrics.winRate - 33.33) > 1, `Regression: winRate is still being diluted by scratches`);
 
-    // expectancy should be (1/3 * 500) - (1/3 * 200) = 100 (which is exactly net PnL 300 / 3)
-    // If avgLoss was diluted to 100, expectancy would be 133.33. If avgLoss is correct (200), expectancy is 100.
-    assert.ok(Math.abs(metrics.expectancy - 100) < 0.01, `Expected expectancy to be 100, got ${metrics.expectancy}`);
+    // expectancy should be (1/2 * 500) - (1/2 * 200) = 150 (which is the expected value per *decisive* trade)
+    assert.ok(Math.abs(metrics.expectancy - 150) < 0.01, `Expected expectancy to be 150 per decisive trade, got ${metrics.expectancy}`);
   });
 
   await t.test('computes drawdown relative to initialCapital parameter', () => {
