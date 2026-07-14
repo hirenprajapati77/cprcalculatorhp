@@ -1231,11 +1231,13 @@ export default function ScannerClient() {
 
       const data = await res.json();
       if (data.success) {
+        setIsDegraded(!!data.degraded);
         if (requestId !== activeRequestRef.current) return;
 
         setExecutionWindowOpen(true);
         setCachedResult(false);
         setScannedAt('');
+        setIsDegraded(!!data.degraded);
         if (data.insights) {
           setInsightCounts(data.insights);
         }
