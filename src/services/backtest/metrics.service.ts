@@ -263,7 +263,7 @@ export class MetricsService {
     }
 
     // Create Snapshots for Signals (Legacy)
-    for (const [signal, stats] of Object.entries(signalSuccess) as any) {
+    for (const [signal, stats] of Object.entries(signalSuccess) as [string, { win: number; loss: number; total: number }][]) {
       const decisive = stats.win + stats.loss;
       await prisma.backtestMetricSnapshot.create({
         data: {

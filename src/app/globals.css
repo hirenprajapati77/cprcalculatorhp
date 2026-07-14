@@ -159,3 +159,9 @@ body {
   background: rgba(59, 130, 246, 0.35);
   color: #fff;
 }
+
+/* ── Form Overrides ─────────────────────────────────────────────── */
+option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
