@@ -45,7 +45,7 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
 
 ## 📜 Releases & Changelog
 For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
-Release `v1.0.0-rc.1` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
+Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine, completely audited and fortified with permanent regression safeguards against look-ahead and scanner dynamic shifting biases.
 
 ---
 
@@ -94,7 +94,7 @@ The platform is fully containerized and production-ready for controlled shadow t
 1. **Configure Environment:** Ensure your `.env` is explicitly gated:
    ```env
    EXECUTION_MODE="SHADOW"
-   APP_VERSION="v1.0.0-rc.1"
+   APP_VERSION="v2.0.0-production"
    ```
 2. **Pre-flight Check:** Run the deployment verification script on your host to catch config or schema mismatches before boot:
    ```bash
@@ -117,7 +117,7 @@ You can poll `http://localhost:3000/api/health` to receive this validation paylo
 ```json
 {
   "status": "healthy",
-  "version": "v1.0.0-rc.1",
+  "version": "v2.0.0-production",
   "executionMode": "SHADOW",
   "checks": {
     "database": "healthy",
