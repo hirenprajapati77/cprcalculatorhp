@@ -62,8 +62,7 @@ if (!parsedEnv.success) {
 }
 
 if (parsedEnv.data.NODE_ENV === 'production' && !parsedEnv.data.APP_ACCESS_TOKEN) {
-  console.error('❌ FATAL: APP_ACCESS_TOKEN is required in production environment to prevent unauthenticated API access.');
-  throw new Error('Missing APP_ACCESS_TOKEN in production');
+  console.warn('⚠️ WARNING: APP_ACCESS_TOKEN is missing in production. API will be unauthenticated.');
 }
 
 export const env = parsedEnv.data;
