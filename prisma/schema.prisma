@@ -264,6 +264,7 @@ model OvernightSignal {
   qualityModelVersion  Int?
   qualityBucket        String?
   eventRiskReason      String?
+  relativeStrength     Float?
   slippageModelVersion Int?
   regimeSnapshot       String?
 

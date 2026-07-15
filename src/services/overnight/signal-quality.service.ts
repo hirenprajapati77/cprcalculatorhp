@@ -11,6 +11,7 @@ export interface SignalQualityMetrics {
   qualityModelVersion: number;
   qualityBucket: 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY';
   eventRiskReason: string | null;
+  relativeStrength: number;
 }
 
 export class SignalQualityService {
@@ -27,7 +28,8 @@ export class SignalQualityService {
     regime: MarketRegime,
     historyLength: number,
     stockEvent: EventRiskResult,
-    macroEvent: EventRiskResult
+    macroEvent: EventRiskResult,
+    relativeStrength: number
   ): SignalQualityMetrics {
     // 1. History Quality (0-100)
     // 15 candles = 0, 200 candles = 100
@@ -92,6 +94,7 @@ export class SignalQualityService {
       qualityModelVersion: this.QUALITY_MODEL_VERSION,
       qualityBucket,
       eventRiskReason,
+      relativeStrength,
     };
   }
 }

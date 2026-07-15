@@ -20,7 +20,7 @@ import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
 import { getISTTime, isTodayCandleClosed } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
-import { RegimeService } from './regime.service';
+import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
 
 const MIN_HISTORY_FOR_RELIABLE_ATR = 15; // Minimum daily candles for stable ATR computation
@@ -317,6 +317,12 @@ export class OvernightService {
         if (!fullStock) continue;
 
         const history = fullStock.history || [];
+        const stockReturn5d = history.length > RS_LOOKBACK
+          ? ((history[history.length - 1].close - history[history.length - 1 - RS_LOOKBACK].close) /
+             history[history.length - 1 - RS_LOOKBACK].close) * 100
+          : 0;
+        const relativeStrength = stockReturn5d - regime.niftyReturn5d;
+
         if (history.length === 0) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Empty market history (cannot establish distinct prior day candle).`);
           continue;
@@ -450,7 +456,8 @@ export class OvernightService {
             regime,
             history.length,
             bulkEventRisks[fullStock.symbol] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'UNKNOWN' },
-            macroEventRisk
+            macroEventRisk,
+            relativeStrength
           );
 
           if (quality.qualityBucket === 'LOW_QUALITY') {
@@ -484,6 +491,7 @@ export class OvernightService {
             qualityModelVersion: quality.qualityModelVersion,
             qualityBucket: quality.qualityBucket,
             eventRiskReason: quality.eventRiskReason,
+            relativeStrength: quality.relativeStrength,
             regimeSnapshot: JSON.stringify(regime),
           });
         }

@@ -1,10 +1,14 @@
 import { HistoricalProvider } from '../backtest/historical.provider';
 import { calculateATR } from '@/lib/atr';
 
+// Requires 6 candles to compute a 5-day return.
+export const RS_LOOKBACK = 5;
+
 export interface MarketRegime {
   trend: 'BULL' | 'BEAR' | 'CHOPPY';
   volatility: 'HIGH' | 'LOW';
   score: number; // 0 to 100 representing trend strength
+  niftyReturn5d: number; // % return over last 5 trading candles, for RS calculations
 }
 
 export class RegimeService {
@@ -36,6 +40,10 @@ export class RegimeService {
       
       // Calculate 20 EMA
       const closePrices = history.map(h => h.close);
+      const niftyReturn5d = closePrices.length > RS_LOOKBACK
+        ? ((closePrices[closePrices.length - 1] - closePrices[closePrices.length - 1 - RS_LOOKBACK]) /
+           closePrices[closePrices.length - 1 - RS_LOOKBACK]) * 100
+        : 0;
       const ema20 = this.calculateEMA(closePrices, 20);
       const currentEma20 = ema20[ema20.length - 1];
       const prevEma20 = ema20[ema20.length - 2];
@@ -59,7 +67,7 @@ export class RegimeService {
       // Nifty typically ranges 0.5% to 1.5% daily. > 1.2% is high volatility.
       const volatility: 'HIGH' | 'LOW' = atrPct > 1.2 ? 'HIGH' : 'LOW';
 
-      const regime = { trend, volatility, score };
+      const regime = { trend, volatility, score, niftyReturn5d };
       
       // Cache it
       this.cachedRegime = { date, regime };
@@ -73,7 +81,7 @@ export class RegimeService {
   }
 
   private static getDefaultRegime(): MarketRegime {
-    return { trend: 'CHOPPY', volatility: 'LOW', score: 50 };
+    return { trend: 'CHOPPY', volatility: 'LOW', score: 50, niftyReturn5d: 0 };
   }
 
   private static calculateEMA(prices: number[], period: number): number[] {
