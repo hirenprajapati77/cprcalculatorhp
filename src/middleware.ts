@@ -29,6 +29,7 @@ export function middleware(request: NextRequest) {
       url.pathname.startsWith('/api/health') ||
       url.pathname.startsWith('/api/cron/') ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
+      url.pathname.startsWith('/api/broker/fyers/login') ||
       url.pathname.startsWith('/api/share/')
     ) {
       return NextResponse.next();
