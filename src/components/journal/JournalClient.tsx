@@ -418,7 +418,7 @@ function formatRegime(regime: string | null | undefined) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
-  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS'>('LOG');
+  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS'>('LOG');
   const [reportingData]               = useState<ReportingResponse | null>(initialReportingData || null);
   const [entries, setEntries]         = useState<JournalEntry[]>([]);
   const [stats, setStats]             = useState<JournalStats | null>(null);
@@ -446,6 +446,22 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   // Expand state for V2 breakdown detail section
   const [expandedV2Row, setExpandedV2Row] = useState<string>('');
 
+  // Signal Analytics state
+  const [signalAnalytics, setSignalAnalytics] = useState<{
+    baselineTrades: number;
+    baselineWinRate: number;
+    signals: Array<{
+      signal: string;
+      trades: number;
+      winRate: number;
+      avgPnl: number;
+      avgPnlPct: number;
+      lift: number;
+      confidence: 'Low' | 'Medium' | 'High';
+    }>;
+  } | null>(null);
+  const [signalAnalyticsLoading, setSignalAnalyticsLoading] = useState(false);
+
   useEffect(() => {
     if (!activeTooltipRow) return;
     const handleOutsideClick = () => {
@@ -454,6 +470,16 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
   }, [activeTooltipRow]);
+
+  useEffect(() => {
+    if (activeTab !== 'SIGNALS' || signalAnalytics) return;
+    setSignalAnalyticsLoading(true);
+    fetch('/api/analytics/signals')
+      .then(r => r.json())
+      .then(data => setSignalAnalytics(data))
+      .catch(() => {})
+      .finally(() => setSignalAnalyticsLoading(false));
+  }, [activeTab, signalAnalytics]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -621,6 +647,15 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 }`}
               >
                 Analytics
+              </button>
+              <button
+                id="journal-signals-tab-btn"
+                onClick={() => setActiveTab('SIGNALS')}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === 'SIGNALS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                Signals
               </button>
             </div>
             
@@ -969,6 +1004,134 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   </div>
                 </div>
 
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Signal Analytics Tab ─────────────────────────────────────────── */}
+        {activeTab === 'SIGNALS' && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-white">Signal Analytics</h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Every signal is scored against your closed trades. <span className="text-slate-400">Lift</span> = signal Win% − baseline Win%.
+                </p>
+              </div>
+              <button
+                id="signals-refresh-btn"
+                onClick={() => { setSignalAnalytics(null); setSignalAnalyticsLoading(true); fetch('/api/analytics/signals').then(r => r.json()).then(data => setSignalAnalytics(data)).catch(() => {}).finally(() => setSignalAnalyticsLoading(false)); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 text-xs font-medium transition-all"
+              >
+                <RefreshCw size={12} className={signalAnalyticsLoading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
+
+            {signalAnalyticsLoading && (
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center text-slate-500 text-sm">
+                Loading signal data…
+              </div>
+            )}
+
+            {!signalAnalyticsLoading && signalAnalytics && signalAnalytics.signals.length === 0 && (
+              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center">
+                <div className="text-4xl mb-3">📈</div>
+                <div className="text-slate-400 font-semibold mb-1">No closed trades yet.</div>
+                <div className="text-slate-600 text-xs">Signal analytics will appear once trades close with P&amp;L data.</div>
+              </div>
+            )}
+
+            {!signalAnalyticsLoading && signalAnalytics && signalAnalytics.signals.length > 0 && (
+              <>
+                {/* Baseline KPI */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Baseline Trades</div>
+                    <div className="text-2xl font-bold font-mono text-white">{signalAnalytics.baselineTrades}</div>
+                    <div className="text-[10px] text-slate-600 mt-1">All closed journal trades</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Baseline Win Rate</div>
+                    <div className="text-2xl font-bold font-mono" style={{ color: signalAnalytics.baselineWinRate >= 55 ? '#22c55e' : signalAnalytics.baselineWinRate >= 45 ? '#eab308' : '#ef4444' }}>
+                      {signalAnalytics.baselineWinRate.toFixed(1)}%
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">Strategy-wide win rate</div>
+                  </div>
+                </div>
+
+                {/* Signal Table */}
+                <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+                  <div className="p-4 border-b border-slate-800/50">
+                    <h3 className="text-sm font-semibold text-white">Per-Signal Performance</h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Sorted by trade count. Confidence: Low &lt;30 · Medium 30-100 · High 100+</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs whitespace-nowrap">
+                      <thead className="bg-[#12141c] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-2.5 font-medium">Signal</th>
+                          <th className="px-4 py-2.5 font-medium text-right">Trades</th>
+                          <th className="px-4 py-2.5 font-medium text-right">Win %</th>
+                          <th className="px-4 py-2.5 font-medium text-right">Avg P&amp;L %</th>
+                          <th className="px-4 py-2.5 font-medium text-right">Lift</th>
+                          <th className="px-4 py-2.5 font-medium text-center">Confidence</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {signalAnalytics.signals.map(s => {
+                          const liftColor = s.lift > 0 ? '#22c55e' : s.lift < 0 ? '#ef4444' : '#94a3b8';
+                          const wrColor   = s.winRate >= 55 ? '#22c55e' : s.winRate >= 45 ? '#eab308' : '#ef4444';
+                          const confColor = s.confidence === 'High' ? '#22c55e' : s.confidence === 'Medium' ? '#eab308' : '#64748b';
+                          const confBg    = s.confidence === 'High' ? 'rgba(34,197,94,0.1)' : s.confidence === 'Medium' ? 'rgba(234,179,8,0.1)' : 'rgba(100,116,139,0.1)';
+                          const isKgs    = s.signal.startsWith('KGS_');
+                          return (
+                            <tr key={s.signal} className="hover:bg-white/[0.02] transition-colors">
+                              <td className="px-4 py-2.5">
+                                <span
+                                  style={isKgs ? { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)' } : {}}
+                                  className={`font-mono text-[11px] font-semibold ${isKgs ? 'px-1.5 py-0.5 rounded' : 'text-slate-300'}`}
+                                >
+                                  {s.signal}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-slate-400">{s.trades}</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: wrColor }}>
+                                {s.winRate.toFixed(1)}%
+                              </td>
+                              <td className={`px-4 py-2.5 text-right font-mono font-semibold ${s.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {s.avgPnlPct >= 0 ? '+' : ''}{s.avgPnlPct.toFixed(2)}%
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: liftColor }}>
+                                {s.lift > 0 ? '+' : ''}{s.lift.toFixed(1)}%
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                <span
+                                  style={{ color: confColor, background: confBg, border: `1px solid ${confColor}40` }}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase"
+                                >
+                                  {s.confidence}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Legend */}
+                <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 text-[10px] text-slate-500 space-y-1">
+                  <div className="font-semibold text-slate-400 text-[11px] mb-2">How to read this table</div>
+                  <div>● <span className="text-slate-300">Lift</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline. Positive lift means the signal correlates with above-average outcomes.</div>
+                  <div>● <span className="text-violet-400">Purple signals</span> are KGS-family (observational only — zero score impact until validated).</div>
+                  <div>● <span className="text-yellow-400">Low confidence</span> (&lt;30 trades) — statistically inconclusive. Do not promote to scoring yet.</div>
+                  <div>● Target <span className="text-slate-300">200–500 trades</span> before using Lift to make promotion decisions.</div>
+                </div>
               </>
             )}
           </div>
