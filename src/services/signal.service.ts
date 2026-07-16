@@ -212,9 +212,9 @@ export class SignalService {
     // inside the today's CPR zone (between TC and BC).
     // Cam R3 inside CPR = bearish bias (favors shorts)
     // Cam S3 inside CPR = bullish bias (favors longs)
-    const priorRange = yesterdayCandle.high - yesterdayCandle.low;
-    const camR3 = yesterdayCandle.close + priorRange * 0.275; // Close + Range * 1.1 / 4
-    const camS3 = yesterdayCandle.close - priorRange * 0.275; // Close - Range * 1.1 / 4
+    const camRange = yesterdayCandle.high - yesterdayCandle.low;
+    const camR3 = yesterdayCandle.close + camRange * (1.1 / 4); // standard Camarilla R3: Close + (H-L) * 1.1 / 4
+    const camS3 = yesterdayCandle.close - camRange * (1.1 / 4); // standard Camarilla S3: Close - (H-L) * 1.1 / 4
 
     // Note: cprToday.tc is already normalized to be >= cprToday.bc
     if (camR3 <= cprToday.tc && camR3 >= cprToday.bc) {
