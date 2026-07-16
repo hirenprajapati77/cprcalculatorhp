@@ -2397,6 +2397,12 @@ export default function ScannerClient() {
                       <option value="KGS_DESC_CPR">KGS Descending CPR</option>
                       <option value="KGS_RTP">KGS RTP (Slope Match)</option>
                       <option value="KGS_HP_RTP">KGS HP-RTP (200 SMA Cross)</option>
+                      <option value="KGS_DIRECT_UP">KGS Direct Up</option>
+                      <option value="KGS_DIRECT_DOWN">KGS Direct Down</option>
+                      <option value="KGS_REVERSAL_UP">KGS Reversal Up</option>
+                      <option value="KGS_REVERSAL_DOWN">KGS Reversal Down</option>
+                      <option value="KGS_CAM_BULL_BIAS">KGS Camarilla Bullish Bias</option>
+                      <option value="KGS_CAM_BEAR_BIAS">KGS Camarilla Bearish Bias</option>
                     </select>
                   </div>
 
@@ -2976,7 +2982,13 @@ export default function ScannerClient() {
                             KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
                             KGS_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
                             KGS_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
-                            KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed."
+                            KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
+                            KGS_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
+                            KGS_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
+                            KGS_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
+                            KGS_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
+                            KGS_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
+                            KGS_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance."
                           };
                           const expl = explMap[sig];
                           if (!expl) return null;
