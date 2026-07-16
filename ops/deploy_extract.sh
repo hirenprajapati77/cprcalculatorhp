@@ -27,9 +27,21 @@ tar -xzf /home/ubuntu/deploy_prisma.tar.gz -C $APP/
 echo "=== Copying .env into standalone ==="
 cp $APP/.env $APP/.next/standalone/.env
 
+# Source DATABASE_URL if not present
+if [ -z "$DATABASE_URL" ] && [ -f "$APP/.env" ]; then
+    export DATABASE_URL=$(grep '^DATABASE_URL=' $APP/.env | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
+fi
+
+echo "=== Recording pre-deploy migration state ==="
+PRE_DEPLOY_MIGRATIONS=$(psql "$DATABASE_URL" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at;" 2>/dev/null | sed '/^\s*$/d')
+
 echo "=== Running Database Migrations ==="
 cd $APP
 npx prisma migrate deploy
+
+echo "=== Recording post-deploy migration state ==="
+POST_DEPLOY_MIGRATIONS=$(psql "$DATABASE_URL" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at;" 2>/dev/null | sed '/^\s*$/d')
+NEW_MIGRATIONS=$(comm -13 <(echo "$PRE_DEPLOY_MIGRATIONS" | sort) <(echo "$POST_DEPLOY_MIGRATIONS" | sort))
 
 echo "=== Synchronizing Prisma Client ==="
 npx prisma generate
@@ -68,6 +80,12 @@ else
     echo "[ERROR] Health check failed or DB is not up!"
     echo "Output was: $HEALTH_OUTPUT"
     echo "=== Initiating Automatic Rollback ==="
+    
+    if [ -n "$NEW_MIGRATIONS" ]; then
+        echo "[CRITICAL] The following migration(s) were applied this deploy and CANNOT be automatically reverted:"
+        echo "$NEW_MIGRATIONS"
+        echo "[CRITICAL] Rolling back app code only. If the old code is incompatible with the new schema, this rollback may not restore a working state. Manual review required."
+    fi
     
     if [ -d "$BACKUP_DIR" ]; then
         echo "Restoring from $BACKUP_DIR"
