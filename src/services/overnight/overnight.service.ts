@@ -508,18 +508,22 @@ export class OvernightService {
 
     const savedSignals = [];
     for (const sig of signalsToSave) {
-      const saved = await prisma.overnightSignal.upsert({
-        where: {
-          symbol_signalDate_signalTime: {
-            symbol: sig.symbol,
-            signalDate: sig.signalDate,
-            signalTime: sig.signalTime
-          }
-        },
-        update: sig,
-        create: sig
-      });
-      savedSignals.push(saved);
+      try {
+        const saved = await prisma.overnightSignal.upsert({
+          where: {
+            symbol_signalDate_signalTime: {
+              symbol: sig.symbol,
+              signalDate: sig.signalDate,
+              signalTime: sig.signalTime
+            }
+          },
+          update: sig,
+          create: sig
+        });
+        savedSignals.push(saved);
+      } catch (err) {
+        console.error(`Error saving overnight signal for ${sig.symbol}:`, err);
+      }
     }
 
     return savedSignals;
