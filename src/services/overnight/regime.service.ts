@@ -8,7 +8,7 @@ export interface MarketRegime {
   trend: 'BULL' | 'BEAR' | 'CHOPPY';
   volatility: 'HIGH' | 'LOW';
   score: number; // 0 to 100 representing trend strength
-  niftyReturn5d: number; // % return over last 5 trading candles, for RS calculations
+  niftyReturn5d?: number; // % return over last 5 trading candles, for RS calculations
 }
 
 export class RegimeService {
