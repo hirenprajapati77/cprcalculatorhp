@@ -457,6 +457,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
       avgPnl: number;
       avgPnlPct: number;
       lift: number;
+      liftExclusive: number;
       confidence: 'Low' | 'Medium' | 'High';
     }>;
   } | null>(null);
@@ -476,8 +477,11 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     setSignalAnalyticsLoading(true);
     fetch('/api/analytics/signals')
       .then(r => r.json())
-      .then(data => setSignalAnalytics(data))
-      .catch(() => {})
+      .then(data => {
+        if (Array.isArray(data?.signals)) setSignalAnalytics(data);
+        else setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] });
+      })
+      .catch(() => setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] }))
       .finally(() => setSignalAnalyticsLoading(false));
   }, [activeTab, signalAnalytics]);
 
@@ -1023,7 +1027,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </div>
               <button
                 id="signals-refresh-btn"
-                onClick={() => { setSignalAnalytics(null); setSignalAnalyticsLoading(true); fetch('/api/analytics/signals').then(r => r.json()).then(data => setSignalAnalytics(data)).catch(() => {}).finally(() => setSignalAnalyticsLoading(false)); }}
+                onClick={() => { setSignalAnalytics(null); setSignalAnalyticsLoading(true); fetch('/api/analytics/signals').then(r => r.json()).then(data => { if (Array.isArray(data?.signals)) setSignalAnalytics(data); else setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] }); }).catch(() => setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] })).finally(() => setSignalAnalyticsLoading(false)); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 text-xs font-medium transition-all"
               >
                 <RefreshCw size={12} className={signalAnalyticsLoading ? 'animate-spin' : ''} />
@@ -1077,13 +1081,15 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                           <th className="px-4 py-2.5 font-medium text-right">Trades</th>
                           <th className="px-4 py-2.5 font-medium text-right">Win %</th>
                           <th className="px-4 py-2.5 font-medium text-right">Avg P&amp;L %</th>
-                          <th className="px-4 py-2.5 font-medium text-right">Lift</th>
+                          <th className="px-4 py-2.5 font-medium text-right" title="Signal Win% - Baseline Win% (baseline includes ALL trades)">Lift (Incl)</th>
+                          <th className="px-4 py-2.5 font-medium text-right" title="Signal Win% - Baseline Win% (baseline excludes this signal's trades)">Lift (Excl)</th>
                           <th className="px-4 py-2.5 font-medium text-center">Confidence</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/40">
                         {signalAnalytics.signals.map(s => {
                           const liftColor = s.lift > 0 ? '#22c55e' : s.lift < 0 ? '#ef4444' : '#94a3b8';
+                          const liftExclColor = s.liftExclusive > 0 ? '#22c55e' : s.liftExclusive < 0 ? '#ef4444' : '#94a3b8';
                           const wrColor   = s.winRate >= 55 ? '#22c55e' : s.winRate >= 45 ? '#eab308' : '#ef4444';
                           const confColor = s.confidence === 'High' ? '#22c55e' : s.confidence === 'Medium' ? '#eab308' : '#64748b';
                           const confBg    = s.confidence === 'High' ? 'rgba(34,197,94,0.1)' : s.confidence === 'Medium' ? 'rgba(234,179,8,0.1)' : 'rgba(100,116,139,0.1)';
@@ -1108,6 +1114,9 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                               <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: liftColor }}>
                                 {s.lift > 0 ? '+' : ''}{s.lift.toFixed(1)}%
                               </td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: liftExclColor }}>
+                                {s.liftExclusive > 0 ? '+' : ''}{s.liftExclusive.toFixed(1)}%
+                              </td>
                               <td className="px-4 py-2.5 text-center">
                                 <span
                                   style={{ color: confColor, background: confBg, border: `1px solid ${confColor}40` }}
@@ -1127,7 +1136,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 {/* Legend */}
                 <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 text-[10px] text-slate-500 space-y-1">
                   <div className="font-semibold text-slate-400 text-[11px] mb-2">How to read this table</div>
-                  <div>● <span className="text-slate-300">Lift</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline. Positive lift means the signal correlates with above-average outcomes.</div>
+                  <div>● <span className="text-slate-300">Lift (Incl)</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline (includes the signal's own trades).</div>
+                  <div>● <span className="text-slate-300">Lift (Excl)</span> = signal Win% − Win% of trades WITHOUT this signal. Stricter baseline; isolates the signal's true differentiating edge.</div>
                   <div>● <span className="text-violet-400">Purple signals</span> are KGS-family (observational only — zero score impact until validated).</div>
                   <div>● <span className="text-yellow-400">Low confidence</span> (&lt;30 trades) — statistically inconclusive. Do not promote to scoring yet.</div>
                   <div>● Target <span className="text-slate-300">200–500 trades</span> before using Lift to make promotion decisions.</div>
