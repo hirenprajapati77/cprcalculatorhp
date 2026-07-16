@@ -52,7 +52,7 @@ set +e
 HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
 set -e
 
-if [[ "$HEALTH_OUTPUT" == *"DB: up"* ]]; then
+if [[ "$HEALTH_OUTPUT" == *"DB: healthy"* ]]; then
     echo "[OK] Health check passed! Database is up."
     echo "=== Cleanup ==="
     rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_prisma.tar.gz
@@ -83,7 +83,7 @@ else
         set +e
         ROLLBACK_HEALTH=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
         set -e
-        if [[ "$ROLLBACK_HEALTH" == *"DB: up"* ]]; then
+        if [[ "$ROLLBACK_HEALTH" == *"DB: healthy"* ]]; then
             echo "[OK] Rollback stabilized."
         else
             echo "[CRITICAL] Rollback also failed health check!"
