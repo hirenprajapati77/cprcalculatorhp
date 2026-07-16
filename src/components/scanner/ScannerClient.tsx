@@ -353,7 +353,7 @@ const StockRow = React.memo(({
               className={`hover:scale-110 transition-transform ${isStarred ? 'text-accent-amber' : 'text-text-tertiary group-hover:text-text-secondary'}`}
               title="Star Watchlist"
             >
-              <Star size={12} fill={isStarred ? 'currentColor' : 'none'} />
+              <Star size={12} fill={isStarred ? 'currentColor' : 'none'} className={isStarred ? 'text-accent-amber' : ''} />
             </button>
             <button
               onClick={() => onToggleWatchlist(row.symbol, 'pinned')}
@@ -692,7 +692,7 @@ const StockRow = React.memo(({
                 className={`p-1 hover:bg-bg-tertiary rounded ${isStarred ? 'text-accent-amber' : 'text-text-secondary'}`}
                 title="Star Watchlist"
               >
-                <Star size={12} fill={isStarred ? 'currentColor' : 'none'} />
+                <Star size={12} fill={isStarred ? 'currentColor' : 'none'} className={isStarred ? 'text-accent-amber' : ''} />
               </button>
               <button
                 onClick={() => onChartRedirect(row)}
@@ -1833,7 +1833,7 @@ export default function ScannerClient() {
           
           <div className="flex flex-wrap items-center gap-2">
             {/* Auto refresh display countdown info */}
-            <div className="bg-bg-primary border border-border-primary/80 rounded px-2.5 py-1.5 text-[10px] flex flex-wrap items-center gap-3">
+            <div className="bg-bg-primary border border-border-primary/80 rounded-lg px-2.5 py-1.5 text-[10px] flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-3">
                 <Clock size={12} className="text-text-tertiary" />
                 <div className="space-y-0.5 leading-none">
@@ -1851,7 +1851,7 @@ export default function ScannerClient() {
               <select
                 value={refreshInterval}
                 onChange={(e) => setRefreshInterval(e.target.value)}
-                className="bg-bg-secondary border border-border-secondary text-text-secondary font-bold focus:outline-none cursor-pointer p-1 rounded text-[9px]"
+                className="bg-bg-secondary border border-border-secondary text-text-secondary font-bold focus:outline-none cursor-pointer p-1 rounded-lg text-[9px]"
               >
                 <option value="Off">Interval: Off</option>
                 <option value="5m">5m</option>
@@ -1893,7 +1893,7 @@ export default function ScannerClient() {
               {scanHistoryLog.map((log) => (
                 <div 
                   key={log.id} 
-                  className="bg-bg-secondary/60 border border-border-primary hover:border-border-secondary p-3 rounded cursor-pointer transition-colors"
+                  className="bg-bg-secondary/60 border border-border-primary hover:border-border-secondary p-3 rounded-lg cursor-pointer transition-colors"
                   onClick={() => handleLoadPastScan(log)}
                 >
                   <div className="flex justify-between font-bold text-text-primary">
@@ -1923,7 +1923,7 @@ export default function ScannerClient() {
               <span className="text-[10px] text-text-tertiary uppercase">BTST Ready</span>
               <h2 className="text-2xl font-bold text-accent-blue">{btstMetrics.ready}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue">
+            <div className="h-10 w-10 rounded-lg bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue">
               <TrendingUp size={18} />
             </div>
           </div>
@@ -1932,7 +1932,7 @@ export default function ScannerClient() {
               <span className="text-[10px] text-text-tertiary uppercase">Strong BTST</span>
               <h2 className="text-2xl font-bold text-accent-green">{btstMetrics.strong}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
+            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
               <Award size={18} />
             </div>
           </div>
@@ -1941,7 +1941,7 @@ export default function ScannerClient() {
               <span className="text-[10px] text-text-tertiary uppercase">Avg Expected Gap %</span>
               <h2 className="text-2xl font-bold text-accent-purple">+{btstMetrics.avgGap.toFixed(2)}%</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Activity size={18} />
             </div>
           </div>
@@ -1950,7 +1950,7 @@ export default function ScannerClient() {
               <span className="text-[10px] text-text-tertiary uppercase">Avg Confidence</span>
               <h2 className="text-2xl font-bold text-accent-amber">{btstMetrics.avgConf.toFixed(1)}%</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
+            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
               <Target size={18} />
             </div>
           </div>
@@ -1963,7 +1963,7 @@ export default function ScannerClient() {
               <p className="text-[9px] opacity-70">Score ≥ 75</p>
               <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
               <Award size={18} />
             </div>
           </div>
@@ -1974,7 +1974,7 @@ export default function ScannerClient() {
               <p className="text-[9px] opacity-70">Score 60-74</p>
               <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
+            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
               <TrendingUp size={18} />
             </div>
           </div>
@@ -1984,7 +1984,7 @@ export default function ScannerClient() {
               <span className="text-[10px] text-text-tertiary uppercase">Watchlist Items</span>
               <h2 className="text-2xl font-bold text-accent-amber">{watchlistCount}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
+            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
               <Star size={18} fill="currentColor" />
             </div>
           </div>
@@ -1995,7 +1995,7 @@ export default function ScannerClient() {
               <p className="text-[9px] opacity-70">Score &lt; 40 or Conflict</p>
               <h2 className="text-2xl font-bold text-accent-red">{avoidCount}</h2>
             </div>
-            <div className="h-10 w-10 rounded bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
+            <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
               <AlertTriangle size={18} />
             </div>
           </div>

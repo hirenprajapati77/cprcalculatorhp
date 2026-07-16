@@ -61,9 +61,9 @@ export default function HeatmapPage() {
   );
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto font-mono text-xs">
+    <div className="space-y-4 font-mono text-xs">
       {/* Title Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-2xl relative overflow-hidden select-none">
+      <div className="bg-bg-secondary border border-border-primary rounded-xl p-4 sm:p-6 shadow-2xl relative overflow-hidden select-none">
         <div className="absolute top-0 right-0 p-6 opacity-10 hidden sm:block">
           <LayoutGrid size={100} className="text-blue-500 rotate-12" />
         </div>
@@ -80,7 +80,7 @@ export default function HeatmapPage() {
       </div>
 
       {/* Control Board */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-bg-secondary/60 border border-border-primary rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
             <BarChart2 size={14} className="text-blue-400" />
@@ -94,7 +94,7 @@ export default function HeatmapPage() {
         <button
           onClick={() => fetchHeatmap(true)}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 text-white border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors h-8"
+          className="flex items-center gap-1.5 bg-bg-primary hover:bg-bg-secondary text-text-primary border border-border-primary px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors h-8"
         >
           <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
           Refresh
@@ -108,7 +108,7 @@ export default function HeatmapPage() {
           <span className="text-xs text-slate-400">Loading heatmap matrix...</span>
         </div>
       ) : heatmapData.length === 0 ? (
-        <Card className="bg-slate-900 border-slate-800 p-8 text-center max-w-md mx-auto">
+        <Card className="bg-bg-secondary border-border-primary p-8 text-center max-w-md mx-auto">
           <ShieldAlert size={40} className="mx-auto text-slate-700 mb-3" />
           <h3 className="text-sm font-bold text-white uppercase">No Scanner Records Found</h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -116,17 +116,17 @@ export default function HeatmapPage() {
           </p>
         </Card>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
+        <div className="bg-bg-secondary border border-border-primary rounded-xl shadow-2xl overflow-hidden">
           {/* Mobile scroll hint */}
-          <div className="sm:hidden flex items-center justify-between px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[9px] text-slate-500 uppercase tracking-wider">
+          <div className="sm:hidden flex items-center justify-between px-3 py-2 bg-bg-primary/60 border-b border-border-primary text-[9px] text-text-secondary uppercase tracking-wider">
             <span>← Scroll horizontally →</span>
             <span>{heatmapData.length} sectors</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse select-none whitespace-nowrap" style={{ minWidth: 560 }}>
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[9px] uppercase">
-                  <th className="p-2 sm:p-4 w-[110px] sm:w-[200px] sticky left-0 bg-slate-950 z-10">Sector</th>
+                <tr className="border-b border-border-primary bg-bg-primary/60 text-text-secondary text-[9px] uppercase">
+                  <th className="p-2 sm:p-4 w-[110px] sm:w-[200px] sticky left-0 bg-bg-primary z-10">Sector</th>
                   {trackedSignals.map((sig) => (
                     <th key={sig} className="p-2 sm:p-4 text-center text-[8px] sm:text-[9px] font-bold tracking-wide whitespace-nowrap">
                       {sig.replace('_', ' ')}
@@ -141,10 +141,10 @@ export default function HeatmapPage() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: rowIdx * 0.04 }}
-                    className="hover:bg-slate-800/10 text-slate-300"
+                    className="hover:bg-bg-secondary/10 text-slate-300"
                   >
                     {/* Sticky sector name on mobile */}
-                    <td className="p-2 sm:p-4 font-bold text-white border-r border-slate-800 bg-slate-950/80 sticky left-0 z-10 text-[10px] sm:text-xs">
+                    <td className="p-2 sm:p-4 font-bold text-white border-r border-border-primary bg-bg-primary/80 sticky left-0 z-10 text-[10px] sm:text-xs">
                       <span className="block truncate max-w-[100px] sm:max-w-none" title={item.sector}>
                         {item.sector}
                       </span>
@@ -157,7 +157,7 @@ export default function HeatmapPage() {
                       const isBullish = sig === 'BULLISH' || sig === 'BREAKOUT' || sig === 'LONG_BUILD';
                       const isBearish = sig === 'BEARISH' || sig === 'SHORT_BUILD';
 
-                      const cellClass = 'bg-slate-950/40 text-slate-600 border border-slate-900/40';
+                      const cellClass = 'bg-bg-primary/40 text-text-tertiary border border-border-primary/40';
                       let style: React.CSSProperties = {};
 
                       if (count > 0) {

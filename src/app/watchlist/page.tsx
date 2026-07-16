@@ -165,14 +165,14 @@ export default function WatchlistPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto px-4 py-6">
+    <div className="space-y-6 px-4 py-6">
       {/* Title Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
+      <div className="bg-bg-secondary border border-border-primary rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
         <div className="absolute top-0 right-0 p-8 opacity-10">
-          <Star size={120} className="text-yellow-400 rotate-12" />
+          <Star size={120} className="text-accent-amber rotate-12" />
         </div>
         <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5 font-mono">
-          <Star size={13} className="fill-blue-400" />
+          <Star size={13} className="fill-accent-amber text-accent-amber" />
           Quant Terminal Watchlist
         </span>
         <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white uppercase mt-1">
@@ -184,7 +184,7 @@ export default function WatchlistPage() {
       </div>
 
       {/* Control Board */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-bg-secondary/60 border border-border-primary rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="bg-blue-500/10 p-2 rounded-lg border border-blue-500/20">
             <TrendingUp size={14} className="text-blue-400" />
@@ -203,11 +203,11 @@ export default function WatchlistPage() {
               value={searchSymbol}
               onChange={(e) => setSearchSymbol(e.target.value)}
               disabled={isAdding}
-              className="bg-slate-950 border border-slate-800 text-white pl-8 pr-3 py-2 rounded-lg text-xs focus:outline-none focus:border-blue-500 w-full sm:w-[200px] font-mono"
+              className="bg-bg-secondary border border-border-secondary text-text-primary pl-8 pr-3 py-1.5 rounded-lg text-[11px] focus:outline-none focus:border-accent-blue w-full sm:w-[200px] font-mono h-8"
             />
-            <Search size={12} className="absolute left-2.5 top-3 text-slate-500" />
+            <Search size={12} className="absolute left-2.5 top-2.5 text-slate-500" />
           </div>
-          <Button type="submit" size="sm" variant="primary" disabled={isAdding} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg h-9 shrink-0">
+          <Button type="submit" size="sm" variant="primary" disabled={isAdding} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg h-8 shrink-0 text-[11px]">
             <Plus size={13} /> Add
           </Button>
         </form>
@@ -220,7 +220,7 @@ export default function WatchlistPage() {
           <span className="text-xs text-slate-400">Fetching watchlist data...</span>
         </div>
       ) : watchlist.length === 0 ? (
-        <Card className="bg-slate-900 border-slate-800 p-8 text-center max-w-md mx-auto">
+        <Card className="bg-bg-secondary border-border-primary p-8 text-center max-w-md mx-auto">
           <Star size={40} className="mx-auto text-slate-700 mb-3" />
           <h3 className="text-sm font-bold text-white font-mono uppercase">Your Watchlist is Empty</h3>
           <p className="text-xs text-slate-500 font-mono mt-1 leading-relaxed">
@@ -239,7 +239,7 @@ export default function WatchlistPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="bg-slate-900 border border-slate-800 rounded-xl p-3 font-mono"
+                  className="bg-bg-secondary border border-border-primary rounded-xl p-3 font-mono"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-white text-sm">{item.symbol}</span>
@@ -269,7 +269,7 @@ export default function WatchlistPage() {
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex flex-wrap gap-1">
                       {item.signals?.slice(0, 3).map((sig) => (
-                        <span key={sig} className="text-[8px] px-1.5 py-0.5 rounded font-bold bg-slate-800 border border-slate-700 text-slate-400 uppercase">{sig}</span>
+                        <span key={sig} className="text-[8px] px-1.5 py-0.5 rounded font-bold bg-bg-secondary border border-border-secondary text-text-secondary uppercase">{sig}</span>
                       ))}
                     </div>
                     <div className="flex items-center gap-2">
@@ -289,11 +289,11 @@ export default function WatchlistPage() {
           </div>
 
           {/* Desktop table view */}
-          <div className="hidden sm:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-2xl">
+          <div className="hidden sm:block bg-bg-secondary border border-border-primary rounded-xl overflow-hidden shadow-2xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 text-[10px] uppercase">
+                  <tr className="border-b border-border-primary bg-bg-primary/60 text-text-secondary text-[10px] uppercase">
                     <th className="p-4 w-[50px] text-center">Pin</th>
                     <th className="p-4 w-[50px] text-center">Alert</th>
                     <th className="p-4">Symbol</th>
@@ -314,7 +314,7 @@ export default function WatchlistPage() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -20 }}
-                        className="hover:bg-slate-800/20 text-slate-300"
+                        className="hover:bg-bg-secondary/20 text-text-primary"
                       >
                         <td className="p-4 text-center">
                           <button type="button" onClick={() => handleToggleState(item.symbol, 'pinned', !item.pinned)}
@@ -350,7 +350,7 @@ export default function WatchlistPage() {
                                   <span key={sig} className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide border ${
                                     isBullish ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
                                     isBearish ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
-                                    'bg-slate-800 border-slate-700 text-slate-400'
+                                    'bg-bg-secondary border-border-secondary text-text-secondary'
                                   }`}>{sig}</span>
                                 );
                               })

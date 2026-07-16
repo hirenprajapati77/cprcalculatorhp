@@ -168,7 +168,7 @@ function renderV2Breakdown(
     return (
       <div className="space-y-1 text-[10px] text-slate-500 italic">
         No breakdown data available.
-        <div className="text-[9px] text-slate-600 mt-1 not-italic">V2 scoring runs at signal creation via overnight cron.</div>
+        <div className="text-[9px] text-text-tertiary mt-1 not-italic">V2 scoring runs at signal creation via overnight cron.</div>
       </div>
     );
   }
@@ -199,8 +199,8 @@ function renderV2Breakdown(
       </div>
 
       {/* Direction */}
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5">
-        <span className="text-slate-500 font-medium">Direction</span>
+      <div className="flex items-center justify-between border-b border-border-primary pb-1.5">
+        <span className="text-text-secondary font-medium">Direction</span>
         <V2DirectionPill direction={breakdown.direction} />
       </div>
 
@@ -210,7 +210,7 @@ function renderV2Breakdown(
           border: `1px solid ${allGatesPass ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
         }} className="rounded-md px-2 py-1.5 space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">Hard Gate</span>
+          <span className="text-[8px] font-bold text-text-secondary uppercase tracking-wider">Hard Gate</span>
           <span style={{ color: allGatesPass ? '#22c55e' : '#ef4444' }} className="text-[9px] font-bold">
             {allGatesPass ? '🟢 PASSED' : '🔴 FAILED'}
           </span>
@@ -221,8 +221,8 @@ function renderV2Breakdown(
       </div>
 
       {/* Raw Component Score */}
-      <div className="border-b border-slate-800/80 pb-1.5 space-y-0.5">
-        <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">Raw Component Score</div>
+      <div className="border-b border-border-primary pb-1.5 space-y-0.5">
+        <div className="text-[8px] font-bold text-text-secondary uppercase tracking-wider mb-1">Raw Component Score</div>
         <div className="pl-1 space-y-0.5">
           <div className="flex justify-between text-[9px]">
             <span className="text-slate-400">CLV Score</span>
@@ -244,7 +244,7 @@ function renderV2Breakdown(
       </div>
 
       {/* Gate Result & Final */}
-      <div className="border-b border-slate-800/80 pb-1.5 pl-1 space-y-0.5">
+      <div className="border-b border-border-primary pb-1.5 pl-1 space-y-0.5">
         <div className="flex justify-between text-[9px]">
           <span className="text-slate-400">Gate Result</span>
           <span style={{ color: allGatesPass ? '#22c55e' : '#ef4444' }} className="font-bold">{allGatesPass ? 'PASSED' : 'FAILED'}</span>
@@ -269,14 +269,14 @@ function renderV2Breakdown(
 
       {/* Expanded detail section */}
       {isExpanded && (
-        <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">CPR Classification</div>
+        <div className="space-y-1.5 pt-1 border-t border-border-primary">
+          <div className="text-[8px] font-bold text-text-secondary uppercase tracking-wider mb-0.5">CPR Classification</div>
           <div className="flex justify-between text-[9px] pl-1">
             <span className="text-slate-400">Tomorrow&apos;s CPR</span>
             <V2CprClassBadge cls={breakdown.classification} />
           </div>
 
-          <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-1.5 mb-0.5">CLV Detail</div>
+          <div className="text-[8px] font-bold text-text-secondary uppercase tracking-wider mt-1.5 mb-0.5">CLV Detail</div>
           <div className="pl-1 space-y-0.5">
             <div className="flex justify-between text-[9px]">
               <span className="text-slate-400">CLV Raw</span>
@@ -296,7 +296,7 @@ function renderV2Breakdown(
 
           {Object.keys(gates).length > 0 && (
             <>
-              <div className="text-[8px] font-bold text-slate-500 uppercase tracking-wider mt-1.5 mb-0.5">Gate Detail</div>
+              <div className="text-[8px] font-bold text-text-secondary uppercase tracking-wider mt-1.5 mb-0.5">Gate Detail</div>
               <div className="pl-1 space-y-0.5">
                 {Object.entries(gates).map(([k, v]) => (
                   <div key={k} className="flex justify-between text-[9px]">
@@ -340,7 +340,7 @@ function StatWidget({
           {label}
         </p>
         <p className="text-xl font-bold text-white leading-tight">{value}</p>
-        {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+        {sub && <p className="text-[10px] text-text-tertiary mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -621,7 +621,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#08090c] text-white">
+    <div className="min-h-screen bg-bg-primary text-white">
       <div className="max-w-[1400px] mx-auto px-4 py-8 space-y-6">
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
@@ -635,11 +635,11 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex bg-[#0d0f18] p-1 rounded-lg border border-slate-800 mr-4">
+            <div className="flex bg-bg-secondary p-1 rounded-lg border border-border-primary mr-4">
               <button
                 onClick={() => setActiveTab('LOG')}
                 className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === 'LOG' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                  activeTab === 'LOG' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
                 Trade Log
@@ -647,7 +647,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               <button
                 onClick={() => setActiveTab('ANALYTICS')}
                 className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === 'ANALYTICS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                  activeTab === 'ANALYTICS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
                 Analytics
@@ -656,7 +656,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 id="journal-signals-tab-btn"
                 onClick={() => setActiveTab('SIGNALS')}
                 className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === 'SIGNALS' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                  activeTab === 'SIGNALS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
                 Signals
@@ -667,7 +667,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               id="journal-refresh-btn"
               onClick={() => fetchData(1)}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 text-xs font-medium transition-all disabled:opacity-40"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all disabled:opacity-40"
             >
               <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
               Refresh
@@ -675,7 +675,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             <button
               id="journal-export-btn"
               onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 text-xs font-medium transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all"
             >
               <Download size={12} />
               Export CSV
@@ -688,7 +688,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
 
             {/* ── No-data empty state ── */}
             {(!reportingData || (reportingData.qualityBuckets.length === 0 && reportingData.executionOutcomes.length === 0)) && (
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center">
+              <div className="rounded-xl border border-border-primary bg-bg-secondary p-12 text-center">
                 <div className="text-4xl mb-3">📊</div>
                 <div className="text-slate-400 font-semibold mb-1">Not enough completed trades to generate analytics.</div>
                 <div className="text-slate-600 text-xs">Close at least 5 trades to unlock strategy insights.</div>
@@ -740,10 +740,10 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                   {/* Quality Bucket Performance */}
-                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                    <div className="p-4 border-b border-slate-800/50">
+                  <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                    <div className="p-4 border-b border-border-primary/50">
                       <h3 className="text-sm font-semibold text-white">Quality Bucket Performance</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Signal classification breakdown</p>
+                      <p className="text-[10px] text-text-tertiary mt-0.5">Signal classification breakdown</p>
                     </div>
                     <div className="divide-y divide-slate-800/40">
                       {(() => {
@@ -766,7 +766,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 mb-1.5">
-                                <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                <div className="flex-1 h-1.5 rounded-full bg-bg-primary overflow-hidden">
                                   <div style={{ width: `${contrib}%`, background: col }} className="h-full rounded-full transition-all" />
                                 </div>
                                 <span className="text-[10px] text-slate-500 font-mono w-8 text-right">{contrib.toFixed(0)}%</span>
@@ -784,14 +784,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   </div>
 
                   {/* Execution Outcomes */}
-                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                    <div className="p-4 border-b border-slate-800/50">
+                  <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                    <div className="p-4 border-b border-border-primary/50">
                       <h3 className="text-sm font-semibold text-white">Execution Outcomes</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">What happened after the signal fired</p>
+                      <p className="text-[10px] text-text-tertiary mt-0.5">What happened after the signal fired</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs whitespace-nowrap">
-                      <thead className="bg-[#12141c] text-slate-500">
+                      <thead className="bg-bg-primary text-slate-500">
                         <tr>
                           <th className="px-4 py-2 font-medium">Outcome</th>
                           <th className="px-4 py-2 font-medium text-right">Trades</th>
@@ -823,14 +823,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
                   {/* Regime Performance */}
-                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                    <div className="p-4 border-b border-slate-800/50">
+                  <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                    <div className="p-4 border-b border-border-primary/50">
                       <h3 className="text-sm font-semibold text-white">Regime Performance</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Market condition × strategy fit</p>
+                      <p className="text-[10px] text-text-tertiary mt-0.5">Market condition × strategy fit</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs whitespace-nowrap">
-                      <thead className="bg-[#12141c] text-slate-500">
+                      <thead className="bg-bg-primary text-slate-500">
                         <tr>
                           <th className="px-4 py-2 font-medium">Regime</th>
                           <th className="px-4 py-2 font-medium text-right">Trades</th>
@@ -874,10 +874,10 @@ export default function JournalClient({ initialReportingData }: { initialReporti
 
                   {/* Strategy Comparison */}
                   {stats && (
-                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                      <div className="p-4 border-b border-slate-800/50">
+                    <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                      <div className="p-4 border-b border-border-primary/50">
                         <h3 className="text-sm font-semibold text-white">Strategy Comparison</h3>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Which signal type performs best</p>
+                        <p className="text-[10px] text-text-tertiary mt-0.5">Which signal type performs best</p>
                       </div>
                       <div className="divide-y divide-slate-800/40">
                         {(['CPR', 'BTST', 'STBT'] as const).map(sig => {
@@ -898,7 +898,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                                 <span style={{ color: d.winRate >= 55 ? '#22c55e' : d.winRate >= 40 ? '#eab308' : '#ef4444' }}
                                   className="text-xs font-bold font-mono">{d.winRate.toFixed(1)}% WR</span>
                               </div>
-                              <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden mb-1.5">
+                              <div className="h-1.5 rounded-full bg-bg-primary overflow-hidden mb-1.5">
                                 <div style={{ width: `${Math.min(d.winRate, 100)}%`, background: col }} className="h-full rounded-full" />
                               </div>
                               <div className="flex gap-3 text-[10px] text-slate-500">
@@ -916,14 +916,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 {/* ── 6. Event Risk & Loss Analysis ── */}
                 {(reportingData.eventRisks?.length > 0) && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                      <div className="p-4 border-b border-slate-800/50">
+                    <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                      <div className="p-4 border-b border-border-primary/50">
                         <h3 className="text-sm font-semibold text-white">Event Risk Impact</h3>
-                        <p className="text-[10px] text-slate-500 mt-0.5">How event risk affects outcomes</p>
+                        <p className="text-[10px] text-text-tertiary mt-0.5">How event risk affects outcomes</p>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs whitespace-nowrap">
-                        <thead className="bg-[#12141c] text-slate-500">
+                        <thead className="bg-bg-primary text-slate-500">
                           <tr>
                             <th className="px-4 py-2 font-medium">Event Risk</th>
                             <th className="px-4 py-2 font-medium text-right">Trades</th>
@@ -953,10 +953,10 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                     </div>
 
                     {/* Loss Analysis */}
-                    <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                      <div className="p-4 border-b border-slate-800/50">
+                    <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                      <div className="p-4 border-b border-border-primary/50">
                         <h3 className="text-sm font-semibold text-white">Loss Analysis</h3>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Top reasons trades underperform</p>
+                        <p className="text-[10px] text-text-tertiary mt-0.5">Top reasons trades underperform</p>
                       </div>
                       <div className="divide-y divide-slate-800/40">
                         {reportingData.executionOutcomes
@@ -986,7 +986,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 )}
 
                 {/* ── 7. Execution Variance Card ── */}
-                <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 flex items-start gap-4">
+                <div className="rounded-xl border border-border-primary/50 bg-bg-secondary p-4 flex items-start gap-4">
                   <div style={{ background: (reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444') + '18', color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}
                     className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-lg">
                     <Activity size={18} />
@@ -997,7 +997,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       className="text-2xl font-bold font-mono">
                       {reportingData.variance.averageVariancePct >= 0 ? '+' : ''}{reportingData.variance.averageVariancePct.toFixed(2)}%
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">
+                    <div className="text-[11px] text-text-tertiary mt-0.5">
                       Average gap between model prediction and actual return · {reportingData.variance.sampleSize} trades sampled
                     </div>
                     <div className="mt-2 text-[10px]" style={{ color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}>
@@ -1021,14 +1021,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-white">Signal Analytics</h2>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-[11px] text-text-tertiary mt-0.5">
                   Every signal is scored against your closed trades. <span className="text-slate-400">Lift</span> = signal Win% − baseline Win%.
                 </p>
               </div>
               <button
                 id="signals-refresh-btn"
                 onClick={() => { setSignalAnalytics(null); setSignalAnalyticsLoading(true); fetch('/api/analytics/signals').then(r => r.json()).then(data => { if (Array.isArray(data?.signals)) setSignalAnalytics(data); else setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] }); }).catch(() => setSignalAnalytics({ baselineTrades: 0, baselineWinRate: 0, signals: [] })).finally(() => setSignalAnalyticsLoading(false)); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 text-xs font-medium transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all"
               >
                 <RefreshCw size={12} className={signalAnalyticsLoading ? 'animate-spin' : ''} />
                 Refresh
@@ -1036,13 +1036,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             </div>
 
             {signalAnalyticsLoading && (
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center text-slate-500 text-sm">
+              <div className="rounded-xl border border-border-primary bg-bg-secondary p-12 text-center text-slate-500 text-sm">
                 Loading signal data…
               </div>
             )}
 
             {!signalAnalyticsLoading && signalAnalytics && signalAnalytics.signals.length === 0 && (
-              <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-12 text-center">
+              <div className="rounded-xl border border-border-primary bg-bg-secondary p-12 text-center">
                 <div className="text-4xl mb-3">📈</div>
                 <div className="text-slate-400 font-semibold mb-1">No closed trades yet.</div>
                 <div className="text-slate-600 text-xs">Signal analytics will appear once trades close with P&amp;L data.</div>
@@ -1053,29 +1053,29 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               <>
                 {/* Baseline KPI */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Baseline Trades</div>
+                  <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-1">Baseline Trades</div>
                     <div className="text-2xl font-bold font-mono text-white">{signalAnalytics.baselineTrades}</div>
-                    <div className="text-[10px] text-slate-600 mt-1">All closed journal trades</div>
+                    <div className="text-[10px] text-text-tertiary mt-1">All closed journal trades</div>
                   </div>
-                  <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Baseline Win Rate</div>
+                  <div className="rounded-xl border border-border-primary bg-bg-secondary p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-1">Baseline Win Rate</div>
                     <div className="text-2xl font-bold font-mono" style={{ color: signalAnalytics.baselineWinRate >= 55 ? '#22c55e' : signalAnalytics.baselineWinRate >= 45 ? '#eab308' : '#ef4444' }}>
                       {signalAnalytics.baselineWinRate.toFixed(1)}%
                     </div>
-                    <div className="text-[10px] text-slate-600 mt-1">Strategy-wide win rate</div>
+                    <div className="text-[10px] text-text-tertiary mt-1">Strategy-wide win rate</div>
                   </div>
                 </div>
 
                 {/* Signal Table */}
-                <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
-                  <div className="p-4 border-b border-slate-800/50">
+                <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+                  <div className="p-4 border-b border-border-primary/50">
                     <h3 className="text-sm font-semibold text-white">Per-Signal Performance</h3>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Sorted by trade count. Confidence: Low &lt;30 · Medium 30-100 · High 100+</p>
+                    <p className="text-[10px] text-text-tertiary mt-0.5">Sorted by trade count. Confidence: Low &lt;30 · Medium 30-100 · High 100+</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs whitespace-nowrap">
-                      <thead className="bg-[#12141c] text-slate-500">
+                      <thead className="bg-bg-primary text-slate-500">
                         <tr>
                           <th className="px-4 py-2.5 font-medium">Signal</th>
                           <th className="px-4 py-2.5 font-medium text-right">Trades</th>
@@ -1134,7 +1134,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 </div>
 
                 {/* Legend */}
-                <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 text-[10px] text-slate-500 space-y-1">
+                <div className="rounded-xl border border-border-primary/50 bg-bg-secondary p-4 text-[10px] text-text-tertiary space-y-1">
                   <div className="font-semibold text-slate-400 text-[11px] mb-2">How to read this table</div>
                   <div>● <span className="text-slate-300">Lift (Incl)</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline (includes the signal&apos;s own trades).</div>
                   <div>● <span className="text-slate-300">Lift (Excl)</span> = signal Win% − Win% of trades WITHOUT this signal. Stricter baseline; isolates the signal&apos;s true differentiating edge.</div>
@@ -1184,25 +1184,25 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         )}
 
         {/* ── Filter Bar ───────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-slate-800 bg-[#0d0f18]">
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-border-primary bg-bg-secondary">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500 font-medium">From</label>
+            <label className="text-xs text-text-secondary font-medium">From</label>
             <input
               id="journal-from-date"
               type="date"
               value={fromDate}
               onChange={e => { setFromDate(e.target.value); setPage(1); }}
-              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-300 text-xs focus:outline-none focus:border-blue-500/50"
+              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-primary text-[11px] focus:outline-none focus:border-accent-blue"
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500 font-medium">To</label>
+            <label className="text-xs text-text-secondary font-medium">To</label>
             <input
               id="journal-to-date"
               type="date"
               value={toDate}
               onChange={e => { setToDate(e.target.value); setPage(1); }}
-              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-300 text-xs focus:outline-none focus:border-blue-500/50"
+              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-primary text-[11px] focus:outline-none focus:border-accent-blue"
             />
           </div>
           <div className="flex items-center gap-1 ml-auto">
@@ -1219,9 +1219,9 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
                   signalType === t
                     ? t === 'ALL'
-                      ? 'bg-white/10 text-white border-slate-600'
+                      ? 'bg-white/10 text-white border-border-secondary'
                       : 'border-current'
-                    : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5'
+                    : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-white/5'
                 }`}
               >
                 {t}
@@ -1229,11 +1229,11 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             ))}
           </div>
           
-          <div className="flex items-center gap-2 border-l border-slate-700 pl-3 ml-1">
+          <div className="flex items-center gap-2 border-l border-border-secondary pl-3 ml-1">
             <select
               value={qualityFilter}
               onChange={e => { setQualityFilter(e.target.value as 'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'); setPage(1); }}
-              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-400 text-xs focus:outline-none focus:border-blue-500/50"
+              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-secondary text-[11px] focus:outline-none focus:border-accent-blue"
             >
               <option value="ALL">All Qualities</option>
               <option value="TRADEABLE">Tradeable</option>
@@ -1244,7 +1244,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             <select
               value={outcomeFilter}
               onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }}
-              className="h-8 px-2 rounded-lg border border-slate-700 bg-[#08090c] text-slate-400 text-xs focus:outline-none focus:border-blue-500/50 w-[140px]"
+              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-secondary text-[11px] focus:outline-none focus:border-accent-blue w-[140px]"
             >
               <option value="ALL">All Outcomes</option>
               <option value="MODEL_VALID">Model Valid</option>
@@ -1267,7 +1267,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         </div>
 
         {/* ── Table ────────────────────────────────────────────────────────── */}
-        <div className="rounded-xl border border-slate-800 bg-[#0d0f18] overflow-hidden">
+        <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
           {error && (
             <div className="p-6 text-center text-red-400 text-sm">{error}</div>
           )}
@@ -1285,7 +1285,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             <div className="overflow-x-auto">
               <table className="w-full text-xs whitespace-nowrap">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-wider text-[10px]">
+                  <tr className="border-b border-border-primary text-text-secondary uppercase tracking-wider text-[10px]">
                     <th className="text-left px-4 py-3 font-semibold">Trade Date</th>
                     <th className="text-left px-3 py-3 font-semibold">Type</th>
                     <th className="text-left px-3 py-3 font-semibold">Stock</th>
@@ -1302,7 +1302,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                     <th className="text-center px-3 py-3 font-semibold">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-border-primary/60">
                   {entries.map((entry, index) => (
                     <tr
                       key={entry.id}
@@ -1315,7 +1315,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         <div className="flex flex-col gap-1 items-start">
                           <SignalBadge type={entry.signalType} />
                           {entry.qualityBucketAtSignal && (
-                            <span className="text-[9px] text-slate-500 border border-slate-700 rounded px-1 whitespace-nowrap">{entry.qualityBucketAtSignal}</span>
+                            <span className="text-[9px] text-slate-500 border border-border-secondary rounded-lg px-1 whitespace-nowrap">{entry.qualityBucketAtSignal}</span>
                           )}
                           <OutcomeBadge outcome={entry.executionOutcome} />
                         </div>
@@ -1367,7 +1367,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                                 e.stopPropagation();
                                 setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
                               }}
-                              className="cursor-help border-b border-dashed border-slate-600 select-none hover:text-white transition-colors"
+                              className="cursor-help border-b border-dashed border-border-secondary select-none hover:text-white transition-colors"
                             >
                               {entry.scoreV2}
                             </span>
@@ -1375,13 +1375,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                             {/* Premium Tooltip Overlay */}
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className={`absolute z-50 right-0 w-64 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-xl shadow-2xl text-left whitespace-normal pointer-events-auto transition-all ${
+                              className={`absolute z-50 right-0 w-64 p-3 bg-bg-secondary border border-border-secondary/80 rounded-xl shadow-2xl text-left whitespace-normal pointer-events-auto transition-all ${
                                 index < 3 ? 'top-full mt-2' : 'bottom-full mb-2'
                               } ${
                                 activeTooltipRow === entry.id ? 'block opacity-100 translate-y-0' : 'hidden md:group-hover:block md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0'
                               }`}
                             >
-                              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-800">
+                              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border-primary">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V2 Score Breakdown</span>
                                 <span className="text-[9px] text-slate-600 font-mono">Shadow Mode</span>
                               </div>
@@ -1413,20 +1413,20 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                                 placeholder="₹ price"
                                 value={exitValue}
                                 onChange={e => { setExitValue(e.target.value); setExitError(null); }}
-                                className="w-20 h-6 px-1.5 rounded border border-slate-700 bg-[#08090c] text-slate-300 text-[10px] focus:outline-none focus:border-blue-500/50"
+                                className="w-20 h-6 px-1.5 rounded border border-border-secondary bg-bg-primary text-slate-300 text-[10px] focus:outline-none focus:border-blue-500/50"
                                 autoFocus
                               />
                               <button
                                 id={`journal-exit-confirm-${entry.id}`}
                                 onClick={() => submitExit(entry.id)}
                                 disabled={exitLoading}
-                                className="h-6 px-2 rounded bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-semibold transition-colors disabled:opacity-40"
+                                className="h-6 px-2 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-semibold transition-colors disabled:opacity-40"
                               >
                                 {exitLoading ? '…' : '✓'}
                               </button>
                               <button
                                 onClick={() => { setExitRow(null); setExitValue(''); setExitError(null); }}
-                                className="h-6 px-1.5 rounded border border-slate-700 text-slate-500 hover:text-white text-[10px] transition-colors"
+                                className="h-6 px-1.5 rounded border border-border-secondary text-slate-500 hover:text-white text-[10px] transition-colors"
                               >
                                 ✕
                               </button>
@@ -1439,7 +1439,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                           <button
                             id={`journal-exit-btn-${entry.id}`}
                             onClick={() => { setExitRow(entry.id); setExitValue(''); setExitError(null); }}
-                            className="px-2 py-1 rounded border border-slate-700 text-slate-500 hover:text-white hover:border-slate-500 text-[10px] font-medium transition-all"
+                            className="px-2 py-1 rounded border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-secondary text-[10px] font-medium transition-all"
                           >
                             Set Exit
                           </button>
@@ -1454,8 +1454,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800">
-              <span className="text-xs text-slate-500">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border-primary">
+              <span className="text-xs text-text-secondary">
                 {total} entries · Page {page} of {totalPages}
               </span>
               <div className="flex items-center gap-1">
@@ -1463,7 +1463,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   id="journal-prev-page"
                   onClick={() => { const p = page - 1; setPage(p); fetchData(p); }}
                   disabled={page <= 1}
-                  className="h-7 w-7 flex items-center justify-center rounded border border-slate-700 text-slate-500 hover:text-white hover:border-slate-600 disabled:opacity-30 transition-all"
+                  className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-slate-500 hover:text-white hover:border-border-secondary disabled:opacity-30 transition-all"
                 >
                   <ChevronLeft size={12} />
                 </button>
@@ -1471,7 +1471,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   id="journal-next-page"
                   onClick={() => { const p = page + 1; setPage(p); fetchData(p); }}
                   disabled={page >= totalPages}
-                  className="h-7 w-7 flex items-center justify-center rounded border border-slate-700 text-slate-500 hover:text-white hover:border-slate-600 disabled:opacity-30 transition-all"
+                  className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-slate-500 hover:text-white hover:border-border-secondary disabled:opacity-30 transition-all"
                 >
                   <ChevronRight size={12} />
                 </button>
@@ -1485,7 +1485,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* Chart 1: Win Rate by Signal Type */}
-            <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-5">
+            <div className="rounded-xl border border-border-primary bg-bg-secondary p-5">
               <h2 className="text-sm font-semibold text-white mb-1">
                 Win Rate by Signal Type
               </h2>
@@ -1529,7 +1529,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
             </div>
 
             {/* Chart 2: Avg P&L% by Exit Time */}
-            <div className="rounded-xl border border-slate-800 bg-[#0d0f18] p-5">
+            <div className="rounded-xl border border-border-primary bg-bg-secondary p-5">
               <h2 className="text-sm font-semibold text-white mb-1">
                 Avg P&amp;L % by Exit Time
               </h2>
