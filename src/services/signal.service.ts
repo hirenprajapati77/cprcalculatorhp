@@ -207,6 +207,23 @@ export class SignalService {
       }
     }
 
+    // ── KGS Camarilla + CPR Alignment ────────────────────────────────────────
+    // Source: KGS "CAMARILLA & CPR" — evaluates whether Camarilla R3 or S3 falls
+    // inside the today's CPR zone (between TC and BC).
+    // Cam R3 inside CPR = bearish bias (favors shorts)
+    // Cam S3 inside CPR = bullish bias (favors longs)
+    const priorRange = yesterdayCandle.high - yesterdayCandle.low;
+    const camR3 = yesterdayCandle.close + priorRange * 0.275; // Close + Range * 1.1 / 4
+    const camS3 = yesterdayCandle.close - priorRange * 0.275; // Close - Range * 1.1 / 4
+
+    // Note: cprToday.tc is already normalized to be >= cprToday.bc
+    if (camR3 <= cprToday.tc && camR3 >= cprToday.bc) {
+      signals.push('KGS_CAM_BEAR_BIAS');
+    }
+    if (camS3 <= cprToday.tc && camS3 >= cprToday.bc) {
+      signals.push('KGS_CAM_BULL_BIAS');
+    }
+
     // ── KGS Open Tricks (DIRECT / REVERSAL) ──────────────────────────────────
     // Source: KGS "OPEN TRICKS" — classification is candle color at R1/S1, not an
     // opening-range-breakout timing rule. DIRECT = candle color confirms the pivot
