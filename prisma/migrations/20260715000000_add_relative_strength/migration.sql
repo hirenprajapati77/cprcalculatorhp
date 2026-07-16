@@ -1,1 +1,2 @@
--- AlterTable ALTER TABLE "BtstSignal" ADD COLUMN     "relativeStrength" DOUBLE PRECISION;
+-- AlterTable
+ALTER TABLE "BtstSignal" ADD COLUMN     "relativeStrength" DOUBLE PRECISION;
