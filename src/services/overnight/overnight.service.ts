@@ -321,7 +321,7 @@ export class OvernightService {
           ? ((history[history.length - 1].close - history[history.length - 1 - RS_LOOKBACK].close) /
              history[history.length - 1 - RS_LOOKBACK].close) * 100
           : 0;
-        const relativeStrength = stockReturn5d - regime.niftyReturn5d;
+        const relativeStrength = stockReturn5d - (regime.niftyReturn5d ?? 0);
 
         if (history.length === 0) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Empty market history (cannot establish distinct prior day candle).`);

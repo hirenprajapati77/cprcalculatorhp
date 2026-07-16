@@ -29,7 +29,7 @@ export class SignalQualityService {
     historyLength: number,
     stockEvent: EventRiskResult,
     macroEvent: EventRiskResult,
-    relativeStrength: number
+    relativeStrength: number = 0
   ): SignalQualityMetrics {
     // 1. History Quality (0-100)
     // 15 candles = 0, 200 candles = 100
