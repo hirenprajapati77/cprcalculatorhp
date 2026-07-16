@@ -183,9 +183,9 @@ export default function SettingsPage() {
 
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto px-4 py-6 font-mono text-xs text-slate-300">
+    <div className="space-y-6 px-4 py-6 font-mono text-xs text-slate-300">
       {/* Title Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
+      <div className="bg-bg-secondary border border-border-primary rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
         <div className="absolute top-0 right-0 p-8 opacity-10">
           <Settings size={120} className="text-slate-500 rotate-12" />
         </div>
@@ -214,7 +214,7 @@ export default function SettingsPage() {
               <select
                 value={marketMode}
                 onChange={(e) => setMarketMode(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-white w-full p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
               >
                 <option value="live">Live (Yahoo Finance Real-time)</option>
                 <option value="paper">Paper (Simulated Tick Fluctuations)</option>
@@ -234,7 +234,7 @@ export default function SettingsPage() {
               <select
                 value={defaultUniverse}
                 onChange={(e) => setDefaultUniverse(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-white w-full p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
               >
                 <option value="NSE_FNO">NSE F&O (~202 Stocks)</option>
                 <option value="NIFTY50">Nifty 50 Index</option>
@@ -256,7 +256,7 @@ export default function SettingsPage() {
               <select
                 value={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-white w-full p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
               >
                 <option value="off">Off (Manual Sync)</option>
                 <option value="5m">Every 5 Minutes</option>
@@ -275,7 +275,7 @@ export default function SettingsPage() {
                   type="checkbox"
                   checked={bypassBtst}
                   onChange={(e) => setBypassBtst(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-800 bg-slate-950 focus:ring-blue-500 accent-blue cursor-pointer"
+                  className="w-4 h-4 rounded border-border-secondary bg-bg-secondary focus:ring-accent-blue accent-accent-blue cursor-pointer"
                 />
                 <span>Bypass BTST Time Lock (Run Scan Anywhere/Anytime)</span>
               </label>
@@ -297,7 +297,7 @@ export default function SettingsPage() {
                 step="0.5"
                 value={minPrice}
                 onChange={(e) => setMinPrice(parseFloat(e.target.value) || 1)}
-                className="bg-slate-950 border border-slate-800 text-white w-full p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
               />
               <p className="text-[9px] text-slate-500 mt-1">
                 Excludes penny stocks below this floor threshold during scans.
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                 step="1000"
                 value={minVolume}
                 onChange={(e) => setMinVolume(parseInt(e.target.value) || 1000)}
-                className="bg-slate-950 border border-slate-800 text-white w-full p-2.5 rounded-lg focus:outline-none focus:border-blue-500"
+                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
               />
               <p className="text-[9px] text-slate-500 mt-1">
                 Excludes illiquid counters with volume below this floor threshold.
@@ -397,7 +397,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Breakout Alert Group Chat ID */}
-            <div className="md:col-span-2 space-y-1.5 border-t border-slate-700/50 pt-4 mt-2">
+            <div className="md:col-span-2 space-y-1.5 border-t border-border-secondary/50 pt-4 mt-2">
               <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
                 Breakout Alert Group Chat ID
               </label>
