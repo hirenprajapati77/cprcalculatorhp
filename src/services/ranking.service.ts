@@ -27,7 +27,9 @@ export class RankingService {
    *   KGS_DIRECT_DOWN: 0
    *   KGS_REVERSAL_UP: 0
    *   KGS_REVERSAL_DOWN: 0
-   *   (Open Tricks signal family is brand-new and unvalidated — held at zero score
+   *   KGS_CAM_BULL_BIAS: 0
+   *   KGS_CAM_BEAR_BIAS: 0
+   *   (Open Tricks & Camarilla signal families are brand-new and unvalidated — held at zero score
    *   impact across the board (DIRECT included) until backtested against a few
    *   hundred journaled trades. Signals still fire, get stored, and are visible in
    *   analytics; they just don't move the ranking number yet. Revisit per Phase E

@@ -679,9 +679,49 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     const withoutDirect = RankingService.calculateScore(baseResult);
     const withDirect = RankingService.calculateScore({
       ...baseResult,
-      signals: [...baseResult.signals, 'KGS_DIRECT_UP'],
+      signals: [...baseResult.signals, 'KGS_DIRECT_UP', 'KGS_CAM_BULL_BIAS'],
     });
-    assert.strictEqual(withDirect, withoutDirect, 'KGS_DIRECT_UP should not change the ranking score yet — zero-weight until validated');
+    assert.strictEqual(withDirect, withoutDirect, 'Zero-weight signals should not change the ranking score');
+  });
+
+  await t.test('KGS_CAM_BULL_BIAS fires when Cam S3 is inside CPR zone', async () => {
+    // CPR Pivot = 100, BC = 98, TC = 102
+    // We want Cam S3 between 98 and 102. Let's aim for 100.
+    // Cam S3 = Close - Range * 0.275
+    // Close = 105.5, Range = 20. S3 = 105.5 - 5.5 = 100.
+    const mockStock: MarketStockData = {
+      symbol: 'CAM_BULL', market: 'NSE', sector: 'Tech',
+      open: 100, high: 105, low: 95, close: 100,
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 100,
+      history: [
+        { date: 'dayBeforeYesterday', open: 100, high: 105, low: 95, close: 100, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 110, low: 90, close: 105.5, volume: 100000 }, // H=110, L=90 (Range=20), C=105.5. S3=100. P=101.83, BC=100, TC=103.66. S3 is inside [100, 103.66].
+        { date: todayStr, open: 100, high: 105, low: 95, close: 100, volume: 100000 }
+      ]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_CAM_BULL_BIAS'), 'Expected KGS_CAM_BULL_BIAS to fire');
+    assert.ok(!scanResult.signals.includes('KGS_CAM_BEAR_BIAS'), 'Should not fire BEAR_BIAS');
+  });
+
+  await t.test('KGS_CAM_BEAR_BIAS fires when Cam R3 is inside CPR zone', async () => {
+    // CPR Pivot = 100, BC = 98, TC = 102
+    // We want Cam R3 between 98 and 102. Let's aim for 100.
+    // Cam R3 = Close + Range * 0.275
+    // Close = 94.5, Range = 20. R3 = 94.5 + 5.5 = 100.
+    const mockStock: MarketStockData = {
+      symbol: 'CAM_BEAR', market: 'NSE', sector: 'Tech',
+      open: 100, high: 105, low: 95, close: 100,
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 100,
+      history: [
+        { date: 'dayBeforeYesterday', open: 100, high: 105, low: 95, close: 100, volume: 100000 },
+        { date: 'yesterday', open: 100, high: 110, low: 90, close: 94.5, volume: 100000 }, // H=110, L=90 (Range=20), C=94.5. R3=100. P=98.16, BC=100, TC=96.33 -> normalized to [96.33, 100]. R3 is exactly at BC (100).
+        { date: todayStr, open: 100, high: 105, low: 95, close: 100, volume: 100000 }
+      ]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_CAM_BEAR_BIAS'), 'Expected KGS_CAM_BEAR_BIAS to fire');
+    assert.ok(!scanResult.signals.includes('KGS_CAM_BULL_BIAS'), 'Should not fire BULL_BIAS');
   });
 
   await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', async () => {
