@@ -6,7 +6,8 @@ export interface SignalStats {
   winRate: number; // percentage (0-100)
   avgPnl: number;
   avgPnlPct: number;
-  lift: number; // Signal WR - Baseline WR
+  lift: number; // Signal WR - Baseline WR (baseline = ALL trades, including this signal)
+  liftExclusive: number; // Signal WR - Baseline WR (baseline = trades WITHOUT this signal)
   confidence: 'Low' | 'Medium' | 'High'; // <30, 30-100, 100+
 }
 
@@ -59,9 +60,21 @@ export function aggregateSignalAnalytics(journals: JournalRow[]): AnalyticsResul
 
   const signalsList: SignalStats[] = [];
 
+  function winRateExcluding(journals: JournalRow[], signal: string): number {
+    const excluded = journals.filter(j => {
+      if (!j.signalSummary) return true; // no signals at all — definitely doesn't have this one
+      const signals = j.signalSummary.split(',').map((s: string) => s.trim());
+      return !signals.includes(signal);
+    });
+    if (excluded.length === 0) return 0; // signal appears in every trade — no exclusive baseline possible
+    const wins = excluded.filter(j => (j.pnl ?? 0) > 0).length;
+    return (wins / excluded.length) * 100;
+  }
+
   for (const [signal, stats] of signalMap.entries()) {
     const winRate = (stats.wins / stats.count) * 100;
     const lift = winRate - baselineWinRate;
+    const liftExclusive = winRate - winRateExcluding(journals, signal);
 
     let confidence: 'Low' | 'Medium' | 'High' = 'Low';
     if (stats.count >= 100) confidence = 'High';
@@ -74,6 +87,7 @@ export function aggregateSignalAnalytics(journals: JournalRow[]): AnalyticsResul
       avgPnl: stats.totalPnl / stats.count,
       avgPnlPct: stats.totalPnlPct / stats.count,
       lift,
+      liftExclusive,
       confidence
     });
   }

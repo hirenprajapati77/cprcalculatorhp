@@ -60,4 +60,25 @@ test('aggregateSignalAnalytics', async (t) => {
     assert.ok(bullish);
     assert.strictEqual(bullish.trades, 1);
   });
+
+  await t.test('calculates liftExclusive correctly where signal appears in some but not all trades', () => {
+    const directUp = result.signals.find(s => s.signal === 'KGS_DIRECT_UP');
+    assert.ok(directUp);
+    assert.strictEqual(directUp.lift, 50); // 100% WR - 50% baseline WR
+    assert.strictEqual(directUp.liftExclusive, 100); // 100% WR - 0% exclusive WR (since non-directUp trades both lost)
+    assert.notStrictEqual(directUp.lift, directUp.liftExclusive);
+  });
+
+  await t.test('handles degenerate case where signal appears in every single trade (liftExclusive should equal winRate)', () => {
+    const allSameSignal = aggregateSignalAnalytics([
+      { pnl: 100, pnlPct: 1, signalSummary: 'ALWAYS_PRESENT' },
+      { pnl: -50, pnlPct: -0.5, signalSummary: 'ALWAYS_PRESENT' },
+    ]);
+    const alwaysPresent = allSameSignal.signals.find(s => s.signal === 'ALWAYS_PRESENT');
+    assert.ok(alwaysPresent);
+    assert.strictEqual(alwaysPresent.winRate, 50);
+    assert.strictEqual(alwaysPresent.lift, 0); // 50% WR - 50% baseline WR
+    // liftExclusive is winRate - 0 = 50% because no non-signal trades exist to form an exclusive baseline, returning 0
+    assert.strictEqual(alwaysPresent.liftExclusive, 50);
+  });
 });
