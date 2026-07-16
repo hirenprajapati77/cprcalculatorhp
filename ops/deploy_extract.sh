@@ -2,9 +2,18 @@
 set -e
 
 APP=/home/ubuntu/cpr-calculator-platform
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+RELEASES_DIR=$APP/releases
+BACKUP_DIR=$RELEASES_DIR/$TIMESTAMP
 
-echo "=== Replacing standalone ==="
-rm -rf $APP/.next/standalone
+echo "=== Versioned Backup ==="
+mkdir -p $RELEASES_DIR
+if [ -d "$APP/.next/standalone" ]; then
+    echo "Backing up current release to $BACKUP_DIR"
+    mv $APP/.next/standalone $BACKUP_DIR
+fi
+
+echo "=== Extracting new release ==="
 mkdir -p $APP/.next/standalone
 tar -xzf /home/ubuntu/deploy_standalone.tar.gz -C $APP/.next/standalone
 
@@ -12,35 +21,75 @@ echo "=== Placing static assets ==="
 mkdir -p $APP/.next/standalone/.next/static
 tar -xzf /home/ubuntu/deploy_static.tar.gz -C $APP/.next/standalone/.next/static
 
-echo "=== Extracting Prisma schema & migrations ==="
+echo "=== Extracting Prisma bundle ==="
 tar -xzf /home/ubuntu/deploy_prisma.tar.gz -C $APP/
 
 echo "=== Copying .env into standalone ==="
 cp $APP/.env $APP/.next/standalone/.env
 
-echo "=== Checking DATABASE_URL in .env ==="
-grep "DATABASE_URL" $APP/.next/standalone/.env | head -1
-
-echo "=== Checking NEXT_PUBLIC_BASE_URL ==="
-grep "NEXT_PUBLIC_BASE_URL" $APP/.next/standalone/.env | head -1
-
 echo "=== Running Database Migrations ==="
 cd $APP
 npx prisma migrate deploy
 
-echo "=== Restarting PM2 fresh ==="
-pm2 delete cpr-platform 2>/dev/null || true
-cd $APP/.next/standalone
-pm2 start server.js --name cpr-platform
-pm2 save
+echo "=== Synchronizing Prisma Client ==="
+npx prisma generate
 
-echo "=== Cleanup ==="
-rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_prisma.tar.gz
-rm -f /home/ubuntu/deploy_standalone.zip /home/ubuntu/deploy_static.zip /home/ubuntu/deploy_prisma.zip
+echo "=== Restarting PM2 fresh ==="
+cd $APP/.next/standalone
+if pm2 list | grep -q "cpr-platform"; then
+    pm2 restart cpr-platform --update-env
+else
+    pm2 start server.js --name cpr-platform
+fi
+pm2 save
 
 echo "=== PM2 status ==="
 pm2 list
 
 echo "=== Health check (waiting 5s for startup) ==="
 sleep 5
-curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database']); print('Env:', d['environment']); print('BaseURL from env:', d.get('baseUrl','N/A'))" 2>/dev/null || curl -s http://localhost:3000/api/health | head -c 500
+set +e
+HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+set -e
+
+if [[ "$HEALTH_OUTPUT" == *"DB: up"* ]]; then
+    echo "[OK] Health check passed! Database is up."
+    echo "=== Cleanup ==="
+    rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_prisma.tar.gz
+    # Remove old backup to save space
+    if [ -d "$BACKUP_DIR" ]; then
+        echo "Removing old backup $BACKUP_DIR to conserve space"
+        rm -rf $BACKUP_DIR
+    fi
+    echo "================================================"
+    echo "  DEPLOY COMPLETE"
+    echo "================================================"
+else
+    echo "[ERROR] Health check failed or DB is not up!"
+    echo "Output was: $HEALTH_OUTPUT"
+    echo "=== Initiating Automatic Rollback ==="
+    
+    if [ -d "$BACKUP_DIR" ]; then
+        echo "Restoring from $BACKUP_DIR"
+        rm -rf $APP/.next/standalone
+        mv $BACKUP_DIR $APP/.next/standalone
+        
+        echo "Restarting PM2 with rolled-back release..."
+        cd $APP/.next/standalone
+        pm2 restart cpr-platform --update-env
+        
+        echo "Waiting 5s for rollback to stabilize..."
+        sleep 5
+        set +e
+        ROLLBACK_HEALTH=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+        set -e
+        if [[ "$ROLLBACK_HEALTH" == *"DB: up"* ]]; then
+            echo "[OK] Rollback stabilized."
+        else
+            echo "[CRITICAL] Rollback also failed health check!"
+        fi
+    else
+        echo "[CRITICAL] No backup found to restore!"
+    fi
+    exit 1
+fi
