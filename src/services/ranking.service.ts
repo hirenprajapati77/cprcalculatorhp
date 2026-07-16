@@ -23,6 +23,15 @@ export class RankingService {
    *   KGS_ASC_REVERSAL: 0
    *   KGS_DESC_REVERSAL: 0
    *   KGS_HP_RTP: 0
+   *   KGS_DIRECT_UP: 0
+   *   KGS_DIRECT_DOWN: 0
+   *   KGS_REVERSAL_UP: 0
+   *   KGS_REVERSAL_DOWN: 0
+   *   (Open Tricks signal family is brand-new and unvalidated — held at zero score
+   *   impact across the board (DIRECT included) until backtested against a few
+   *   hundred journaled trades. Signals still fire, get stored, and are visible in
+   *   analytics; they just don't move the ranking number yet. Revisit per Phase E
+   *   of the rollout plan once there's evidence DIRECT actually outperforms baseline.)
    *
    * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, KGS_OUTSIDE_CPR
    */

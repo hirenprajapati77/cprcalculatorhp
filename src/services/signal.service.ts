@@ -54,7 +54,7 @@ export class SignalService {
     const todayStr = asOfDate ?? getISTDateString();
 
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
-    let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
+    let todayCandle = { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
     // These are null when distinct historical candles don't exist —
     // signals that depend on them are skipped rather than fabricated.
     let dayBeforeYesterdayCandle: { high: number; low: number; close: number } | null = null;
@@ -71,7 +71,7 @@ export class SignalService {
 
       todayCandle = isTodayCandleFinal
         ? lastCandle
-        : { high: stock.high, low: stock.low, close: stock.ltp };
+        : { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
 
       yesterdayCandle = isLastToday
         ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
@@ -205,6 +205,35 @@ export class SignalService {
       if (cprToday.tc > cprYesterday.tc && cprToday.bc < cprYesterday.bc) {
         signals.push('KGS_OUTSIDE_CPR');
       }
+    }
+
+    // ── KGS Open Tricks (DIRECT / REVERSAL) ──────────────────────────────────
+    // Source: KGS "OPEN TRICKS" — classification is candle color at R1/S1, not an
+    // opening-range-breakout timing rule. DIRECT = candle color confirms the pivot
+    // break (green closing above R1, red closing below S1) = continuation.
+    // REVERSAL = candle color contradicts the pivot touch (red after tagging R1,
+    // green after tagging S1) = rejection.
+    // NOTE: this is a daily-candle proxy (today's O/H/L/C vs cprToday.r1/s1), not a
+    // true first-three-5-minute-candle intraday read — the platform does not
+    // currently ingest an intraday 5m candle series. Revisit if/when it does.
+    const r1 = cprToday.r1;
+    const s1 = cprToday.s1;
+    const todayIsGreen = todayCandle.close > todayCandle.open;
+    const todayIsRed = todayCandle.close < todayCandle.open;
+
+    const touchedR1 = todayCandle.high >= r1;
+    const touchedS1 = todayCandle.low <= s1;
+
+    if (touchedR1 && todayCandle.close > r1 && todayIsGreen) {
+      signals.push('KGS_DIRECT_UP');
+    } else if (touchedR1 && todayCandle.close < r1 && todayIsRed) {
+      signals.push('KGS_REVERSAL_DOWN');
+    }
+
+    if (touchedS1 && todayCandle.close < s1 && todayIsRed) {
+      signals.push('KGS_DIRECT_DOWN');
+    } else if (touchedS1 && todayCandle.close > s1 && todayIsGreen) {
+      signals.push('KGS_REVERSAL_UP');
     }
 
     // KGS RTP (Running Trend Pattern)

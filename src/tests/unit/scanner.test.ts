@@ -599,6 +599,91 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with live ltp should fire');
   });
 
+  // Shared yesterday candle for Open Tricks tests: H=110, L=90, C=100
+  // => pivot=100, R1 = 2*100-90 = 110, S1 = 2*100-110 = 90
+  const openTricksYesterday = { date: 'yesterday', open: 100, high: 110, low: 90, close: 100, volume: 100000 };
+
+  await t.test('KGS_DIRECT_UP fires on green candle closing decisively above R1', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'DIRECT_UP', market: 'NSE', sector: 'Tech',
+      open: 108, high: 115, low: 107, close: 113, // green, high>=R1(110), close>R1
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 113,
+      history: [openTricksYesterday, { date: todayStr, open: 108, high: 115, low: 107, close: 113, volume: 100000 }]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_DIRECT_UP'), 'Expected KGS_DIRECT_UP');
+    assert.ok(!scanResult.signals.includes('KGS_REVERSAL_DOWN'), 'Should not also fire REVERSAL_DOWN');
+  });
+
+  await t.test('KGS_DIRECT_DOWN fires on red candle closing decisively below S1', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'DIRECT_DOWN', market: 'NSE', sector: 'Tech',
+      open: 92, high: 93, low: 85, close: 87, // red, low<=S1(90), close<S1
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 87,
+      history: [openTricksYesterday, { date: todayStr, open: 92, high: 93, low: 85, close: 87, volume: 100000 }]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_DIRECT_DOWN'), 'Expected KGS_DIRECT_DOWN');
+    assert.ok(!scanResult.signals.includes('KGS_REVERSAL_UP'), 'Should not also fire REVERSAL_UP');
+  });
+
+  await t.test('KGS_REVERSAL_DOWN fires on red candle rejecting R1 after tagging it', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'REVERSAL_DOWN', market: 'NSE', sector: 'Tech',
+      open: 112, high: 116, low: 105, close: 108, // red, high>=R1(110), close<R1
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 108,
+      history: [openTricksYesterday, { date: todayStr, open: 112, high: 116, low: 105, close: 108, volume: 100000 }]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_REVERSAL_DOWN'), 'Expected KGS_REVERSAL_DOWN');
+    assert.ok(!scanResult.signals.includes('KGS_DIRECT_UP'), 'Should not also fire DIRECT_UP');
+  });
+
+  await t.test('KGS_REVERSAL_UP fires on green candle rejecting S1 after tagging it', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'REVERSAL_UP', market: 'NSE', sector: 'Tech',
+      open: 88, high: 95, low: 84, close: 93, // green, low<=S1(90), close>S1
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 93,
+      history: [openTricksYesterday, { date: todayStr, open: 88, high: 95, low: 84, close: 93, volume: 100000 }]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    assert.ok(scanResult.signals.includes('KGS_REVERSAL_UP'), 'Expected KGS_REVERSAL_UP');
+    assert.ok(!scanResult.signals.includes('KGS_DIRECT_DOWN'), 'Should not also fire DIRECT_DOWN');
+  });
+
+  await t.test('Open Tricks signals do not fire when R1/S1 are not touched', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'NO_TOUCH', market: 'NSE', sector: 'Tech',
+      open: 101, high: 104, low: 98, close: 102, // stays well inside R1(110)/S1(90)
+      volume: 100000, avgVolume: 100000, marketCap: 100000, ltp: 102,
+      history: [openTricksYesterday, { date: todayStr, open: 101, high: 104, low: 98, close: 102, volume: 100000 }]
+    };
+    const scanResult = await ScannerService.scanStock(mockStock, todayStr);
+    for (const sig of ['KGS_DIRECT_UP', 'KGS_DIRECT_DOWN', 'KGS_REVERSAL_UP', 'KGS_REVERSAL_DOWN']) {
+      assert.ok(!scanResult.signals.includes(sig), `${sig} should not fire without touching R1/S1`);
+    }
+  });
+
+  await t.test('RankingService does NOT score KGS_DIRECT_UP + BULLISH (zero-weight until backtested)', async () => {
+    const baseResult = {
+      symbol: 'DIRECT_SCORE_TEST',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 101, low: 99, close: 100,
+      volume: 150000, avgVolume: 100000, marketCap: 50000, ltp: 105,
+      pivot: 100, bc: 100, tc: 100, r1: 102, r2: 103, r3: 104, r4: 105, s1: 98, s2: 97, s3: 96, s4: 95,
+      width: 0, classification: 'NARROW' as const,
+      signals: ['NARROW', 'BULLISH', 'MOMENTUM'],
+      entry: 0, sl: 0, target: 0, rr: '1:1',
+    };
+    const withoutDirect = RankingService.calculateScore(baseResult);
+    const withDirect = RankingService.calculateScore({
+      ...baseResult,
+      signals: [...baseResult.signals, 'KGS_DIRECT_UP'],
+    });
+    assert.strictEqual(withDirect, withoutDirect, 'KGS_DIRECT_UP should not change the ranking score yet — zero-weight until validated');
+  });
+
   await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'INSIDEVAL',
