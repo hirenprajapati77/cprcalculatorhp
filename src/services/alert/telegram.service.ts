@@ -5,6 +5,8 @@ import { prisma } from '../../lib/db';
 
 import { decrypt } from '../../lib/crypto';
 
+const MIN_BTST_ALERT_SCORE = 75;
+
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
     let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
@@ -71,8 +73,8 @@ export class TelegramService {
   }
 
   static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<{ sent: boolean; reason?: string }> {
-    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= 60);
-    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= 60);
+    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
+    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
 
     const strongSignalCount = results.filter(r => r.signals && r.signals.some(s => s.includes('STRONG') || s.includes('BREAKOUT') || s.includes('HIGHER_VALUE') || s.includes('LOWER_VALUE'))).length;
     const breakoutCount = results.filter(r => r.signals && r.signals.includes('BREAKOUT')).length;
@@ -87,7 +89,7 @@ export class TelegramService {
       const result = await this.sendMessage(
         `📊 <b>CPR PRO — BTST/STBT SCAN</b>\n` +
         `📅 ${dateStr}\n\n` +
-        `<i>No qualifying setups found today (score < 60).\n` +
+        `<i>No qualifying setups found today (score < ${MIN_BTST_ALERT_SCORE}).\n` +
         `Scanner ran successfully.</i>`
       );
       return { sent: result.ok, ...(result.ok ? { reason: 'no setups' } : (result.reason ? { reason: result.reason } : {})) };

@@ -39,11 +39,14 @@ Ok "NEXT_PUBLIC_BASE_URL = $PROD_URL"
 
 # ── 3. BUILD ─────────────────────────────────────────────────
 Log "Building Next.js (this takes ~1-2 min)..."
+$ErrorActionPreference = "Continue"
 $build = & npm run build 2>&1
-if ($LASTEXITCODE -ne 0) {
+$exitCode = $LASTEXITCODE
+$ErrorActionPreference = "Stop"
+if ($exitCode -ne 0) {
     # Restore .env before failing
     (Get-Content $ENV_FILE) -replace "NEXT_PUBLIC_BASE_URL=.*", "NEXT_PUBLIC_BASE_URL=`"$LOCAL_URL`"" | Set-Content $ENV_FILE
-    Err "Build failed. Restored .env. Check output above."
+    Err "Build failed with exit code $exitCode. Restored .env. Check output above."
 }
 Ok "Build complete"
 
@@ -51,9 +54,11 @@ Ok "Build complete"
 Log "Packaging standalone + static..."
 tar -czf deploy_standalone.tar.gz -C .next/standalone .
 tar -czf deploy_static.tar.gz -C .next/static .
+tar -czf deploy_prisma.tar.gz prisma/
 $s1 = [math]::Round((Get-Item deploy_standalone.tar.gz).Length / 1MB, 1)
 $s2 = [math]::Round((Get-Item deploy_static.tar.gz).Length / 1MB, 1)
-Ok "Packaged: standalone=${s1}MB  static=${s2}MB"
+$s3 = [math]::Round((Get-Item deploy_prisma.tar.gz).Length / 1MB, 1)
+Ok "Packaged: standalone=${s1}MB  static=${s2}MB  prisma=${s3}MB"
 
 # ── 5. RESTORE LOCAL .env ────────────────────────────────────
 Log "Restoring local .env..."
@@ -62,7 +67,7 @@ Ok "NEXT_PUBLIC_BASE_URL restored to $LOCAL_URL"
 
 # ── 6. UPLOAD ────────────────────────────────────────────────
 Log "Uploading to server (~15-20s)..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz "${SERVER}:/home/ubuntu/"
+scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_prisma.tar.gz "${SERVER}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { Err "SCP upload failed" }
 Ok "Upload complete"
 
@@ -72,7 +77,7 @@ ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "bash /home/ubuntu/deploy_ex
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
 # ── 8. CLEANUP LOCAL TARBALLS ────────────────────────────────
-Remove-Item -Force deploy_standalone.tar.gz, deploy_static.tar.gz -ErrorAction SilentlyContinue
+Remove-Item -Force deploy_standalone.tar.gz, deploy_static.tar.gz, deploy_prisma.tar.gz -ErrorAction SilentlyContinue
 Ok "Local tarballs cleaned up"
 
 # ── 9. DONE ──────────────────────────────────────────────────

@@ -12,6 +12,11 @@ export class DatabaseCircuitBreaker {
   static async execute<T>(operation: () => Promise<T>): Promise<T> {
     const now = Date.now();
 
+    if (this.state === CircuitState.HALF_OPEN) {
+      // A probe request is already in flight. Fail other concurrent requests fast.
+      throw new Error('CIRCUIT_OPEN'); 
+    }
+
     if (this.state === CircuitState.OPEN) {
       if (now >= this.nextAttemptAt) {
         this.state = CircuitState.HALF_OPEN;
@@ -47,9 +52,6 @@ export class DatabaseCircuitBreaker {
   }
 
   static isOpen(): boolean {
-    if (this.state === CircuitState.OPEN && Date.now() >= this.nextAttemptAt) {
-      this.state = CircuitState.HALF_OPEN;
-    }
-    return this.state === CircuitState.OPEN;
+    return this.state === CircuitState.OPEN && Date.now() < this.nextAttemptAt;
   }
 }

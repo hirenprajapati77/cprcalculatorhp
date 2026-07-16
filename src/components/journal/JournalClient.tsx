@@ -1202,7 +1202,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                             {/* Premium Tooltip Overlay */}
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className={`absolute z-50 right-0 w-64 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-xl shadow-2xl text-left pointer-events-auto transition-all ${
+                              className={`absolute z-50 right-0 w-64 p-3 bg-[#0d0f18] border border-slate-700/80 rounded-xl shadow-2xl text-left whitespace-normal pointer-events-auto transition-all ${
                                 index < 3 ? 'top-full mt-2' : 'bottom-full mb-2'
                               } ${
                                 activeTooltipRow === entry.id ? 'block opacity-100 translate-y-0' : 'hidden md:group-hover:block md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0'
