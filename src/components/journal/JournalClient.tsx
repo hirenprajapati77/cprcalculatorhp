@@ -1136,8 +1136,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 {/* Legend */}
                 <div className="rounded-xl border border-slate-800/50 bg-[#0d0f18] p-4 text-[10px] text-slate-500 space-y-1">
                   <div className="font-semibold text-slate-400 text-[11px] mb-2">How to read this table</div>
-                  <div>● <span className="text-slate-300">Lift (Incl)</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline (includes the signal's own trades).</div>
-                  <div>● <span className="text-slate-300">Lift (Excl)</span> = signal Win% − Win% of trades WITHOUT this signal. Stricter baseline; isolates the signal's true differentiating edge.</div>
+                  <div>● <span className="text-slate-300">Lift (Incl)</span> = signal Win% − {signalAnalytics.baselineWinRate.toFixed(1)}% baseline (includes the signal&apos;s own trades).</div>
+                  <div>● <span className="text-slate-300">Lift (Excl)</span> = signal Win% − Win% of trades WITHOUT this signal. Stricter baseline; isolates the signal&apos;s true differentiating edge.</div>
                   <div>● <span className="text-violet-400">Purple signals</span> are KGS-family (observational only — zero score impact until validated).</div>
                   <div>● <span className="text-yellow-400">Low confidence</span> (&lt;30 trades) — statistically inconclusive. Do not promote to scoring yet.</div>
                   <div>● Target <span className="text-slate-300">200–500 trades</span> before using Lift to make promotion decisions.</div>
