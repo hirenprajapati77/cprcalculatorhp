@@ -71,6 +71,17 @@ export async function POST(request: NextRequest) {
     const input = result.data;
     const calculation = await CalculationService.calculateAndSave(input);
 
+    // Do not report success when the DB write failed (unsaved local_* record).
+    if (calculation.persisted === false || String(calculation.id).startsWith('local_')) {
+      return NextResponse.json(
+        {
+          error: 'Calculation computed but could not be saved to the database',
+          calculation,
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(calculation, { status: 200 });
   } catch (err) {
     console.error('Error in calculate API route:', err);
