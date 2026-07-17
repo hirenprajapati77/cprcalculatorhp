@@ -103,6 +103,49 @@ test('TradeJournalService Phase 3', async (t) => {
     prisma.tradeJournal.findMany = originalFindMany;
   });
 
+  await t.test('getEntries applies qualityBucket and executionOutcome server-side', async () => {
+    const originalCount = prisma.tradeJournal.count;
+    const originalFindMany = prisma.tradeJournal.findMany;
+    const capturedWheres: Array<Record<string, unknown>> = [];
+
+    // @ts-expect-error Mocking Prisma for tests
+    prisma.tradeJournal.count = async (args: { where?: Record<string, unknown> }) => {
+      if (args?.where) capturedWheres.push(args.where);
+      return 2;
+    };
+
+    // @ts-expect-error Mocking Prisma for tests
+    prisma.tradeJournal.findMany = async (args: { where?: Record<string, unknown>; skip?: number; take?: number }) => {
+      if (args?.where) capturedWheres.push(args.where);
+      return [
+        { id: '1', signalType: 'BTST', pnl: 10, pnlPct: 1, qualityBucketAtSignal: 'TRADEABLE', executionOutcome: 'MODEL_VALID' },
+        { id: '2', signalType: 'BTST', pnl: -5, pnlPct: -0.5, qualityBucketAtSignal: 'TRADEABLE', executionOutcome: 'MODEL_VALID' },
+      ];
+    };
+
+    const result = await TradeJournalService.getEntries({
+      page: 2,
+      limit: 10,
+      signalType: 'BTST',
+      qualityBucket: 'TRADEABLE',
+      executionOutcome: 'MODEL_VALID',
+    });
+
+    assert.ok(capturedWheres.length >= 1);
+    for (const where of capturedWheres) {
+      assert.strictEqual(where.signalType, 'BTST');
+      assert.strictEqual(where.qualityBucketAtSignal, 'TRADEABLE');
+      assert.strictEqual(where.executionOutcome, 'MODEL_VALID');
+    }
+    assert.strictEqual(result.total, 2);
+    assert.strictEqual(result.page, 2);
+    assert.strictEqual(result.totalPages, 1);
+    assert.strictEqual(result.entries.length, 2);
+
+    prisma.tradeJournal.count = originalCount;
+    prisma.tradeJournal.findMany = originalFindMany;
+  });
+
   await t.test('previousTradingDayMidnightIST resolves Monday to prior Friday', async () => {
     // 2026-07-13 is a Monday
     const monday = new Date(Date.UTC(2026, 6, 13, 6, 0, 0)); // 11:30 AM IST

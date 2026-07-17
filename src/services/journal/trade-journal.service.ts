@@ -298,10 +298,20 @@ export class TradeJournalService {
     fromDate?: string;
     toDate?: string;
     signalType?: string;
+    qualityBucket?: string;
+    executionOutcome?: string;
     page?: number;
     limit?: number;
   }) {
-    const { fromDate, toDate, signalType, page = 1, limit = 50 } = params;
+    const {
+      fromDate,
+      toDate,
+      signalType,
+      qualityBucket,
+      executionOutcome,
+      page = 1,
+      limit = 50,
+    } = params;
 
     const where: Record<string, unknown> = {};
 
@@ -320,6 +330,14 @@ export class TradeJournalService {
 
     if (signalType && signalType !== 'ALL') {
       where.signalType = signalType;
+    }
+
+    if (qualityBucket && qualityBucket !== 'ALL') {
+      where.qualityBucketAtSignal = qualityBucket;
+    }
+
+    if (executionOutcome && executionOutcome !== 'ALL') {
+      where.executionOutcome = executionOutcome;
     }
 
     const [entries, total, allEntries] = await Promise.all([
