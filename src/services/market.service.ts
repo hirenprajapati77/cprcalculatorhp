@@ -18,7 +18,13 @@ export interface MarketStockData {
   open: number;
   high: number;
   low: number;
+  /** Latest candle close (may be today's in-progress close during market hours). */
   close: number;
+  /**
+   * Prior completed session close. Use for day-over-day % change / F&O build-up.
+   * Falls back to `close` when only one session of history exists.
+   */
+  previousClose?: number;
   volume: number;
   avgVolume: number;
   marketCap: number; // INR Crores
@@ -337,7 +343,7 @@ export class MarketService {
    * Returns the current data mode (live/mock/paper) for the UI status badge.
    */
   static getLiveStatus(): LiveStatus {
-    const dataMode = env.MARKET_DATA_MODE || 'live';
+    const dataMode = (env.MARKET_DATA_MODE || 'live').toLowerCase();
     if (dataMode === 'live') return { mode: 'live', source: 'Yahoo Finance (Real-time)' };
     if (dataMode === 'paper') return { mode: 'paper', source: 'Paper Trading (Simulated)' };
     return { mode: 'mock', source: 'Mock Data (Static)' };
@@ -388,7 +394,7 @@ export class MarketService {
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
     const cleanSymbol = symbol.trim();
-    const dataMode = env.MARKET_DATA_MODE || 'live';
+    const dataMode = (env.MARKET_DATA_MODE || 'live').toLowerCase();
     const cacheKey = `stock_data_${cleanSymbol}_${market}_${dataMode}`;
     const cached = await CacheService.get<MarketStockData>(cacheKey);
     
@@ -547,6 +553,15 @@ export class MarketService {
             // ATR/CPR-width behavior exactly as before the 1mo -> 6mo range widening above.
             history = history.slice(-22);
 
+            // Prior completed session close for day-over-day % change (F&O build/unwind).
+            // During market hours `prevClose` is today's in-progress close ≈ LTP, so
+            // priceChangePct would collapse to ~0 without a true previousClose.
+            const lastHist = history[history.length - 1];
+            const previousClose =
+              lastHist?.date === todayStr && history.length >= 2
+                ? history[history.length - 2].close
+                : prevClose;
+
             // -- Fetch 15m intraday data for VWAP and candle15m --
             let vwap = (prevHigh + prevLow + prevClose) / 3;
             let candle15m = null;
@@ -610,6 +625,7 @@ export class MarketService {
               high: prevHigh,
               low: prevLow,
               close: prevClose,
+              previousClose,
               volume: prevVolume,
               avgVolume,
               marketCap,
@@ -684,7 +700,7 @@ export class MarketService {
       const dayHigh = Math.max(dayOpen, dayClose) * (1 + narrowFactor);
       const dayLow = Math.min(dayOpen, dayClose) * (1 - narrowFactor);
       const dayVolume = avgVolume * (0.8 + (daySeed % 5) * 0.1);
-      const dateStr = new Date(Date.now() - day * 86400 * 1000).toISOString().split('T')[0];
+      const dateStr = getISTDateString(new Date(Date.now() - day * 86400 * 1000));
 
       history.push({
         date: dateStr,
@@ -697,7 +713,10 @@ export class MarketService {
     }
 
     const sma200Mock = await CacheService.get<number>(`sma200:${cleanSymbol}`);
-    const resultData: MarketStockData = { symbol, market, sector, open, high, low, close, volume, avgVolume, marketCap, ltp, history, sma20Slope: 0, sma50Slope: 0 };
+    const previousClose = history.length >= 2 ? history[history.length - 2].close : close;
+    const resultData: MarketStockData = {
+      symbol, market, sector, open, high, low, close, previousClose, volume, avgVolume, marketCap, ltp, history, sma20Slope: 0, sma50Slope: 0
+    };
     if (sma200Mock !== undefined && sma200Mock !== null) {
       resultData.sma200 = sma200Mock;
     }

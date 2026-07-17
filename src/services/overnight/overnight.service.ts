@@ -175,8 +175,16 @@ export class OvernightService {
         let count = 0;
         let maxHigh = 0;
         let minLow = Infinity;
+        let skippedCurrent = false;
+        // Exclude the current/forming 5m candle, then take the prior three completed
+        // candles as the "last 15m" range. Including the current bar makes
+        // close > last15mHigh / close < last15mLow nearly impossible.
         for (let i = timestamps.length - 1; i >= 0; i--) {
           if (timestamps[i] <= currentTimestampSec) {
+            if (!skippedCurrent) {
+              skippedCurrent = true;
+              continue;
+            }
             const high = quotes.high[i];
             const low = quotes.low[i];
             if (high != null && low != null) {
@@ -225,7 +233,9 @@ export class OvernightService {
         sumVol += candle.volume;
       }
 
-      const last3 = activeCandles.slice(-3);
+      const last3 = activeCandles.length > 1
+        ? activeCandles.slice(0, -1).slice(-3) // exclude current forming candle
+        : [];
       for (const c of last3) {
         maxHigh = Math.max(maxHigh, c.high);
         minLow = Math.min(minLow, c.low);
@@ -335,7 +345,9 @@ export class OvernightService {
           : (isLastToday && isTodayCandleClosed());
 
         // Ensure we have distinct candles for both today's candle and yesterday's (prior day) candle.
-        if (isTodayCandleFinal && history.length < 2) {
+        // When history already contains today's (possibly in-progress) bar, yesterday must be
+        // history[n-2] — never the same candle as today — regardless of whether today is final.
+        if (isLastToday && history.length < 2) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} for today-appended database state (requires at least 2 distinct daily candles).`);
           continue;
         }
@@ -349,11 +361,16 @@ export class OvernightService {
           ? lastCandle
           : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
 
-        const yesterdayCandle = isTodayCandleFinal
+        const yesterdayCandle = isLastToday
           ? history[history.length - 2]
           : lastCandle;
 
-        const atrPct = getAtrPct(history, fullStock.close);
+        const atrPct = getAtrPct(
+          isLastToday && !isTodayCandleFinal ? history.slice(0, -1) : history,
+          isLastToday && !isTodayCandleFinal && history.length >= 2
+            ? history[history.length - 2].close
+            : fullStock.close
+        );
 
         const todayCpr = calculateCPR({
           high: yesterdayCandle.high,

@@ -4,6 +4,7 @@ import { CacheService } from './cache.service';
 import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
+import { getISTDateString } from '@/lib/market-hours';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
@@ -36,12 +37,13 @@ export class ScannerController {
       stocks = MarketService.getUniverse(universeName);
     }
 
-    const execMode = env.EXECUTION_MODE || 'auto';
+    const execMode = (env.EXECUTION_MODE || 'auto').toLowerCase();
     const queueThreshold = parseInt(env.SCAN_QUEUE_THRESHOLD?.toString() || '75', 10);
-    
-    const shouldQueue = 
-      execMode === 'queue' || 
-      (execMode === 'auto' && stocks.length >= queueThreshold);
+    // Only attempt queue when ENABLE_QUEUE=true and mode is explicitly queue/auto.
+    // Do not treat trading EXECUTION_MODE=SHADOW/LIVE as queue mode.
+    const shouldQueue =
+      env.ENABLE_QUEUE === 'true' &&
+      (execMode === 'queue' || (execMode === 'auto' && stocks.length >= queueThreshold));
 
     if (shouldQueue) {
       // Import here to avoid circular dependency issues if any
@@ -53,7 +55,9 @@ export class ScannerController {
             QueueService.scannerQueue.add('full-scan', { universeName, market, stocks }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
           ]);
-          return []; // Return empty or a job status indicator in a real app
+          // No BullMQ worker is wired in this repo for full-scan. Falling through to
+          // inline execution avoids refresh/cron reporting success with an empty result.
+          console.warn('[ScannerController] Queue job enqueued but no worker exists; executing scan inline.');
         } catch (error) {
           console.warn(`[${universeName}] Queue add timed out or failed. Falling back to sync scan. Note: If this was a timeout, the job might eventually enqueue as a duplicate once BullMQ reconnects (accepted tradeoff). Error: ${error}`);
         }
@@ -107,7 +111,7 @@ export class ScannerController {
 
     // Score gate: filter out completely useless results (score < 10)
     const filtered = ranked.filter(r => r.score >= 10);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getISTDateString();
     console.log(`[SCAN] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
 
     // Background database persist (upserts)

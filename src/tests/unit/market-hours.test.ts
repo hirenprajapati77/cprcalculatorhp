@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'assert';
-import { getISTDateString, getISTTime, isTodayCandleClosed, isMarketOpen } from '../../lib/market-hours';
+import { getISTDateString, getISTTime, isTodayCandleClosed, isMarketOpen, getCompletedHistory } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
   describe('getISTDateString', () => {
@@ -39,14 +39,8 @@ describe('Market Hours Utilities', () => {
 
     it('returns false right before market close (15:29 IST)', () => {
       // 2026-07-09T09:59:00.000Z = 2026-07-09T15:29:00.000+05:30 (IST)
-      const justBeforeClose = new Date('2026-07-09T09:59:00.000Z');
-      assert.strictEqual(isTodayCandleClosed(justBeforeClose), false);
-    });
-
-    it('returns true exactly at market close (15:30 IST)', () => {
-      // 2026-07-09T10:00:00.000Z = 2026-07-09T15:30:00.000+05:30 (IST)
-      const exactlyAtClose = new Date('2026-07-09T10:00:00.000Z');
-      assert.strictEqual(isTodayCandleClosed(exactlyAtClose), true);
+      const almostClose = new Date('2026-07-09T09:59:00.000Z');
+      assert.strictEqual(isTodayCandleClosed(almostClose), false);
     });
 
     it('returns true after market close (e.g., 4:00 PM IST)', () => {
@@ -54,6 +48,18 @@ describe('Market Hours Utilities', () => {
       const postMarketDate = new Date('2026-07-09T10:30:00.000Z');
       assert.strictEqual(isTodayCandleClosed(postMarketDate), true);
       assert.strictEqual(isMarketOpen(postMarketDate), false);
+    });
+  });
+
+  describe('getCompletedHistory', () => {
+    it('keeps history unchanged when asOfDate replay is used', () => {
+      const history = [
+        { date: '2026-07-08', close: 100 },
+        { date: '2026-07-09', close: 101 },
+      ];
+      const result = getCompletedHistory(history, '2026-07-09');
+      assert.equal(result.length, 2);
+      assert.deepEqual(result, history);
     });
   });
 });

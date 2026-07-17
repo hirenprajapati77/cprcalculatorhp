@@ -1,13 +1,11 @@
-import { env } from '@/config/env';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
-import { CPR_THRESHOLDS, VOLUME_THRESHOLDS } from '../config/trading-constants';
+import { VOLUME_THRESHOLDS } from '../config/trading-constants';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
+import { isTodayCandleClosed, getISTDateString, getISTTime, getCompletedHistory } from '@/lib/market-hours';
 import { CprCompressionService, CprCompressionStats } from './cpr-compression.service';
-import { compareCpr } from '@/lib/cpr-relationship';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -46,6 +44,7 @@ export class ScannerService {
   static async scanStock(stock: MarketStockData, asOfDate?: string): Promise<ScannerSignalResult> {
     // Differentiate yesterday's and today's daily candles robustly
     const todayStr = asOfDate || getISTDateString();
+    const isTradingSession = asOfDate ? true : getISTTime().isTradingDay;
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
 
@@ -60,23 +59,37 @@ export class ScannerService {
         ? isLastToday 
         : (isLastToday && isTodayCandleClosed());
       
-      todayCandle = isTodayCandleFinal ? lastCandle : {
-        high: stock.high,
-        low: stock.low,
-        close: stock.ltp
-      };
-      
-      if (isTodayCandleFinal && stock.history.length < 2) {
-        console.warn(`[ScannerService] Degenerate CPR for ${stock.symbol} (history length: ${stock.history.length}). Computed against itself.`);
-        degenerateData = true;
+      if (!isTradingSession && !isLastToday) {
+        // Weekend/holiday: last candle is the prior session. Do not fabricate a
+        // live "today" bar from stale OHLC — use prior session as todayCandle
+        // (next-session CPR) and the day before as yesterdayCandle (session CPR).
+        todayCandle = lastCandle;
+        yesterdayCandle = stock.history.length >= 2
+          ? stock.history[stock.history.length - 2]
+          : lastCandle;
+      } else {
+        todayCandle = isTodayCandleFinal ? lastCandle : {
+          high: stock.high,
+          low: stock.low,
+          close: stock.ltp
+        };
+        
+        if (isTodayCandleFinal && stock.history.length < 2) {
+          console.warn(`[ScannerService] Degenerate CPR for ${stock.symbol} (history length: ${stock.history.length}). Computed against itself.`);
+          degenerateData = true;
+        }
+        
+        yesterdayCandle = isLastToday 
+          ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
+          : lastCandle;
       }
-      
-      yesterdayCandle = isLastToday 
-        ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
-        : lastCandle;
     }
 
-    const atrPct = getAtrPct(stock.history || [], stock.close);
+    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const atrRefClose = completedHistory.length
+      ? completedHistory[completedHistory.length - 1].close
+      : stock.close;
+    const atrPct = getAtrPct(completedHistory, atrRefClose);
 
     // 1. Calculate Today's CPR using yesterday's OHLC
     const cprToday = calculateCPR({
@@ -245,7 +258,7 @@ export class ScannerService {
       sl: Number(sl.toFixed(2)),
       target: Number(target.toFixed(2)),
       rr,
-      tomorrowCPRProvisional: !isTodayCandleFinal,
+      tomorrowCPRProvisional: isTradingSession && !isTodayCandleFinal,
       degenerateData,
       distPivot: Number(distPivot.toFixed(2)),
       cprCompression

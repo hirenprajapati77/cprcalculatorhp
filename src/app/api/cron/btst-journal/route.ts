@@ -24,9 +24,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // Only run during 15:25–15:35 IST window (cron fires at 15:25)
+  // Only run during 15:20–15:30 IST (executable window; market closes 15:30)
   const timeValue = hour * 100 + minute;
-  if ((timeValue < 1525 || timeValue > 1535) && !bypassWindow) {
+  if ((timeValue < 1520 || timeValue > 1530) && !bypassWindow) {
     return NextResponse.json({
       message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')}`
     });
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
 
-      await TradeJournalService.logSignal({
+      const didLog = await TradeJournalService.logSignal({
         signalType:     'BTST',
         symbol:         signal.symbol,
         optionContract: optionName,
@@ -107,7 +107,8 @@ export async function GET(req: NextRequest) {
         ...v2Fields,
       });
 
-      logged.push(`${signal.symbol}:BTST`);
+      if (didLog) logged.push(`${signal.symbol}:BTST`);
+      else skipped.push(`${signal.symbol}:BTST`);
     }
 
     // Log STBT (SHORT → PE)
@@ -153,7 +154,7 @@ export async function GET(req: NextRequest) {
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} PE`;
 
-      await TradeJournalService.logSignal({
+      const didLog = await TradeJournalService.logSignal({
         signalType:     'STBT',
         symbol:         signal.symbol,
         optionContract: optionName,
@@ -165,7 +166,8 @@ export async function GET(req: NextRequest) {
         ...v2Fields,
       });
 
-      logged.push(`${signal.symbol}:STBT`);
+      if (didLog) logged.push(`${signal.symbol}:STBT`);
+      else skipped.push(`${signal.symbol}:STBT`);
     }
 
     return NextResponse.json({ success: true, logged, skipped });

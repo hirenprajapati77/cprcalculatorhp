@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
+import { getISTDateString } from '@/lib/market-hours';
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '5', 10);
     const market = searchParams.get('market') || 'NSE';
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getISTDateString();
 
     // Separate NSE vs BSE records by symbol suffix
     const symbolCondition = market === 'BSE' 

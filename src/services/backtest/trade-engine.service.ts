@@ -37,8 +37,8 @@ export class TradeEngineService {
       finalSlippage = Math.min(finalSlippage, 0.01);
     }
 
-    // Cap normal slippage at 0.5%
-    return Math.min(finalSlippage, 0.005);
+    // Cap normal slippage at 0.5%; adverse gap-through-stop already capped at 1.0% above
+    return isAdverseGap ? finalSlippage : Math.min(finalSlippage, 0.005);
   }
   /**
    * Simulates a trade's execution through OHLC data until it hits SL or Target or the data ends.
@@ -82,8 +82,24 @@ export class TradeEngineService {
     if (notional > MAX_NOTIONAL) {
       positionSize = MAX_NOTIONAL / entryPrice;
     }
-    // Guard 2: Minimum 1 share; always use integer share count.
-    positionSize = Math.max(1, Math.floor(positionSize));
+    // Guard 2: Integer share count. Do NOT force a 1-share floor after the capital
+    // cap — that would re-expand notional above capital for expensive stocks.
+    positionSize = Math.floor(positionSize);
+    if (positionSize < 1 || !Number.isFinite(positionSize) || riskPerShare <= 0) {
+      return {
+        status: 'SKIPPED_UNTRADEABLE',
+        exitPrice: null,
+        exitDate: null,
+        exitReason: 'Position size below 1 share after capital cap',
+        pnl: 0,
+        pnlPercent: 0,
+        positionSize: 0,
+        riskAmount: 0,
+        durationDays: 0,
+        rr: 0,
+        journalEvents: [],
+      };
+    }
     // Guard 3: Recalculate riskAmount after capping so P&L is consistent.
     riskAmount = positionSize * riskPerShare;
 

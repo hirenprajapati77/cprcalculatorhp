@@ -84,6 +84,7 @@ export class JournalReportService {
         pnlPct: true,
         modelEntryPrice: true,
         modelExitPrice: true,
+        signalType: true,
       }
     });
 
@@ -92,7 +93,11 @@ export class JournalReportService {
 
     for (const t of trades) {
       if (t.modelEntryPrice && t.modelExitPrice && t.pnlPct !== null) {
-        const modelPnlPct = ((t.modelExitPrice - t.modelEntryPrice) / t.modelEntryPrice) * 100;
+        // STBT/SHORT model P&L is inverted vs long stock/CE trades
+        const isShort = t.signalType === 'STBT';
+        const modelPnlPct = isShort
+          ? ((t.modelEntryPrice - t.modelExitPrice) / t.modelEntryPrice) * 100
+          : ((t.modelExitPrice - t.modelEntryPrice) / t.modelEntryPrice) * 100;
         // In options, variance is not 1:1, but this gives a directional heuristic
         const variance = t.pnlPct - modelPnlPct;
         totalVariance += variance;

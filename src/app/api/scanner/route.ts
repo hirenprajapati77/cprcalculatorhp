@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
-import { isMarketOpen } from '@/lib/market-hours';
+import { isMarketOpen, getISTDateString } from '@/lib/market-hours';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +51,12 @@ export async function GET(request: NextRequest) {
     const isAll = limitParam === 'ALL';
     const page = isAll ? 1 : parseInt(searchParams.get('page') || '1', 10);
     const limit = isAll ? undefined : parseInt(limitParam, 10);
-    const sortField = searchParams.get('sortField') || 'score';
+    const ALLOWED_SORT_FIELDS = new Set([
+      'score', 'ltp', 'volume', 'width', 'pivot', 'bc', 'tc', 'createdAt', 'updatedAt', 'date', 'symbol'
+    ]);
+    const sortField = ALLOWED_SORT_FIELDS.has(searchParams.get('sortField') || '')
+      ? (searchParams.get('sortField') as string)
+      : 'score';
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
 
     // V2 Advanced Filters
@@ -70,7 +75,7 @@ export async function GET(request: NextRequest) {
     
     const search = searchParams.get('search')?.trim() || '';
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getISTDateString();
 
     const useCache = searchParams.get('useCache') === 'true';
     if (useCache) {
