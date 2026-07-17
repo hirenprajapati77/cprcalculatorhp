@@ -1,6 +1,7 @@
 import yahooFinance from 'yahoo-finance2';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
+import { getISTTime } from '@/lib/market-hours';
 
 export interface MtfCprLevels {
   weekly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
@@ -37,19 +38,27 @@ export class MtfCprService {
       throw new Error('Not enough MTF data');
     }
 
-    // Helper to robustly find the LAST index of a completed period
+    // Helper to robustly find the LAST index of a completed period using IST calendar
+    // (avoids UTC Sunday midnight treating Monday 00:30 IST as still "last week").
     const getLastCompletedIndex = (history: { date: Date | string }[], isMonthly: boolean) => {
-      const now = new Date();
-      const startOfCurrentPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const ist = getISTTime();
+      const [y, m, d] = ist.dateString.split('-').map(Number);
+      // Construct IST calendar date as a UTC noon anchor to avoid DST edge cases
+      const startOfCurrentPeriod = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
       
       if (isMonthly) {
-        startOfCurrentPeriod.setDate(1);
+        startOfCurrentPeriod.setUTCDate(1);
       } else {
-        const day = startOfCurrentPeriod.getDay();
-        const diff = startOfCurrentPeriod.getDate() - day + (day === 0 ? -6 : 1);
-        startOfCurrentPeriod.setDate(diff);
+        // Monday-start week in IST
+        const weekdayMap: Record<string, number> = {
+          Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+          Thursday: 4, Friday: 5, Saturday: 6,
+        };
+        const day = weekdayMap[ist.weekday] ?? startOfCurrentPeriod.getUTCDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        startOfCurrentPeriod.setUTCDate(startOfCurrentPeriod.getUTCDate() + diff);
       }
-      startOfCurrentPeriod.setHours(0, 0, 0, 0);
+      startOfCurrentPeriod.setUTCHours(0, 0, 0, 0);
 
       let lastCompletedIndex = -1;
       for (let i = history.length - 1; i >= 0; i--) {

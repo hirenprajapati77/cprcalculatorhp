@@ -15,7 +15,17 @@ export async function POST(req: NextRequest) {
          return NextResponse.json({ success: false, message: 'Bot Token or Chat ID not configured' }, { status: 400 });
       }
 
-      await TelegramService.sendMessage('🟢 <b>CPR PRO Test Alert</b>\nYour Telegram notifications are correctly configured.', chatId, token);
+      const result = await TelegramService.sendMessage(
+        '🟢 <b>CPR PRO Test Alert</b>\nYour Telegram notifications are correctly configured.',
+        chatId,
+        token
+      );
+      if (!result.ok) {
+        return NextResponse.json(
+          { success: false, message: result.reason || 'Failed to send Telegram message' },
+          { status: 502 }
+        );
+      }
       return NextResponse.json({ success: true, message: 'Test message sent' });
     }
 

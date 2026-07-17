@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
+import { getISTDateString } from '@/lib/market-hours';
 
 interface Props {
   params: Promise<{ symbol: string }>;
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest, { params }: Props) {
 
     if (currentSnapshot && currentSnapshot.sector) {
       sectorName = currentSnapshot.sector;
-      const today = new Date().toISOString().split('T')[0];
+      const today = getISTDateString();
       
       // Get all peer snapshot symbol maps
       const peerSnapshots = await prisma.marketSnapshot.findMany({

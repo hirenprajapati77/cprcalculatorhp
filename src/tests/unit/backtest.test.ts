@@ -390,3 +390,24 @@ test('Backtest Look-Ahead Bias Prevention (P0)', async (t) => {
     assert.notStrictEqual(entryPrice, 100, 'Entry price should never equal the theoretical TC level if the strategy specifies Market-On-Close');
   });
 });
+
+test('TradeEngine — adverse gap slippage cap and untradeable size', async (t) => {
+  await t.test('adverse gap slippage is capped at 1.0%, not 0.5%', () => {
+    // HIGH volatility * 3 adverse multiplier would exceed 1% without the adverse cap
+    const slip = TradeEngineService.calculateSlippage(1000, 'HIGH', true);
+    assert.ok(slip <= 0.01 + 1e-12, `adverse slip should be <= 1%, got ${slip}`);
+    assert.ok(slip > 0.005, `adverse slip should be allowed above the 0.5% normal cap, got ${slip}`);
+  });
+
+  await t.test('does not force 1 share when capital cannot afford it', () => {
+    const ohlc = makeOhlc(makeDates(2), 50000, 'flat');
+    const result = TradeEngineService.simulateTrade('LONG', 50000, 49000, 52000, ohlc, {
+      ...baseConfig,
+      capital: 10000, // cannot afford 1 share of ₹50,000 stock at 1× leverage
+      riskModel: 'Capital%',
+      riskValue: 100,
+    });
+    assert.strictEqual(result.status, 'SKIPPED_UNTRADEABLE');
+    assert.strictEqual(result.positionSize, 0);
+  });
+});
