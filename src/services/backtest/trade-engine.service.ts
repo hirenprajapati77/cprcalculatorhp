@@ -7,6 +7,12 @@ export interface BacktestTradeConfig {
   executionMode: string; // "conservative" | "optimistic"
   avgVolume: number;
   volatility: string; // "HIGH" | "LOW" | "NORMAL"
+  /**
+   * Optional true entry session date (YYYY-MM-DD).
+   * BTST/STBT passes only the next-day OHLC into simulateTrade for exits;
+   * without this, ENTRY journal events would stamp the exit-day candle.
+   */
+  entryDate?: string;
 }
 
 export class TradeEngineService {
@@ -108,7 +114,7 @@ export class TradeEngineService {
 
     journalEvents.push({
       event: 'ENTRY',
-      timestamp: new Date(ohlcSeries[0]?.date || Date.now()),
+      timestamp: new Date(config.entryDate || ohlcSeries[0]?.date || Date.now()),
       details: `Entered at ${entryPrice.toFixed(2)}, SL: ${sl.toFixed(2)}, Target: ${target.toFixed(2)}`
     });
 
