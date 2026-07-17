@@ -495,22 +495,16 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         page: String(p),
         limit: '50',
         signalType,
+        qualityBucket: qualityFilter,
+        executionOutcome: outcomeFilter,
         ...(fromDate ? { fromDate } : {}),
         ...(toDate   ? { toDate   } : {}),
       });
       const res  = await fetch(`/api/journal?${params}`);
       const data: JournalResponse = await res.json();
       if (!data.success) throw new Error('API returned error');
-      
-      let filteredEntries = data.entries;
-      if (qualityFilter !== 'ALL') {
-         filteredEntries = filteredEntries.filter(e => e.qualityBucketAtSignal === qualityFilter);
-      }
-      if (outcomeFilter !== 'ALL') {
-         filteredEntries = filteredEntries.filter(e => e.executionOutcome === outcomeFilter);
-      }
-      
-      setEntries(filteredEntries);
+
+      setEntries(data.entries);
       setStats(data.stats);
       setTotal(data.total);
       setPage(data.page);
