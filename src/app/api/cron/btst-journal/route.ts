@@ -6,7 +6,22 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
+import { prisma } from '@/lib/db';
 
+/**
+ * BTST/STBT Trade Journal cron.
+ *
+ * Single source of truth: OvernightSignal rows (DB table "BtstSignal") written by
+ * overnight.service.ts via /api/overnight/refresh. We intentionally do NOT call
+ * BtstService.discover() here — that was a disconnected ranking pipeline that left
+ * qualityBucketAtSignal / regimeSnapshotAtSignal null for ~60% of journal trades.
+ *
+ * SEQUENCING DEPENDENCY: OvernightSignal must already be populated for today's IST
+ * signalDate before this cron fires (15:20–15:30 IST). There is currently no crontab
+ * entry for /api/overnight/refresh in scratch/deploy_final.sh — if that job has not
+ * run, this route returns success:false with reason overnight_signals_missing and
+ * does NOT fall back to BtstService.discover() (that would re-introduce the split).
+ */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
   
@@ -33,33 +48,75 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Discover BTST/STBT signals from NSE_FNO universe
-    const { results } = await BtstService.discover('NSE_FNO');
+    const signalDate = TradeJournalService.todayISTString();
 
-    // Top 2 LONG signals by longScore → BTST (CE)
-    const topLongs = results
-      .filter(r => r.tag === 'LONG')
-      .sort((a, b) => b.longScore - a.longScore)
-      .slice(0, 2);
+    // Same source that logSignal() joins for quality/regime snapshots.
+    // Exclude IGNORE / NEUTRAL_CONFLICT — those are not actionable journal picks.
+    const excludeClassifications = ['IGNORE', 'NEUTRAL_CONFLICT'];
 
-    // Top 2 SHORT signals by shortScore → STBT (PE)
-    const topShorts = results
-      .filter(r => r.tag === 'SHORT')
-      .sort((a, b) => b.shortScore - a.shortScore)
-      .slice(0, 2);
+    const [topLongs, topShorts] = await Promise.all([
+      prisma.overnightSignal.findMany({
+        where: {
+          signalDate,
+          direction: 'LONG',
+          classification: { notIn: excludeClassifications },
+        },
+        orderBy: { overnightScore: 'desc' },
+        take: 2,
+      }),
+      prisma.overnightSignal.findMany({
+        where: {
+          signalDate,
+          direction: 'SHORT',
+          classification: { notIn: excludeClassifications },
+        },
+        orderBy: { overnightScore: 'desc' },
+        take: 2,
+      }),
+    ]);
+
+    if (topLongs.length === 0 && topShorts.length === 0) {
+      // Do not silently reintroduce BtstService.discover() — that disconnects quality tags.
+      console.warn(
+        `[BtstJournal] No OvernightSignal rows for ${signalDate}. ` +
+        `Ensure /api/overnight/refresh ran before this cron (sequencing dependency).`
+      );
+      return NextResponse.json({
+        success: false,
+        reason: 'overnight_signals_missing',
+        signalDate,
+        message:
+          `No OvernightSignal (BtstSignal) rows for ${signalDate}. ` +
+          `Schedule /api/overnight/refresh before btst-journal; refusing disconnected discover() fallback.`,
+        logged: [],
+        skipped: [],
+      }, { status: 503 });
+    }
 
     const logged: string[] = [];
     const skipped: string[] = [];
 
     // Log BTST (LONG → CE)
     for (const signal of topLongs) {
+      const stockData = await MarketService.getStockData(signal.symbol);
+      const ltp = stockData?.ltp ?? signal.entry ?? 0;
+      const entry = signal.entry ?? ltp;
+      const sl = signal.stopLoss ?? ltp * 0.98;
+      const target = signal.target ?? ltp * 1.04;
+
+      if (!ltp || ltp <= 0) {
+        console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping BTST log`);
+        skipped.push(`${signal.symbol}:BTST`);
+        continue;
+      }
+
       const suggestion = await OptionSuggestionService.suggestOption(
         signal.symbol,
-        signal.ltp,
+        ltp,
         'BULLISH',
-        signal.entry,
-        signal.sl,
-        signal.target
+        entry,
+        sl,
+        target
       );
 
       if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
@@ -74,7 +131,6 @@ export async function GET(req: NextRequest) {
       // Shadow: compute v2 score in parallel (does not affect production)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
-        const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
           // Approximate sector return as 0 when no live index feed available
           const v2Result = BtstService.evaluateOvernightV2(stockData);
@@ -94,6 +150,11 @@ export async function GET(req: NextRequest) {
       }
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
+      const signalSummary = [
+        signal.classification,
+        signal.qualityBucket,
+        signal.direction,
+      ].filter(Boolean).join(',');
 
       const didLog = await TradeJournalService.logSignal({
         signalType:     'BTST',
@@ -101,9 +162,9 @@ export async function GET(req: NextRequest) {
         optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'CE',
-        score:          signal.longScore,
-        confidence:     signal.gapConfidence || 0,
-        signalSummary:  signal.signals.join(','),
+        score:          signal.overnightScore ?? 0,
+        confidence:     signal.confidence ?? 0,
+        signalSummary,
         ...v2Fields,
       });
 
@@ -113,13 +174,25 @@ export async function GET(req: NextRequest) {
 
     // Log STBT (SHORT → PE)
     for (const signal of topShorts) {
+      const stockData = await MarketService.getStockData(signal.symbol);
+      const ltp = stockData?.ltp ?? signal.entry ?? 0;
+      const entry = signal.entry ?? ltp;
+      const sl = signal.stopLoss ?? ltp * 1.02;
+      const target = signal.target ?? ltp * 0.96;
+
+      if (!ltp || ltp <= 0) {
+        console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping STBT log`);
+        skipped.push(`${signal.symbol}:STBT`);
+        continue;
+      }
+
       const suggestion = await OptionSuggestionService.suggestOption(
         signal.symbol,
-        signal.ltp,
+        ltp,
         'BEARISH',
-        signal.entry,
-        signal.sl,
-        signal.target
+        entry,
+        sl,
+        target
       );
 
       if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
@@ -134,7 +207,6 @@ export async function GET(req: NextRequest) {
       // Shadow: compute v2 score in parallel (does not affect production)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
-        const stockData = await MarketService.getStockData(signal.symbol);
         if (stockData) {
           const v2Result = BtstService.evaluateOvernightV2(stockData);
           v2Fields = {
@@ -153,6 +225,11 @@ export async function GET(req: NextRequest) {
       }
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} PE`;
+      const signalSummary = [
+        signal.classification,
+        signal.qualityBucket,
+        signal.direction,
+      ].filter(Boolean).join(',');
 
       const didLog = await TradeJournalService.logSignal({
         signalType:     'STBT',
@@ -160,9 +237,9 @@ export async function GET(req: NextRequest) {
         optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'PE',
-        score:          signal.shortScore,
-        confidence:     signal.gapConfidence || 0,
-        signalSummary:  signal.signals.join(','),
+        score:          signal.overnightScore ?? 0,
+        confidence:     signal.confidence ?? 0,
+        signalSummary,
         ...v2Fields,
       });
 
@@ -170,7 +247,27 @@ export async function GET(req: NextRequest) {
       else skipped.push(`${signal.symbol}:STBT`);
     }
 
-    return NextResponse.json({ success: true, logged, skipped });
+    return NextResponse.json({
+      success: true,
+      signalDate,
+      source: 'OvernightSignal',
+      picked: {
+        longs: topLongs.map((s) => ({
+          symbol: s.symbol,
+          overnightScore: s.overnightScore,
+          qualityBucket: s.qualityBucket,
+          classification: s.classification,
+        })),
+        shorts: topShorts.map((s) => ({
+          symbol: s.symbol,
+          overnightScore: s.overnightScore,
+          qualityBucket: s.qualityBucket,
+          classification: s.classification,
+        })),
+      },
+      logged,
+      skipped,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
