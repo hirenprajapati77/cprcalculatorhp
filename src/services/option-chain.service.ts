@@ -196,7 +196,8 @@ export class OptionChainService {
         return { error: 'PROXY_NOT_CONFIGURED' };
       }
       console.log(`[OptionChain] Attempting proxy fetch for ${cleanSym} via ${proxyUrl}...`);
-      const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=NSE:${cleanSym}-${suffix}&strikecount=30`, {
+      const proxySymbol = encodeURIComponent(`NSE:${cleanSym}-${suffix}`);
+      const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`, {
         headers: {
           'Authorization': `${appId}:${token}`,
           'X-Fyers-AppId': appId,

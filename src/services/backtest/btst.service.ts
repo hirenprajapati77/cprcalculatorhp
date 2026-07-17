@@ -141,7 +141,10 @@ export class BtstService {
         const result = this.evaluateOvernight(stock, undefined, strategyVariant);
 
         // Compute gap probability based on direction
-        const direction = result.tag === 'SHORT' ? 'SHORT' : 'LONG';
+        const direction =
+          result.tag === 'SHORT' ? 'SHORT'
+          : result.tag === 'LONG' ? 'LONG'
+          : (result.shortScore > result.longScore ? 'SHORT' : 'LONG');
         const gapMetrics = GapProbabilityService.calculateGapProbability(stock, direction);
 
         // Count metrics

@@ -92,6 +92,7 @@ export class FyersAuthService {
       console.log('[FyersAuthService] Token saved successfully in DB.');
     } catch (err) {
       console.error('[FyersAuthService] Error saving token to database:', err);
+      throw err instanceof Error ? err : new Error('Failed to persist Fyers token');
     }
   }
 
@@ -181,7 +182,12 @@ export class FyersAuthService {
               if (new Date() >= expiresAt) {
                 expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
               }
-              await this.saveToken(token, expiresAt);
+              try {
+                await this.saveToken(token, expiresAt);
+              } catch (saveErr) {
+                console.error('[FyersAuthService] Token received but DB persist failed (direct):', saveErr);
+                return { success: false, message: 'Token received but failed to save. Please retry login.' };
+              }
               console.log('[FyersAuthService] Direct token exchange succeeded.');
               return { success: true, message: 'Login successful (Direct)' };
             }
@@ -227,7 +233,12 @@ export class FyersAuthService {
             if (new Date() >= expiresAt) {
               expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
             }
-            await this.saveToken(token, expiresAt);
+            try {
+              await this.saveToken(token, expiresAt);
+            } catch (saveErr) {
+              console.error('[FyersAuthService] Token received but DB persist failed (proxy):', saveErr);
+              return { success: false, message: 'Token received but failed to save. Please retry login.' };
+            }
             console.log('[FyersAuthService] Proxy token exchange succeeded.');
             return { success: true, message: 'Login successful (Proxy)' };
           }

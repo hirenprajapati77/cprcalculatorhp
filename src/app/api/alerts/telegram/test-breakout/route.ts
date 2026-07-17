@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Send a sample breakout alert with dummy data
-    await TelegramService.sendBreakoutAlert([
+    const result = await TelegramService.sendBreakoutAlert([
       {
         symbol: 'BHEL',
         ltp: 414.35,
@@ -41,6 +41,13 @@ export async function POST(req: NextRequest) {
         sector: 'Banking'
       }
     ], groupChatId, token);
+
+    if (!result.ok) {
+      return NextResponse.json(
+        { success: false, message: result.reason || 'Failed to send breakout alert' },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({ success: true, message: 'Test breakout alert sent to group', chatId });
   } catch (error: unknown) {

@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
+import { getISTDateString } from '@/lib/market-hours';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getISTDateString();
 
     // 1. Fetch all scan results for today
     const scans = await prisma.scannerResult.findMany({

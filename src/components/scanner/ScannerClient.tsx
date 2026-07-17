@@ -578,7 +578,9 @@ const StockRow = React.memo(({
       {visibleColumns.includes('gap') && (
         <td className={cellPadding}>
           {row.expectedGap !== null && row.expectedGap !== undefined ? (
-            <span className="text-accent-green font-semibold">+{row.expectedGap}%</span>
+            <span className={`font-semibold ${row.expectedGap >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {row.expectedGap > 0 ? '+' : ''}{row.expectedGap}%
+            </span>
           ) : (
             <span className="text-text-tertiary">Rejected</span>
           )}
@@ -588,7 +590,9 @@ const StockRow = React.memo(({
       {visibleColumns.includes('move') && (
         <td className={cellPadding}>
           {row.expectedMove !== null && row.expectedMove !== undefined ? (
-            <span className="text-accent-blue font-semibold">+{row.expectedMove}%</span>
+            <span className={`font-semibold ${row.expectedMove >= 0 ? 'text-accent-blue' : 'text-accent-red'}`}>
+              {row.expectedMove > 0 ? '+' : ''}{row.expectedMove}%
+            </span>
           ) : (
             <span className="text-text-tertiary">—</span>
           )}
@@ -1112,7 +1116,7 @@ export default function ScannerClient() {
           const base = {
             id: `btst-live-${idx}`,
             symbol: sig.symbol,
-            date: new Date().toISOString().split('T')[0],
+            date: new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0],
             market: 'NSE' as const,
             sector: sig.sector || 'NIFTY50',
             price: sig.ltp,
@@ -1179,9 +1183,18 @@ export default function ScannerClient() {
           } else if (sortField === 'ltp') {
             comparison = a.ltp - b.ltp;
           } else if (sortField === 'gap') {
-            comparison = (a.expectedGap ?? 0) - (b.expectedGap ?? 0);
+            // STBT gaps are negative; rank by directional desirability (stronger move first)
+            const aGap = a.expectedGap ?? 0;
+            const bGap = b.expectedGap ?? 0;
+            const aDir = a.direction === 'SHORT' || scannerMode === 'STBT' ? -aGap : aGap;
+            const bDir = b.direction === 'SHORT' || scannerMode === 'STBT' ? -bGap : bGap;
+            comparison = aDir - bDir;
           } else if (sortField === 'move') {
-            comparison = (a.expectedMove ?? 0) - (b.expectedMove ?? 0);
+            const aMove = a.expectedMove ?? 0;
+            const bMove = b.expectedMove ?? 0;
+            const aDir = a.direction === 'SHORT' || scannerMode === 'STBT' ? -aMove : aMove;
+            const bDir = b.direction === 'SHORT' || scannerMode === 'STBT' ? -bMove : bMove;
+            comparison = aDir - bDir;
           } else if (sortField === 'confidence') {
             comparison = (a.confidence ?? 0) - (b.confidence ?? 0);
           }
