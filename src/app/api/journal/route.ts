@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
+import { computeOptionPnl } from '@/lib/pnl';
+import { sanitizePagination } from '@/lib/pagination';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +15,10 @@ export async function GET(request: NextRequest) {
     const signalType       = searchParams.get('signalType')       || 'ALL';
     const qualityBucket    = searchParams.get('qualityBucket')    || 'ALL';
     const executionOutcome = searchParams.get('executionOutcome') || 'ALL';
-    const page             = parseInt(searchParams.get('page')  || '1');
-    const limit            = parseInt(searchParams.get('limit') || '50');
+    const { page, limit } = sanitizePagination(
+      searchParams.get('page'),
+      searchParams.get('limit')
+    );
 
     const result = await TradeJournalService.getEntries({
       ...(fromDate   ? { fromDate }   : {}),
@@ -61,7 +65,9 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Do not overwrite a manual exit already set
+    // Do not overwrite an exit already set (manual or auto-close). The conditional
+    // updateMany below is the authoritative guard against a race with the 10:00 AM
+    // auto-close cron; this early check just returns a friendlier 409.
     if (entry.exitCmp !== null) {
       return NextResponse.json(
         { error: 'Exit already recorded. Delete and re-enter to override.' },
@@ -69,19 +75,68 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = await prisma.tradeJournal.update({
-      where: { id },
-      data: {
-        exitCmp,
-        exitTime: new Date(),
-        pnl:    exitCmp - entry.entryCmp,
-        pnlPct: ((exitCmp - entry.entryCmp) / entry.entryCmp) * 100,
-      },
+    const { pnl, pnlPct } = computeOptionPnl(entry.entryCmp, exitCmp);
+
+    // Race-safe: only set the exit if it is still null in the DB. If the auto-close
+    // cron won the race between the read above and this write, count === 0 and we
+    // report the conflict instead of double-writing.
+    const write = await prisma.tradeJournal.updateMany({
+      where: { id, exitCmp: null },
+      data: { exitCmp, exitTime: new Date(), pnl, pnlPct },
     });
+
+    if (write.count === 0) {
+      return NextResponse.json(
+        { error: 'Exit already recorded. Delete and re-enter to override.' },
+        { status: 409 }
+      );
+    }
 
     await TradeJournalService.classifyExecutionOutcome(id);
 
+    const updated = await prisma.tradeJournal.findUnique({ where: { id } });
     return NextResponse.json({ success: true, entry: updated });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// DELETE — remove a journal entry so a wrong exit (manual or auto-closed) can be
+// corrected via the documented "delete and re-enter" flow. Without this handler the
+// 409 message in PATCH pointed at a workflow that did not exist, leaving bad exits
+// permanently frozen.
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    let id = searchParams.get('id') || undefined;
+
+    if (!id) {
+      // Allow id in the JSON body too, for clients that can't send a query string.
+      try {
+        const body = await request.json();
+        if (body && typeof body.id === 'string') id = body.id;
+      } catch {
+        // no body — fall through to the validation error below
+      }
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'id is required (query param ?id= or JSON body { id })' },
+        { status: 400 }
+      );
+    }
+
+    const deleted = await prisma.tradeJournal.deleteMany({ where: { id } });
+    if (deleted.count === 0) {
+      return NextResponse.json(
+        { error: `Journal entry not found: ${id}` },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, deletedId: id });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

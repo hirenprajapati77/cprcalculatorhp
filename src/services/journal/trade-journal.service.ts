@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import type { TradeJournal } from '@prisma/client';
 import { getISTTime } from '@/lib/market-hours';
+import { computeOptionPnl } from '@/lib/pnl';
+import { sanitizePagination } from '@/lib/pagination';
 
 
 export class TradeJournalService {
@@ -260,28 +262,48 @@ export class TradeJournalService {
           continue;
         }
 
-        const updateData: Record<string, unknown> = { [field]: cmp };
+        // Write the snapshot column only if it is STILL null in the DB. Using updateMany
+        // with the null guard (instead of a plain update on a stale in-memory row) makes
+        // the write idempotent and race-safe: a duplicate/overlapping cron run cannot
+        // overwrite a slot another run already filled.
+        const snapshotWrite = await prisma.tradeJournal.updateMany({
+          where: { id: entry.id, [field]: null },
+          data: { [field]: cmp },
+        });
 
-        // 10:00 AM auto-close: set exit only if no manual exit yet
-        if (timeSlot === '1000' && !entry.exitCmp) {
-          updateData.exitCmp  = cmp;
-          updateData.exitTime = new Date();
-          updateData.pnl      = cmp - entry.entryCmp;
-          updateData.pnlPct   =
-            ((cmp - entry.entryCmp) / entry.entryCmp) * 100;
+        if (snapshotWrite.count === 0) {
+          console.log(
+            `[TradeJournal] ${timeSlot} snapshot already filled for ` +
+            `${entry.symbol} ${entry.optionContract}; skipping.`
+          );
+          continue;
         }
 
-        await prisma.tradeJournal.update({
-          where: { id: entry.id },
-          data: updateData,
-        });
+        // 10:00 AM auto-close: set exit ONLY if no exit exists yet in the DB. The
+        // `exitCmp: null` guard in updateMany is critical — between the findMany above
+        // and this write a user may have PATCHed a real manual exit; without the guard
+        // the auto-close would silently clobber their true exit price and P&L.
+        let autoClosed = false;
+        if (timeSlot === '1000') {
+          const { pnl, pnlPct } = computeOptionPnl(entry.entryCmp, cmp);
+          const closeWrite = await prisma.tradeJournal.updateMany({
+            where: { id: entry.id, exitCmp: null },
+            data: {
+              exitCmp: cmp,
+              exitTime: new Date(),
+              pnl,
+              pnlPct,
+            },
+          });
+          autoClosed = closeWrite.count > 0;
+        }
 
         console.log(
           `[TradeJournal] ${timeSlot} snapshot: ` +
           `${entry.symbol} ${entry.optionContract} @ ₹${cmp}`
         );
-        
-        if (timeSlot === '1000' && !entry.exitCmp) {
+
+        if (autoClosed) {
            await TradeJournalService.classifyExecutionOutcome(entry.id);
         }
       }
@@ -309,9 +331,11 @@ export class TradeJournalService {
       signalType,
       qualityBucket,
       executionOutcome,
-      page = 1,
-      limit = 50,
     } = params;
+
+    // Defensive: never trust raw page/limit — a negative skip throws in Prisma and an
+    // unbounded take can OOM the stats query that loads every matching row.
+    const { page, limit } = sanitizePagination(params.page, params.limit);
 
     const where: Record<string, unknown> = {};
 
