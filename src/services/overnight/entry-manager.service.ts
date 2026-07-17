@@ -1,9 +1,27 @@
+import { getAtrPct } from '@/lib/atr';
+import { getCompletedHistory } from '@/lib/market-hours';
 import { MarketStockData } from '../market.service';
 
 export interface ExclusionCheckResult {
   eligible: boolean;
   reason?: string | null;
 }
+
+/**
+ * Hard caps for overnight extension / exhaustion.
+ * DIXON-style +ATR blow-off days score well on HV/VDU/close strength but mean-revert next open —
+ * that is the EXECUTION_SLIPPAGE cohort in the journal.
+ */
+export const EXTENSION_LIMITS = {
+  /** Absolute day-return cap (%). Above this → reject BTST (LONG). */
+  MAX_DAY_RETURN_PCT: 3.5,
+  /** Absolute day-return cap (%) for STBT (SHORT) on large down days. */
+  MAX_DAY_DROP_PCT: 3.5,
+  /** Day range (H-L)/close as multiple of ATR%. */
+  MAX_RANGE_ATR_MULT: 2.25,
+  /** Day return as multiple of ATR%. */
+  MAX_RETURN_ATR_MULT: 1.75,
+};
 
 export class EntryManagerService {
   /**
@@ -47,6 +65,76 @@ export class EntryManagerService {
     if (intraVol < 5000) {
       console.log(`[EligibilityGate] ${stock.symbol} rejected: intradayVolume ${intraVol} < 5000`);
       return { eligible: false, reason: `intradayVolume ${intraVol} < 5000` };
+    }
+
+    return { eligible: true, reason: null };
+  }
+
+  /**
+   * Directional extension / exhaustion gate.
+   * Rejects BTST after vertical up days and STBT after vertical down days.
+   */
+  static evaluateExtension(
+    stock: MarketStockData,
+    direction: 'LONG' | 'SHORT'
+  ): ExclusionCheckResult {
+    const close = stock.ltp || stock.close || 0;
+    if (!close || close <= 0 || !stock.high || !stock.low) {
+      return { eligible: false, reason: 'Insufficient OHLC for extension check' };
+    }
+
+    const prevClose =
+      (stock.previousClose && stock.previousClose > 0)
+        ? stock.previousClose
+        : (stock.history && stock.history.length >= 2
+            ? stock.history[stock.history.length - 2].close
+            : stock.close);
+
+    if (!prevClose || prevClose <= 0) {
+      return { eligible: true, reason: null }; // cannot evaluate — do not hard-block
+    }
+
+    const dayReturnPct = ((close - prevClose) / prevClose) * 100;
+    const dayRangePct = ((stock.high - stock.low) / close) * 100;
+
+    const completed = getCompletedHistory(stock.history || []);
+    const atrPctFrac = getAtrPct(completed.length ? completed : [{ high: stock.high, low: stock.low, close }], close);
+    const atrPct = atrPctFrac * 100;
+
+    if (direction === 'LONG') {
+      if (dayReturnPct >= EXTENSION_LIMITS.MAX_DAY_RETURN_PCT) {
+        const reason = `EXTENDED_UP dayReturn=${dayReturnPct.toFixed(2)}% >= ${EXTENSION_LIMITS.MAX_DAY_RETURN_PCT}%`;
+        console.log(`[ExtensionGate] ${stock.symbol} LONG rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
+      if (atrPct > 0 && dayReturnPct >= atrPct * EXTENSION_LIMITS.MAX_RETURN_ATR_MULT) {
+        const reason = `EXTENDED_UP dayReturn=${dayReturnPct.toFixed(2)}% >= ${EXTENSION_LIMITS.MAX_RETURN_ATR_MULT}×ATR(${atrPct.toFixed(2)}%)`;
+        console.log(`[ExtensionGate] ${stock.symbol} LONG rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
+      if (atrPct > 0 && dayRangePct >= atrPct * EXTENSION_LIMITS.MAX_RANGE_ATR_MULT) {
+        const reason = `EXTENDED_RANGE dayRange=${dayRangePct.toFixed(2)}% >= ${EXTENSION_LIMITS.MAX_RANGE_ATR_MULT}×ATR(${atrPct.toFixed(2)}%)`;
+        console.log(`[ExtensionGate] ${stock.symbol} LONG rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
+    }
+
+    if (direction === 'SHORT') {
+      if (dayReturnPct <= -EXTENSION_LIMITS.MAX_DAY_DROP_PCT) {
+        const reason = `EXTENDED_DOWN dayReturn=${dayReturnPct.toFixed(2)}% <= -${EXTENSION_LIMITS.MAX_DAY_DROP_PCT}%`;
+        console.log(`[ExtensionGate] ${stock.symbol} SHORT rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
+      if (atrPct > 0 && dayReturnPct <= -(atrPct * EXTENSION_LIMITS.MAX_RETURN_ATR_MULT)) {
+        const reason = `EXTENDED_DOWN dayReturn=${dayReturnPct.toFixed(2)}% <= -${EXTENSION_LIMITS.MAX_RETURN_ATR_MULT}×ATR(${atrPct.toFixed(2)}%)`;
+        console.log(`[ExtensionGate] ${stock.symbol} SHORT rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
+      if (atrPct > 0 && dayRangePct >= atrPct * EXTENSION_LIMITS.MAX_RANGE_ATR_MULT) {
+        const reason = `EXTENDED_RANGE dayRange=${dayRangePct.toFixed(2)}% >= ${EXTENSION_LIMITS.MAX_RANGE_ATR_MULT}×ATR(${atrPct.toFixed(2)}%)`;
+        console.log(`[ExtensionGate] ${stock.symbol} SHORT rejected: ${reason}`);
+        return { eligible: false, reason };
+      }
     }
 
     return { eligible: true, reason: null };

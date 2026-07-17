@@ -453,6 +453,12 @@ export class OvernightService {
         }
 
         if (finalDir && finalSig) {
+          const ext = EntryManagerService.evaluateExtension(fullStock, finalDir);
+          if (!ext.eligible) {
+            console.warn(`[OvernightScan] ${fullStock.symbol} ${finalDir} skipped: ${ext.reason}`);
+            continue;
+          }
+
           const gapMetrics = GapProbabilityService.calculateGapProbability(fullStock, finalDir);
           const conf = gapMetrics ? gapMetrics.gapConfidence : 50;
           const expGap = gapMetrics ? gapMetrics.expectedGap : 0;
