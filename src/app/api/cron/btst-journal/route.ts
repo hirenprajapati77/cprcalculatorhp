@@ -7,6 +7,7 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
+import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
@@ -138,6 +139,15 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      if (stockData) {
+        const ext = EntryManagerService.evaluateExtension(stockData, 'LONG');
+        if (!ext.eligible) {
+          console.warn(`[BtstJournal] ${signal.symbol} BTST skipped: ${ext.reason}`);
+          skipped.push(`${signal.symbol}:BTST:EXTENDED`);
+          continue;
+        }
+      }
+
       const suggestion = await OptionSuggestionService.suggestOption(
         signal.symbol,
         ltp,
@@ -212,6 +222,15 @@ export async function GET(req: NextRequest) {
         console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping STBT log`);
         skipped.push(`${signal.symbol}:STBT`);
         continue;
+      }
+
+      if (stockData) {
+        const ext = EntryManagerService.evaluateExtension(stockData, 'SHORT');
+        if (!ext.eligible) {
+          console.warn(`[BtstJournal] ${signal.symbol} STBT skipped: ${ext.reason}`);
+          skipped.push(`${signal.symbol}:STBT:EXTENDED`);
+          continue;
+        }
       }
 
       const suggestion = await OptionSuggestionService.suggestOption(
