@@ -2,21 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
+import { getISTDateString } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+    const date = searchParams.get('date') || getISTDateString();
     const direction = searchParams.get('direction');
     const activeOnly = searchParams.get('activeOnly') === 'true';
 
     // Get today's date in IST
-    const todayStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(new Date()); // YYYY-MM-DD
+    const todayStr = getISTDateString();
 
     const isToday = date === todayStr;
 

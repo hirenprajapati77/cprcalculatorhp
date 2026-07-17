@@ -4,7 +4,7 @@ import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
-import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
+import { getISTDateString, isTodayCandleClosed, getISTTime, getCompletedHistory } from '@/lib/market-hours';
 
 export interface SignalResult {
   signals: string[];
@@ -52,6 +52,7 @@ export class SignalService {
     // NSE market closes at 3:30 PM IST; the UTC date flips at 6:30 PM IST,
     // so using new Date().toISOString() would misclassify candles for 3 hours daily.
     const todayStr = asOfDate ?? getISTDateString();
+    const isTradingSession = asOfDate ? true : getISTTime().isTradingDay;
 
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
@@ -69,33 +70,48 @@ export class SignalService {
         ? isLastToday 
         : (isLastToday && isTodayCandleClosed());
 
-      todayCandle = isTodayCandleFinal
-        ? lastCandle
-        : { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
+      if (!isTradingSession && !isLastToday) {
+        // Weekend/holiday: do not synthesize a live today bar from stale quotes.
+        todayCandle = lastCandle;
+        yesterdayCandle = stock.history.length >= 2
+          ? stock.history[stock.history.length - 2]
+          : lastCandle;
+        dayBeforeYesterdayCandle = stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null;
+        threeDaysAgoCandle = stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null;
+        fourDaysAgoCandle = stock.history.length >= 5 ? stock.history[stock.history.length - 5] : null;
+      } else {
+        todayCandle = isTodayCandleFinal
+          ? lastCandle
+          : { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
 
-      yesterdayCandle = isLastToday
-        ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
-        : lastCandle;
+        yesterdayCandle = isLastToday
+          ? (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : lastCandle)
+          : lastCandle;
 
-      // Only assign when a genuinely distinct (older) candle exists.
-      // Previously these fell back to yesterdayCandle, which could fabricate
-      // fake ascending/descending CPR patterns on short history.
-      dayBeforeYesterdayCandle = isLastToday
-        ? (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null)
-        : (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : null);
+        // Only assign when a genuinely distinct (older) candle exists.
+        // Previously these fell back to yesterdayCandle, which could fabricate
+        // fake ascending/descending CPR patterns on short history.
+        dayBeforeYesterdayCandle = isLastToday
+          ? (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null)
+          : (stock.history.length >= 2 ? stock.history[stock.history.length - 2] : null);
 
-      threeDaysAgoCandle = isLastToday
-        ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null)
-        : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null);
+        threeDaysAgoCandle = isLastToday
+          ? (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null)
+          : (stock.history.length >= 3 ? stock.history[stock.history.length - 3] : null);
 
-      fourDaysAgoCandle = isLastToday
-        ? (stock.history.length >= 5 ? stock.history[stock.history.length - 5] : null)
-        : (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null);
+        fourDaysAgoCandle = isLastToday
+          ? (stock.history.length >= 5 ? stock.history[stock.history.length - 5] : null)
+          : (stock.history.length >= 4 ? stock.history[stock.history.length - 4] : null);
+      }
     }
 
     // ── ATR% ──────────────────────────────────────────────────────────────────
-    const atr = calculateATR(stock.history || [], stock.close);
-    const atrPct = stock.close > 0 ? atr / stock.close : DEFAULT_ATR_PCT;
+    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const atrRefClose = completedHistory.length
+      ? completedHistory[completedHistory.length - 1].close
+      : stock.close;
+    const atr = calculateATR(completedHistory, atrRefClose);
+    const atrPct = atrRefClose > 0 ? atr / atrRefClose : DEFAULT_ATR_PCT;
 
     // ── CPR Calculations ─────────────────────────────────────────────────────
     // cprYesterday requires dayBeforeYesterdayCandle — skip dependent signals when null.
@@ -322,7 +338,12 @@ export class SignalService {
     // ── F&O Build-up Proxies ──────────────────────────────────────────────────
     // safeRatio returns 0 when close is 0, preventing Infinity/NaN from
     // propagating into build/unwind threshold comparisons.
-    const priceChangePct = safeRatio(ltp - stock.close, stock.close, 0);
+    // Use previousClose (prior session), not stock.close — during market hours
+    // Yahoo's daily close tracks LTP and would zero-out priceChangePct.
+    const refClose = (stock.previousClose && stock.previousClose > 0)
+      ? stock.previousClose
+      : stock.close;
+    const priceChangePct = safeRatio(ltp - refClose, refClose, 0);
     // PROVISIONAL: thresholds derived from assumed 2% avg ATR, pending backtest confirmation.
     const buildThreshold  = ATR.BUILD_MULTIPLIER * atrPct;
     const unwindThreshold = 0.50 * atrPct;

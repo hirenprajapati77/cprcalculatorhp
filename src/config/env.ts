@@ -24,8 +24,9 @@ const envSchema = z.object({
   NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_ENABLE_DEBUG_PANEL: z.string().optional(),
   
-  CACHE_PROVIDER: z.enum(['redis', 'memory']).default('memory'),
-  MARKET_DATA_MODE: z.string().default('LIVE'),
+  CACHE_PROVIDER: z.enum(['redis', 'memory', 'auto']).default('auto'),
+  // Normalize to lowercase so "LIVE"/"Live" still enable real Yahoo data
+  MARKET_DATA_MODE: z.string().default('live').transform((v) => v.toLowerCase()),
   
   // Optional tuning parameters with reasonable defaults
   BTST_BYPASS_WINDOW: z.string().default('false'),

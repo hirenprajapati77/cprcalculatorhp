@@ -23,14 +23,20 @@ export class TradeJournalService {
     // Shadow Mode: BTST v2 parallel scoring
     scoreV2?: number;
     v2Breakdown?: Record<string, unknown>;
-  }): Promise<void> {
+  }): Promise<boolean> {
     try {
-      // Find matching OvernightSignal
+      // Find matching OvernightSignal — filter by direction so BTST/STBT
+      // don't inherit the opposite model's entry/target/quality snapshots.
       const signalDateStr = TradeJournalService.todayISTString();
+      const directionFilter =
+        params.signalType === 'BTST' ? 'LONG'
+        : params.signalType === 'STBT' ? 'SHORT'
+        : undefined;
       const overnightSignal = await prisma.overnightSignal.findFirst({
         where: {
           symbol: params.symbol,
           signalDate: signalDateStr,
+          ...(directionFilter ? { direction: directionFilter } : {}),
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -46,7 +52,7 @@ export class TradeJournalService {
           `[TradeJournal] Could not fetch entry CMP for ` +
           `${params.symbol} ${params.optionContract}`
         );
-        return;
+        return false;
       }
 
       // Midnight IST for the signal date (deduplication key)
@@ -103,8 +109,10 @@ export class TradeJournalService {
         `[TradeJournal] Logged ${params.signalType}: ` +
         `${params.symbol} ${params.optionContract} @ ₹${entryCmp}`
       );
+      return true;
     } catch (err) {
       console.error('[TradeJournal] Failed to log signal:', err);
+      return false;
     }
   }
 

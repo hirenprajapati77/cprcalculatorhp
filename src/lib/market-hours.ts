@@ -86,3 +86,23 @@ export function isTodayCandleClosed(date: Date = new Date()): boolean {
   if (!isTradingDay) return false;
   return totalMinutes >= 930; // After 15:30 IST
 }
+
+/**
+ * Returns history with the in-progress IST daily candle removed when the session
+ * is still open. Completed-session ATR/CPR classification must not use today's
+ * partial high/low/close.
+ */
+export function getCompletedHistory<T extends { date: string }>(
+  history: T[],
+  asOfDate?: string
+): T[] {
+  if (!history.length) return history;
+  const todayStr = asOfDate || getISTDateString();
+  const last = history[history.length - 1];
+  // When replaying a historical asOfDate, treat that day's candle as final.
+  if (asOfDate) return history;
+  if (last.date === todayStr && !isTodayCandleClosed()) {
+    return history.slice(0, -1);
+  }
+  return history;
+}

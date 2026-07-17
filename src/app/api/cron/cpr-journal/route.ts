@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
 
-      await TradeJournalService.logSignal({
+      const didLog = await TradeJournalService.logSignal({
         signalType:     'CPR',
         symbol:         signal.symbol,
         optionContract: optionName,
@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
         signalSummary:  signal.signalSummary,
       });
 
-      logged.push(signal.symbol);
+      if (didLog) logged.push(signal.symbol);
+      else skipped.push(signal.symbol);
     }
 
     return NextResponse.json({ success: true, logged, skipped });
