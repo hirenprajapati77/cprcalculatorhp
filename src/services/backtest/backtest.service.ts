@@ -411,7 +411,9 @@ export class BacktestService {
                   riskValue: run.riskValue ?? 1,
                   executionMode: 'conservative',
                   avgVolume: avgVol,
-                  volatility
+                  volatility,
+                  // Exit simulation uses day i+1 OHLC only; ENTRY must keep signal day.
+                  entryDate: today.date,
                 }
               );
 

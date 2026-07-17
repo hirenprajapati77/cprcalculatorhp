@@ -24,50 +24,47 @@ export class HistoryService {
       }
     }
 
-    // 2. Try DB
-    try {
-      const calculations = (await prisma.calculation.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      })) as CalculationRecord[];
+    // 2. DB — do not swallow failures as an empty list (that looked like "no history").
+    const calculations = (await prisma.calculation.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    })) as CalculationRecord[];
 
-      // 3. Save to cache
-      await cache.set(cacheKey, JSON.stringify(calculations), 60); // Cache for 60 seconds
-      return calculations;
+    // 3. Save to cache (best-effort; fetch still succeeded)
+    try {
+      await cache.set(cacheKey, JSON.stringify(calculations), 60);
     } catch (err) {
-      console.warn('Database fetch failed for history:', err);
-      return [];
+      console.warn('Failed to cache history list:', err);
     }
+    return calculations;
   }
 
   /**
    * Deletes a calculation history entry by database ID and invalidates related caches.
    */
   static async deleteEntry(id: string): Promise<boolean> {
+    // 1. Find the calculation to get its share token
+    const record = await prisma.calculation.findUnique({
+      where: { id },
+    });
+
+    if (!record) return false;
+
+    // 2. Delete from DB — let unexpected DB errors propagate (API → 500),
+    // not collapse into false (which looked like 404 "not found").
+    await prisma.calculation.delete({
+      where: { id },
+    });
+
+    // 3. Evict caches (best-effort after successful delete)
     try {
-      // 1. Find the calculation to get its share token
-      const record = await prisma.calculation.findUnique({
-        where: { id },
-      });
-
-      if (!record) return false;
-
-      // 2. Delete from DB
-      await prisma.calculation.delete({
-        where: { id },
-      });
-
-      // 3. Evict caches
       if (record.shareToken) {
         await cache.del(`calc:share:${record.shareToken}`);
       }
-      
-      // Invalidate general history cache keys scoped to history namespace
-      await cache.delPattern('history:limit:*'); 
-      return true;
+      await cache.delPattern('history:limit:*');
     } catch (err) {
-      console.error('Failed to delete calculation entry:', err);
-      return false;
+      console.warn('Failed to evict history caches after delete:', err);
     }
+    return true;
   }
 }

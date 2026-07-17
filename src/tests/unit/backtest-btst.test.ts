@@ -118,5 +118,27 @@ describe('BTST backtest — single-day EOD-forced-exit simulation (Task I)', () 
     assert.strictEqual(result.status, 'CLOSED_TIME_EXIT', `Expected CLOSED_TIME_EXIT, got ${result.status}`);
     assert.strictEqual(result.exitPrice, 97, 'Exit price must equal next-day close');
     assert.strictEqual(result.durationDays, 1);
+    assert.strictEqual(result.exitReason, 'Max holding period (1 days) reached',
+      'Exit reason must indicate EOD forced exit');
+  });
+
+  // ─── Case 6: ENTRY journal uses signal day, not exit-day OHLC ─────────────
+  test('Case 6: ENTRY timestamp uses config.entryDate when OHLC is next-day only', () => {
+    const result = TradeEngineService.simulateTrade(
+      'LONG',
+      100,
+      97,
+      106,
+      [{ date: '2023-06-02', open: 101, high: 104, low: 98, close: 102, volume: 500000 }],
+      { ...BASE_CONFIG, entryDate: '2023-06-01' }
+    );
+
+    const entryEvent = result.journalEvents.find((e) => e.event === 'ENTRY');
+    assert.ok(entryEvent, 'ENTRY journal event must exist');
+    assert.strictEqual(
+      entryEvent!.timestamp.toISOString().slice(0, 10),
+      '2023-06-01',
+      'ENTRY must stamp signal/entry day, not the exit-day candle in ohlcSeries'
+    );
   });
 });

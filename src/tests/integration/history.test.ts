@@ -56,6 +56,48 @@ test('HistoryService Cache Scoped Eviction Tests', async (t) => {
       await cache.del(unrelatedKey);
     }
   });
+
+  await t.test('getHistory() propagates DB failures instead of returning []', async () => {
+    const originalFindMany = prisma.calculation.findMany;
+    const originalGet = cache.get;
+    cache.get = (async () => null) as typeof cache.get;
+    prisma.calculation.findMany = (async () => {
+      throw new Error('simulated db down');
+    }) as unknown as typeof originalFindMany;
+
+    try {
+      await assert.rejects(
+        () => HistoryService.getHistory(10),
+        /simulated db down/
+      );
+    } finally {
+      prisma.calculation.findMany = originalFindMany;
+      cache.get = originalGet;
+    }
+  });
+
+  await t.test('deleteEntry() propagates DB delete failures instead of returning false', async () => {
+    const originalFindUnique = prisma.calculation.findUnique;
+    const originalDelete = prisma.calculation.delete;
+
+    prisma.calculation.findUnique = (async () => ({
+      id: 'boom',
+      shareToken: 'tok',
+    })) as unknown as typeof originalFindUnique;
+    prisma.calculation.delete = (async () => {
+      throw new Error('simulated delete failure');
+    }) as unknown as typeof originalDelete;
+
+    try {
+      await assert.rejects(
+        () => HistoryService.deleteEntry('boom'),
+        /simulated delete failure/
+      );
+    } finally {
+      prisma.calculation.findUnique = originalFindUnique;
+      prisma.calculation.delete = originalDelete;
+    }
+  });
 });
 
 test.after(() => {

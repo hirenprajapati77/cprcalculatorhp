@@ -68,8 +68,14 @@ export async function POST(request: NextRequest) {
       telegramGroupChatId,
     } = parsed.data;
 
-    const isMaskedToken = telegramToken && telegramToken.startsWith('***');
-    const encryptedToken = telegramToken && telegramToken.trim() !== '' && !isMaskedToken ? encrypt(telegramToken) : undefined;
+    // Masked values mean "leave unchanged". Empty string means "clear saved token".
+    const isMaskedToken = Boolean(telegramToken && telegramToken.startsWith('***'));
+    const clearTelegramToken =
+      telegramToken !== undefined && telegramToken.trim() === '';
+    const encryptedToken =
+      telegramToken !== undefined && telegramToken.trim() !== '' && !isMaskedToken
+        ? encrypt(telegramToken)
+        : undefined;
 
     const settings = await prisma.appSettings.upsert({
       where: { id: 'global' },
@@ -92,7 +98,11 @@ export async function POST(request: NextRequest) {
         ...(minPrice             !== undefined && { minPrice }),
         ...(minVolume            !== undefined && { minVolume }),
         ...(bypassBtst           !== undefined && { bypassBtst }),
-        ...(encryptedToken       !== undefined && { telegramToken: encryptedToken }),
+        ...(clearTelegramToken
+          ? { telegramToken: '' }
+          : encryptedToken !== undefined
+            ? { telegramToken: encryptedToken }
+            : {}),
         ...(telegramChatId       !== undefined && { telegramChatId }),
         ...(telegramGroupChatId  !== undefined && { telegramGroupChatId }),
       },

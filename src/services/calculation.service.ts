@@ -1,4 +1,3 @@
-import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
@@ -55,13 +54,9 @@ export class CalculationService {
           continue;
         }
 
-        const isProd = env.NODE_ENV === 'production';
-        if (isProd) {
-          console.error('[CalculationService] Database write failed in production:', err);
-        } else {
-          console.warn('Database write failed, returning unsaved calculation:', err);
-        }
-
+        // Non-collision DB failures must not look like a successful save.
+        // Callers (API route) return 503 when persisted === false.
+        console.error('[CalculationService] Database write failed:', err);
         record = {
           id: `local_${Date.now()}`,
           high: input.high,
@@ -70,7 +65,7 @@ export class CalculationService {
           ...result,
           shareToken,
           createdAt: new Date(),
-          ...(isProd ? { persisted: false } : {})
+          persisted: false,
         };
         break;
       }
