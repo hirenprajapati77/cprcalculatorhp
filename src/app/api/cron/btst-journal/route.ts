@@ -1,26 +1,32 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
+import type { OvernightSignal } from '@prisma/client';
 import { BtstService } from '@/services/backtest/btst.service';
 import { MarketService } from '@/services/market.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
+import { OvernightService } from '@/services/overnight/overnight.service';
+import { RegimeService } from '@/services/overnight/regime.service';
 import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
 
+/** Premium journal: only READY+ classifications (not WATCH / IGNORE). */
+const LONG_READY = ['STRONG_BTST', 'BTST_READY'];
+const SHORT_READY = ['STRONG_STBT', 'STBT_READY'];
+/** Aligns with BtstRankingService BTST_READY floor. */
+const MIN_OVERNIGHT_SCORE = 85;
+
 /**
- * BTST/STBT Trade Journal cron.
+ * Premium / tradable BTST–STBT Trade Journal cron.
  *
- * Single source of truth: OvernightSignal rows (DB table "BtstSignal") written by
- * overnight.service.ts via /api/overnight/refresh. We intentionally do NOT call
- * BtstService.discover() here — that was a disconnected ranking pipeline that left
- * qualityBucketAtSignal / regimeSnapshotAtSignal null for ~60% of journal trades.
- *
- * SEQUENCING DEPENDENCY: OvernightSignal must already be populated for today's IST
- * signalDate before this cron fires (15:20–15:30 IST). There is currently no crontab
- * entry for /api/overnight/refresh in scratch/deploy_final.sh — if that job has not
- * run, this route returns success:false with reason overnight_signals_missing and
- * does NOT fall back to BtstService.discover() (that would re-introduce the split).
+ * Robust pipeline:
+ * 1. Single source of truth = OvernightSignal (BtstSignal table) from overnight.service
+ * 2. If today's rows are missing, run OvernightService.discover() once (same pipeline —
+ *    never BtstService.discover(), which caused the 60% UNKNOWN quality gap)
+ * 3. Journal only qualityBucket=TRADEABLE + READY+ score (>=85)
+ * 4. Suppress STBT when NIFTY regime is BULL (month of evidence: STBT 32% vs BTST 54%)
+ * 5. Keep v2 shadow scoring unchanged
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -49,17 +55,28 @@ export async function GET(req: NextRequest) {
 
   try {
     const signalDate = TradeJournalService.todayISTString();
+    const regime = await RegimeService.getMarketRegime(signalDate);
+    const suppressStbt = regime.trend === 'BULL';
 
-    // Same source that logSignal() joins for quality/regime snapshots.
-    // Exclude IGNORE / NEUTRAL_CONFLICT — those are not actionable journal picks.
-    const excludeClassifications = ['IGNORE', 'NEUTRAL_CONFLICT'];
+    let overnightEnsured = false;
+    const anyToday = await prisma.overnightSignal.count({ where: { signalDate } });
+    if (anyToday === 0) {
+      // Same OvernightSignal pipeline — not the disconnected simple engine.
+      console.warn(
+        `[BtstJournal] No OvernightSignal for ${signalDate}; running OvernightService.discover() to populate.`
+      );
+      await OvernightService.discover('BOTH');
+      overnightEnsured = true;
+    }
 
-    const [topLongs, topShorts] = await Promise.all([
+    const [topLongs, topShortsRaw] = await Promise.all([
       prisma.overnightSignal.findMany({
         where: {
           signalDate,
           direction: 'LONG',
-          classification: { notIn: excludeClassifications },
+          qualityBucket: 'TRADEABLE',
+          classification: { in: LONG_READY },
+          overnightScore: { gte: MIN_OVERNIGHT_SCORE },
         },
         orderBy: { overnightScore: 'desc' },
         take: 2,
@@ -68,29 +85,40 @@ export async function GET(req: NextRequest) {
         where: {
           signalDate,
           direction: 'SHORT',
-          classification: { notIn: excludeClassifications },
+          qualityBucket: 'TRADEABLE',
+          classification: { in: SHORT_READY },
+          overnightScore: { gte: MIN_OVERNIGHT_SCORE },
         },
         orderBy: { overnightScore: 'desc' },
         take: 2,
       }),
     ]);
 
+    const topShorts: OvernightSignal[] = suppressStbt ? [] : topShortsRaw;
+
     if (topLongs.length === 0 && topShorts.length === 0) {
-      // Do not silently reintroduce BtstService.discover() — that disconnects quality tags.
+      const reason = suppressStbt && topShortsRaw.length > 0 && topLongs.length === 0
+        ? 'no_tradable_longs_stbt_suppressed_bull_regime'
+        : 'no_tradable_setups';
       console.warn(
-        `[BtstJournal] No OvernightSignal rows for ${signalDate}. ` +
-        `Ensure /api/overnight/refresh ran before this cron (sequencing dependency).`
+        `[BtstJournal] ${reason} for ${signalDate} (regime=${regime.trend}/${regime.volatility}, ensuredScan=${overnightEnsured})`
       );
       return NextResponse.json({
         success: false,
-        reason: 'overnight_signals_missing',
+        reason,
         signalDate,
+        regime,
+        overnightEnsured,
         message:
-          `No OvernightSignal (BtstSignal) rows for ${signalDate}. ` +
-          `Schedule /api/overnight/refresh before btst-journal; refusing disconnected discover() fallback.`,
+          `No TRADEABLE READY+ OvernightSignal picks for ${signalDate}. ` +
+          (suppressStbt ? 'STBT suppressed (BULL regime). ' : '') +
+          `Refusing weak/WATCH/UNKNOWN fills.`,
+        candidatesSkipped: {
+          shortsSuppressedByRegime: suppressStbt ? topShortsRaw.map((s) => s.symbol) : [],
+        },
         logged: [],
         skipped: [],
-      }, { status: 503 });
+      }, { status: 200 });
     }
 
     const logged: string[] = [];
@@ -132,7 +160,6 @@ export async function GET(req: NextRequest) {
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         if (stockData) {
-          // Approximate sector return as 0 when no live index feed available
           const v2Result = BtstService.evaluateOvernightV2(stockData);
           v2Fields = {
             scoreV2: v2Result.finalScore,
@@ -154,6 +181,7 @@ export async function GET(req: NextRequest) {
         signal.classification,
         signal.qualityBucket,
         signal.direction,
+        `REGIME_${regime.trend}`,
       ].filter(Boolean).join(',');
 
       const didLog = await TradeJournalService.logSignal({
@@ -172,7 +200,7 @@ export async function GET(req: NextRequest) {
       else skipped.push(`${signal.symbol}:BTST`);
     }
 
-    // Log STBT (SHORT → PE)
+    // Log STBT (SHORT → PE) — already empty when BULL regime
     for (const signal of topShorts) {
       const stockData = await MarketService.getStockData(signal.symbol);
       const ltp = stockData?.ltp ?? signal.entry ?? 0;
@@ -204,7 +232,6 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // Shadow: compute v2 score in parallel (does not affect production)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         if (stockData) {
@@ -229,6 +256,7 @@ export async function GET(req: NextRequest) {
         signal.classification,
         signal.qualityBucket,
         signal.direction,
+        `REGIME_${regime.trend}`,
       ].filter(Boolean).join(',');
 
       const didLog = await TradeJournalService.logSignal({
@@ -251,6 +279,10 @@ export async function GET(req: NextRequest) {
       success: true,
       signalDate,
       source: 'OvernightSignal',
+      mode: 'TRADEABLE_READY_PLUS',
+      regime,
+      suppressStbt,
+      overnightEnsured,
       picked: {
         longs: topLongs.map((s) => ({
           symbol: s.symbol,
@@ -264,6 +296,13 @@ export async function GET(req: NextRequest) {
           qualityBucket: s.qualityBucket,
           classification: s.classification,
         })),
+        shortsSuppressedByRegime: suppressStbt
+          ? topShortsRaw.map((s) => ({
+              symbol: s.symbol,
+              overnightScore: s.overnightScore,
+              qualityBucket: s.qualityBucket,
+            }))
+          : [],
       },
       logged,
       skipped,

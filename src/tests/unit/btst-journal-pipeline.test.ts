@@ -1,7 +1,6 @@
 /**
- * Focused regression for journal pipeline unification.
- * Verifies top-2 LONG/SHORT selection from OvernightSignal-shaped rows
- * (mirrors btst-journal/route.ts query semantics without hitting the DB).
+ * Focused regression for premium TRADEABLE journal pipeline.
+ * Mirrors btst-journal/route.ts selection gates without hitting the DB.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,63 +14,78 @@ type FakeSignal = {
   qualityBucket: string | null;
 };
 
-function pickJournalTops(rows: FakeSignal[], signalDate: string) {
-  const exclude = new Set(['IGNORE', 'NEUTRAL_CONFLICT']);
-  const actionable = rows.filter(
-    (r) => r.signalDate === signalDate && !exclude.has(r.classification)
+const LONG_READY = new Set(['STRONG_BTST', 'BTST_READY']);
+const SHORT_READY = new Set(['STRONG_STBT', 'STBT_READY']);
+const MIN_SCORE = 85;
+
+function pickTradableTops(
+  rows: FakeSignal[],
+  signalDate: string,
+  regimeTrend: 'BULL' | 'BEAR' | 'CHOPPY'
+) {
+  const base = rows.filter(
+    (r) =>
+      r.signalDate === signalDate &&
+      r.qualityBucket === 'TRADEABLE' &&
+      (r.overnightScore ?? 0) >= MIN_SCORE
   );
-  const topLongs = actionable
-    .filter((r) => r.direction === 'LONG')
+
+  const topLongs = base
+    .filter((r) => r.direction === 'LONG' && LONG_READY.has(r.classification))
     .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
     .slice(0, 2);
-  const topShorts = actionable
-    .filter((r) => r.direction === 'SHORT')
+
+  const topShortsRaw = base
+    .filter((r) => r.direction === 'SHORT' && SHORT_READY.has(r.classification))
     .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
     .slice(0, 2);
-  return { topLongs, topShorts };
+
+  const topShorts = regimeTrend === 'BULL' ? [] : topShortsRaw;
+  return { topLongs, topShorts, topShortsRaw };
 }
 
-describe('btst-journal OvernightSignal sourcing', () => {
+describe('btst-journal premium TRADEABLE pipeline', () => {
   const today = '2026-07-17';
 
-  it('picks top-2 LONG and SHORT by overnightScore, excluding IGNORE/NEUTRAL_CONFLICT', () => {
-    const rows: FakeSignal[] = [
-      { symbol: 'A', signalDate: today, direction: 'LONG', overnightScore: 100, classification: 'STRONG_BTST', qualityBucket: 'TRADEABLE' },
-      { symbol: 'B', signalDate: today, direction: 'LONG', overnightScore: 90, classification: 'BTST_READY', qualityBucket: 'TRADEABLE' },
-      { symbol: 'C', signalDate: today, direction: 'LONG', overnightScore: 85, classification: 'WATCH', qualityBucket: 'WATCHLIST' },
-      { symbol: 'D', signalDate: today, direction: 'LONG', overnightScore: 99, classification: 'IGNORE', qualityBucket: 'LOW_QUALITY' },
-      { symbol: 'E', signalDate: today, direction: 'SHORT', overnightScore: 95, classification: 'STRONG_STBT', qualityBucket: 'TRADEABLE' },
-      { symbol: 'F', signalDate: today, direction: 'SHORT', overnightScore: 88, classification: 'STBT_READY', qualityBucket: 'TRADEABLE' },
-      { symbol: 'G', signalDate: today, direction: 'SHORT', overnightScore: 120, classification: 'NEUTRAL_CONFLICT', qualityBucket: 'WATCHLIST' },
-      { symbol: 'H', signalDate: '2026-07-16', direction: 'LONG', overnightScore: 200, classification: 'STRONG_BTST', qualityBucket: 'TRADEABLE' },
-    ];
+  const rows: FakeSignal[] = [
+    { symbol: 'A', signalDate: today, direction: 'LONG', overnightScore: 100, classification: 'STRONG_BTST', qualityBucket: 'TRADEABLE' },
+    { symbol: 'B', signalDate: today, direction: 'LONG', overnightScore: 90, classification: 'BTST_READY', qualityBucket: 'TRADEABLE' },
+    { symbol: 'C', signalDate: today, direction: 'LONG', overnightScore: 88, classification: 'WATCH', qualityBucket: 'TRADEABLE' },
+    { symbol: 'D', signalDate: today, direction: 'LONG', overnightScore: 95, classification: 'BTST_READY', qualityBucket: 'WATCHLIST' },
+    { symbol: 'E', signalDate: today, direction: 'SHORT', overnightScore: 95, classification: 'STRONG_STBT', qualityBucket: 'TRADEABLE' },
+    { symbol: 'F', signalDate: today, direction: 'SHORT', overnightScore: 88, classification: 'STBT_READY', qualityBucket: 'TRADEABLE' },
+    { symbol: 'G', signalDate: today, direction: 'SHORT', overnightScore: 80, classification: 'STBT_READY', qualityBucket: 'TRADEABLE' },
+    { symbol: 'H', signalDate: today, direction: 'LONG', overnightScore: 99, classification: 'IGNORE', qualityBucket: 'TRADEABLE' },
+  ];
 
-    const { topLongs, topShorts } = pickJournalTops(rows, today);
+  it('picks only TRADEABLE + READY+ (>=85), excluding WATCH/WATCHLIST/IGNORE', () => {
+    const { topLongs, topShorts } = pickTradableTops(rows, today, 'CHOPPY');
     assert.deepEqual(topLongs.map((r) => r.symbol), ['A', 'B']);
     assert.deepEqual(topShorts.map((r) => r.symbol), ['E', 'F']);
-    // Quality present on every picked row — this is what logSignal will snapshot
     for (const r of [...topLongs, ...topShorts]) {
-      assert.ok(r.qualityBucket, `${r.symbol} missing qualityBucket`);
+      assert.equal(r.qualityBucket, 'TRADEABLE');
+      assert.ok((r.overnightScore ?? 0) >= 85);
     }
   });
 
-  it('returns empty picks when OvernightSignal has no actionable rows for today (sequencing miss)', () => {
-    const rows: FakeSignal[] = [
-      { symbol: 'X', signalDate: today, direction: 'LONG', overnightScore: 50, classification: 'IGNORE', qualityBucket: null },
-    ];
-    const { topLongs, topShorts } = pickJournalTops(rows, today);
-    assert.equal(topLongs.length, 0);
+  it('suppresses STBT entirely in BULL regime', () => {
+    const { topLongs, topShorts, topShortsRaw } = pickTradableTops(rows, today, 'BULL');
+    assert.deepEqual(topLongs.map((r) => r.symbol), ['A', 'B']);
     assert.equal(topShorts.length, 0);
+    assert.ok(topShortsRaw.length >= 1, 'would have had shorts without regime gate');
   });
 
-  it('does not use a disconnected discover()-style tag field — only OvernightSignal direction', () => {
-    // Guards the regression: journal must key off direction LONG/SHORT from OvernightSignal,
-    // not invent LONG from a separate simple-engine tag.
-    const rows: FakeSignal[] = [
-      { symbol: 'ONLY_SHORT', signalDate: today, direction: 'SHORT', overnightScore: 100, classification: 'STRONG_STBT', qualityBucket: 'TRADEABLE' },
+  it('allows STBT in BEAR regime', () => {
+    const { topShorts } = pickTradableTops(rows, today, 'BEAR');
+    assert.deepEqual(topShorts.map((r) => r.symbol), ['E', 'F']);
+  });
+
+  it('returns empty when only weak/non-tradable rows exist', () => {
+    const weak: FakeSignal[] = [
+      { symbol: 'X', signalDate: today, direction: 'LONG', overnightScore: 70, classification: 'WATCH', qualityBucket: 'WATCHLIST' },
     ];
-    const { topLongs, topShorts } = pickJournalTops(rows, today);
+    const { topLongs, topShorts } = pickTradableTops(weak, today, 'CHOPPY');
     assert.equal(topLongs.length, 0);
-    assert.deepEqual(topShorts.map((r) => r.symbol), ['ONLY_SHORT']);
+    assert.equal(topShorts.length, 0);
   });
 });
