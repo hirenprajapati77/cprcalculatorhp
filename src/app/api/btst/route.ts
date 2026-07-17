@@ -17,19 +17,23 @@ export async function GET(request: Request) {
       scannedAt: string;
       results: unknown[];
       insights: unknown;
+      coverage?: unknown;
     }
 
     if (!executionWindowOpen) {
       const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
       if (cached) {
+        const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
         return NextResponse.json({
           success: true,
           executionWindowOpen: false,
           cachedResult: true,
           scannedAt: cached.scannedAt,
           message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:10 IST.`,
+          degraded: cachedCoverage?.degraded ?? false,
           results: cached.results,
           insights: cached.insights,
+          ...(cached.coverage ? { coverage: cached.coverage } : {}),
         });
       }
       return NextResponse.json({
@@ -111,6 +115,7 @@ export async function GET(request: Request) {
       scannedAt,
       results: scanResult.results,
       insights: scanResult.insights,
+      coverage: scanResult.coverage,
     };
 
     await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
@@ -119,6 +124,9 @@ export async function GET(request: Request) {
       success: true,
       executionWindowOpen: true,
       cachedResult: false,
+      // Hoist the degraded flag to the top level so clients that only read
+      // `data.degraded` (ScannerClient) can surface an incomplete-scan warning.
+      degraded: scanResult.coverage?.degraded ?? false,
       ...scanResult,
     });
 
