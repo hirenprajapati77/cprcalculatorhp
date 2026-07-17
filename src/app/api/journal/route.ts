@@ -8,16 +8,20 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const fromDate   = searchParams.get('fromDate')   || undefined;
-    const toDate     = searchParams.get('toDate')     || undefined;
-    const signalType = searchParams.get('signalType') || 'ALL';
-    const page       = parseInt(searchParams.get('page')  || '1');
-    const limit      = parseInt(searchParams.get('limit') || '50');
+    const fromDate         = searchParams.get('fromDate')         || undefined;
+    const toDate           = searchParams.get('toDate')           || undefined;
+    const signalType       = searchParams.get('signalType')       || 'ALL';
+    const qualityBucket    = searchParams.get('qualityBucket')    || 'ALL';
+    const executionOutcome = searchParams.get('executionOutcome') || 'ALL';
+    const page             = parseInt(searchParams.get('page')  || '1');
+    const limit            = parseInt(searchParams.get('limit') || '50');
 
     const result = await TradeJournalService.getEntries({
       ...(fromDate   ? { fromDate }   : {}),
       ...(toDate     ? { toDate }     : {}),
       ...(signalType ? { signalType } : {}),
+      ...(qualityBucket    ? { qualityBucket }    : {}),
+      ...(executionOutcome ? { executionOutcome } : {}),
       page,
       limit,
     });
