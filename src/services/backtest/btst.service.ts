@@ -123,6 +123,15 @@ export class BtstService {
       stockResults.push(...batchResults);
     }
 
+    // Track which symbols could not be fetched (after retries) so the scan can honestly
+    // report that it covered only part of the universe instead of presenting a partial
+    // result as if it were complete — critical when acting on the output for real trades.
+    const failedSymbols = stockResults
+      .filter((r) => !r.stock)
+      .map((r) => r.stockMeta.symbol as string);
+    const universeSize = stocks.length;
+    const symbolsScanned = universeSize - failedSymbols.length;
+
     for (const { stock } of stockResults) {
       if (stock) {
         // Hard liquidity/volume eligibility gate — mirrors the first 3 checks in
@@ -193,7 +202,16 @@ export class BtstService {
         totalLong,
         totalShort,
         totalConflict
-      }
+      },
+      coverage: {
+        universeSize,
+        symbolsScanned,
+        symbolsFailed: failedSymbols.length,
+        failedSymbols,
+        // `degraded` is true when any symbol in the universe failed to fetch, so the
+        // UI/consumers can warn that the scan is incomplete.
+        degraded: failedSymbols.length > 0,
+      },
     };
   }
 
