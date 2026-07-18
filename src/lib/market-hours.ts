@@ -1,4 +1,4 @@
-import { BTST_WINDOWS } from '@/config/trading-constants';
+import { BTST_WINDOWS, MARKET_SESSION } from '@/config/trading-constants';
 
 // NSE Trading Holidays mapped by year
 const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
@@ -77,21 +77,23 @@ export function getISTTime(date: Date = new Date()) {
   };
 }
 
-export function isMarketOpen(date: Date = new Date()): boolean {
-  const { totalMinutes, isTradingDay } = getISTTime(date);
-  if (!isTradingDay) return false;
-  return totalMinutes >= 555 && totalMinutes < 930; // 09:15 to 15:30 IST
-}
-
-export function isTodayCandleClosed(date: Date = new Date()): boolean {
-  const { isTradingDay, totalMinutes } = getISTTime(date);
-  if (!isTradingDay) return false;
-  return totalMinutes >= 930; // After 15:30 IST
-}
-
 function toTotalMinutes(hour: number, minute: number): number {
   return hour * 60 + minute;
 }
+
+/** Format minute-of-day as HH:MM (values must come from BTST_WINDOWS / MARKET_SESSION). */
+export function formatIstHm(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function formatIstClock(parts: { hour: number; minute: number }): string {
+  return formatIstHm(toTotalMinutes(parts.hour, parts.minute));
+}
+
+const MARKET_OPEN_MIN = toTotalMinutes(MARKET_SESSION.OPEN.hour, MARKET_SESSION.OPEN.minute);
+const MARKET_CLOSE_MIN = toTotalMinutes(MARKET_SESSION.CLOSE.hour, MARKET_SESSION.CLOSE.minute);
 
 const DISCOVERY_START_MIN = toTotalMinutes(
   BTST_WINDOWS.DISCOVERY_START.hour,
@@ -114,12 +116,55 @@ const JOURNAL_END_MIN = toTotalMinutes(
   BTST_WINDOWS.JOURNAL_END_INCLUSIVE.minute
 );
 
+/** Derived IST minute-of-day bounds (from trading-constants only). */
+export const BTST_WINDOW_MINUTES = {
+  MARKET_OPEN: MARKET_OPEN_MIN,
+  MARKET_CLOSE: MARKET_CLOSE_MIN,
+  DISCOVERY_START: DISCOVERY_START_MIN,
+  CONFIRM_START: CONFIRM_START_MIN,
+  DISCOVERY_END: DISCOVERY_END_MIN,
+  JOURNAL_START: JOURNAL_START_MIN,
+  JOURNAL_END: JOURNAL_END_MIN,
+} as const;
+
+/** Preformatted HH:MM labels for UI/cron messages (derived — no clock literals here). */
+export const BTST_CLOCK = {
+  marketOpen: formatIstHm(MARKET_OPEN_MIN),
+  marketClose: formatIstHm(MARKET_CLOSE_MIN),
+  discoveryStart: formatIstHm(DISCOVERY_START_MIN),
+  confirmStart: formatIstHm(CONFIRM_START_MIN),
+  discoveryEnd: formatIstHm(DISCOVERY_END_MIN),
+  journalStart: formatIstHm(JOURNAL_START_MIN),
+  journalEnd: formatIstHm(JOURNAL_END_MIN),
+} as const;
+
+/** HHMM integer form for UI comparisons (e.g. hour*100+minute). */
+export const BTST_HHMM = {
+  marketOpen: MARKET_SESSION.OPEN.hour * 100 + MARKET_SESSION.OPEN.minute,
+  discoveryStart: BTST_WINDOWS.DISCOVERY_START.hour * 100 + BTST_WINDOWS.DISCOVERY_START.minute,
+  confirmStart: BTST_WINDOWS.CONFIRM_START.hour * 100 + BTST_WINDOWS.CONFIRM_START.minute,
+  discoveryEnd: BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.hour * 100 + BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.minute,
+  journalEnd: BTST_WINDOWS.JOURNAL_END_INCLUSIVE.hour * 100 + BTST_WINDOWS.JOURNAL_END_INCLUSIVE.minute,
+} as const;
+
+export function isMarketOpen(date: Date = new Date()): boolean {
+  const { totalMinutes, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return false;
+  return totalMinutes >= MARKET_OPEN_MIN && totalMinutes < MARKET_CLOSE_MIN;
+}
+
+export function isTodayCandleClosed(date: Date = new Date()): boolean {
+  const { isTradingDay, totalMinutes } = getISTTime(date);
+  if (!isTradingDay) return false;
+  return totalMinutes >= MARKET_CLOSE_MIN;
+}
+
 export type BtstWindowState = 'DISCOVERING' | 'ACTIVE' | 'FROZEN';
 
 /**
- * Overnight / BTST phase for a trading day:
- * - DISCOVERING: 15:10–15:20 (preview scan)
- * - ACTIVE: 15:20–15:25 (confirm / entry)
+ * Overnight / BTST phase for a trading day (from BTST_WINDOWS):
+ * - DISCOVERING: [DISCOVERY_START, CONFIRM_START)
+ * - ACTIVE: [CONFIRM_START, DISCOVERY_END_EXCLUSIVE)
  * - FROZEN: otherwise (or non-trading day)
  */
 export function getBtstWindowState(date: Date = new Date()): BtstWindowState {
@@ -134,18 +179,18 @@ export function getBtstWindowState(date: Date = new Date()): BtstWindowState {
   return 'FROZEN';
 }
 
-/** True during 15:10–15:25 IST (exclusive end) on a trading day. */
+/** True during [DISCOVERY_START, DISCOVERY_END_EXCLUSIVE) on a trading day. */
 export function isBtstDiscoveryOpen(date: Date = new Date()): boolean {
   const state = getBtstWindowState(date);
   return state === 'DISCOVERING' || state === 'ACTIVE';
 }
 
-/** True during 15:20–15:25 IST (exclusive end) on a trading day. */
+/** True during [CONFIRM_START, DISCOVERY_END_EXCLUSIVE) on a trading day. */
 export function isBtstConfirmOpen(date: Date = new Date()): boolean {
   return getBtstWindowState(date) === 'ACTIVE';
 }
 
-/** True during 15:25–15:30 IST (inclusive end) on a trading day. */
+/** True during [JOURNAL_START, JOURNAL_END_INCLUSIVE] on a trading day. */
 export function isBtstJournalWindowOpen(date: Date = new Date()): boolean {
   const { isTradingDay, totalMinutes } = getISTTime(date);
   if (!isTradingDay) return false;

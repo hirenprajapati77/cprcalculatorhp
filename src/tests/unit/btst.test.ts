@@ -3,6 +3,8 @@ import assert from 'node:assert';
 import { BtstService } from '../../services/backtest/btst.service';
 import { MarketService, MarketStockData } from '../../services/market.service';
 import { OvernightService } from '../../services/overnight/overnight.service';
+import { BTST_WINDOWS } from '../../config/trading-constants';
+import { BTST_CLOCK } from '../../lib/market-hours';
 import type { OvernightSignal } from '@prisma/client';
 
 describe('BTST Scoring Engine Tests', () => {
@@ -257,7 +259,7 @@ describe('BTST Scoring Engine Tests', () => {
     }
   });
 
-  test('isExecutionWindowOpen() enforces 15:10 - 15:25 IST window (exclusive end)', () => {
+  test('isExecutionWindowOpen() enforces discovery window from BTST_WINDOWS (exclusive end)', () => {
     // Generate dates on a Wednesday to avoid weekend logic overriding times
     const createDate = (h: number, m: number) => {
       // 2026-07-08 is a Wednesday
@@ -267,11 +269,13 @@ describe('BTST Scoring Engine Tests', () => {
       return d;
     };
 
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 9)), false, '15:09 should be closed');
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 10)), true, '15:10 should be open');
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 24)), true, '15:24 should be open');
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 25)), false, '15:25 should be closed (exclusive end / freeze)');
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 26)), false, '15:26 should be closed');
+    const ds = BTST_WINDOWS.DISCOVERY_START;
+    const de = BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE;
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(ds.hour, ds.minute - 1)), false, 'one minute before discoveryStart should be closed');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(ds.hour, ds.minute)), true, `${BTST_CLOCK.discoveryStart} should be open`);
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(de.hour, de.minute - 1)), true, 'one minute before discoveryEnd should be open');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(de.hour, de.minute)), false, `${BTST_CLOCK.discoveryEnd} should be closed (exclusive end / freeze)`);
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(de.hour, de.minute + 1)), false, 'one minute after discoveryEnd should be closed');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(16, 0)), false, '16:00 should be closed');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(23, 0)), false, '23:00 should be closed');
     
@@ -292,7 +296,7 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(
       BtstService.isExecutionWindowOpen(false, holidayInWindow),
       false,
-      'NSE holiday during 15:10-15:25 IST should report window closed'
+      `NSE holiday during ${BTST_CLOCK.discoveryStart}-${BTST_CLOCK.discoveryEnd} IST should report window closed`
     );
   });
 
@@ -302,7 +306,7 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(
       BtstService.isExecutionWindowOpen(false, ordinaryDayInWindow),
       true,
-      'Ordinary trading day during 15:10-15:25 IST should report window open'
+      `Ordinary trading day during ${BTST_CLOCK.discoveryStart}-${BTST_CLOCK.discoveryEnd} IST should report window open`
     );
   });
 });

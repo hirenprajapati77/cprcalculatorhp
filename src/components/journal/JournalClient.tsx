@@ -9,6 +9,7 @@ import {
   Download, RefreshCw, ChevronLeft, ChevronRight,
   TrendingUp, TrendingDown, Award, Activity,
 } from 'lucide-react';
+import { BTST_CLOCK } from '@/lib/market-hours';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1275,7 +1276,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           )}
           {!error && !loading && entries.length === 0 && (
             <div className="p-10 text-center text-slate-600 text-sm">
-              No journal entries yet. Entries appear after the 15:25–15:30 IST journal cron on trading days.
+              No journal entries yet. Entries appear after the {BTST_CLOCK.journalStart}–{BTST_CLOCK.journalEnd} IST journal cron on trading days.
             </div>
           )}
           {entries.length > 0 && (

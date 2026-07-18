@@ -11,8 +11,7 @@ import { getAtrPct, calculateATR } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
-import { isDiscoveryWindowOpen } from '@/config/btst-windows';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen } from '@/lib/market-hours';
 import { discoverViaAdvancedEngine } from '../overnight/advanced-discover-bridge';
 
 export interface BtstScoreResult {
@@ -60,7 +59,7 @@ export class BtstService {
       return true;
     }
 
-    return isDiscoveryWindowOpen(now);
+    return isBtstDiscoveryOpen(now);
   }
 
   /**

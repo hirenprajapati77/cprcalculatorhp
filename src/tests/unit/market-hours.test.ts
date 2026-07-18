@@ -27,7 +27,7 @@ describe('Market Hours Utilities', () => {
     });
     
     it('returns the correct IST date when UTC and IST days match', () => {
-      // 2026-07-09T10:00:00.000Z = 2026-07-09T15:30:00.000+05:30 (IST)
+      // 2026-07-09T10:00:00.000Z → same calendar day in IST (UTC+05:30)
       const date = new Date('2026-07-09T10:00:00.000Z');
       assert.strictEqual(getISTDateString(date), '2026-07-09');
     });
@@ -41,14 +41,14 @@ describe('Market Hours Utilities', () => {
 
   describe('isTodayCandleClosed (Live Market Scenario Regression)', () => {
     it('returns false during live market hours (e.g., 2:30 PM IST)', () => {
-      // 2026-07-09T09:00:00.000Z = 2026-07-09T14:30:00.000+05:30 (IST) - Market is Open
+      // 2026-07-09T09:00:00.000Z → mid-session IST - Market is Open
       const liveMarketDate = new Date('2026-07-09T09:00:00.000Z');
       assert.strictEqual(isTodayCandleClosed(liveMarketDate), false);
       assert.strictEqual(isMarketOpen(liveMarketDate), true);
     });
 
-    it('returns false right before market close (15:29 IST)', () => {
-      // 2026-07-09T09:59:00.000Z = 2026-07-09T15:29:00.000+05:30 (IST)
+    it('returns false right before market close', () => {
+      // 2026-07-09T09:59:00.000Z → one minute before MARKET_SESSION.CLOSE IST
       const almostClose = new Date('2026-07-09T09:59:00.000Z');
       assert.strictEqual(isTodayCandleClosed(almostClose), false);
     });
