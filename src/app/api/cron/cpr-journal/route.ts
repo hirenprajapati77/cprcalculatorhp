@@ -4,6 +4,7 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
+import { CPR_JOURNAL_WINDOW } from '@/config/trading-constants';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   // CPR journal EOD window (HHMM) — distinct from BTST_WINDOWS discovery/journal gates
   const timeValue = hour * 100 + minute;
-  if (timeValue < 1515 || timeValue > 1529) {
+  if (timeValue < CPR_JOURNAL_WINDOW.START_HHMM || timeValue > CPR_JOURNAL_WINDOW.END_HHMM) {
     return NextResponse.json({
       message: `CPR journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')}`
     });

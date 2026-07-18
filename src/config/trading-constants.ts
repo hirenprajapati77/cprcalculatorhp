@@ -59,6 +59,15 @@ export const BTST_WINDOWS = {
   MARKET_CLOSE: MARKET_SESSION.CLOSE,
 } as const;
 
+/**
+ * CPR journal cron IST window (distinct from BTST_WINDOWS).
+ * Compared as HHMM integers: hour * 100 + minute (inclusive both ends).
+ */
+export const CPR_JOURNAL_WINDOW = {
+  START_HHMM: 1515,
+  END_HHMM: 1529,
+} as const;
+
 export const LIQUIDITY = {
   MIN_HISTORY_FOR_RELIABLE_ATR: 15,
 };

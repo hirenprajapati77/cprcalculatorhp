@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert';
 import { ScannerService } from '../../services/scanner.service';
 import { RankingService } from '../../services/ranking.service';
@@ -875,17 +875,28 @@ test('ScannerService/SignalService — asOfDate Inject and Forwarding', async (t
     assert.ok(!res.signals.includes('GAP_UP'), 'Should not include GAP_UP when asOfDate is Day 2');
   });
 
-  await t.test('scanStock(stock) with no asOfDate defaults to real system date (no GAP_UP)', async () => {
-    const res = await ScannerService.scanStock({
-      ...mockStock,
-      open: 110,
-      high: 115,
-      low: 108,
-      close: 112,
-      ltp: 112
+  await t.test('scanStock(stock) with no asOfDate defaults to system IST date (no GAP_UP)', async () => {
+    // Wall-clock weekends/holidays take the "stale history as today" branch in
+    // SignalService, which can falsely emit GAP_UP against Day-2. Pin a Friday
+    // IST session outside the mock history so this asserts date defaulting only.
+    mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2026-07-17T06:30:00.000Z'), // Friday 12:00 IST
     });
+    try {
+      const res = await ScannerService.scanStock({
+        ...mockStock,
+        open: 110,
+        high: 115,
+        low: 108,
+        close: 112,
+        ltp: 112
+      });
 
-    assert.ok(!res.signals.includes('GAP_UP'), 'Should default to system time and not match historical dates');
+      assert.ok(!res.signals.includes('GAP_UP'), 'Should use pinned system IST date and not match historical Day-3 gap setup');
+    } finally {
+      mock.timers.reset();
+    }
   });
 });
 
