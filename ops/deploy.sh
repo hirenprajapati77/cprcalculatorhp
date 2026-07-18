@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Deployment Script (Track A - Local Build & Upload)
 # Required env vars (set in your local shell, NOT committed to git):
 #   DEPLOY_HOST  — server IP or hostname, e.g. export DEPLOY_HOST=1.2.3.4

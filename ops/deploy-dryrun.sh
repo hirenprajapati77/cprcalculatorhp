@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Dry-run the deploy.sh pre-flight against a throwaway Docker Postgres.
 # Never touches DEPLOY_HOST, DEPLOY_KEY, production, or .env DATABASE_URL.
 #
