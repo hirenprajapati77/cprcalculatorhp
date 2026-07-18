@@ -7,7 +7,7 @@ import {
   overnightSignalToBtstUi,
   selectTradableOvernightPicks,
 } from '@/services/overnight/overnight-ui-adapter';
-import { isBtstDiscoveryOpen, getISTTime, getISTDateString } from '@/lib/market-hours';
+import { isBtstDiscoveryOpen, getISTTime, getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
@@ -22,11 +22,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // Align with canonical discovery window (15:10–15:25 exclusive)
+  // Align with canonical discovery window [DISCOVERY_START, DISCOVERY_END_EXCLUSIVE)
   if (!isBtstDiscoveryOpen()) {
     const { hour, minute } = getISTTime();
     return NextResponse.json({
-      message: `Time ${hour}:${String(minute).padStart(2, '0')} is outside alert window (15:10–15:25 IST)`,
+      message: `Time ${hour}:${String(minute).padStart(2, '0')} is outside alert window (${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST)`,
     });
   }
 

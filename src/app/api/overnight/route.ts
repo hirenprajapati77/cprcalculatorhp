@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
-import { getISTDateString } from '@/lib/market-hours';
+import { getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         insights: unknown;
       }
 
-      // Live discovery spans DISCOVERING (15:10–15:20) + ACTIVE (15:20–15:25)
+      // Live discovery spans DISCOVERING + ACTIVE (BTST_WINDOWS via getBtstWindowState)
       if (state !== 'ACTIVE' && state !== 'DISCOVERING') {
         const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
         if (cached) {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
             windowOpen: false,
             cachedResult: true,
             scannedAt: cached.scannedAt,
-            message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:10 IST.`,
+            message: `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
             results: cached.results,
             insights: cached.insights,
             state,
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
           success: true,
           windowOpen: false,
           cachedResult: false,
-          message: 'Overnight scanner activates at 15:10–15:25 IST.',
+          message: `Overnight scanner activates at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
           results: [],
           state,
         });

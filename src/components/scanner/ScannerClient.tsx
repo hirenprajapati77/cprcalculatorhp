@@ -31,6 +31,7 @@ import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST } from '@/utils/format';
+import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT';
@@ -73,7 +74,7 @@ function useBtstState() {
   const time = hours * 100 + minutes;
 
   let state = 'PREMARKET';
-  let message = 'BTST discovery activates at 15:10 IST';
+  let message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
   let emptyMessage = 'BTST discovery has not started.';
   let nextRefresh = '';
 
@@ -88,23 +89,23 @@ function useBtstState() {
     message = 'Market is closed';
     emptyMessage = 'No qualified BTST setups today.';
     nextRefresh = 'Locked';
-  } else if (time < 915) {
+  } else if (time < BTST_HHMM.marketOpen) {
     state = 'PREMARKET';
-    message = 'BTST discovery activates at 15:10 IST';
+    message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
     emptyMessage = 'BTST discovery has not started.';
-    const diffMinutes = (15 * 60 + 10) - (hours * 60 + minutes);
+    const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
     nextRefresh = `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m`;
-  } else if (time >= 915 && time < 1510) {
+  } else if (time >= BTST_HHMM.marketOpen && time < BTST_HHMM.discoveryStart) {
     state = 'INTRADAY';
-    message = 'BTST discovery activates at 15:10 IST';
+    message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
     emptyMessage = 'BTST discovery has not started.';
-    const diffMinutes = (15 * 60 + 10) - (hours * 60 + minutes);
+    const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
     nextRefresh = `Opens in ${diffMinutes}m`;
-  } else if (time >= 1510 && time < 1525) {
+  } else if (time >= BTST_HHMM.discoveryStart && time < BTST_HHMM.discoveryEnd) {
     state = 'ACTIVE';
     message = 'Generating BTST candidates';
     emptyMessage = 'Scanning live candidates…';
-    nextRefresh = 'Live until 15:25';
+    nextRefresh = `Live until ${BTST_CLOCK.discoveryEnd}`;
   } else {
     state = 'FROZEN';
     message = 'Scan results frozen for today';
@@ -935,9 +936,9 @@ export default function ScannerClient() {
     const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
     const t = h * 100 + m;
     
-    if (t < 915) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
-    if (t >= 915 && t < 1510) return { label: 'INTRADAY', color: 'bg-accent-blue' };
-    if (t >= 1510 && t < 1525) return { label: 'ACTIVE', color: 'bg-accent-green animate-pulse' };
+    if (t < BTST_HHMM.marketOpen) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
+    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.discoveryStart) return { label: 'INTRADAY', color: 'bg-accent-blue' };
+    if (t >= BTST_HHMM.discoveryStart && t < BTST_HHMM.discoveryEnd) return { label: 'ACTIVE', color: 'bg-accent-green animate-pulse' };
     return { label: 'FROZEN', color: 'bg-accent-purple' };
   };
   const telState = getTelemetryState();
@@ -1423,8 +1424,8 @@ export default function ScannerClient() {
       const m = parseInt(
         parts.find(p => p.type === 'minute')?.value || '0', 10
       );
-      // Match canonical discovery window 15:10–15:25 (exclusive end)
-      return { h, m, inWindow: h === 15 && m >= 10 && m < 25 };
+      // Match canonical discovery window [DISCOVERY_START, DISCOVERY_END)
+      return { h, m, inWindow: (h * 60 + m) >= BTST_WINDOW_MINUTES.DISCOVERY_START && (h * 60 + m) < BTST_WINDOW_MINUTES.DISCOVERY_END };
     };
 
     const checkAndRefresh = async () => {
@@ -1789,7 +1790,7 @@ export default function ScannerClient() {
     const isWeekdayForCountdown = istDateStrForCountdown !== 'Saturday' && istDateStrForCountdown !== 'Sunday';
 
     const totalMinForCountdown = hForCountdown * 60 + mForCountdown;
-    const targetMinForCountdown = 15 * 60 + 10; // 15:10
+    const targetMinForCountdown = BTST_WINDOW_MINUTES.DISCOVERY_START;
 
     if (isWeekdayForCountdown && totalMinForCountdown < targetMinForCountdown) {
       const minutesUntil = targetMinForCountdown - totalMinForCountdown;
@@ -2577,7 +2578,7 @@ export default function ScannerClient() {
                 </div>
                 <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
                   <span className="text-text-tertiary">Freeze Time:</span>
-                  <span className="font-bold text-text-primary">15:25 IST</span>
+                  <span className="font-bold text-text-primary">{BTST_CLOCK.discoveryEnd} IST</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-text-tertiary">Latency:</span>
@@ -2594,7 +2595,7 @@ export default function ScannerClient() {
               <p className="text-sm font-medium text-red-400 font-mono">
                 {scannerMode === 'CPR'
                   ? 'Markets closed. See you Monday at 09:15 IST.'
-                  : 'Markets closed. See you Monday at 15:10 IST.'}
+                  : `Markets closed. See you Monday at ${BTST_CLOCK.discoveryStart} IST.`}
               </p>
             </div>
           )}
@@ -2618,12 +2619,12 @@ export default function ScannerClient() {
                     }`}>
                       {cachedResult
                         ? `Showing cached scan from ${scannedAt}`
-                        : `BTST/STBT Scanner — Activates at 15:10 IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                        : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {cachedResult
-                        ? 'Next live scan today at 15:10–15:25 IST'
+                        ? `Next live scan today at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST`
                         : 'Results will appear here automatically when window opens'
                       }
                     </p>
@@ -2637,7 +2638,7 @@ export default function ScannerClient() {
                   border border-green-500/30 font-mono">
                   <span className="animate-pulse text-green-400">●</span>
                   <p className="text-sm font-medium text-green-400">
-                    LIVE SCAN ACTIVE — 15:10 IST Window Open{countdownDisplay ? ' (Bypass/Testing Mode)' : ''}
+                    LIVE SCAN ACTIVE — {BTST_CLOCK.discoveryStart} IST Window Open{countdownDisplay ? ' (Bypass/Testing Mode)' : ''}
                   </p>
                 </div>
               )}
@@ -3493,8 +3494,8 @@ export default function ScannerClient() {
               <div className="space-y-2">
                 <h4 className="font-bold text-accent-blue">When to Take Trades?</h4>
                 <ul className="list-disc pl-5 space-y-1">
-                  <li><strong>BTST (Buy Today, Sell Tomorrow) / LONG:</strong> Look for stocks that show breakout momentum towards the end of the day. Take entry near 15:20 IST to avoid intraday volatility and capture the next day&apos;s gap-up open.</li>
-                  <li><strong>STBT (Sell Today, Buy Tomorrow) / SHORT:</strong> Look for stocks breaking down with heavy selling pressure. Entry should similarly be taken near 15:20 IST aiming for a gap-down open.</li>
+                  <li><strong>BTST (Buy Today, Sell Tomorrow) / LONG:</strong> Look for stocks that show breakout momentum towards the end of the day. Take entry near {BTST_CLOCK.confirmStart} IST to avoid intraday volatility and capture the next day&apos;s gap-up open.</li>
+                  <li><strong>STBT (Sell Today, Buy Tomorrow) / SHORT:</strong> Look for stocks breaking down with heavy selling pressure. Entry should similarly be taken near {BTST_CLOCK.confirmStart} IST aiming for a gap-down open.</li>
                 </ul>
               </div>
 

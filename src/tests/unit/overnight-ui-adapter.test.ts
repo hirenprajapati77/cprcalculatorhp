@@ -6,13 +6,14 @@ import {
   buildInsightsFromOvernight,
   selectTradableOvernightPicks,
 } from '../../services/overnight/overnight-ui-adapter';
+import { BTST_CLOCK } from '../../lib/market-hours';
 
 function makeSignal(partial: Partial<OvernightSignal>): OvernightSignal {
   return {
     id: '1',
     symbol: 'RELIANCE',
     signalDate: '2026-07-08',
-    signalTime: '15:20',
+    signalTime: BTST_CLOCK.confirmStart,
     direction: 'LONG',
     entry: 1000,
     stopLoss: 980,

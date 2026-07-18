@@ -2,6 +2,7 @@ import { env } from '@/config/env';
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
+import { BTST_CLOCK } from '@/lib/market-hours';
 
 import { decrypt } from '../../lib/crypto';
 
@@ -96,7 +97,7 @@ export class TelegramService {
     }
 
 
-    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ 15:10–15:25 IST | Engine: Advanced\n\n`;
+    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST | Engine: Advanced\n\n`;
 
     text += `🟢 <b>LONG SETUPS (${longs.length})</b>\n`;
     if (longs.length === 0) text += `<i>None</i>\n`;

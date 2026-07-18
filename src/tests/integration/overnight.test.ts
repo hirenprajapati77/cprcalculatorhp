@@ -11,6 +11,14 @@ import { RegimeService } from '../../services/overnight/regime.service';
 import { SignalQualityService } from '../../services/overnight/signal-quality.service';
 import { EventCalendarService } from '../../services/overnight/event.service';
 import { prisma } from '../../lib/db';
+import { BTST_WINDOWS } from '../../config/trading-constants';
+import { BTST_CLOCK } from '../../lib/market-hours';
+
+function pad2(n: number): string { return String(n).padStart(2, '0'); }
+/** Build an IST Date from calendar day + hour/minute (no hardcoded HH:MM clock strings). */
+function istAt(ymd: string, hour: number, minute: number): Date {
+  return new Date(`${ymd}T${pad2(hour)}:${pad2(minute)}:00+05:30`);
+}
 
 describe('Overnight Engine Tests', () => {
   test('LONG setup (BTST Scoring Logic)', () => {
@@ -175,7 +183,7 @@ describe('Overnight Engine Tests', () => {
 
     try {
       // Run discover for mockStock on 2026-07-07
-      const date = new Date('2026-07-07T15:20:00+05:30');
+      const date = istAt('2026-07-07', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
       await OvernightService.discover('BOTH', date, [mockStock]);
       
       assert.strictEqual(upserted.length, 1);
@@ -283,7 +291,7 @@ describe('Overnight Engine Tests', () => {
     env.HISTORICAL_MODE = 'mock';
 
     try {
-      const date = new Date('2026-07-08T15:20:00+05:30');
+      const date = istAt('2026-07-08', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
       
       // Empty history -> should skip
       // 1 candle (today) -> should skip because we need at least 2 distinct candles (yesterday and today)
@@ -337,13 +345,13 @@ describe('Overnight Engine Tests', () => {
 
   test('determineState holiday freeze boundary transitions', () => {
     // 2026-01-26 is Republic Day (NSE Trading Holiday)
-    const holidayDateStr = '2026-01-26T15:20:00+05:30';
-    const dayBeforeHolidayStr = '2026-01-23T15:20:00+05:30'; // Friday (working day)
-    const dayAfterHolidayStr = '2026-01-27T15:20:00+05:30'; // Tuesday (working day)
+    const holidayDate = istAt('2026-01-26', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
+    const dayBeforeHoliday = istAt('2026-01-23', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute); // Friday (working day)
+    const dayAfterHoliday = istAt('2026-01-27', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute); // Tuesday (working day)
 
-    const stateHoliday = OvernightService.determineState(new Date(holidayDateStr));
-    const stateBefore = OvernightService.determineState(new Date(dayBeforeHolidayStr));
-    const stateAfter = OvernightService.determineState(new Date(dayAfterHolidayStr));
+    const stateHoliday = OvernightService.determineState(holidayDate);
+    const stateBefore = OvernightService.determineState(dayBeforeHoliday);
+    const stateAfter = OvernightService.determineState(dayAfterHoliday);
 
     assert.strictEqual(stateHoliday, 'FROZEN', 'Holiday date should be FROZEN');
     assert.strictEqual(stateBefore, 'ACTIVE', 'Trading day before holiday should allow ACTIVE scan');
@@ -352,25 +360,29 @@ describe('Overnight Engine Tests', () => {
 
   test('determineState uses canonical discovery vs confirm windows', () => {
     // 2026-07-08 is a Wednesday trading day
+    const ymd = '2026-07-08';
+    const ds = BTST_WINDOWS.DISCOVERY_START;
+    const cs = BTST_WINDOWS.CONFIRM_START;
+    const de = BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE;
     assert.strictEqual(
-      OvernightService.determineState(new Date('2026-07-08T15:09:00+05:30')),
+      OvernightService.determineState(istAt(ymd, ds.hour, ds.minute - 1)),
       'FROZEN',
-      'Before 15:10 should be FROZEN'
+      `Before ${BTST_CLOCK.discoveryStart} should be FROZEN`
     );
     assert.strictEqual(
-      OvernightService.determineState(new Date('2026-07-08T15:10:00+05:30')),
+      OvernightService.determineState(istAt(ymd, ds.hour, ds.minute)),
       'DISCOVERING',
-      '15:10 should be DISCOVERING'
+      `${BTST_CLOCK.discoveryStart} should be DISCOVERING`
     );
     assert.strictEqual(
-      OvernightService.determineState(new Date('2026-07-08T15:20:00+05:30')),
+      OvernightService.determineState(istAt(ymd, cs.hour, cs.minute)),
       'ACTIVE',
-      '15:20 should be ACTIVE'
+      `${BTST_CLOCK.confirmStart} should be ACTIVE`
     );
     assert.strictEqual(
-      OvernightService.determineState(new Date('2026-07-08T15:25:00+05:30')),
+      OvernightService.determineState(istAt(ymd, de.hour, de.minute)),
       'FROZEN',
-      '15:25 should be FROZEN'
+      `${BTST_CLOCK.discoveryEnd} should be FROZEN`
     );
   });
   test('getIntradayData validates array lengths for high, low, close, volume', async () => {
@@ -410,6 +422,53 @@ describe('Overnight Engine Tests', () => {
     }
   });
 
+  test('discover() hard-excludes illiquid stocks via EntryManagerService (avgVolume / volumeRatio)', async () => {
+    const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({
+      date: `2026-07-${(i + 1).toString().padStart(2, '0')}`,
+      open: 100, high: 105, low: 95, close: 100, volume: 1000000,
+    }));
+
+    const illiquidAvg = {
+      symbol: 'ILLIQ_AVG', market: 'NSE' as const, sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 200000, avgVolume: 50000,
+      marketCap: 10000, ltp: 100, history: makeHistory(15),
+      longScoreOverride: 100, shortScoreOverride: 20,
+    };
+    const illiquidRatio = {
+      symbol: 'ILLIQ_RATIO', market: 'NSE' as const, sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 110000, avgVolume: 100000,
+      marketCap: 10000, ltp: 100, history: makeHistory(15),
+      longScoreOverride: 100, shortScoreOverride: 20,
+    };
+    const liquid = {
+      symbol: 'LIQUID_OK', market: 'NSE' as const, sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100, volume: 200000, avgVolume: 100000,
+      marketCap: 10000, ltp: 100, history: makeHistory(15),
+      longScoreOverride: 100, shortScoreOverride: 20,
+    };
+
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = env.HISTORICAL_MODE;
+    const upserted: string[] = [];
+    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
+      upserted.push(args.create.symbol);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+    env.HISTORICAL_MODE = 'mock';
+
+    try {
+      const date = istAt('2026-08-01', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
+      // Do NOT mock evaluateEligibility — this asserts the real hard gate.
+      await OvernightService.discover('BOTH', date, [illiquidAvg as any, illiquidRatio as any, liquid as any]);
+      assert.strictEqual(upserted.includes('ILLIQ_AVG'), false, 'avgVolume < 100k must be hard-excluded');
+      assert.strictEqual(upserted.includes('ILLIQ_RATIO'), false, 'volumeRatio < 1.2 must be hard-excluded');
+      assert.strictEqual(upserted.includes('LIQUID_OK'), true, 'liquid stock should still produce a signal');
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
   test('discover() skips stocks with < 15 daily candles (MIN_HISTORY_FOR_RELIABLE_ATR)', async () => {
     const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
     
@@ -426,7 +485,7 @@ describe('Overnight Engine Tests', () => {
     env.HISTORICAL_MODE = 'mock';
 
     try {
-      const date = new Date('2026-08-01T15:20:00+05:30');
+      const date = istAt('2026-08-01', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
        
       await OvernightService.discover('BOTH', date, [stock14 as any, stock15 as any]);
 
@@ -464,7 +523,7 @@ describe('Overnight Engine Tests', () => {
     env.HISTORICAL_MODE = 'mock';
 
     try {
-      const date = new Date('2026-08-01T15:20:00+05:30');
+      const date = istAt('2026-08-01', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
        
       await OvernightService.discover('BOTH', date, [stockDiff9 as any, stockDiff10 as any, stockDiff11 as any]);
 
@@ -573,7 +632,7 @@ describe('Overnight Engine Tests', () => {
     env.HISTORICAL_MODE = 'mock';
 
     try {
-      const date = new Date('2026-08-01T15:20:00+05:30');
+      const date = istAt('2026-08-01', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
        
       await OvernightService.discover('BOTH', date, [mockStock as any]);
 
