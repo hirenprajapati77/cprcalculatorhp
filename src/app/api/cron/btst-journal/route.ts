@@ -8,7 +8,7 @@ import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
-import { getISTTime } from '@/lib/market-hours';
+import { getISTTime, isBtstJournalWindowOpen } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
 
@@ -27,7 +27,7 @@ const MIN_OVERNIGHT_SCORE = 85;
  *    never BtstService.discover(), which caused the 60% UNKNOWN quality gap)
  * 3. Journal only qualityBucket=TRADEABLE + READY+ score (>=85)
  * 4. Suppress STBT when NIFTY regime is BULL (month of evidence: STBT 32% vs BTST 54%)
- * 5. Keep v2 shadow scoring unchanged
+ * 5. Keep Simple V2 shadow scoring (scoreV2) for research — Advanced overnightScore is authoritative
  */
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -46,11 +46,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // Only run during 15:20–15:30 IST (executable window; market closes 15:30)
-  const timeValue = hour * 100 + minute;
-  if ((timeValue < 1520 || timeValue > 1530) && !bypassWindow) {
+  // Only run during 15:25–15:30 IST (after discovery freeze; market closes 15:30)
+  if (!isBtstJournalWindowOpen() && !bypassWindow) {
     return NextResponse.json({
-      message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')}`
+      message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')} (expected 15:25–15:30)`
     });
   }
 
@@ -166,7 +165,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // Shadow: compute v2 score in parallel (does not affect production)
+      // Research-only: Simple V2 shadow in parallel (does not select or rank trades)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         if (stockData) {
@@ -183,7 +182,7 @@ export async function GET(req: NextRequest) {
           };
         }
       } catch (v2Err) {
-        console.warn(`[BtstJournal] v2 scoring failed for ${signal.symbol}:`, v2Err);
+        console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
       }
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} CE`;
@@ -200,6 +199,7 @@ export async function GET(req: NextRequest) {
         optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'CE',
+        // Authoritative Advanced Engine score (0–130)
         score:          signal.overnightScore ?? 0,
         confidence:     signal.confidence ?? 0,
         signalSummary,
@@ -251,6 +251,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      // Research-only Simple V2 shadow (same as BTST path)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         if (stockData) {
@@ -267,7 +268,7 @@ export async function GET(req: NextRequest) {
           };
         }
       } catch (v2Err) {
-        console.warn(`[BtstJournal] v2 scoring failed for ${signal.symbol}:`, v2Err);
+        console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
       }
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} PE`;
@@ -284,6 +285,7 @@ export async function GET(req: NextRequest) {
         optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'PE',
+        // Authoritative Advanced Engine score (0–130)
         score:          signal.overnightScore ?? 0,
         confidence:     signal.confidence ?? 0,
         signalSummary,

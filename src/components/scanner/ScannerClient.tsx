@@ -31,6 +31,23 @@ import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST } from '@/utils/format';
+import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
+
+type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT';
+
+function isOvernightMode(mode: ScannerMode): boolean {
+  return mode === 'BTST' || mode === 'STBT' || mode === 'OVERNIGHT';
+}
+
+function scoreScaleMax(mode: ScannerMode): number {
+  return isOvernightMode(mode) ? ADVANCED_SCORE.MAX : SIMPLE_SCORE.MAX;
+}
+
+function scoreThresholds(mode: ScannerMode) {
+  return isOvernightMode(mode)
+    ? { strong: ADVANCED_SCORE.STRONG, ready: ADVANCED_SCORE.READY, watch: ADVANCED_SCORE.WATCH }
+    : { strong: SIMPLE_SCORE.STRONG, ready: SIMPLE_SCORE.READY, watch: SIMPLE_SCORE.WATCH };
+}
 
 function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinutes: number } {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -298,6 +315,7 @@ const StockRow = React.memo(({
   isStarred,
   isPinned,
   isNotified,
+  scoreThresholds: thresholds,
   onToggleCompare,
   onToggleWatchlist,
   onOpenDrawer,
@@ -311,6 +329,7 @@ const StockRow = React.memo(({
   isStarred: boolean;
   isPinned: boolean;
   isNotified: boolean;
+  scoreThresholds: { strong: number; ready: number; watch: number };
   onToggleCompare: (symbol: string) => void;
   onToggleWatchlist: (symbol: string, key: keyof WatchlistItemState) => void;
   onOpenDrawer: (stock: ScannedStock) => void;
@@ -324,9 +343,13 @@ const StockRow = React.memo(({
 
   let rowClass = isPinned ? 'bg-accent-blue/5 border-l-2 border-accent-blue' : '';
   if (row.btstClassification) {
-    if (row.btstClassification === 'STRONG_BTST') rowClass += ' border-l-2 border-accent-green bg-accent-green/5';
-    else if (row.btstClassification === 'BTST_READY') rowClass += ' border-l-2 border-accent-blue bg-accent-blue/5';
-    else if (row.btstClassification === 'WATCH') rowClass += ' border-l-2 border-accent-amber bg-accent-amber/5';
+    if (row.btstClassification === 'STRONG_BTST' || row.btstClassification === 'STRONG_STBT') {
+      rowClass += ' border-l-2 border-accent-green bg-accent-green/5';
+    } else if (row.btstClassification === 'BTST_READY' || row.btstClassification === 'STBT_READY') {
+      rowClass += ' border-l-2 border-accent-blue bg-accent-blue/5';
+    } else if (row.btstClassification === 'WATCH') {
+      rowClass += ' border-l-2 border-accent-amber bg-accent-amber/5';
+    }
     else if (row.btstClassification === 'IGNORE') rowClass += ' border-l-2 border-text-tertiary bg-bg-tertiary/5';
   }
 
@@ -559,11 +582,10 @@ const StockRow = React.memo(({
             <div className="font-bold text-text-primary text-[13px] leading-none">{row.score}</div>
             <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}%</div>
             {densityMode === 'detailed' && <div className="mt-1">{
-              row.score >= 75 ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge> :
-              row.score >= 60 ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge> :
-              row.score >= 40 ? <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge> :
-              row.score >= 20 ? <Badge variant="gray">Ignore</Badge> :
-              <Badge variant="red" className="shadow-[0_0_10px_rgba(239,68,68,0.15)]">Avoid</Badge>
+              row.score >= thresholds.strong ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong</Badge> :
+              row.score >= thresholds.ready ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Ready</Badge> :
+              row.score >= thresholds.watch ? <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge> :
+              <Badge variant="gray">Ignore</Badge>
             }</div>}
           </div>
         </td>
@@ -776,7 +798,10 @@ export default function ScannerClient() {
   }, []);
   const [market, setMarket] = useState<'NSE' | 'BSE'>('NSE');
   const [mode, setMode] = useState<string>('ALL');
-  const [scannerMode, setScannerMode] = useState<'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT'>('CPR');
+  const [scannerMode, setScannerMode] = useState<ScannerMode>('CPR');
+  const overnightMode = isOvernightMode(scannerMode);
+  const thresholds = scoreThresholds(scannerMode);
+  const scoreMax = scoreScaleMax(scannerMode);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [page, setPage] = useState<number>(1);
@@ -1072,7 +1097,7 @@ export default function ScannerClient() {
     try {
       if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
         const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
-        // Live scoring engine — calls /api/btst which runs BtstService.evaluateOvernight on stocks in real-time
+        // Advanced Engine via /api/btst adapter (OvernightService → UI DTO)
         const res = await fetch(`/api/btst?universe=${universe}${bypassVal ? '&bypass=true' : ''}`);
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
@@ -1104,6 +1129,7 @@ export default function ScannerClient() {
           exitStrategy: string;
           scoreBreakdown?: ScannedStock['scoreBreakdown'];
           optionSuggestion?: ScannedStock['optionSuggestion'];
+          classification?: string;
         }> = data.results || [];
 
         const filtered = allResults.filter(r => {
@@ -1113,6 +1139,11 @@ export default function ScannerClient() {
         });
 
         const mapped: ScannedStock[] = filtered.map((sig, idx) => {
+          const overnightCls =
+            sig.classification ||
+            sig.signals?.find((s) =>
+              /^(STRONG_|BTST_|STBT_|WATCH|IGNORE|NEUTRAL_CONFLICT)/.test(s)
+            );
           const base = {
             id: `btst-live-${idx}`,
             symbol: sig.symbol,
@@ -1158,6 +1189,7 @@ export default function ScannerClient() {
             exitStrategy: sig.exitStrategy || 'EOD',
             rejectionReason: null,
             volumeRatio: 1,
+            ...(overnightCls ? { btstClassification: overnightCls } : {}),
             ...(sig.scoreBreakdown !== undefined && { scoreBreakdown: sig.scoreBreakdown }),
             ...(sig.optionSuggestion !== undefined && { optionSuggestion: sig.optionSuggestion }),
           };
@@ -1391,7 +1423,8 @@ export default function ScannerClient() {
       const m = parseInt(
         parts.find(p => p.type === 'minute')?.value || '0', 10
       );
-      return { h, m, inWindow: h === 15 && m >= 20 && m <= 25 };
+      // Match canonical discovery window 15:10–15:25 (exclusive end)
+      return { h, m, inWindow: h === 15 && m >= 10 && m < 25 };
     };
 
     const checkAndRefresh = async () => {
@@ -1597,22 +1630,25 @@ export default function ScannerClient() {
     return `${m}m ${s < 10 ? '0' : ''}${s}s`;
   };
 
-  // Standardized V3 category labels and styling
+  // Mode-aware badges: CPR uses 0–100 Simple thresholds; overnight uses Advanced 0–130
   const getRatingBadge = (score: number) => {
-    if (score >= 75) return <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong Buy</Badge>;
-    if (score >= 60) return <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Opportunity</Badge>;
-    if (score >= 40) return <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge>;
-    if (score >= 20) return <Badge variant="gray">Ignore</Badge>;
-    return <Badge variant="red" className="shadow-[0_0_10px_rgba(239,68,68,0.15)]">Avoid</Badge>;
+    if (score >= thresholds.strong) {
+      return <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">{overnightMode ? 'Strong' : 'Strong Buy'}</Badge>;
+    }
+    if (score >= thresholds.ready) {
+      return <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">{overnightMode ? 'Ready' : 'Opportunity'}</Badge>;
+    }
+    if (score >= thresholds.watch) {
+      return <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge>;
+    }
+    return <Badge variant="gray">Ignore</Badge>;
   };
 
-  // Standardized V3 color selectors
   const getRatingColorClass = (score: number) => {
-    if (score >= 75) return 'text-accent-purple border-accent-purple/30 bg-accent-purple/10';
-    if (score >= 60) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
-    if (score >= 40) return 'text-accent-amber border-accent-amber/30 bg-accent-amber/10';
-    if (score >= 20) return 'text-text-secondary border-border-tertiary bg-bg-tertiary';
-    return 'text-accent-red border-accent-red/30 bg-accent-red/10';
+    if (score >= thresholds.strong) return 'text-accent-purple border-accent-purple/30 bg-accent-purple/10';
+    if (score >= thresholds.ready) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
+    if (score >= thresholds.watch) return 'text-accent-amber border-accent-amber/30 bg-accent-amber/10';
+    return 'text-text-secondary border-border-tertiary bg-bg-tertiary';
   };
 
   // Heatmap Aggregator with Row and Column Totals
@@ -1677,8 +1713,8 @@ export default function ScannerClient() {
         }
       };
 
-      if (score >= 75) checkAndAddCell('Strong Buy');
-      if (score >= 60 && score < 75) checkAndAddCell('Breakout');
+      if (score >= thresholds.strong) checkAndAddCell('Strong Buy');
+      if (score >= thresholds.ready && score < thresholds.strong) checkAndAddCell('Breakout');
       if (
         signals.includes('BULLISH') ||
         signals.includes('ABOVE_VWAP') ||
@@ -1689,18 +1725,18 @@ export default function ScannerClient() {
         signals.includes('BELOW_VWAP') ||
         (scannerMode !== 'CPR' && signals.includes('LOWER_VALUE'))
       ) checkAndAddCell('Bearish');
-      if (score >= 40 && score < 60) checkAndAddCell('Watch');
+      if (score >= thresholds.watch && score < thresholds.ready) checkAndAddCell('Watch');
     });
 
     return { grid, colTotals };
-  }, [results, scannerMode]);
+  }, [results, scannerMode, thresholds.strong, thresholds.ready, thresholds.watch]);
 
   // V2 Scanner Insights
-  const strongBuyCount = results.filter(r => r.score >= 75 && !r.rejectionReason).length || insightCounts.strongBuy;
-  const breakoutReadyCount = results.filter(r => r.score >= 60 && r.score < 75).length || insightCounts.breakoutReady;
+  const strongBuyCount = results.filter(r => r.score >= thresholds.strong && !r.rejectionReason).length || insightCounts.strongBuy;
+  const breakoutReadyCount = results.filter(r => r.score >= thresholds.ready && r.score < thresholds.strong).length || insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
   // @ts-expect-error btstStatus is optional and sometimes added by the backend
-  const avoidCount = results.filter(r => r.score < 40 || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
+  const avoidCount = results.filter(r => r.score < thresholds.watch || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
 
   // KPI calculations
   const totalActiveSignals = useMemo(() => {
@@ -1717,7 +1753,13 @@ export default function ScannerClient() {
     let ready = 0, strong = 0, gapSum = 0, confSum = 0;
     results.forEach(r => {
       ready++;
-      if (r.score >= 75 || r.btstClassification === 'STRONG_BTST') strong++;
+      if (
+        r.score >= ADVANCED_SCORE.STRONG ||
+        r.btstClassification === 'STRONG_BTST' ||
+        r.btstClassification === 'STRONG_STBT'
+      ) {
+        strong++;
+      }
       gapSum += r.expectedGap || 0;
       confSum += r.confidence || 0;
     });
@@ -2031,11 +2073,11 @@ export default function ScannerClient() {
               <thead>
                 <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary uppercase">
                   <th className="p-2.5 text-left w-36">Sector</th>
-                  <th className="p-2.5">Strong Buy (&gt;=75)</th>
-                  <th className="p-2.5">Breakout (60-74)</th>
+                  <th className="p-2.5">Strong (&gt;={thresholds.strong})</th>
+                  <th className="p-2.5">Ready ({thresholds.ready}-{thresholds.strong - 1})</th>
                   <th className="p-2.5">Bullish</th>
                   <th className="p-2.5">Bearish</th>
-                  <th className="p-2.5">Watch (40-59)</th>
+                  <th className="p-2.5">Watch ({thresholds.watch}-{thresholds.ready - 1})</th>
                   <th className="p-2.5 bg-bg-primary text-text-primary">Total</th>
                 </tr>
               </thead>
@@ -2552,7 +2594,7 @@ export default function ScannerClient() {
               <p className="text-sm font-medium text-red-400 font-mono">
                 {scannerMode === 'CPR'
                   ? 'Markets closed. See you Monday at 09:15 IST.'
-                  : 'Markets closed. See you Monday at 15:20 IST.'}
+                  : 'Markets closed. See you Monday at 15:10 IST.'}
               </p>
             </div>
           )}
@@ -2697,6 +2739,7 @@ export default function ScannerClient() {
                             isStarred={isStarred}
                             isPinned={isPinned}
                             isNotified={isNotified}
+                            scoreThresholds={thresholds}
                             onToggleCompare={handleToggleCompareCheckbox}
                             onToggleWatchlist={handleToggleWatchlistState}
                             onOpenDrawer={handleOpenDrawer}
@@ -2876,7 +2919,7 @@ export default function ScannerClient() {
                         <div className="flex items-center justify-between border-t border-border-primary/50 pt-3 text-[11px]">
                           <div className="flex items-center gap-1.5">
                             <span className="text-text-secondary">Scoring Rank:</span>
-                            <span className="font-bold text-text-primary">{drawerStock.score} / 100</span>
+                            <span className="font-bold text-text-primary">{drawerStock.score} / {scoreMax}</span>
                           </div>
                           <div className="flex items-center gap-2">
                              <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Win Rate {drawerStock.confidence}%</span>
@@ -3468,9 +3511,10 @@ export default function ScannerClient() {
               <div className="space-y-2">
                 <h4 className="font-bold text-accent-blue">Scores and Confidence</h4>
                 <p>
-                  Scores out of 100 represent the alignment of indicators. 
-                  A score <strong>≥ 75</strong> is considered a Strong Buy/Sell. 
-                  Confidence percentage reflects the mathematical probability of a successful gap based on historical performance of the setup.
+                  BTST / STBT / OVERNIGHT use the Advanced Engine score scale of <strong>0–{ADVANCED_SCORE.MAX}</strong>:
+                  Strong ≥ {ADVANCED_SCORE.STRONG}, Ready ≥ {ADVANCED_SCORE.READY}, Watch ≥ {ADVANCED_SCORE.WATCH}.
+                  CPR mode remains on the Simple 0–{SIMPLE_SCORE.MAX} scale (Strong ≥ {SIMPLE_SCORE.STRONG}).
+                  Confidence reflects the historical gap probability of the setup.
                 </p>
               </div>
             </div>

@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
         insights: unknown;
       }
 
-      if (state !== 'ACTIVE') {
+      // Live discovery spans DISCOVERING (15:10–15:20) + ACTIVE (15:20–15:25)
+      if (state !== 'ACTIVE' && state !== 'DISCOVERING') {
         const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
         if (cached) {
           return NextResponse.json({
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
             windowOpen: false,
             cachedResult: true,
             scannedAt: cached.scannedAt,
-            message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:20 IST.`,
+            message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:10 IST.`,
             results: cached.results,
             insights: cached.insights,
             state,
@@ -47,13 +48,13 @@ export async function GET(req: NextRequest) {
           success: true,
           windowOpen: false,
           cachedResult: false,
-          message: 'Overnight scanner activates at 15:20–15:25 IST.',
+          message: 'Overnight scanner activates at 15:10–15:25 IST.',
           results: [],
           state,
         });
       }
 
-      // ACTIVE — run scan and cache
+      // Discovery open — run Advanced scan and cache
       const signals = await OvernightService.discover('BOTH');
 
       interface OvernightResultItem {

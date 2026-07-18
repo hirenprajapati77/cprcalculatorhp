@@ -1,3 +1,5 @@
+import { BTST_WINDOWS } from '@/config/trading-constants';
+
 // NSE Trading Holidays mapped by year
 const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
   '2026': [
@@ -85,6 +87,69 @@ export function isTodayCandleClosed(date: Date = new Date()): boolean {
   const { isTradingDay, totalMinutes } = getISTTime(date);
   if (!isTradingDay) return false;
   return totalMinutes >= 930; // After 15:30 IST
+}
+
+function toTotalMinutes(hour: number, minute: number): number {
+  return hour * 60 + minute;
+}
+
+const DISCOVERY_START_MIN = toTotalMinutes(
+  BTST_WINDOWS.DISCOVERY_START.hour,
+  BTST_WINDOWS.DISCOVERY_START.minute
+);
+const CONFIRM_START_MIN = toTotalMinutes(
+  BTST_WINDOWS.CONFIRM_START.hour,
+  BTST_WINDOWS.CONFIRM_START.minute
+);
+const DISCOVERY_END_MIN = toTotalMinutes(
+  BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.hour,
+  BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.minute
+);
+const JOURNAL_START_MIN = toTotalMinutes(
+  BTST_WINDOWS.JOURNAL_START.hour,
+  BTST_WINDOWS.JOURNAL_START.minute
+);
+const JOURNAL_END_MIN = toTotalMinutes(
+  BTST_WINDOWS.JOURNAL_END_INCLUSIVE.hour,
+  BTST_WINDOWS.JOURNAL_END_INCLUSIVE.minute
+);
+
+export type BtstWindowState = 'DISCOVERING' | 'ACTIVE' | 'FROZEN';
+
+/**
+ * Overnight / BTST phase for a trading day:
+ * - DISCOVERING: 15:10–15:20 (preview scan)
+ * - ACTIVE: 15:20–15:25 (confirm / entry)
+ * - FROZEN: otherwise (or non-trading day)
+ */
+export function getBtstWindowState(date: Date = new Date()): BtstWindowState {
+  const { isTradingDay, totalMinutes } = getISTTime(date);
+  if (!isTradingDay) return 'FROZEN';
+  if (totalMinutes >= DISCOVERY_START_MIN && totalMinutes < CONFIRM_START_MIN) {
+    return 'DISCOVERING';
+  }
+  if (totalMinutes >= CONFIRM_START_MIN && totalMinutes < DISCOVERY_END_MIN) {
+    return 'ACTIVE';
+  }
+  return 'FROZEN';
+}
+
+/** True during 15:10–15:25 IST (exclusive end) on a trading day. */
+export function isBtstDiscoveryOpen(date: Date = new Date()): boolean {
+  const state = getBtstWindowState(date);
+  return state === 'DISCOVERING' || state === 'ACTIVE';
+}
+
+/** True during 15:20–15:25 IST (exclusive end) on a trading day. */
+export function isBtstConfirmOpen(date: Date = new Date()): boolean {
+  return getBtstWindowState(date) === 'ACTIVE';
+}
+
+/** True during 15:25–15:30 IST (inclusive end) on a trading day. */
+export function isBtstJournalWindowOpen(date: Date = new Date()): boolean {
+  const { isTradingDay, totalMinutes } = getISTTime(date);
+  if (!isTradingDay) return false;
+  return totalMinutes >= JOURNAL_START_MIN && totalMinutes <= JOURNAL_END_MIN;
 }
 
 /**
