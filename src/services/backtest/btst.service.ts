@@ -1,17 +1,19 @@
 import { env } from '@/config/env';
 /**
- * SIMPLE ENGINE — retained for backtests and evaluateOvernight / V2 shadow scoring.
- * Live UI + Telegram + journal use the Advanced Engine (OvernightService) via
- * overnight-ui-adapter (Phase H). Max score 100.
+ * Live discovery (`discover`) delegates to OvernightService Advanced engine
+ * via advanced-discover-bridge (Phase H option a). Simple evaluateOvernight /
+ * score helpers remain for backtests and V2 shadow only (max 100).
  */
-import { MarketStockData, MarketService } from '../market.service';
+import { MarketStockData } from '../market.service';
 import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct, calculateATR } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString } from '@/lib/market-hours';
+import { isDiscoveryWindowOpen } from '@/config/btst-windows';
+import { discoverViaAdvancedEngine } from '../overnight/advanced-discover-bridge';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -47,7 +49,7 @@ export interface BtstScoreResultEnriched extends BtstScoreResult {
 
 export class BtstService {
   /**
-   * Checks if the canonical 15:10–15:25 IST discovery window is open (exclusive end).
+   * Checks if the canonical discovery window is open ([DISCOVERY_START, ACTIVE_END)).
    */
   static isExecutionWindowOpen(bypassQuery?: boolean, now: Date = new Date()): boolean {
     const bypassAllowed =
@@ -58,158 +60,28 @@ export class BtstService {
       return true;
     }
 
-    return isBtstDiscoveryOpen(now);
+    return isDiscoveryWindowOpen(now);
   }
 
   /**
-   * Scans the universe and returns BTST candidates and metrics.
+   * Live discovery — Advanced Engine only (OvernightService via bridge).
+   * `strategyVariant` is accepted for API compatibility but ignored; backtests
+   * must call evaluateOvernight(..., strategyVariant) directly.
    */
-  static async discover(universe: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid' = 'baseline') {
-    const stocks = MarketService.getUniverse(universe as Parameters<typeof MarketService.getUniverse>[0]);
-    const results: BtstScoreResultEnriched[] = [];
-
-    let strongSignal = 0;
-    let breakoutReady = 0;
-    let avoid = 0;
-    let totalLong = 0;
-    let totalShort = 0;
-    let totalConflict = 0;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stockResults: { stockMeta: any; stock: any }[] = [];
-    const batchSize = Number(env.YAHOO_BATCH_SIZE || 10);
-    const maxRetries = Number(env.YAHOO_MAX_RETRIES || 3);
-
-    for (let i = 0; i < stocks.length; i += batchSize) {
-      const batch = stocks.slice(i, i + batchSize);
-      const batchPromises = batch.map(async (stockMeta) => {
-        let attempts = 0;
-        let stock = null;
-        while (attempts < maxRetries) {
-          try {
-            const fetchPromise = MarketService.getStockData(stockMeta.symbol);
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Fetch timeout')), 5000)
-            );
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            stock = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-            break; // success
-          } catch (err) {
-            attempts++;
-            console.warn(`Attempt ${attempts} failed for ${stockMeta.symbol}: ${err instanceof Error ? err.message : err}`);
-            if (attempts >= maxRetries) {
-              console.error(`Max retries reached for ${stockMeta.symbol}. Skipping.`);
-              break;
-            }
-            await new Promise(r => setTimeout(r, Math.pow(2, attempts) * 1000));
-          }
-        }
-        return { stockMeta, stock };
-      });
-
-      const batchResults = await Promise.all(batchPromises);
-      stockResults.push(...batchResults);
-    }
-
-    // Track which symbols could not be fetched (after retries) so the scan can honestly
-    // report that it covered only part of the universe instead of presenting a partial
-    // result as if it were complete — critical when acting on the output for real trades.
-    const failedSymbols = stockResults
-      .filter((r) => !r.stock)
-      .map((r) => r.stockMeta.symbol as string);
-    const universeSize = stocks.length;
-    const symbolsScanned = universeSize - failedSymbols.length;
-
-    for (const { stock } of stockResults) {
-      if (stock) {
-        // Hard liquidity/volume eligibility gate — mirrors the first 3 checks in
-        // EntryManagerService.evaluateEligibility(), ported here because that service
-        // is only wired into the informational overnight.service.ts view, not this
-        // live production path. Rejected stocks are skipped entirely, before scoring,
-        // rather than merely losing the +10 liquidity bonus point.
-        const avgVolume = stock.avgVolume || 0;
-        const volume = stock.volume || 0;
-        const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
-
-        if (avgVolume < 100000 || volume < 100000 || volumeRatio < 1.2) {
-          continue; // skip illiquid stock entirely — do not score or include in results
-        }
-
-        const result = this.evaluateOvernight(stock, undefined, strategyVariant);
-
-        // Compute gap probability based on direction
-        const direction =
-          result.tag === 'SHORT' ? 'SHORT'
-          : result.tag === 'LONG' ? 'LONG'
-          : (result.shortScore > result.longScore ? 'SHORT' : 'LONG');
-        const gapMetrics = GapProbabilityService.calculateGapProbability(stock, direction);
-
-        // Count metrics
-        const maxScore = Math.max(result.longScore, result.shortScore);
-
-        if (result.tag === 'NEUTRAL_CONFLICT') {
-          totalConflict++;
-          avoid++;
-        } else if (result.tag === 'WEAK') {
-          avoid++;
-        } else {
-          if (maxScore >= 90) {
-            strongSignal++;
-          } else if (maxScore >= 70) {
-            breakoutReady++;
-          } else if (maxScore < 40) {
-            avoid++;
-          }
-
-          if (result.tag === 'LONG') totalLong++;
-          if (result.tag === 'SHORT') totalShort++;
-        }
-
-        // Exclude WEAK
-        if (result.tag !== 'WEAK') {
-          results.push({
-            ...result,
-            expectedGap: gapMetrics.expectedGap,
-            expectedMove: parseFloat((gapMetrics.expectedGap * 2.0).toFixed(2)),
-            gapConfidence: gapMetrics.gapConfidence,
-            exitStrategy: 'EOD'
-          });
-        }
-      }
-    }
-
-    // Sort results by max score
-    results.sort((a, b) => Math.max(b.longScore, b.shortScore) - Math.max(a.longScore, a.shortScore));
-
-    return {
-      results,
-      insights: {
-        strongSignal,
-        breakoutReady,
-        avoid,
-        totalLong,
-        totalShort,
-        totalConflict
-      },
-      coverage: {
-        universeSize,
-        symbolsScanned,
-        symbolsFailed: failedSymbols.length,
-        failedSymbols,
-        // `degraded` is true when any symbol in the universe failed to fetch, so the
-        // UI/consumers can warn that the scan is incomplete.
-        degraded: failedSymbols.length > 0,
-      },
-    };
+  static async discover(
+    universe: string,
+    _strategyVariant:
+      | 'baseline'
+      | 'cpr_aware'
+      | 'no_vdu_weighted'
+      | 'clv_continuous'
+      | 'clv_hybrid' = 'baseline'
+  ) {
+    return discoverViaAdvancedEngine(universe);
   }
 
-  // NOTE: This engine uses raw market data signals (VWAP, 15m candle, 
-  // CPR value relationship) appropriate for overnight BTST/STBT positions.
-  // Score scale is additive 0-100, separate from the intraday scanner's
-  // weighted composite scoring in ranking.service.ts.
-  // TODO: Phase H — replace with Advanced Engine (overnight.service.ts) 
-  // which uses btst-ranking.service.ts weighted system (max 130).
-  // Do not apply ranking.service.ts catA/B/C/D weights here.
+  // NOTE: Simple score helpers below are for evaluateOvernight / backtests only
+  // (additive 0-100). Live discover uses Advanced (max 130) via the bridge.
   /**
    * Calculates the LONG BTST Score (Max 100).
    */
