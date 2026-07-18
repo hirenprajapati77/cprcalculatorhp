@@ -4,8 +4,20 @@ This runbook outlines standard operating procedures (SOP) for incident response,
 
 ## 1. Operating Modes
 The platform requires `EXECUTION_MODE` to be explicitly set in the `.env` file.
-- `SHADOW`: (Default) The system generates signals, snapshots them in `TradeJournal`, and logs the expected entry/exit, but **no real orders are routed to a broker**.
-- `LIVE`: Signals will be routed to the connected broker API using real capital.
+- `SHADOW`: (Default) The system generates signals, snapshots them in `TradeJournal`, and logs the expected entry/exit, but **no real orders are routed to a broker**. (`LIVE` is currently display/health labeling only — there is no broker order path yet.)
+- `LIVE`: Reserved for future broker routing; do not treat flipping this flag as enabling live orders today.
+
+**Auth:** `APP_ACCESS_TOKEN` is **required** when `NODE_ENV=production`. The process refuses to start without it. Cron routes use `CRON_SECRET` (`x-cron-secret`) separately.
+
+## 1.1 BTST / Overnight IST Windows (canonical)
+
+| Window | IST | Used by |
+|---|---|---|
+| Discovery | 15:10–15:25 (exclusive end) | `/api/btst`, `/api/overnight`, Telegram `btst-alert`, Scanner auto-refresh |
+| Confirm / entry | 15:20–15:25 | Ranking “Rule 5” confirmation slice (`ACTIVE` state) |
+| Journal | 15:25–15:30 (inclusive) | `btst-journal` cron — schedule crontab inside this window |
+
+Live UI + Telegram + journal all use the **Advanced Engine** (`OvernightService` / `OvernightSignal`). Score scale is **0–130** (STRONG ≥ 100, READY ≥ 85, WATCH ≥ 70).
 
 ## 2. Degraded Mode Behavior
 The engine relies on external data sources (Yahoo Finance, Fyers, Redis). If data becomes stale, the platform fails safely:
@@ -24,9 +36,9 @@ The engine relies on external data sources (Yahoo Finance, Fyers, Redis). If dat
 
 ## 3. Cron Job Failures
 
-### 3.1 Missed 3:15 PM Scan
+### 3.1 Missed 15:10–15:25 Discovery / 15:25 Journal
 - **Impact**: `OvernightSignal` and `TradeJournal` entries are not generated for the day.
-- **Recovery**: The scan can be manually triggered via `ScannerService.scanAll()` before 3:30 PM. If missed entirely, the day must be skipped to avoid corrupting the `cmp916` forward tests.
+- **Recovery**: Before 15:30 IST, manually hit `/api/overnight/refresh` or `/api/cron/btst-journal` (with `x-cron-secret`) so Advanced Engine rows are written. If missed entirely after close, skip the day to avoid corrupting the `cmp916` forward tests.
 
 ### 3.2 Missed 10:00 AM Snapshot Sweep
 - **Impact**: Options CMP snapshots are not recorded for the morning.
@@ -70,13 +82,13 @@ Before relying on the system's generated signals for paper-trading or shadow val
 3. **Verify Event Calendar Freshness**
    - Confirm `checks.events` is `healthy` (last sync < 48 hours). If it says `stale`, all symbols will be evaluated with `100` Event Risk (`STALE_CALENDAR_FALLBACK`) and overnight trades will be universally blocked or heavily downgraded.
 4. **Verify Cron Freshness**
-   - Confirm `checks.signals` is `healthy` (yesterday's 3:15 PM scan ran successfully).
+   - Confirm `checks.signals` is `healthy` (yesterday's 15:10–15:25 discovery and/or 15:25 journal cron ran successfully).
 
 ## 6. Daily Post-Market Shadow Checklist
 After the trading day concludes (e.g., around 4:00 PM IST), run this validation checklist:
 
 1. **Compare Signal Generation**
-   - Did the 3:15 PM cron run? Verify `OvernightSignal` rows were created.
+   - Did discovery (15:10–15:25) and `btst-journal` (15:25–15:30) run? Verify `OvernightSignal` rows were created and journal picks match Telegram TRADEABLE READY+ alerts.
    - Were risky symbols properly downgraded to `LOW_QUALITY` or `WATCHLIST`?
 2. **Review Execution Outcomes**
    - Use the `Trade Journal > Analytics` tab to review the distribution of `EXECUTION_SLIPPAGE`, `GAP_FAILURE`, and `EVENT_RISK_AVOIDABLE`.
