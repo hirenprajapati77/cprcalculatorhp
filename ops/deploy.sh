@@ -56,7 +56,6 @@ cp -a .next/standalone/. .
 cp .env .next/standalone/.env
 cp -r .next/static .next/standalone/.next/
 cp -r public .next/standalone/
-pm2 stop cpr-platform || true
 mv node_modules node_modules_old_\$(date +%s) || true
 npm ci --omit=dev
 # INTENTIONAL: use migrate deploy, NOT db push.
@@ -66,7 +65,10 @@ npm ci --omit=dev
 # See fix/deploy-migration-safety — do not "helpfully" restore db push.
 npx prisma@${PRISMA_VERSION} migrate deploy --schema=prisma/schema.postgresql.prisma
 npx prisma@${PRISMA_VERSION} generate --schema=prisma/schema.postgresql.prisma
-pm2 restart cpr-platform --update-env
+# Rulebook: never pm2 restart --update-env (stale env cache) — always delete + start.
+pm2 delete cpr-platform || true
+pm2 start server.js --name cpr-platform
+pm2 save
 EOF
 
 scp -i "${DEPLOY_KEY}" -o StrictHostKeyChecking=accept-new remote_deploy.sh ubuntu@${DEPLOY_HOST}:/home/ubuntu/cpr-calculator-platform/remote_deploy.sh
