@@ -31,7 +31,7 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 
 The platform goes beyond raw signal generation by implementing a realistic, multi-layered execution architecture:
 
-1. **Overnight Signal Discovery**: Scans the `NSE_FNO` universe for potential BTST/STBT setups based on CPR, gaps, and momentum parameters.
+1. **Overnight Signal Discovery**: Scans the `NSE_FNO` universe during **15:10–15:25 IST** (confirm slice 15:20–15:25). Journal cron finalizes picks at **15:25–15:30 IST**. Scoring uses VDU, narrow CPR, Higher/Lower Value, VWAP, 15m confirmation, and close strength (max 130).
 2. **Signal Quality Gates (Phase 1)**: Evaluates raw signals against dynamic thresholds, assigning them into `TRADEABLE`, `WATCHLIST`, or `LOW_QUALITY` buckets. It incorporates:
    - **Regime Filtering**: Matches signal direction against the broader market trend (NIFTY 50 Bull/Bear) and volatility context.
    - **Liquidity & History Rules**: Requires minimum daily average volume and robust historical data (minimum 15 days) to ensure reliable ATR calculations.
@@ -95,7 +95,10 @@ The platform is fully containerized and production-ready for controlled shadow t
    ```env
    EXECUTION_MODE="SHADOW"
    APP_VERSION="v2.0.0-production"
+   APP_ACCESS_TOKEN="your_secure_app_access_token"
+   CRON_SECRET="your_secure_cron_secret"
    ```
+   Production will refuse to start without `APP_ACCESS_TOKEN`. Schedule `btst-journal` crontab inside **15:25–15:30 IST**.
 2. **Pre-flight Check:** Run the deployment verification script on your host to catch config or schema mismatches before boot:
    ```bash
    bash scripts/deploy-check.sh
