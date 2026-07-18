@@ -19,6 +19,8 @@ The platform requires `EXECUTION_MODE` to be explicitly set in the `.env` file.
 
 Live UI + Telegram + journal all use the **Advanced Engine** (`OvernightService` / `OvernightSignal`). Score scale is **0–130** (STRONG ≥ 100, READY ≥ 85, WATCH ≥ 70).
 
+**Journal columns:** `Advanced` = authoritative overnight score; `Shadow` = Simple V2 research score (does not select trades).
+
 ## 2. Degraded Mode Behavior
 The engine relies on external data sources (Yahoo Finance, Fyers, Redis). If data becomes stale, the platform fails safely:
 
