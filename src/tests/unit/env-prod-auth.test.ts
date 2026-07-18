@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'assert';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Verifies production fail-fast for APP_ACCESS_TOKEN without mutating the
@@ -9,12 +10,13 @@ import path from 'node:path';
  */
 describe('APP_ACCESS_TOKEN production guard', () => {
   it('throws when NODE_ENV=production and token is missing (runtime)', () => {
+    const fileUrl = pathToFileURL(path.resolve('src/config/env.ts')).href;
     const script = `
       process.env.NODE_ENV = 'production';
       delete process.env.APP_ACCESS_TOKEN;
       delete process.env.NEXT_PHASE;
       try {
-        await import(${JSON.stringify(path.resolve('src/config/env.ts'))});
+        await import(${JSON.stringify(fileUrl)});
         console.log('UNEXPECTED_SUCCESS');
         process.exit(2);
       } catch (e) {
@@ -43,11 +45,12 @@ describe('APP_ACCESS_TOKEN production guard', () => {
   });
 
   it('allows next production build phase without token', () => {
+    const fileUrl = pathToFileURL(path.resolve('src/config/env.ts')).href;
     const script = `
       process.env.NODE_ENV = 'production';
       process.env.NEXT_PHASE = 'phase-production-build';
       delete process.env.APP_ACCESS_TOKEN;
-      await import(${JSON.stringify(path.resolve('src/config/env.ts'))});
+      await import(${JSON.stringify(fileUrl)});
       console.log('OK_BUILD');
     `;
     const result = spawnSync(process.execPath, ['--import', 'tsx', '-e', script], {
