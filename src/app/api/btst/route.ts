@@ -8,6 +8,7 @@ import {
   filterOvernightByUniverse,
   type OvernightUiResult,
 } from '@/services/overnight/overnight-ui-adapter';
+import { BTST_CLOCK } from '@/lib/market-hours';
 
 export async function GET(request: Request) {
   try {
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
           executionWindowOpen: false,
           cachedResult: true,
           scannedAt: cached.scannedAt,
-          message: `Showing last scan from ${cached.scannedAt}. Next scan at 15:10 IST.`,
+          message: `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
           degraded: cachedCoverage?.degraded ?? false,
           results: cached.results,
           insights: cached.insights,
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
         success: true,
         executionWindowOpen: false,
         cachedResult: false,
-        message: 'BTST/STBT scanner runs only at 15:10–15:25 IST. Check back then.',
+        message: `BTST/STBT scanner runs only at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST. Check back then.`,
         results: [],
         insights: {
           strongSignal: 0, breakoutReady: 0, avoid: 0,

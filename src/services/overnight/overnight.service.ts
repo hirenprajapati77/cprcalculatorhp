@@ -14,8 +14,7 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed } from '@/lib/market-hours';
-import { getBtstPhase } from '@/config/btst-windows';
+import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -80,8 +79,7 @@ export class OvernightService {
   }
 
   /**
-   * Helper to determine signal state from src/config/btst-windows.ts
-   * (DISCOVERY_START / DISCOVERY_END / ACTIVE_END).
+   * Helper to determine signal state from BTST_WINDOWS via getBtstWindowState.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
     const bypassAllowed =
@@ -91,7 +89,7 @@ export class OvernightService {
       return 'ACTIVE';
     }
 
-    return getBtstPhase(time);
+    return getBtstWindowState(time);
   }
 
   /**
@@ -195,7 +193,7 @@ export class OvernightService {
     } else {
       const { totalMinutes } = OvernightService.getISTTime(currentTime);
 
-      const startMinutes = 9 * 60 + 15;
+      const startMinutes = BTST_WINDOW_MINUTES.MARKET_OPEN;
       let elapsedCandles = Math.floor((totalMinutes - startMinutes) / 5);
       if (elapsedCandles < 0) elapsedCandles = 0;
       if (elapsedCandles > 73) elapsedCandles = 73;
@@ -368,6 +366,9 @@ export class OvernightService {
 
         const mockStock = fullStock as MockOvernightStock;
 
+        // Hard liquidity gate (avgVolume < 100k / volumeRatio < 1.2 / etc.):
+        // ineligible stocks never become signals — not even LOW_QUALITY.
+        // LOW_QUALITY later is only for weaker tiers that already passed this gate.
         const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
         if (!elig.eligible) {
           continue;
