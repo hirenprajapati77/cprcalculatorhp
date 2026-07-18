@@ -168,7 +168,9 @@ function renderV2Breakdown(
     return (
       <div className="space-y-1 text-[10px] text-slate-500 italic">
         No breakdown data available.
-        <div className="text-[9px] text-text-tertiary mt-1 not-italic">V2 scoring runs at signal creation via overnight cron.</div>
+        <div className="text-[9px] text-text-tertiary mt-1 not-italic">
+          Simple V2 shadow scoring runs at journal creation for research only — it does not pick trades.
+        </div>
       </div>
     );
   }
@@ -194,8 +196,9 @@ function renderV2Breakdown(
       <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)' }}
         className="rounded px-2 py-1.5 text-[9px] text-slate-400 leading-relaxed">
         <span className="text-blue-400 font-semibold">ⓘ</span>{' '}
-        Raw Score = CLV + CPR + Liquidity. Hard Gate determines eligibility.
-        If gate fails, Stored V2 Score becomes <span className="text-red-400 font-semibold">0</span>.
+        Research-only Simple V2 shadow (0–100). Raw = CLV + CPR + Liquidity; hard gate sets eligibility.
+        If the gate fails, stored shadow score becomes <span className="text-red-400 font-semibold">0</span>.
+        Trade decisions use the Advanced column.
       </div>
 
       {/* Direction */}
@@ -254,7 +257,7 @@ function renderV2Breakdown(
           <span className="font-mono font-bold text-white">×{allGatesPass ? '1' : '0'}</span>
         </div>
         <div className="flex justify-between text-[9px] items-center">
-          <span className="text-slate-400 font-semibold">Stored V2 Score</span>
+          <span className="text-slate-400 font-semibold">Stored Shadow Score</span>
           <V2FinalScore score={finalScore} />
         </div>
       </div>
@@ -551,7 +554,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   function exportCSV() {
     const headers = [
       'Trade Date','Type','Stock','Option','Entry CMP',
-      '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','V1 Score','V2 Score',
+      '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','Advanced Score','Shadow Simple Score',
       'Quality Bucket', 'Execution Outcome', 'Event Risk', 'Regime Snapshot', 'Regime Parsed'
     ];
     const rows = entries.map(e => {
@@ -1291,8 +1294,18 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                     <th className="text-right px-3 py-3 font-semibold">10:00 AM</th>
                     <th className="text-right px-3 py-3 font-semibold">Exit CMP</th>
                     <th className="text-right px-3 py-3 font-semibold">P&amp;L %</th>
-                    <th className="text-right px-3 py-3 font-semibold">V1 Score</th>
-                    <th className="text-right px-3 py-3 font-semibold">V2 Score</th>
+                    <th
+                      className="text-right px-3 py-3 font-semibold"
+                      title="Advanced Engine overnightScore (0–130) — source of truth for journal picks, UI, and Telegram"
+                    >
+                      Advanced
+                    </th>
+                    <th
+                      className="text-right px-3 py-3 font-semibold text-slate-500"
+                      title="Simple Engine V2 shadow (0–100) — research only, does not select trades"
+                    >
+                      Shadow
+                    </th>
                     <th className="text-center px-3 py-3 font-semibold">Action</th>
                   </tr>
                 </thead>
@@ -1350,10 +1363,10 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                           <span className="text-slate-600">---</span>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-300">
-                        {entry.score}
+                      <td className="px-3 py-3 text-right font-mono text-slate-200 font-semibold">
+                        <span title="Advanced Engine (0–130)">{entry.score}</span>
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400 relative">
+                      <td className="px-3 py-3 text-right font-mono text-slate-500 relative">
                         {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
                           <div className="inline-block relative group">
                             <span
@@ -1361,7 +1374,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                                 e.stopPropagation();
                                 setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
                               }}
-                              className="cursor-help border-b border-dashed border-border-secondary select-none hover:text-white transition-colors"
+                              className="cursor-help border-b border-dashed border-border-secondary/60 select-none hover:text-slate-300 transition-colors"
+                              title="Simple V2 shadow — research only"
                             >
                               {entry.scoreV2}
                             </span>
@@ -1376,8 +1390,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                               }`}
                             >
                               <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border-primary">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">V2 Score Breakdown</span>
-                                <span className="text-[9px] text-slate-600 font-mono">Shadow Mode</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shadow Breakdown</span>
+                                <span className="text-[9px] text-slate-600 font-mono">Simple V2 · research</span>
                               </div>
                               <div className="font-sans text-[11px] text-slate-300">
                                 {renderV2Breakdown(
