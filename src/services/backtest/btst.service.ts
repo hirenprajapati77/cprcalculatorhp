@@ -1,11 +1,8 @@
 import { env } from '@/config/env';
 /**
- * SIMPLE ENGINE — AUTHORITATIVE. Currently used by /api/btst, ScannerClient UI tabs
- * (BTST/STBT/OVERNIGHT), and the Telegram cron alert. Max score 100.
- * 
- * TODO: Phase H migration — validate Advanced Engine signals against
- * Simple Engine on live market data before promoting to UI/cron.
- * See project audit notes.
+ * SIMPLE ENGINE — retained for backtests and evaluateOvernight / V2 shadow scoring.
+ * Live UI + Telegram + journal use the Advanced Engine (OvernightService) via
+ * overnight-ui-adapter (Phase H). Max score 100.
  */
 import { MarketStockData, MarketService } from '../market.service';
 import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
@@ -14,7 +11,7 @@ import { getAtrPct, calculateATR } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString, getISTTime } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen } from '@/lib/market-hours';
 
 export interface BtstScoreResult {
   symbol: string;
@@ -50,27 +47,18 @@ export interface BtstScoreResultEnriched extends BtstScoreResult {
 
 export class BtstService {
   /**
-   * Checks if the 15:10-15:25 IST window is open.
+   * Checks if the canonical 15:10–15:25 IST discovery window is open (exclusive end).
    */
   static isExecutionWindowOpen(bypassQuery?: boolean, now: Date = new Date()): boolean {
-    const bypassAllowed = 
+    const bypassAllowed =
       bypassQuery ||
-      (env.NODE_ENV !== 'production' &&
-      env.BTST_BYPASS_WINDOW === 'true');
+      (env.NODE_ENV !== 'production' && env.BTST_BYPASS_WINDOW === 'true');
 
     if (bypassAllowed) {
       return true;
     }
 
-    // Delegates to the shared getISTTime() helper (same source of truth used by
-    // previousTradingDayMidnightIST() and OvernightService.determineState()) instead of
-    // reimplementing IST weekday parsing here. The old version only checked Sat/Sun and
-    // never consulted NSE_HOLIDAYS_BY_YEAR, so any weekday NSE holiday during 15:10-15:25 IST
-    // caused /api/btst to run and cache a "live" scan against a closed market.
-    const { isTradingDay, hour, minute } = getISTTime(now);
-    if (!isTradingDay) return false;
-
-    return hour === 15 && minute >= 10 && minute <= 25;
+    return isBtstDiscoveryOpen(now);
   }
 
   /**

@@ -266,7 +266,7 @@ describe('BTST Scoring Engine Tests', () => {
     }
   });
 
-  test('isExecutionWindowOpen() enforces 15:10 - 15:25 IST window', () => {
+  test('isExecutionWindowOpen() enforces 15:10 - 15:25 IST window (exclusive end)', () => {
     // Generate dates on a Wednesday to avoid weekend logic overriding times
     const createDate = (h: number, m: number) => {
       // 2026-07-08 is a Wednesday
@@ -278,7 +278,8 @@ describe('BTST Scoring Engine Tests', () => {
 
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 9)), false, '15:09 should be closed');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 10)), true, '15:10 should be open');
-    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 25)), true, '15:25 should be open');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 24)), true, '15:24 should be open');
+    assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 25)), false, '15:25 should be closed (exclusive end / freeze)');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(15, 26)), false, '15:26 should be closed');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(16, 0)), false, '16:00 should be closed');
     assert.strictEqual(BtstService.isExecutionWindowOpen(false, createDate(23, 0)), false, '23:00 should be closed');

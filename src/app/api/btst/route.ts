@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { BtstService } from '@/services/backtest/btst.service';
 import { CacheService } from '@/services/cache.service';
+import { OvernightService } from '@/services/overnight/overnight.service';
+import {
+  overnightSignalToBtstUi,
+  buildInsightsFromOvernight,
+  filterOvernightByUniverse,
+  type OvernightUiResult,
+} from '@/services/overnight/overnight-ui-adapter';
 
 export async function GET(request: Request) {
   try {
@@ -9,6 +16,7 @@ export async function GET(request: Request) {
     const bypassQuery = searchParams.get('bypass') === 'true';
 
     const executionWindowOpen = BtstService.isExecutionWindowOpen(bypassQuery);
+    const windowState = OvernightService.determineState(new Date());
 
     const today = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
     const CACHE_KEY = `btst_last_scan_${today}`;
@@ -18,6 +26,7 @@ export async function GET(request: Request) {
       results: unknown[];
       insights: unknown;
       coverage?: unknown;
+      engine?: string;
     }
 
     if (!executionWindowOpen) {
@@ -33,6 +42,8 @@ export async function GET(request: Request) {
           degraded: cachedCoverage?.degraded ?? false,
           results: cached.results,
           insights: cached.insights,
+          engine: cached.engine ?? 'advanced',
+          state: windowState,
           ...(cached.coverage ? { coverage: cached.coverage } : {}),
         });
       }
@@ -45,26 +56,17 @@ export async function GET(request: Request) {
         insights: {
           strongSignal: 0, breakoutReady: 0, avoid: 0,
           totalLong: 0, totalShort: 0, totalConflict: 0,
-        }
+        },
+        engine: 'advanced',
+        state: windowState,
       });
     }
 
-    // Window open — run scan then cache result
-    const scanResult = await BtstService.discover(universe);
-
-    interface BtstResultItem {
-      symbol: string;
-      ltp: number;
-      longScore: number;
-      shortScore: number;
-      tag: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
-      entry?: number;
-      sl?: number;
-      target?: number;
-      optionSuggestion?: unknown;
-    }
-
-    const resultsList = scanResult.results as BtstResultItem[];
+    // Window open — Advanced Engine discover, then adapt to UI DTO
+    const overnightSignals = await OvernightService.discover('BOTH');
+    const filtered = filterOvernightByUniverse(overnightSignals, universe);
+    const resultsList: OvernightUiResult[] = filtered.map(overnightSignalToBtstUi);
+    const insights = buildInsightsFromOvernight(filtered);
 
     // F&O Option Suggestion Enrichment Layer for BTST (LONG) & STBT (SHORT)
     const eligibleBtst = resultsList
@@ -79,7 +81,14 @@ export async function GET(request: Request) {
             const stockEntry = r.entry || r.ltp;
             const stockSl = r.sl || (r.tag === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
             const stockTarget = r.target || (r.tag === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
-            const suggestion = await OptionSuggestionService.suggestOptionForBtst(r.symbol, r.ltp, r.tag as 'LONG' | 'SHORT', stockEntry, stockSl, stockTarget);
+            const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+              r.symbol,
+              r.ltp,
+              r.tag as 'LONG' | 'SHORT',
+              stockEntry,
+              stockSl,
+              stockTarget
+            );
             return { symbol: r.symbol, suggestion };
           } catch (e) {
             console.warn(`Failed to generate option suggestion for BTST ${r.symbol}:`, e);
@@ -98,7 +107,8 @@ export async function GET(request: Request) {
 
         for (const r of resultsList) {
           if (suggestionMap.has(r.symbol)) {
-            r.optionSuggestion = suggestionMap.get(r.symbol);
+            (r as OvernightUiResult & { optionSuggestion?: unknown }).optionSuggestion =
+              suggestionMap.get(r.symbol);
           }
         }
       } catch (enrichErr) {
@@ -111,11 +121,20 @@ export async function GET(request: Request) {
     const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
     const scannedAt = `${timeStr} IST, ${dateStr}`;
 
+    const coverage = {
+      engine: 'advanced' as const,
+      degraded: false,
+      universe,
+      signalCount: resultsList.length,
+      overnightUniverseCount: overnightSignals.length,
+    };
+
     const cacheData = {
       scannedAt,
-      results: scanResult.results,
-      insights: scanResult.insights,
-      coverage: scanResult.coverage,
+      results: resultsList,
+      insights,
+      coverage,
+      engine: 'advanced',
     };
 
     await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
@@ -124,10 +143,12 @@ export async function GET(request: Request) {
       success: true,
       executionWindowOpen: true,
       cachedResult: false,
-      // Hoist the degraded flag to the top level so clients that only read
-      // `data.degraded` (ScannerClient) can surface an incomplete-scan warning.
-      degraded: scanResult.coverage?.degraded ?? false,
-      ...scanResult,
+      degraded: false,
+      results: resultsList,
+      insights,
+      coverage,
+      engine: 'advanced',
+      state: windowState,
     });
 
   } catch (error) {

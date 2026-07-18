@@ -19,6 +19,39 @@ export const BTST_SCORING = {
   CLV_BASE_MULTIPLIER: 75,
 };
 
+/** Advanced Engine (OvernightService) score scale — matches BtstRankingService / StbtRankingService. */
+export const ADVANCED_SCORE = {
+  MAX: 130,
+  STRONG: 100,
+  READY: 85,
+  WATCH: 70,
+} as const;
+
+/** Legacy Simple / CPR scanner score scale (0–100). */
+export const SIMPLE_SCORE = {
+  MAX: 100,
+  STRONG: 75,
+  READY: 60,
+  WATCH: 40,
+} as const;
+
+/**
+ * Canonical BTST / overnight IST windows (single source of truth).
+ * End times are exclusive unless noted — e.g. discovery is open through 15:24.
+ */
+export const BTST_WINDOWS = {
+  /** Live discovery may run (UI + Advanced scan gate). */
+  DISCOVERY_START: { hour: 15, minute: 10 },
+  /** Confirmation / entry slice (ranking Rule 5 + Telegram primary). */
+  CONFIRM_START: { hour: 15, minute: 20 },
+  /** Exclusive end of discovery + confirm (freeze). */
+  DISCOVERY_END_EXCLUSIVE: { hour: 15, minute: 25 },
+  /** Journal cron after freeze, through market close (inclusive end). */
+  JOURNAL_START: { hour: 15, minute: 25 },
+  JOURNAL_END_INCLUSIVE: { hour: 15, minute: 30 },
+  MARKET_CLOSE: { hour: 15, minute: 30 },
+} as const;
+
 export const LIQUIDITY = {
   MIN_HISTORY_FOR_RELIABLE_ATR: 15,
 };

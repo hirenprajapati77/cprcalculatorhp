@@ -62,8 +62,20 @@ if (!parsedEnv.success) {
   throw new Error('Invalid environment variables');
 }
 
-if (parsedEnv.data.NODE_ENV === 'production' && !parsedEnv.data.APP_ACCESS_TOKEN) {
-  console.warn('⚠️ WARNING: APP_ACCESS_TOKEN is missing in production. API will be unauthenticated.');
+/**
+ * Production requires APP_ACCESS_TOKEN. Skip during `next build`
+ * (NODE_ENV=production but NEXT_PHASE=phase-production-build) so CI/deploy
+ * packaging can succeed without runtime secrets present on the build host.
+ */
+const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+if (
+  parsedEnv.data.NODE_ENV === 'production' &&
+  !isProductionBuildPhase &&
+  !parsedEnv.data.APP_ACCESS_TOKEN?.trim()
+) {
+  throw new Error(
+    'APP_ACCESS_TOKEN is required in production. Set it in the server .env before starting.'
+  );
 }
 
 export const env = parsedEnv.data;

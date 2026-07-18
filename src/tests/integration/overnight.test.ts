@@ -349,6 +349,30 @@ describe('Overnight Engine Tests', () => {
     assert.strictEqual(stateBefore, 'ACTIVE', 'Trading day before holiday should allow ACTIVE scan');
     assert.strictEqual(stateAfter, 'ACTIVE', 'Trading day after holiday should allow ACTIVE scan');
   });
+
+  test('determineState uses canonical discovery vs confirm windows', () => {
+    // 2026-07-08 is a Wednesday trading day
+    assert.strictEqual(
+      OvernightService.determineState(new Date('2026-07-08T15:09:00+05:30')),
+      'FROZEN',
+      'Before 15:10 should be FROZEN'
+    );
+    assert.strictEqual(
+      OvernightService.determineState(new Date('2026-07-08T15:10:00+05:30')),
+      'DISCOVERING',
+      '15:10 should be DISCOVERING'
+    );
+    assert.strictEqual(
+      OvernightService.determineState(new Date('2026-07-08T15:20:00+05:30')),
+      'ACTIVE',
+      '15:20 should be ACTIVE'
+    );
+    assert.strictEqual(
+      OvernightService.determineState(new Date('2026-07-08T15:25:00+05:30')),
+      'FROZEN',
+      '15:25 should be FROZEN'
+    );
+  });
   test('getIntradayData validates array lengths for high, low, close, volume', async () => {
     const mockStock = { symbol: 'MISALIGNED', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100, history: [] };
     const originalFetch = global.fetch;
