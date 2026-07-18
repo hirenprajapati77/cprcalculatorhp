@@ -7,9 +7,53 @@ const prismaDir = path.join(__dirname, 'prisma');
 const schemaPath = path.join(prismaDir, 'schema.prisma');
 const envPath = path.join(__dirname, '.env');
 const envExamplePath = path.join(__dirname, '.env.example');
+const noFallback = process.argv.includes('--no-fallback');
+
+function printSqliteFallbackWarning() {
+  const box = [
+    '',
+    '╔══════════════════════════════════════════════════════════════════════════╗',
+    '║  ⚠️  WARNING: prisma/schema.prisma IS ABOUT TO BE MODIFIED ON DISK       ║',
+    '║                                                                          ║',
+    '║  PostgreSQL is unreachable. Falling back to SQLite for local setup.      ║',
+    '║  This will change:                                                       ║',
+    '║    • prisma/schema.prisma  provider "postgresql" → "sqlite"              ║',
+    '║    • .env                  DATABASE_URL → file:./dev.db                  ║',
+    '║                                                                          ║',
+    '║  DO NOT COMMIT prisma/schema.prisma in this state.                       ║',
+    '║  Production requires provider = "postgresql".                            ║',
+    '║  Restore with: git checkout -- prisma/schema.prisma                      ║',
+    '║  Or re-run setup once Postgres is available.                             ║',
+    '║                                                                          ║',
+    '║  Tip: pass --no-fallback to fail instead of rewriting schema.prisma.     ║',
+    '╚══════════════════════════════════════════════════════════════════════════╝',
+    '',
+  ].join('\n');
+  console.warn(box);
+}
+
+function printSchemaPrismaGitDiff() {
+  console.warn('--- git diff --stat prisma/schema.prisma (post-fallback mutation) ---');
+  try {
+    const diffStat = execSync('git diff --stat -- prisma/schema.prisma', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (diffStat && diffStat.trim()) {
+      console.warn(diffStat.trimEnd());
+    } else {
+      console.warn('(no git diff for prisma/schema.prisma — untracked, clean, or not a git repo)');
+    }
+  } catch (diffErr) {
+    console.warn('Could not run git diff --stat prisma/schema.prisma:', diffErr.message);
+  }
+  console.warn('---------------------------------------------------------------------');
+}
 
 console.log('--- Starting CPR Pro Database Setup ---');
-
+if (noFallback) {
+  console.log('Flag --no-fallback enabled: will not rewrite schema.prisma to sqlite on Postgres failure.');
+}
 // 1. Load or initialize .env file
 let envContent = '';
 if (fs.existsSync(envPath)) {
@@ -70,7 +114,13 @@ try {
   console.log('Database synced successfully!');
 } catch (err) {
   if (!forceSqlite) {
-    console.warn('\nPostgreSQL database not reachable. Falling back to SQLite local database...');
+    if (noFallback) {
+      console.error('\nERROR: PostgreSQL database not reachable.');
+      console.error('Refusing to fall back to SQLite because --no-fallback was passed.');
+      console.error('Fix DATABASE_URL / start Postgres, then re-run. prisma/schema.prisma was NOT modified for fallback.');
+      process.exit(1);
+    }
+    printSqliteFallbackWarning();
     try {
       configureSqlite();
       execSync('npx prisma db push', { stdio: 'inherit' });
@@ -78,6 +128,7 @@ try {
     } catch (sqliteErr) {
       console.error('SQLite sync also failed:', sqliteErr.message);
     }
+    printSchemaPrismaGitDiff();
   } else {
     console.error('Error syncing database schema:', err.message);
   }
