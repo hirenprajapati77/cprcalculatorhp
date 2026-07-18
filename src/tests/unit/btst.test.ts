@@ -2,6 +2,8 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstService } from '../../services/backtest/btst.service';
 import { MarketService, MarketStockData } from '../../services/market.service';
+import { OvernightService } from '../../services/overnight/overnight.service';
+import type { OvernightSignal } from '@prisma/client';
 
 describe('BTST Scoring Engine Tests', () => {
   const baseHistory = [
@@ -203,66 +205,55 @@ describe('BTST Scoring Engine Tests', () => {
     assert.strictEqual(withOverride.shortScore, withoutOverride.shortScore);
   });
 
-  test('discover() filters out illiquid stocks via the hard liquidity gate', async () => {
-    const originalGetUniverse = MarketService.getUniverse;
-    const originalGetStockData = MarketService.getStockData;
-
+  test('discover() delegates to Advanced OvernightService engine', async () => {
+    const originalDiscover = OvernightService.discover;
     try {
-      // Mock universe with 3 test stocks:
-      // 1. LIQUID: avgVolume=500000, volume=600000 (ratio = 1.2) -> should pass
-      // 2. ILLIQUID (avgVolume < 100k): avgVolume=50000, volume=100000 -> should be skipped
-      // 3. ILLIQUID (volumeRatio < 1.2): avgVolume=200000, volume=210000 (ratio = 1.05) -> should be skipped
-      MarketService.getUniverse = (_universe: string) => {
-        return [
-          { symbol: 'LIQUID', name: 'Liquid Stock', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
-          { symbol: 'ILLIQUID_AV', name: 'Low Avg Volume', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false },
-          { symbol: 'ILLIQUID_VR', name: 'Low Volume Ratio', sector: 'Test', marketCap: 1000, isNifty50: false, isNifty200: false, isFnO: false }
-        ] as unknown as ReturnType<typeof MarketService.getUniverse>;
-      };
-
-      MarketService.getStockData = async (symbol: string) => {
-        if (symbol === 'LIQUID') {
-          return {
-            ...baseStock,
+      OvernightService.discover = (async () =>
+        [
+          {
+            id: 'sig-1',
             symbol: 'LIQUID',
-            avgVolume: 500000,
-            volume: 600000, // Ratio = 1.2
-            high: 110, low: 105, ltp: 108 // Valid LONG setup
-          } as unknown as MarketStockData;
-        }
-        if (symbol === 'ILLIQUID_AV') {
-          return {
-            ...baseStock,
-            symbol: 'ILLIQUID_AV',
-            avgVolume: 50000, // < 100k
-            volume: 100000,
-            high: 110, low: 105, ltp: 108
-          } as unknown as MarketStockData;
-        }
-        if (symbol === 'ILLIQUID_VR') {
-          return {
-            ...baseStock,
-            symbol: 'ILLIQUID_VR',
-            avgVolume: 200000,
-            volume: 210000, // Ratio = 1.05 < 1.2
-            high: 110, low: 105, ltp: 108
-          } as unknown as MarketStockData;
-        }
-        return null;
-      };
+            signalDate: '2026-07-08',
+            signalTime: '15:22',
+            direction: 'LONG',
+            entry: 108,
+            stopLoss: 105,
+            target: 115,
+            overnightScore: 90,
+            expectedGap: 0.5,
+            expectedMove: 1.0,
+            confidence: 70,
+            exitStrategy: 'EOD',
+            actualExit: null,
+            actualReturn: null,
+            executed: false,
+            classification: 'BTST_READY',
+            freezeTime: null,
+            rejectionReason: null,
+            historyQuality: 100,
+            liquidityQuality: 100,
+            eventRisk: 0,
+            regimeFit: 100,
+            conflictConfidence: 20,
+            qualityModelVersion: 1,
+            qualityBucket: 'TRADEABLE',
+            eventRiskReason: null,
+            relativeStrength: 1,
+            slippageModelVersion: null,
+            regimeSnapshot: null,
+            createdAt: new Date(),
+          },
+        ] as OvernightSignal[]) as typeof OvernightService.discover;
 
-      const result = await BtstService.discover('TEST_UNIVERSE');
-      
-      // Verification: Only 'LIQUID' should be in the results
+      // NSE_FNO skips universe filtering in the Advanced bridge
+      const result = await BtstService.discover('NSE_FNO');
+      assert.strictEqual(result.coverage.engine, 'advanced');
       assert.strictEqual(result.results.length, 1);
       assert.strictEqual(result.results[0].symbol, 'LIQUID');
-
-      // Rejected stocks should not count toward insights
+      assert.strictEqual(result.results[0].tag, 'LONG');
       assert.strictEqual(result.insights.totalLong, 1);
-      assert.strictEqual(result.insights.avoid, 0); // No illiquid stocks counted as avoid/conflict/etc
     } finally {
-      MarketService.getUniverse = originalGetUniverse;
-      MarketService.getStockData = originalGetStockData;
+      OvernightService.discover = originalDiscover;
     }
   });
 

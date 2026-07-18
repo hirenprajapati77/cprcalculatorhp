@@ -8,7 +8,13 @@ import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
-import { getISTTime, isBtstJournalWindowOpen } from '@/lib/market-hours';
+import { getISTTime } from '@/lib/market-hours';
+import {
+  isJournalWindowOpen,
+  formatIstHm,
+  ACTIVE_END,
+  JOURNAL_END,
+} from '@/config/btst-windows';
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
 
@@ -46,10 +52,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // Only run during 15:25–15:30 IST (after discovery freeze; market closes 15:30)
-  if (!isBtstJournalWindowOpen() && !bypassWindow) {
+  // Only run during [ACTIVE_END, JOURNAL_END] from src/config/btst-windows.ts
+  if (!isJournalWindowOpen() && !bypassWindow) {
     return NextResponse.json({
-      message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')} (expected 15:25–15:30)`
+      message: `BTST journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')} (expected ${formatIstHm(ACTIVE_END)}–${formatIstHm(JOURNAL_END)})`
     });
   }
 
