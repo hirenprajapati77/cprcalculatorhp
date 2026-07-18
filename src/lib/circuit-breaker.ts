@@ -4,6 +4,7 @@ export enum CircuitState {
   HALF_OPEN = 'HALF_OPEN' // Probe phase
 }
 
+/** One process-wide circuit: any DB connection failure opens it for all callers (30s). Intentional — not per-model. */
 export class DatabaseCircuitBreaker {
   private static state: CircuitState = CircuitState.CLOSED;
   private static nextAttemptAt: number = 0;
