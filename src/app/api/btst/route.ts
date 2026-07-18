@@ -9,6 +9,7 @@ import {
   type OvernightUiResult,
 } from '@/services/overnight/overnight-ui-adapter';
 import { BTST_CLOCK } from '@/lib/market-hours';
+import { BTST_READY_SCORE } from '@/config/trading-constants';
 
 export async function GET(request: Request) {
   try {
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
 
     // F&O Option Suggestion Enrichment Layer for BTST (LONG) & STBT (SHORT)
     const eligibleBtst = resultsList
-      .filter((r) => (r.tag === 'LONG' || r.tag === 'SHORT') && Math.max(r.longScore, r.shortScore) >= 70)
+      .filter((r) => (r.tag === 'LONG' || r.tag === 'SHORT') && Math.max(r.longScore, r.shortScore) >= BTST_READY_SCORE)
       .slice(0, 10);
 
     if (eligibleBtst.length > 0) {
