@@ -1275,11 +1275,19 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           )}
           {!error && !loading && entries.length === 0 && (
             <div className="p-10 text-center text-slate-600 text-sm">
-              No journal entries yet. Entries will appear after 3:20 PM IST on trading days.
+              No journal entries yet. Entries appear after the 15:25–15:30 IST journal cron on trading days.
             </div>
           )}
           {entries.length > 0 && (
             <div className="overflow-x-auto">
+              <div className="px-4 py-2 border-b border-border-primary/60 text-[10px] text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
+                <span>
+                  <span className="text-slate-300 font-semibold">Advanced</span> = Overnight Engine score (0–130) — trade source of truth
+                </span>
+                <span>
+                  <span className="text-slate-400 font-semibold">Shadow</span> = Simple V2 (0–100) — research only, hover for breakdown
+                </span>
+              </div>
               <table className="w-full text-xs whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-border-primary text-text-secondary uppercase tracking-wider text-[10px]">

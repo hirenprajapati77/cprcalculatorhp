@@ -251,6 +251,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      // Research-only Simple V2 shadow (same as BTST path)
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
       try {
         if (stockData) {
@@ -267,7 +268,7 @@ export async function GET(req: NextRequest) {
           };
         }
       } catch (v2Err) {
-        console.warn(`[BtstJournal] v2 scoring failed for ${signal.symbol}:`, v2Err);
+        console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
       }
 
       const optionName = suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') || `${suggestion.strike} PE`;
@@ -284,6 +285,7 @@ export async function GET(req: NextRequest) {
         optionContract: optionName,
         optionStrike:   suggestion.strike,
         optionType:     'PE',
+        // Authoritative Advanced Engine score (0–130)
         score:          signal.overnightScore ?? 0,
         confidence:     signal.confidence ?? 0,
         signalSummary,
