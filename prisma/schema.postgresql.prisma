@@ -264,6 +264,7 @@ model OvernightSignal {
   qualityModelVersion  Int?
   qualityBucket        String?
   eventRiskReason      String?
+  relativeStrength     Float?
   slippageModelVersion Int?
   regimeSnapshot       String?
 
@@ -281,7 +282,7 @@ model OvernightSignal {
 
 model BrokerToken {
   id          Int      @id @default(autoincrement())
-  broker      String   @default("fyers")
+  broker      String   @unique @default("fyers")
   accessToken String
   expiresAt   DateTime
   updatedAt   DateTime @updatedAt
