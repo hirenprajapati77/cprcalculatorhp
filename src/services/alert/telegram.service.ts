@@ -96,7 +96,7 @@ export class TelegramService {
     }
 
 
-    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ 15:20 IST\n\n`;
+    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ 15:10–15:25 IST | Engine: Advanced\n\n`;
 
     text += `🟢 <b>LONG SETUPS (${longs.length})</b>\n`;
     if (longs.length === 0) text += `<i>None</i>\n`;

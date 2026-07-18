@@ -1391,7 +1391,8 @@ export default function ScannerClient() {
       const m = parseInt(
         parts.find(p => p.type === 'minute')?.value || '0', 10
       );
-      return { h, m, inWindow: h === 15 && m >= 20 && m <= 25 };
+      // Match canonical discovery window 15:10–15:25 (exclusive end)
+      return { h, m, inWindow: h === 15 && m >= 10 && m < 25 };
     };
 
     const checkAndRefresh = async () => {
@@ -2552,7 +2553,7 @@ export default function ScannerClient() {
               <p className="text-sm font-medium text-red-400 font-mono">
                 {scannerMode === 'CPR'
                   ? 'Markets closed. See you Monday at 09:15 IST.'
-                  : 'Markets closed. See you Monday at 15:20 IST.'}
+                  : 'Markets closed. See you Monday at 15:10 IST.'}
               </p>
             </div>
           )}
