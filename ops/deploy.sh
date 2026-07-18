@@ -4,6 +4,8 @@
 #   DEPLOY_HOST  — server IP or hostname, e.g. export DEPLOY_HOST=1.2.3.4
 #   DEPLOY_KEY   — absolute path to your SSH private key, e.g. export DEPLOY_KEY=/path/to/key.pem
 #   DATABASE_URL — live Postgres URL for pre-flight schema drift check (or set in .env)
+#   SHADOW_DATABASE_URL — optional empty Postgres DB for migrations↔schema diff;
+#                         if unset, pre-flight tries to CREATE DATABASE prisma_deploy_shadow
 #
 # Local validation without production: ./ops/deploy-dryrun.sh  (see ops/DEPLOY_DRYRUN.md)
 
