@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 echo "--- Postgres query ---"
 sudo -u postgres psql -d cpr_pro -c 'SELECT symbol, score, date FROM "ScannerResult" WHERE date = '\''2026-06-29'\'' AND score >= 75 ORDER BY score DESC LIMIT 5;'
 

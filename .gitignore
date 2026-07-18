@@ -68,3 +68,15 @@ remote_deploy.sh
 # local untracked configs / scripts
 *.local.env
 *.local.sh
+
+# temporary debug / scratch files
+*.sql
+*.txt
+ssh_history.jsonl
+history.txt
+history_commands.txt
+raw*.txt
+clean_ssh_history.txt
+migration_diff.sql
+scratch/
+prisma/*.old.prisma
