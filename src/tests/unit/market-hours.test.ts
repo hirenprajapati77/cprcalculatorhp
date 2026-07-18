@@ -1,6 +1,16 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'assert';
-import { getISTDateString, getISTTime, isTodayCandleClosed, isMarketOpen, getCompletedHistory } from '../../lib/market-hours';
+import {
+  getISTDateString,
+  getISTTime,
+  isTodayCandleClosed,
+  isMarketOpen,
+  getCompletedHistory,
+  getBtstWindowState,
+  isBtstDiscoveryOpen,
+  isBtstConfirmOpen,
+  isBtstJournalWindowOpen,
+} from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
   describe('getISTDateString', () => {
@@ -60,6 +70,33 @@ describe('Market Hours Utilities', () => {
       const result = getCompletedHistory(history, '2026-07-09');
       assert.equal(result.length, 2);
       assert.deepEqual(result, history);
+    });
+  });
+
+  describe('BTST window helpers (canonical BTST_WINDOWS)', () => {
+    // 2026-07-08 is a Wednesday trading day
+    const at = (h: number, m: number) => new Date(`2026-07-08T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+05:30`);
+
+    it('maps discovery / confirm / freeze / journal phases', () => {
+      assert.strictEqual(getBtstWindowState(at(15, 9)), 'FROZEN');
+      assert.strictEqual(getBtstWindowState(at(15, 10)), 'DISCOVERING');
+      assert.strictEqual(getBtstWindowState(at(15, 19)), 'DISCOVERING');
+      assert.strictEqual(getBtstWindowState(at(15, 20)), 'ACTIVE');
+      assert.strictEqual(getBtstWindowState(at(15, 24)), 'ACTIVE');
+      assert.strictEqual(getBtstWindowState(at(15, 25)), 'FROZEN');
+
+      assert.strictEqual(isBtstDiscoveryOpen(at(15, 10)), true);
+      assert.strictEqual(isBtstDiscoveryOpen(at(15, 24)), true);
+      assert.strictEqual(isBtstDiscoveryOpen(at(15, 25)), false);
+
+      assert.strictEqual(isBtstConfirmOpen(at(15, 15)), false);
+      assert.strictEqual(isBtstConfirmOpen(at(15, 20)), true);
+      assert.strictEqual(isBtstConfirmOpen(at(15, 25)), false);
+
+      assert.strictEqual(isBtstJournalWindowOpen(at(15, 24)), false);
+      assert.strictEqual(isBtstJournalWindowOpen(at(15, 25)), true);
+      assert.strictEqual(isBtstJournalWindowOpen(at(15, 30)), true);
+      assert.strictEqual(isBtstJournalWindowOpen(at(15, 31)), false);
     });
   });
 });

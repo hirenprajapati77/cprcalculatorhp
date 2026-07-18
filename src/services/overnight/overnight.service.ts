@@ -1,12 +1,8 @@
 import { env } from '@/config/env';
 /**
- * ADVANCED ENGINE — NOT YET CONNECTED TO UI OR CRON. Used only by /api/overnight and
- * /refresh endpoints for manual/debugging use. Max score 130. Intended
- * future replacement for the Simple Engine pending validation.
- * 
- * TODO: Phase H migration — validate Advanced Engine signals against
- * Simple Engine on live market data before promoting to UI/cron.
- * See project audit notes.
+ * ADVANCED ENGINE — authoritative for live UI (/api/btst adapter), Telegram
+ * (btst-alert), Trade Journal (btst-journal), and /api/overnight. Max score 130.
+ * Simple Engine (BtstService) remains for backtests and V2 shadow scoring only.
  */
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
@@ -18,7 +14,7 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed, getBtstWindowState } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -83,34 +79,18 @@ export class OvernightService {
   }
 
   /**
-   * Helper to determine signal state based on time.
+   * Helper to determine signal state based on canonical BTST_WINDOWS.
+   * DISCOVERING = 15:10–15:20, ACTIVE = 15:20–15:25, else FROZEN.
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
-    const bypassAllowed = 
-      env.NODE_ENV !== 'production' &&
-      env.BTST_BYPASS_WINDOW === 'true';
+    const bypassAllowed =
+      env.NODE_ENV !== 'production' && env.BTST_BYPASS_WINDOW === 'true';
 
     if (bypassAllowed) {
       return 'ACTIVE';
     }
 
-    const { isTradingDay } = getISTTime(time);
-    if (!isTradingDay) {
-      return 'FROZEN';
-    }
-
-    const { totalMinutes } = this.getISTTime(time);
-
-    const activeMinutes = 15 * 60 + 20; // 3:20 PM
-    const freezeMinutes = 15 * 60 + 25; // 3:25 PM
-
-    if (totalMinutes < activeMinutes) {
-      return 'DISCOVERING';
-    } else if (totalMinutes >= activeMinutes && totalMinutes < freezeMinutes) {
-      return 'ACTIVE';
-    } else {
-      return 'FROZEN';
-    }
+    return getBtstWindowState(time);
   }
 
   /**
