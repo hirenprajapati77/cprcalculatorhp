@@ -46,13 +46,11 @@ NEW_MIGRATIONS=$(comm -13 <(echo "$PRE_DEPLOY_MIGRATIONS" | sort) <(echo "$POST_
 echo "=== Synchronizing Prisma Client ==="
 npx prisma generate
 
-echo "=== Restarting PM2 fresh ==="
+echo "=== Restarting PM2 fresh (delete + start; never restart --update-env) ==="
 cd $APP/.next/standalone
-if pm2 list | grep -q "cpr-platform"; then
-    pm2 restart cpr-platform --update-env
-else
-    pm2 start server.js --name cpr-platform
-fi
+# Rulebook: PM2 caches env at process creation — delete then start so .env is reloaded.
+pm2 delete cpr-platform || true
+pm2 start server.js --name cpr-platform
 pm2 save
 
 echo "=== PM2 status ==="
@@ -92,9 +90,11 @@ else
         rm -rf $APP/.next/standalone
         mv $BACKUP_DIR $APP/.next/standalone
         
-        echo "Restarting PM2 with rolled-back release..."
+        echo "Restarting PM2 with rolled-back release (delete + start)..."
         cd $APP/.next/standalone
-        pm2 restart cpr-platform --update-env
+        pm2 delete cpr-platform || true
+        pm2 start server.js --name cpr-platform
+        pm2 save
         
         echo "Waiting 5s for rollback to stabilize..."
         sleep 5
