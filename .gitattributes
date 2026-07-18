@@ -1,0 +1,11 @@
+# Enforce LF line endings for shell scripts on all platforms
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows scripts use CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Default: auto-detect text files
+* text=auto

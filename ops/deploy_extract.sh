@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 set -e
 
 APP=/home/ubuntu/cpr-calculator-platform
