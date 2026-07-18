@@ -24,13 +24,6 @@ list_local_migration_names() {
   find prisma/migrations -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort
 }
 
-# Run a small node+pg script. Args: helper_dir is created by caller; script on stdin.
-# Env: DATABASE_URL (or whatever the script reads).
-_run_pg_node() {
-  local helper_dir="$1"
-  node - "${helper_dir}"
-}
-
 _ensure_pg_helper() {
   local helper_dir="$1"
   npm install --prefix "${helper_dir}" pg@8.13.1 --silent --no-audit --no-fund >/dev/null 2>&1
