@@ -13,7 +13,8 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
-  
+  const expectedToken = env.APP_ACCESS_TOKEN?.trim();
+
   // 1. Gate /settings/debug
   if (url.pathname.startsWith('/settings/debug')) {
     if (env.NODE_ENV === 'production' && env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL !== 'true') {
@@ -22,7 +23,26 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Gate /api routes
+  // 2. For page routes (non-API, non-static), automatically set the access token
+  //    cookie so that browser-initiated API calls are authenticated.
+  if (!url.pathname.startsWith('/api/') && expectedToken) {
+    const existing = request.cookies.get('app_access_token')?.value;
+    // Only set if missing or stale to avoid rewriting on every request
+    if (!existing || !timingSafeEqual(existing, expectedToken)) {
+      const res = NextResponse.next();
+      res.cookies.set('app_access_token', expectedToken, {
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/',
+        secure: url.protocol === 'https:',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+      });
+      return res;
+    }
+    return NextResponse.next();
+  }
+
+  // 3. Gate /api routes
   if (url.pathname.startsWith('/api/')) {
     // Exempt public routes
     if (
@@ -38,7 +58,6 @@ export function middleware(request: NextRequest) {
     // APP_ACCESS_TOKEN: required in production (env.ts also fail-fasts at import).
     // Reject unauthenticated API calls over plain HTTP when a token is configured;
     // in production, missing token is treated as unauthorized (defense in depth).
-    const expectedToken = env.APP_ACCESS_TOKEN?.trim();
     if (env.NODE_ENV === 'production' && !expectedToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -63,5 +82,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/settings/debug/:path*'],
+  // Run on all routes except Next.js internals and static files
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico).*)'],
 };
