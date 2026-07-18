@@ -35,8 +35,13 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Check for APP_ACCESS_TOKEN
-    const expectedToken = env.APP_ACCESS_TOKEN;
+    // APP_ACCESS_TOKEN: required in production (env.ts also fail-fasts at import).
+    // Reject unauthenticated API calls over plain HTTP when a token is configured;
+    // in production, missing token is treated as unauthorized (defense in depth).
+    const expectedToken = env.APP_ACCESS_TOKEN?.trim();
+    if (env.NODE_ENV === 'production' && !expectedToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     if (expectedToken) {
       const authHeader = request.headers.get('authorization');
       const authCookie = request.cookies.get('app_access_token')?.value;

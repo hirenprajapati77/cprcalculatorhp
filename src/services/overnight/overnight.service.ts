@@ -14,7 +14,8 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed, getBtstWindowState } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed } from '@/lib/market-hours';
+import { getBtstPhase } from '@/config/btst-windows';
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -79,8 +80,8 @@ export class OvernightService {
   }
 
   /**
-   * Helper to determine signal state based on canonical BTST_WINDOWS.
-   * DISCOVERING = 15:10–15:20, ACTIVE = 15:20–15:25, else FROZEN.
+   * Helper to determine signal state from src/config/btst-windows.ts
+   * (DISCOVERY_START / DISCOVERY_END / ACTIVE_END).
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
     const bypassAllowed =
@@ -90,7 +91,7 @@ export class OvernightService {
       return 'ACTIVE';
     }
 
-    return getBtstWindowState(time);
+    return getBtstPhase(time);
   }
 
   /**

@@ -41,6 +41,11 @@ const envSchema = z.object({
   
   HISTORICAL_MODE: z.string().optional(),
   BACKTEST_EXECUTION_MODE: z.string().optional(),
+  /**
+   * DISPLAY-ONLY. Used for UI banners / health payloads (e.g. SHADOW vs LIVE label).
+   * Does NOT gate any broker order placement — no real order-routing path exists
+   * under src/app/api yet. Do not treat this as an execution safety control.
+   */
   EXECUTION_MODE: z.string().optional(),
   RETENTION_DRY_RUN: z.string().optional(),
   RETENTION_LIMIT: z.coerce.number().optional(),
