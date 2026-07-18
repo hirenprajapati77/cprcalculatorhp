@@ -2,12 +2,6 @@ import { NextResponse } from 'next/server';
 import { BtstService } from '@/services/backtest/btst.service';
 import { CacheService } from '@/services/cache.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
-import {
-  overnightSignalToBtstUi,
-  buildInsightsFromOvernight,
-  filterOvernightByUniverse,
-  type OvernightUiResult,
-} from '@/services/overnight/overnight-ui-adapter';
 import { BTST_CLOCK } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 
@@ -64,11 +58,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // Window open — Advanced Engine discover, then adapt to UI DTO
-    const overnightSignals = await OvernightService.discover('BOTH');
-    const filtered = filterOvernightByUniverse(overnightSignals, universe);
-    const resultsList: OvernightUiResult[] = filtered.map(overnightSignalToBtstUi);
-    const insights = buildInsightsFromOvernight(filtered);
+    // Window open — single source of truth: same discover path as the
+    // btst-alert / btst-journal crons (BtstService.discover -> Advanced
+    // engine bridge). Do not re-implement discover/filter/map here.
+    const discovery = await BtstService.discover(universe);
+    const resultsList = discovery.results;
+    const insights = discovery.insights;
 
     // F&O Option Suggestion Enrichment Layer for BTST (LONG) & STBT (SHORT)
     const eligibleBtst = resultsList
@@ -109,7 +104,7 @@ export async function GET(request: Request) {
 
         for (const r of resultsList) {
           if (suggestionMap.has(r.symbol)) {
-            (r as OvernightUiResult & { optionSuggestion?: unknown }).optionSuggestion =
+            (r as (typeof resultsList)[number] & { optionSuggestion?: unknown }).optionSuggestion =
               suggestionMap.get(r.symbol);
           }
         }
@@ -123,13 +118,7 @@ export async function GET(request: Request) {
     const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
     const scannedAt = `${timeStr} IST, ${dateStr}`;
 
-    const coverage = {
-      engine: 'advanced' as const,
-      degraded: false,
-      universe,
-      signalCount: resultsList.length,
-      overnightUniverseCount: overnightSignals.length,
-    };
+    const coverage = discovery.coverage;
 
     const cacheData = {
       scannedAt,
