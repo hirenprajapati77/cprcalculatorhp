@@ -3,7 +3,7 @@ import { ScannerController } from '@/services/scanner-controller';
 import { CacheService } from '@/services/cache.service';
 import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
-import { getISTTime } from '@/lib/market-hours';
+import { getISTTime, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   // Check IST time
   const { isTradingDay, totalMinutes } = getISTTime();
 
-  // Only run between 09:15 and 15:30 IST on trading days
-  if (!isTradingDay || totalMinutes < 555 || totalMinutes > 930) {
+  // Only run during MARKET_SESSION open..close IST on trading days
+  if (!isTradingDay || totalMinutes < BTST_WINDOW_MINUTES.MARKET_OPEN || totalMinutes > BTST_WINDOW_MINUTES.MARKET_CLOSE) {
     return NextResponse.json({ message: 'Market closed' });
   }
 

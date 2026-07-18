@@ -35,9 +35,16 @@ export const SIMPLE_SCORE = {
   WATCH: 40,
 } as const;
 
+/** NSE cash-session open/close (IST). Sole home for these clock literals. */
+export const MARKET_SESSION = {
+  OPEN: { hour: 9, minute: 15 },
+  CLOSE: { hour: 15, minute: 30 },
+} as const;
+
 /**
  * Canonical BTST / overnight IST windows (single source of truth).
- * End times are exclusive unless noted — e.g. discovery is open through 15:24.
+ * End times are exclusive unless noted — e.g. discovery is open through minute before DISCOVERY_END_EXCLUSIVE.
+ * Sole home for BTST clock hour/minute literals in the repo.
  */
 export const BTST_WINDOWS = {
   /** Live discovery may run (UI + Advanced scan gate). */
@@ -49,7 +56,7 @@ export const BTST_WINDOWS = {
   /** Journal cron after freeze, through market close (inclusive end). */
   JOURNAL_START: { hour: 15, minute: 25 },
   JOURNAL_END_INCLUSIVE: { hour: 15, minute: 30 },
-  MARKET_CLOSE: { hour: 15, minute: 30 },
+  MARKET_CLOSE: MARKET_SESSION.CLOSE,
 } as const;
 
 export const LIQUIDITY = {

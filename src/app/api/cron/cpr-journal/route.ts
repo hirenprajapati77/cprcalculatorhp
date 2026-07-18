@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // Only run during 15:15–15:29 IST window (cron fires at 15:20)
+  // CPR journal EOD window (HHMM) — distinct from BTST_WINDOWS discovery/journal gates
   const timeValue = hour * 100 + minute;
   if (timeValue < 1515 || timeValue > 1529) {
     return NextResponse.json({
