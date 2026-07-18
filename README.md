@@ -6,14 +6,14 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 
 ## ⚡ Features
 
-- **Overnight Validation Engine:** High-fidelity BTST/STBT signal generation with parallel tracking of live expectations vs executed reality.
-- **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and fine-grained relationship matching (`OUTSIDE_VALUE`, `OVERLAPPING_HIGHER`) with visual badges.
+- **Overnight Validation Engine:** Advanced Engine (`OvernightService`, score 0–130) drives live UI, Telegram alerts, and Trade Journal picks from one `OvernightSignal` source of truth. Simple Engine remains for backtests and research Shadow scoring only.
+- **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and relationship matching (Higher/Lower/Inside/Overlapping). Extra CPR labels (Outside Value, Overlapping Higher/Lower, Quality grades) are specified but deferred — see `cpr_deferred_implementation_notes.md`.
 - **Strict Quality Gates:** Filters low-probability setups utilizing broader market regime alignment (NIFTY 50 trend), structural liquidity rules, and 15-day ATR momentum histories.
 - **Event-Risk Profiling:** Automatically cross-references setups against corporate (Earnings/Dividends) and macro events, applying a hard fallback if calendar data goes stale.
-- **Server-Side Journaling:** Immutable signal metadata snapshots (V2 Score, Regime, Event Risk) bound to every generated trade for off-line divergence analysis.
+- **Server-Side Journaling:** Immutable signal metadata snapshots — **Advanced** score (authoritative) plus optional **Shadow** (Simple V2 research), regime, and event risk — bound to every generated trade.
 - **Aesthetic Terminal UI:** Responsive dark-themed dashboard mapping raw CPR calculations alongside execution telemetry (Recharts).
 - **Resilient Fallback Design:** Database Circuit Breaker pattern with gracefully degraded cached responses, ensuring 99.9% uptime for the UI even during database outages.
-- **Strict Environment Validation:** Zod-enforced environment variable schemas fail fast at startup if configuration is invalid.
+- **Strict Environment Validation:** Zod-enforced environment variable schemas fail fast at startup if configuration is invalid. **`APP_ACCESS_TOKEN` is required in production.**
 - **Redis First Caching:** All module-level maps replaced with TTL-managed Redis caches for horizontal scalability.
 
 ---
