@@ -27,6 +27,9 @@ export const ADVANCED_SCORE = {
   WATCH: 70,
 } as const;
 
+/** Advanced engine (0–130 scale) READY floor — mirrors BtstRankingService/StbtRankingService. */
+export const BTST_READY_SCORE = 85;
+
 /** Legacy Simple / CPR scanner score scale (0–100). */
 export const SIMPLE_SCORE = {
   MAX: 100,

@@ -3,10 +3,11 @@ import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
 import { BTST_CLOCK } from '@/lib/market-hours';
+import { BTST_READY_SCORE } from '@/config/trading-constants';
 
 import { decrypt } from '../../lib/crypto';
 
-const MIN_BTST_ALERT_SCORE = 75;
+const MIN_BTST_ALERT_SCORE = BTST_READY_SCORE;
 
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
