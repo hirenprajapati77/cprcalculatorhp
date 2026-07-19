@@ -163,13 +163,14 @@ export class OvernightService {
         let count = 0;
         let maxHigh = 0;
         let minLow = Infinity;
+        // Only skip the newest bar if it is still forming (< 5 min since candle open).
+        // Post-market, the last bar is fully closed and must be included in last-15m.
+        const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
+        const isLastCandleForming = (currentTimestampSec - lastTimestamp) < 300;
         let skippedCurrent = false;
-        // Exclude the current/forming 5m candle, then take the prior three completed
-        // candles as the "last 15m" range. Including the current bar makes
-        // close > last15mHigh / close < last15mLow nearly impossible.
         for (let i = timestamps.length - 1; i >= 0; i--) {
           if (timestamps[i] <= currentTimestampSec) {
-            if (!skippedCurrent) {
+            if (isLastCandleForming && !skippedCurrent) {
               skippedCurrent = true;
               continue;
             }
@@ -221,9 +222,13 @@ export class OvernightService {
         sumVol += candle.volume;
       }
 
-      const last3 = activeCandles.length > 1
-        ? activeCandles.slice(0, -1).slice(-3) // exclude current forming candle
-        : [];
+      // Only exclude the last (forming) candle when market is currently open.
+      // Post-close, all candles are settled — include the final bar in last-15m.
+      const marketIsOpen = OvernightService.determineState(currentTime) === 'ACTIVE';
+      const last3 = activeCandles.length > 1 && marketIsOpen
+        ? activeCandles.slice(0, -1).slice(-3) // exclude forming candle during live market
+        : activeCandles.slice(-3);             // all candles settled post-close
+
       for (const c of last3) {
         maxHigh = Math.max(maxHigh, c.high);
         minLow = Math.min(minLow, c.low);
