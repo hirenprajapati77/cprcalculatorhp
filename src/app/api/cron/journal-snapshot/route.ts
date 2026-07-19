@@ -17,8 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   const bypassWindow = env.NODE_ENV !== 'production' &&
-                       req.nextUrl.searchParams.get('bypassWindow') === 'true' &&
-                       req.nextUrl.searchParams.get('bypassSecret') === env.CRON_SECRET;
+                       req.nextUrl.searchParams.get('bypassWindow') === 'true';
 
   // Determine which snapshot slot based on current IST time
   let slot: '916' | '930' | '945' | '1000' | null = null;
