@@ -351,6 +351,17 @@ export class OvernightService {
 
         const lastCandle = history[history.length - 1];
         const isLastToday = lastCandle.date === dateStr;
+        const { isTradingDay } = getISTTime(currentTime);
+
+        // Trading day without today's daily bar: do not synthesize todayCandle from
+        // prior-session H/L + LTP (false tomorrow CPR width / Narrow +30).
+        if (!isLastToday && isTradingDay) {
+          console.warn(
+            `[OvernightScan] ${fullStock.symbol} skipped: Today's daily candle unavailable.`
+          );
+          continue;
+        }
+
         const isTodayCandleFinal = dateOverride 
           ? isLastToday 
           : (isLastToday && isTodayCandleClosed());
