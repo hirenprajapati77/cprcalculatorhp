@@ -43,7 +43,7 @@ export interface LiveStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COMPLETE NSE F&O STOCK UNIVERSE (~202 stocks as of June 2025)
+// COMPLETE NSE F&O STOCK UNIVERSE (~202 stocks; base June 2025, symbol fixes Jul 2026)
 // Updated quarterly by SEBI. isFnO = eligible for Futures & Options trading.
 // ─────────────────────────────────────────────────────────────────────────────
 const STOCK_UNIVERSE: {
@@ -87,7 +87,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'WIPRO       ', name: 'Wipro Limited                      ', sector: 'IT                       ', marketCap: 230000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'HCLTECH     ', name: 'HCL Technologies                   ', sector: 'IT                       ', marketCap: 340000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'TECHM       ', name: 'Tech Mahindra                      ', sector: 'IT                       ', marketCap: 110000, isNifty50: true , isNifty200: true , isFnO: true  },
-  { symbol: 'LTIM        ', name: 'LTIMindtree                        ', sector: 'IT                       ', marketCap: 140000, isNifty50: true , isNifty200: true , isFnO: true  },
+  { symbol: 'LTM         ', name: 'LTM Limited                        ', sector: 'IT                       ', marketCap: 140000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'PERSISTENT  ', name: 'Persistent Systems                 ', sector: 'IT                       ', marketCap: 72000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'MPHASIS     ', name: 'Mphasis                            ', sector: 'IT                       ', marketCap: 38000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'COFORGE     ', name: 'Coforge                            ', sector: 'IT                       ', marketCap: 28000 , isNifty50: false, isNifty200: true , isFnO: true  },
@@ -129,7 +129,6 @@ const STOCK_UNIVERSE: {
   { symbol: 'HINDCOPPER  ', name: 'Hindustan Copper                   ', sector: 'Metals                   ', marketCap: 18000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'RATNAMANI   ', name: 'Ratnamani Metals & Tubes           ', sector: 'Metals                   ', marketCap: 9500  , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'APLAPOLLO   ', name: 'APL Apollo Tubes                   ', sector: 'Metals                   ', marketCap: 38000 , isNifty50: false, isNifty200: true , isFnO: true  },
-  { symbol: 'TATAMOTORS  ', name: 'Tata Motors                        ', sector: 'Automotive               ', marketCap: 280000, isNifty50: true , isNifty200: true , isFnO: false },
   { symbol: 'M&M         ', name: 'Mahindra & Mahindra                ', sector: 'Automotive               ', marketCap: 190000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'MARUTI      ', name: 'Maruti Suzuki India                ', sector: 'Automotive               ', marketCap: 280000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'BAJAJ-AUTO  ', name: 'Bajaj Auto                         ', sector: 'Automotive               ', marketCap: 195000, isNifty50: true , isNifty200: true , isFnO: true  },
@@ -172,7 +171,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'GODREJPROP  ', name: 'Godrej Properties                  ', sector: 'Construction             ', marketCap: 72000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'LODHA       ', name: 'Macrotech Developers (Lodha)       ', sector: 'Construction             ', marketCap: 95000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'NCC         ', name: 'NCC                                ', sector: 'Construction             ', marketCap: 16000 , isNifty50: false, isNifty200: false, isFnO: false },
-  { symbol: 'KNR         ', name: 'KNR Constructions                  ', sector: 'Construction             ', marketCap: 9000  , isNifty50: false, isNifty200: false, isFnO: false },
+  { symbol: 'KNRCON      ', name: 'KNR Constructions                  ', sector: 'Construction             ', marketCap: 9000  , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'NTPC        ', name: 'NTPC Limited                       ', sector: 'Power                    ', marketCap: 220000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'POWERGRID   ', name: 'Power Grid Corporation             ', sector: 'Power                    ', marketCap: 210000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'TATAPOWER   ', name: 'Tata Power Company                 ', sector: 'Power                    ', marketCap: 115000, isNifty50: false, isNifty200: true , isFnO: true  },
@@ -217,7 +216,6 @@ const STOCK_UNIVERSE: {
   { symbol: 'IRFC        ', name: 'Indian Railway Finance Corp        ', sector: 'Services                 ', marketCap: 165000, isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'RVNL        ', name: 'Rail Vikas Nigam                   ', sector: 'Services                 ', marketCap: 75000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'DELHIVERY   ', name: 'Delhivery                          ', sector: 'Services                 ', marketCap: 18000 , isNifty50: false, isNifty200: false, isFnO: true  },
-  { symbol: 'ZOMATO      ', name: 'Zomato                             ', sector: 'Services                 ', marketCap: 190000, isNifty50: true , isNifty200: true , isFnO: false },
   { symbol: 'NYKAA       ', name: 'FSN E-Commerce (Nykaa)             ', sector: 'Services                 ', marketCap: 28000 , isNifty50: false, isNifty200: true , isFnO: true  },
   { symbol: 'PAYTM       ', name: 'One97 Communications (Paytm)       ', sector: 'Services                 ', marketCap: 32000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'POLICYBZR   ', name: 'PB Fintech (Policybazaar)          ', sector: 'Financial Services       ', marketCap: 38000 , isNifty50: false, isNifty200: true , isFnO: true  },
@@ -242,7 +240,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'ASTRAL      ', name: 'ASTRAL                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'AUBANK      ', name: 'AUBANK                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'BALRAMCHIN  ', name: 'BALRAMCHIN                         ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
-  { symbol: 'BATAIND     ', name: 'BATAIND                            ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
+  { symbol: 'BATAINDIA   ', name: 'Bata India                         ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'BOSCHLTD    ', name: 'BOSCHLTD                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'BSE         ', name: 'BSE                                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'BSOFT       ', name: 'BSOFT                              ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
@@ -253,7 +251,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'CYIENT      ', name: 'CYIENT                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'DALBHARAT   ', name: 'DALBHARAT                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'ENDURANCE   ', name: 'ENDURANCE                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
-  { symbol: 'ETERNAL     ', name: 'ETERNAL                            ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'ETERNAL     ', name: 'Eternal (Zomato)                   ', sector: 'Services                 ', marketCap: 190000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'EXIDEIND    ', name: 'EXIDEIND                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'FSL         ', name: 'FSL                                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'GLENMARK    ', name: 'GLENMARK                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
@@ -279,7 +277,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'NBCC        ', name: 'NBCC                               ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'NLCINDIA    ', name: 'NLCINDIA                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'PATANJALI   ', name: 'PATANJALI                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
-  { symbol: 'PEL         ', name: 'PEL                                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
+  { symbol: 'PIRAMALFIN  ', name: 'Piramal Finance                    ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'PIIND       ', name: 'PIIND                              ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'PVRINOX     ', name: 'PVRINOX                            ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'RAINBOW     ', name: 'RAINBOW                            ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
@@ -307,7 +305,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'VARROC      ', name: 'VARROC                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'VMM         ', name: 'VMM                                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'YESBANK     ', name: 'YESBANK                            ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
-  { symbol: 'ZENSAR      ', name: 'ZENSAR                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
+  { symbol: 'ZENSARTECH  ', name: 'Zensar Technologies                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'ZYDUSLIFE   ', name: 'ZYDUSLIFE                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: '360ONE      ', name: '360ONE                             ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'ADANIENSOL  ', name: 'ADANIENSOL                         ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
@@ -334,7 +332,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'PREMIERENE  ', name: 'PREMIERENE                         ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'SAMMAANCAP  ', name: 'SAMMAANCAP                         ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'SWIGGY      ', name: 'SWIGGY                             ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
-  { symbol: 'TMPV        ', name: 'TMPV                               ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
+  { symbol: 'TMPV        ', name: 'Tata Motors Passenger Vehicles     ', sector: 'Automotive               ', marketCap: 280000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'WAAREEENER  ', name: 'WAAREEENER                         ', sector: 'Other                    ', marketCap: 30000 , isNifty50: false, isNifty200: false, isFnO: true  },
 ];
 
