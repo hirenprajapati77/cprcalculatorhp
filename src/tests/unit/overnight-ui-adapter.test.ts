@@ -86,4 +86,45 @@ describe('overnight-ui-adapter (Phase H)', () => {
     assert.strictEqual(insights.totalLong, 2);
     assert.strictEqual(insights.totalShort, 1);
   });
+
+  it('dedupes by symbol so rescans cannot fill both top-N slots', () => {
+    const signals = [
+      makeSignal({
+        id: '1',
+        symbol: 'JIOFIN',
+        signalTime: '15:10',
+        overnightScore: 110,
+        classification: 'STRONG_BTST',
+      }),
+      makeSignal({
+        id: '2',
+        symbol: 'JIOFIN',
+        signalTime: '15:15',
+        overnightScore: 105,
+        classification: 'BTST_READY',
+      }),
+      makeSignal({
+        id: '3',
+        symbol: 'DIXON',
+        signalTime: '15:10',
+        overnightScore: 100,
+        classification: 'BTST_READY',
+      }),
+      makeSignal({
+        id: '4',
+        symbol: 'RELIANCE',
+        signalTime: '15:10',
+        overnightScore: 92,
+        classification: 'BTST_READY',
+      }),
+    ];
+
+    const { longs } = selectTradableOvernightPicks(signals, { take: 2, suppressShort: true });
+    assert.deepEqual(
+      longs.map((s) => s.symbol),
+      ['JIOFIN', 'DIXON'],
+      'second slot must be the next distinct symbol, not a rescan of #1'
+    );
+    assert.strictEqual(longs[0].overnightScore, 110, 'keeps highest score for duplicate symbol');
+  });
 });
