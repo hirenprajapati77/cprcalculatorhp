@@ -2881,16 +2881,8 @@ export default function ScannerClient() {
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 
                 {drawerTab === 'overview' && (() => {
-                  const activeSignals = drawerStock.signals || [];
-                  const breakdown = drawerStock.scoreBreakdown || {
-                    vdu: activeSignals.includes('VOLUME_SPIKE') ? 20 : 0,
-                    cprNarrow: (activeSignals.includes('NARROW_CPR') || activeSignals.includes('VIRGIN_TODAY')) ? 15 : 0,
-                    higherValue: (activeSignals.includes('HIGHER_VALUE') || activeSignals.includes('LOWER_VALUE')) ? 20 : 0,
-                    vwap: (activeSignals.includes('ABOVE_VWAP') || activeSignals.includes('BELOW_VWAP')) ? 20 : 0,
-                    liquidity: activeSignals.includes('LIQUID') ? 10 : 0,
-                    closeStrength: (activeSignals.includes('CLOSING_STRENGTH') || activeSignals.includes('CLOSING_WEAKNESS')) ? 15 : 0,
-                    clvScore: undefined,
-                  };
+                  const breakdown = drawerStock.scoreBreakdown;
+                  const hasBreakdown = breakdown != null;
                   return (
                     <div className="space-y-4 animate-fade-in">
                       <div className="bg-bg-primary/40 border border-border-primary/80 rounded p-4 space-y-3.5">
@@ -2934,33 +2926,39 @@ export default function ScannerClient() {
                           <span className="font-bold text-accent-purple flex items-center gap-1 uppercase">
                             <Target size={12} /> BTST Score Explainability
                           </span>
+
+                          {!hasBreakdown && (
+                            <p className="text-[10px] text-text-tertiary italic mt-1">
+                              Breakdown unavailable for this scan — total score is shown below.
+                            </p>
+                          )}
                           
                           <div className="grid grid-cols-2 gap-2 mt-2 border-t border-border-primary/50 pt-2">
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">VDU</span>
-                              <span className="font-mono text-text-primary">{breakdown.vdu ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.vdu ?? '—') : '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">CPR Narrow</span>
-                              <span className="font-mono text-text-primary">{breakdown.cprNarrow ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.cprNarrow ?? '—') : '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">Higher Value</span>
-                              <span className="font-mono text-text-primary">{breakdown.higherValue ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.higherValue ?? '—') : '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">VWAP</span>
-                              <span className="font-mono text-text-primary">{breakdown.vwap ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.vwap ?? '—') : '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">Liquidity</span>
-                              <span className="font-mono text-text-primary">{breakdown.liquidity ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.liquidity ?? '—') : '—'}</span>
                             </div>
                             <div className="flex justify-between border-b border-border-primary/30 pb-1">
                               <span className="text-text-tertiary">Closing Strength</span>
-                              <span className="font-mono text-text-primary">{breakdown.closeStrength ?? '—'}</span>
+                              <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.closeStrength ?? '—') : '—'}</span>
                             </div>
-                            {breakdown.clvScore !== undefined && (
+                            {hasBreakdown && breakdown.clvScore !== undefined && (
                               <div className="flex justify-between border-b border-border-primary/30 pb-1 col-span-2">
                                 <span className="text-text-tertiary">CLV Score Component</span>
                                 <span className="font-mono text-accent-blue font-bold">+{breakdown.clvScore}</span>
