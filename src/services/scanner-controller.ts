@@ -8,23 +8,35 @@ import { getISTDateString } from '@/lib/market-hours';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
+let inFlightScanPromise: Promise<Array<ScannerSignalResult & { score: number }>> | null = null;
+
 export class ScannerController {
   /**
    * Runs a complete stock scanner execution for a specific universe and market.
-   *
-   * Flow:
-   * 1. Fetch stock tickers in the universe
-   * 2. Download historical OHLC, volume, and live LTP in parallel batches
-   * 3. Compute CPR, signals, entry target, stop loss, and RR ratios
-   * 4. Score and Rank stocks (highest score descending, capped at 100)
-   * 5. Save/Upsert ScannerResult records (with signalSummary)
-   * 6. Cache/Upsert MarketSnapshot metadata records
-   * 7. Save a ScanHistory log entry with duration, filter criteria, and top 20 tickers
-   * 8. Cache the full ranked list for 5 minutes
    */
   static async runFullScan(
     universeName: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' = 'NSE_FNO',
     market: 'NSE' | 'BSE' = 'NSE'
+  ): Promise<Array<ScannerSignalResult & { score: number }>> {
+    if (inFlightScanPromise) {
+      console.log('[SCAN] Scan already in progress — reusing in-flight scan promise.');
+      return inFlightScanPromise;
+    }
+
+    inFlightScanPromise = (async () => {
+      try {
+        return await ScannerController.executeScan(universeName, market);
+      } finally {
+        inFlightScanPromise = null;
+      }
+    })();
+
+    return inFlightScanPromise;
+  }
+
+  private static async executeScan(
+    universeName: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST',
+    market: 'NSE' | 'BSE'
   ): Promise<Array<ScannerSignalResult & { score: number }>> {
     const startTime = Date.now();
     console.log(`Starting CPR Scan V2 for universe=${universeName}, market=${market}...`);

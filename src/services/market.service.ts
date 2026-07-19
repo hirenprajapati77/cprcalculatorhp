@@ -370,12 +370,19 @@ export class MarketService {
     else if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  list = STOCK_UNIVERSE.filter(s => s.isFnO);
     else if (universe === 'WATCHLIST')  return []; // Managed in caller by checking Watchlist database model
 
-    return list.map(s => ({
+    const mapped = list.map(s => ({
       ...s,
       symbol: s.symbol.trim(),
       name: s.name.trim(),
       sector: s.sector.trim(),
     }));
+
+    const seen = new Set<string>();
+    return mapped.filter(s => {
+      if (seen.has(s.symbol)) return false;
+      seen.add(s.symbol);
+      return true;
+    });
   }
 
   /**
