@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { MarketService, MarketStockData } from '../../services/market.service';
 import { CacheService } from '../../services/cache.service';
+import { FyersAuthService } from '../../services/fyers-auth.service';
+import { env } from '../../config/env';
 
 test('Market Service - 200 SMA Plumbing', async (t) => {
 
@@ -112,6 +114,96 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.strictEqual(data!.sma200, undefined, 'Missing sma200 should be strictly undefined');
     } finally {
       CacheService.get = originalCacheGet;
+    }
+  });
+
+  await t.test('getStockData() Fyers Connected-only fallback after Yahoo 404', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
+    const originalClearToken = FyersAuthService.clearToken;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    let cached: MarketStockData | null = null;
+    CacheService.set = async (_key: string, val: unknown) => {
+      cached = val as MarketStockData;
+    };
+    FyersAuthService.getAccessToken = async () => 'fyers_test_token';
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
+    FyersAuthService.clearToken = async () => {};
+
+    // Build 110 synthetic daily candles so sma50Slope path is exercised
+    const candles: Array<[number, number, number, number, number, number]> = [];
+    const start = Date.UTC(2026, 0, 1) / 1000;
+    for (let i = 0; i < 110; i++) {
+      const px = 100 + i;
+      candles.push([start + i * 86400, px, px + 1, px - 1, px, 1000 + i]);
+    }
+
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('query1.finance.yahoo.com')) {
+        return new Response(JSON.stringify({ chart: { result: null, error: { code: 'Not Found' } } }), {
+          status: 404,
+        });
+      }
+      if (url.includes('api-t1.fyers.in/data/history') && url.includes('NSE%3ALTM-EQ')) {
+        return new Response(JSON.stringify({ s: 'ok', code: 200, message: '', candles }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('LTM', 'NSE');
+      assert.ok(data, 'Fyers fallback should return stock data when Connected');
+      assert.strictEqual(data!.symbol, 'LTM');
+      assert.ok(data!.history && data!.history.length > 0);
+      assert.ok(data!.history!.length <= 22, 'history should be truncated to ~22 for CPR/ATR');
+      assert.strictEqual(data!.ltp, data!.close);
+      assert.ok(typeof data!.sma50Slope === 'number');
+      assert.ok(cached, 'successful Fyers fallback should populate cache');
+    } finally {
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
+      FyersAuthService.clearToken = originalClearToken;
+    }
+  });
+
+  await t.test('getStockData() skips Fyers fallback when not Connected', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    FyersAuthService.getAccessToken = async () => null;
+    global.fetch = async () =>
+      new Response(JSON.stringify({}), { status: 404 });
+
+    try {
+      const data = await MarketService.getStockData('LTM', 'NSE');
+      assert.strictEqual(data, null, 'without Fyers token, Yahoo failure should still return null');
+    } finally {
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
     }
   });
 
