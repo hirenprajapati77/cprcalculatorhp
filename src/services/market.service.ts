@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
+import { FyersAuthService } from './fyers-auth.service';
 
 export interface HistoricalCandle {
   date: string;
@@ -646,6 +647,17 @@ export class MarketService {
 
       } catch (err) {
         console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}:`, err);
+        // Option A: Fyers history only while broker session is Connected (manual daily OAuth).
+        // No auto-login — missing/expired token means same null as before.
+        const fyersFallback = await MarketService.tryFyersHistoryFallback(
+          cleanSymbol,
+          market,
+          sector,
+          marketCap,
+          sma200,
+          cacheKey
+        );
+        if (fyersFallback) return fyersFallback;
         return null;
       }
     }
@@ -720,6 +732,179 @@ export class MarketService {
     }
     await CacheService.set(cacheKey, resultData, 60);
     return resultData;
+  }
+
+  /**
+   * Yahoo→Fyers OHLC fallback (Connected-only).
+   * Uses daily history only; skips 15m/VWAP enrichment. Returns null if not logged in,
+   on auth/symbol errors, or if candle remap fails.
+   */
+  static async tryFyersHistoryFallback(
+    cleanSymbol: string,
+    market: 'NSE' | 'BSE',
+    sector: string,
+    marketCap: number,
+    sma200: number | undefined,
+    cacheKey: string
+  ): Promise<MarketStockData | null> {
+    const token = await FyersAuthService.getAccessToken();
+    if (!token) {
+      console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: not connected`);
+      return null;
+    }
+
+    let appId: string;
+    try {
+      appId = FyersAuthService.getCredentials().appId;
+    } catch (e) {
+      console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: credentials missing`, e);
+      return null;
+    }
+
+    const fyersSymbol =
+      market === 'NSE' ? `NSE:${cleanSymbol}-EQ` : `BSE:${cleanSymbol}-EQ`;
+
+    const todayStr = getISTDateString();
+    const rangeTo = todayStr;
+    const fromDate = new Date();
+    fromDate.setUTCDate(fromDate.getUTCDate() - 200);
+    const rangeFrom = getISTDateString(fromDate);
+
+    const url =
+      `https://api-t1.fyers.in/data/history?` +
+      new URLSearchParams({
+        symbol: fyersSymbol,
+        resolution: 'D',
+        date_format: '1',
+        range_from: rangeFrom,
+        range_to: rangeTo,
+        cont_flag: '1',
+      }).toString();
+
+    try {
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          Authorization: `${appId}:${token}`,
+          Accept: 'application/json',
+        },
+      });
+
+      if (res.status === 401) {
+        console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+        await FyersAuthService.clearToken();
+        return null;
+      }
+
+      const data = (await res.json()) as {
+        s?: string;
+        code?: number;
+        message?: string;
+        candles?: Array<[number, number, number, number, number, number]>;
+      };
+
+      if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
+        console.warn(
+          `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
+        );
+        return null;
+      }
+
+      let history: HistoricalCandle[] = [];
+      for (const candle of data.candles) {
+        if (!Array.isArray(candle) || candle.length < 6) continue;
+        const [epoch, open, high, low, close, volume] = candle;
+        if (
+          [open, high, low, close, volume].some((n) => typeof n !== 'number' || Number.isNaN(n)) ||
+          high <= 0 ||
+          low <= 0 ||
+          close <= 0 ||
+          open <= 0 ||
+          volume < 0 ||
+          high < low ||
+          close > high ||
+          close < low
+        ) {
+          continue;
+        }
+        history.push({
+          date: getISTDateString(new Date(epoch * 1000)),
+          open,
+          high,
+          low,
+          close,
+          volume,
+        });
+      }
+
+      if (history.length === 0) {
+        console.warn(`[LiveFeed] Fyers history empty after validation for ${fyersSymbol}`);
+        return null;
+      }
+
+      const closesForSlopes = history.map((c) => c.close);
+      let sma20Slope = 0;
+      let sma50Slope = 0;
+      if (closesForSlopes.length >= 40) {
+        const sma20 = closesForSlopes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+        const sma20prev = closesForSlopes.slice(-40, -20).reduce((a, b) => a + b, 0) / 20;
+        sma20Slope = sma20 - sma20prev;
+      }
+      if (closesForSlopes.length >= 100) {
+        const sma50 = closesForSlopes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+        const sma50prev = closesForSlopes.slice(-100, -50).reduce((a, b) => a + b, 0) / 50;
+        sma50Slope = sma50 - sma50prev;
+      }
+
+      history = history.slice(-22);
+      const last = history[history.length - 1];
+      const previousClose =
+        last.date === todayStr && history.length >= 2
+          ? history[history.length - 2].close
+          : last.close;
+
+      const volumeBase =
+        last.date === todayStr && history.length > 1 && !isTodayCandleClosed()
+          ? history.slice(0, -1)
+          : history;
+      const avgVolume =
+        volumeBase.length > 0
+          ? volumeBase.reduce((a, c) => a + c.volume, 0) / volumeBase.length
+          : last.volume;
+
+      const typical = (last.high + last.low + last.close) / 3;
+      const resultData: MarketStockData = {
+        symbol: cleanSymbol,
+        market,
+        sector,
+        open: last.open,
+        high: last.high,
+        low: last.low,
+        close: last.close,
+        previousClose,
+        volume: last.volume,
+        avgVolume,
+        marketCap,
+        ltp: last.close,
+        history,
+        vwap: typical,
+        candle15m: null,
+        sma20Slope,
+        sma50Slope,
+      };
+      if (sma200 !== undefined) {
+        resultData.sma200 = sma200;
+      }
+
+      await CacheService.set(cacheKey, resultData, 60);
+      console.log(
+        `[LiveFeed] Fyers fallback OK for ${fyersSymbol} (candles=${data.candles.length}, hist=${history.length})`
+      );
+      return resultData;
+    } catch (err) {
+      console.warn(`[LiveFeed] Fyers fallback exception for ${fyersSymbol}:`, err);
+      return null;
+    }
   }
 
   /**
