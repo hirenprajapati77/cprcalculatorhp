@@ -1,9 +1,12 @@
 /**
  * Focused regression for premium TRADEABLE journal pipeline.
- * Mirrors btst-journal/route.ts selection gates without hitting the DB.
+ * Mirrors btst-journal/route.ts selection via selectTradableOvernightPicks.
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import type { OvernightSignal } from '@prisma/client';
+import { selectTradableOvernightPicks } from '../../services/overnight/overnight-ui-adapter';
+import { BTST_CLOCK } from '../../lib/market-hours';
 
 type FakeSignal = {
   symbol: string;
@@ -12,34 +15,57 @@ type FakeSignal = {
   overnightScore: number | null;
   classification: string;
   qualityBucket: string | null;
+  signalTime?: string;
 };
 
-const LONG_READY = new Set(['STRONG_BTST', 'BTST_READY']);
-const SHORT_READY = new Set(['STRONG_STBT', 'STBT_READY']);
 const MIN_SCORE = 85;
+
+function asOvernight(rows: FakeSignal[]): OvernightSignal[] {
+  return rows.map((r, i) => ({
+    id: String(i),
+    symbol: r.symbol,
+    signalDate: r.signalDate,
+    signalTime: r.signalTime ?? BTST_CLOCK.confirmStart,
+    direction: r.direction,
+    entry: 100,
+    stopLoss: 98,
+    target: 104,
+    overnightScore: r.overnightScore,
+    expectedGap: null,
+    expectedMove: null,
+    confidence: 70,
+    exitStrategy: 'EOD',
+    actualExit: null,
+    actualReturn: null,
+    executed: false,
+    classification: r.classification,
+    freezeTime: null,
+    rejectionReason: null,
+    historyQuality: 100,
+    liquidityQuality: 100,
+    eventRisk: 0,
+    regimeFit: 100,
+    conflictConfidence: 100,
+    qualityModelVersion: 1,
+    qualityBucket: r.qualityBucket,
+    eventRiskReason: null,
+    relativeStrength: 1,
+    slippageModelVersion: null,
+    regimeSnapshot: null,
+    createdAt: new Date(),
+  }));
+}
 
 function pickTradableTops(
   rows: FakeSignal[],
   signalDate: string,
   regimeTrend: 'BULL' | 'BEAR' | 'CHOPPY'
 ) {
-  const base = rows.filter(
-    (r) =>
-      r.signalDate === signalDate &&
-      r.qualityBucket === 'TRADEABLE' &&
-      (r.overnightScore ?? 0) >= MIN_SCORE
+  const today = rows.filter((r) => r.signalDate === signalDate);
+  const { longs: topLongs, shorts: topShortsRaw } = selectTradableOvernightPicks(
+    asOvernight(today),
+    { minScore: MIN_SCORE, take: 2, suppressShort: false }
   );
-
-  const topLongs = base
-    .filter((r) => r.direction === 'LONG' && LONG_READY.has(r.classification))
-    .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
-    .slice(0, 2);
-
-  const topShortsRaw = base
-    .filter((r) => r.direction === 'SHORT' && SHORT_READY.has(r.classification))
-    .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
-    .slice(0, 2);
-
   const topShorts = regimeTrend === 'BULL' ? [] : topShortsRaw;
   return { topLongs, topShorts, topShortsRaw };
 }
@@ -87,5 +113,15 @@ describe('btst-journal premium TRADEABLE pipeline', () => {
     const { topLongs, topShorts } = pickTradableTops(weak, today, 'CHOPPY');
     assert.equal(topLongs.length, 0);
     assert.equal(topShorts.length, 0);
+  });
+
+  it('does not let duplicate signalTime rows for one symbol fill both top-2 slots', () => {
+    const dupes: FakeSignal[] = [
+      { symbol: 'JIOFIN', signalDate: today, direction: 'LONG', overnightScore: 110, classification: 'STRONG_BTST', qualityBucket: 'TRADEABLE', signalTime: '15:10' },
+      { symbol: 'JIOFIN', signalDate: today, direction: 'LONG', overnightScore: 108, classification: 'BTST_READY', qualityBucket: 'TRADEABLE', signalTime: '15:20' },
+      { symbol: 'HDFCBANK', signalDate: today, direction: 'LONG', overnightScore: 95, classification: 'BTST_READY', qualityBucket: 'TRADEABLE', signalTime: '15:10' },
+    ];
+    const { topLongs } = pickTradableTops(dupes, today, 'CHOPPY');
+    assert.deepEqual(topLongs.map((r) => r.symbol), ['JIOFIN', 'HDFCBANK']);
   });
 });
