@@ -155,7 +155,7 @@ export function isMarketOpen(date: Date = new Date()): boolean {
 
 export function isTodayCandleClosed(date: Date = new Date()): boolean {
   const { isTradingDay, totalMinutes } = getISTTime(date);
-  if (!isTradingDay) return false;
+  if (!isTradingDay) return true;
   return totalMinutes >= MARKET_CLOSE_MIN;
 }
 

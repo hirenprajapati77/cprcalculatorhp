@@ -10,7 +10,8 @@ export class MetricsService {
       where: { id: runId }
     });
     const trades = await prisma.trade.findMany({
-      where: { backtestRunId: runId }
+      where: { backtestRunId: runId },
+      orderBy: [{ exitDate: 'asc' }, { entryDate: 'asc' }],
     });
 
     if (trades.length === 0) return null;
