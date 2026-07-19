@@ -291,8 +291,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
+    const snapshotMap = new Map(matchingSnapshots.map((s: MarketSnapshot) => [s.symbol, s]));
     const formattedResults = results.map((r: ScannerResult) => {
-      const snap = matchingSnapshots.find((s: MarketSnapshot) => s.symbol === r.symbol);
+      const snap = snapshotMap.get(r.symbol);
       const cleanSymbol = r.symbol.split(':')[0];
 
       return {
