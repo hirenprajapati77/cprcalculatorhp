@@ -21,6 +21,14 @@ import { SignalQualityService } from './signal-quality.service';
 
 const MIN_HISTORY_FOR_RELIABLE_ATR = 15; // Minimum daily candles for stable ATR computation
 
+/**
+ * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
+ * 15 balances wall-clock speed (~14 rounds for ~211 symbols) against Yahoo
+ * rate-limit risk from a single IP — wide enough to cut sequential latency,
+ * small enough to avoid a 200+ burst.
+ */
+const STOCK_DATA_PREFETCH_CHUNK = 15;
+
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Kolkata',
   year: 'numeric',
@@ -298,11 +306,35 @@ export class OvernightService {
     const bulkEventRisks = await EventCalendarService.getBulkEventRisk(symbols, dateStr);
     const macroEventRisk = await EventCalendarService.getMacroEventRisk(dateStr);
 
+    // Batch-fetch market data (the expensive Yahoo path on cache miss). Mock
+    // overrides still come from mockStocks below; live path uses this map.
+    const stockDataBySymbol = new Map<string, MarketStockData | null>();
+    if (!mockStocks) {
+      for (let i = 0; i < symbols.length; i += STOCK_DATA_PREFETCH_CHUNK) {
+        const chunk = symbols.slice(i, i + STOCK_DATA_PREFETCH_CHUNK);
+        const settled = await Promise.allSettled(
+          chunk.map((symbol) => MarketService.getStockData(symbol))
+        );
+        settled.forEach((result, idx) => {
+          const symbol = chunk[idx];
+          if (result.status === 'fulfilled') {
+            stockDataBySymbol.set(symbol, result.value);
+          } else {
+            console.error(
+              `Error pre-fetching stock data for Overnight scan ${symbol}:`,
+              result.reason
+            );
+            stockDataBySymbol.set(symbol, null);
+          }
+        });
+      }
+    }
+
     for (const stock of universeStocks) {
       try {
         const fullStock = mockStocks
           ? mockStocks.find(s => s.symbol === stock.symbol)
-          : await MarketService.getStockData(stock.symbol);
+          : (stockDataBySymbol.get(stock.symbol) ?? null);
         if (!fullStock) continue;
 
         const history = fullStock.history || [];
