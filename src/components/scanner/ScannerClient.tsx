@@ -1330,6 +1330,12 @@ export default function ScannerClient() {
       }
     } catch (err) {
       if (requestId === activeRequestRef.current) {
+        // Overnight modes must not keep CPR-shaped rows if /api/btst fails —
+        // stale entry/SL/target and null expectedGap would render under BTST columns.
+        if (scannerMode !== 'CPR') {
+          setResults([]);
+          setTotal(0);
+        }
         showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
       }
     } finally {
