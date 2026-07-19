@@ -1,12 +1,12 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { OvernightService } from '@/services/overnight/overnight.service';
+import { isValidCronSecret } from '@/lib/crypto';
 
 export async function POST(req: NextRequest) {
-  const cronSecret = env.CRON_SECRET;
   const authHeader = req.headers.get('x-cron-secret');
 
-  if (!cronSecret || authHeader !== cronSecret) {
+  if (!isValidCronSecret(authHeader)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
