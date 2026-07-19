@@ -1,5 +1,5 @@
 import { getAtrPct } from '@/lib/atr';
-import { getCompletedHistory } from '@/lib/market-hours';
+import { getCompletedHistory, getISTDateString } from '@/lib/market-hours';
 import { MarketStockData } from '../market.service';
 
 export interface ExclusionCheckResult {
@@ -71,6 +71,28 @@ export class EntryManagerService {
   }
 
   /**
+   * Resolve prior session close for day-return / extension checks.
+   * Prefer MarketStockData.previousClose; fall back to history with today-bar awareness
+   * (do not use n-2 when the last bar is already the prior completed session).
+   */
+  static resolvePreviousClose(stock: MarketStockData): number | null {
+    if (stock.previousClose && stock.previousClose > 0) {
+      return stock.previousClose;
+    }
+    const hist = stock.history || [];
+    if (hist.length === 0) return null;
+
+    const todayStr = getISTDateString();
+    const last = hist[hist.length - 1];
+    if (last.date === todayStr) {
+      return hist.length >= 2 ? hist[hist.length - 2].close : null;
+    }
+    // Last bar is a completed prior session (today not appended) — that close is
+    // the correct reference for live LTP day-return.
+    return last.close > 0 ? last.close : null;
+  }
+
+  /**
    * Directional extension / exhaustion gate.
    * Rejects BTST after vertical up days and STBT after vertical down days.
    */
@@ -83,12 +105,7 @@ export class EntryManagerService {
       return { eligible: false, reason: 'Insufficient OHLC for extension check' };
     }
 
-    const prevClose =
-      (stock.previousClose && stock.previousClose > 0)
-        ? stock.previousClose
-        : (stock.history && stock.history.length >= 2
-            ? stock.history[stock.history.length - 2].close
-            : stock.close);
+    const prevClose = EntryManagerService.resolvePreviousClose(stock);
 
     if (!prevClose || prevClose <= 0) {
       return { eligible: true, reason: null }; // cannot evaluate — do not hard-block

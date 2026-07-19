@@ -858,10 +858,12 @@ export class MarketService {
 
       history = history.slice(-22);
       const last = history[history.length - 1];
+      // Prior completed session vs the OHLC bar we return as open/high/low/close.
+      // Always use n-2 when available — if last is not today, last.close === ltp and
+      // using last.close as previousClose collapses day-return to ~0 and disables the
+      // Dixon-class extension gate.
       const previousClose =
-        last.date === todayStr && history.length >= 2
-          ? history[history.length - 2].close
-          : last.close;
+        history.length >= 2 ? history[history.length - 2].close : last.close;
 
       const volumeBase =
         last.date === todayStr && history.length > 1 && !isTodayCandleClosed()

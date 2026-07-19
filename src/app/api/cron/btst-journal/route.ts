@@ -8,6 +8,7 @@ import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
+import { selectTradableOvernightPicks } from '@/services/overnight/overnight-ui-adapter';
 import {
   getISTTime,
   isBtstJournalWindowOpen,
@@ -16,9 +17,6 @@ import {
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
 
-/** Premium journal: only READY+ classifications (not WATCH / IGNORE). */
-const LONG_READY = ['STRONG_BTST', 'BTST_READY'];
-const SHORT_READY = ['STRONG_STBT', 'STBT_READY'];
 /** Aligns with BtstRankingService BTST_READY floor. */
 const MIN_OVERNIGHT_SCORE = 85;
 
@@ -73,31 +71,17 @@ export async function GET(req: NextRequest) {
       overnightEnsured = true;
     }
 
-    const [topLongs, topShortsRaw] = await Promise.all([
-      prisma.overnightSignal.findMany({
-        where: {
-          signalDate,
-          direction: 'LONG',
-          qualityBucket: 'TRADEABLE',
-          classification: { in: LONG_READY },
-          overnightScore: { gte: MIN_OVERNIGHT_SCORE },
-        },
-        orderBy: { overnightScore: 'desc' },
-        take: 2,
-      }),
-      prisma.overnightSignal.findMany({
-        where: {
-          signalDate,
-          direction: 'SHORT',
-          qualityBucket: 'TRADEABLE',
-          classification: { in: SHORT_READY },
-          overnightScore: { gte: MIN_OVERNIGHT_SCORE },
-        },
-        orderBy: { overnightScore: 'desc' },
-        take: 2,
-      }),
-    ]);
-
+    // Load all of today's rows, then select via the shared helper so journal
+    // and alerts apply the same TRADEABLE/READY+/score gates AND distinct-by-symbol
+    // (rescans can insert multiple signalTime rows for one name).
+    const todaySignals = await prisma.overnightSignal.findMany({
+      where: { signalDate },
+      orderBy: { overnightScore: 'desc' },
+    });
+    const { longs: topLongs, shorts: topShortsRaw } = selectTradableOvernightPicks(
+      todaySignals,
+      { minScore: MIN_OVERNIGHT_SCORE, take: 2, suppressShort: false }
+    );
     const topShorts: OvernightSignal[] = suppressStbt ? [] : topShortsRaw;
 
     if (topLongs.length === 0 && topShorts.length === 0) {
