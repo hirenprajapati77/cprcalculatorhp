@@ -4,6 +4,41 @@ import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
 import { getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
 
+/** Matches historical Prisma `activeOnly` filter (READY+ / WATCH classifications). */
+const ACTIVE_CLASSIFICATIONS = [
+  'STRONG_BTST',
+  'BTST_READY',
+  'STRONG_STBT',
+  'STBT_READY',
+  'WATCH',
+] as const;
+
+type OvernightFilterable = {
+  direction?: string;
+  classification?: string;
+};
+
+/**
+ * Read-side filters for today's overnight payload.
+ * Cache always stores the full BOTH-direction set; callers filter on read.
+ */
+function applyOvernightQueryFilters<T extends OvernightFilterable>(
+  signals: T[],
+  direction: string | null,
+  activeOnly: boolean
+): T[] {
+  let filtered = signals;
+  if (direction && direction !== 'BOTH') {
+    filtered = filtered.filter((s) => s.direction === direction);
+  }
+  if (activeOnly) {
+    filtered = filtered.filter((s) =>
+      (ACTIVE_CLASSIFICATIONS as readonly string[]).includes(s.classification ?? '')
+    );
+  }
+  return filtered;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -25,7 +60,7 @@ export async function GET(req: NextRequest) {
 
       interface CachedOvernightData {
         scannedAt: string;
-        results: unknown[];
+        results: OvernightFilterable[];
         insights: unknown;
       }
 
@@ -33,13 +68,14 @@ export async function GET(req: NextRequest) {
       if (state !== 'ACTIVE' && state !== 'DISCOVERING') {
         const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
         if (cached) {
+          const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
           return NextResponse.json({
             success: true,
             windowOpen: false,
             cachedResult: true,
             scannedAt: cached.scannedAt,
             message: `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
-            results: cached.results,
+            results: filtered,
             insights: cached.insights,
             state,
           });
@@ -160,6 +196,7 @@ export async function GET(req: NextRequest) {
       const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
       const scannedAt = `${timeStr} IST, ${dateStr}`;
 
+      // Store full BOTH set (unfiltered) so direction/activeOnly share one cache entry
       const cacheData = {
         scannedAt,
         results: signals,
@@ -168,11 +205,13 @@ export async function GET(req: NextRequest) {
 
       await CacheService.set(OVERNIGHT_KEY, cacheData, 86400);
 
+      const filtered = applyOvernightQueryFilters(signals, direction, activeOnly);
+
       return NextResponse.json({
         success: true,
         windowOpen: true,
         cachedResult: false,
-        results: signals,
+        results: filtered,
         insights,
       });
     }
@@ -188,7 +227,7 @@ export async function GET(req: NextRequest) {
 
     if (activeOnly) {
       whereClause.classification = {
-        in: ['STRONG_BTST', 'BTST_READY', 'STRONG_STBT', 'STBT_READY', 'WATCH']
+        in: [...ACTIVE_CLASSIFICATIONS],
       };
     }
 
