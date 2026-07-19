@@ -191,6 +191,7 @@ export async function GET(req: NextRequest) {
         score:          signal.overnightScore ?? 0,
         confidence:     signal.confidence ?? 0,
         signalSummary,
+        overnightSignalId: signal.id,
         ...v2Fields,
       });
 
@@ -277,6 +278,7 @@ export async function GET(req: NextRequest) {
         score:          signal.overnightScore ?? 0,
         confidence:     signal.confidence ?? 0,
         signalSummary,
+        overnightSignalId: signal.id,
         ...v2Fields,
       });
 

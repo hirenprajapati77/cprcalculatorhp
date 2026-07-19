@@ -1,9 +1,17 @@
 import { z } from 'zod';
 
+/** Treat blank env values as unset so optional URL fields don't fail Zod `.url()`. */
+export function emptyStringToUndefined(value: unknown): unknown {
+  if (typeof value === 'string' && value.trim() === '') return undefined;
+  return value;
+}
+
+const optionalUrl = z.preprocess(emptyStringToUndefined, z.string().url().optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  DATABASE_URL: z.string().url().optional(),
-  REDIS_URL: z.string().url().optional(),
+  DATABASE_URL: optionalUrl,
+  REDIS_URL: optionalUrl,
   REDIS_HOST: z.string().optional(),
   REDIS_PORT: z.string().optional(),
   
@@ -14,14 +22,14 @@ const envSchema = z.object({
   FYERS_APP_ID: z.string().optional(),
   FYERS_SECRET_ID: z.string().optional(),
   FYERS_REDIRECT_URL: z.string().optional(),
-  FYERS_AUTH_PROXY_URL: z.string().url().optional(),
+  FYERS_AUTH_PROXY_URL: optionalUrl,
   
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
   CRON_SECRET: z.string().optional(),
   APP_ACCESS_TOKEN: z.string().optional(),
   
-  APP_BASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_BASE_URL: z.string().url().optional(),
+  APP_BASE_URL: optionalUrl,
+  NEXT_PUBLIC_BASE_URL: optionalUrl,
   NEXT_PUBLIC_ENABLE_DEBUG_PANEL: z.string().optional(),
   
   CACHE_PROVIDER: z.enum(['redis', 'memory', 'auto']).default('auto'),
@@ -58,6 +66,9 @@ const envSchema = z.object({
   NEXT_RUNTIME: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
 });
+
+/** Exported for unit tests — same schema as startup validation. */
+export const envSchemaForTests = envSchema;
 
 // Validate process.env at startup
 const parsedEnv = envSchema.safeParse(process.env);
