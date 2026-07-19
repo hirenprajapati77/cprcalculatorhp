@@ -295,15 +295,101 @@ describe('Overnight Engine Tests', () => {
       
       // Empty history -> should skip
       // 1 candle (today) -> should skip because we need at least 2 distinct candles (yesterday and today)
-      // 1 candle (yesterday/not-today) -> should scan (yesterday candle = history[0], today candle = live ltp)
+      // 1 candle (yesterday/not-today) -> skip: today's daily candle unavailable (trading day)
       await OvernightService.discover('BOTH', date, [stockEmpty, stockOneToday, stockOneNotToday]);
 
       assert.strictEqual(upserted.includes('EMPTYHIST'), false, 'Empty history should be skipped');
       assert.strictEqual(upserted.includes('ONETODAY'), false, '1-candle history (isLastToday) should be skipped');
-      assert.strictEqual(upserted.includes('ONENOTTODAY'), false, '1-candle history (not today) should be skipped due to MIN_HISTORY_FOR_RELIABLE_ATR');
+      assert.strictEqual(upserted.includes('ONENOTTODAY'), false, 'missing today bar on trading day should be skipped');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       env.HISTORICAL_MODE = originalHistMode;
+    }
+  });
+
+  test('discover() skips trading-day symbols when today daily candle is missing (no synthetic tomorrow CPR)', async () => {
+    const makeHistoryEnding = (lastDate: string, len = 15) => {
+      const bars = Array.from({ length: len - 1 }).map((_, i) => ({
+        date: `2026-06-${(i + 10).toString().padStart(2, '0')}`,
+        open: 100, high: 105, low: 95, close: 100, volume: 1_000_000,
+      }));
+      bars.push({
+        date: lastDate,
+        open: 100, high: 120, low: 100, close: 110, volume: 1_000_000,
+      });
+      return bars;
+    };
+
+    const missingToday = {
+      symbol: 'MISSING_TODAY',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 120, low: 100, close: 110,
+      volume: 2_000_000, avgVolume: 1_000_000, marketCap: 10000, ltp: 110.2,
+      history: makeHistoryEnding('2026-07-07'), // scan day is 2026-07-08
+      longScoreOverride: 110,
+      shortScoreOverride: 20,
+    };
+
+    const hasToday = {
+      symbol: 'HAS_TODAY',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100, high: 105, low: 95, close: 100,
+      volume: 2_000_000, avgVolume: 1_000_000, marketCap: 10000, ltp: 100,
+      history: makeHistoryEnding('2026-07-08'),
+      longScoreOverride: 110,
+      shortScoreOverride: 20,
+    };
+
+    const originalUpsert = prisma.overnightSignal.upsert;
+    const originalHistMode = env.HISTORICAL_MODE;
+    const upserted: string[] = [];
+    const warns: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warns.push(args.map(String).join(' '));
+      originalWarn(...args);
+    };
+
+    prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
+      upserted.push(args.create.symbol);
+      return args.create;
+    }) as unknown as typeof originalUpsert;
+    env.HISTORICAL_MODE = 'mock';
+
+    try {
+      // 2026-07-08 is a Wednesday trading day
+      const date = istAt('2026-07-08', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
+      await OvernightService.discover('BOTH', date, [missingToday as any, hasToday as any]);
+
+      assert.strictEqual(
+        upserted.includes('MISSING_TODAY'),
+        false,
+        'missing today bar must not persist OvernightSignal (no synthetic CPR / BTST)'
+      );
+      assert.strictEqual(
+        upserted.includes('HAS_TODAY'),
+        true,
+        'history including today must still produce OvernightSignal'
+      );
+      assert.ok(
+        warns.some((w) =>
+          w.includes('MISSING_TODAY') && w.includes("Today's daily candle unavailable")
+        ),
+        'expected skip log for missing today candle'
+      );
+
+      // Journal path only reads OvernightSignal — no row ⇒ no journal entry for skipped symbol.
+      assert.strictEqual(
+        upserted.filter((s) => s === 'MISSING_TODAY').length,
+        0,
+        'no OvernightSignal ⇒ no journal source row for MISSING_TODAY'
+      );
+    } finally {
+      prisma.overnightSignal.upsert = originalUpsert;
+      env.HISTORICAL_MODE = originalHistMode;
+      console.warn = originalWarn;
     }
   });
 
@@ -457,7 +543,7 @@ describe('Overnight Engine Tests', () => {
     env.HISTORICAL_MODE = 'mock';
 
     try {
-      const date = istAt('2026-08-01', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
+      const date = istAt('2026-07-15', BTST_WINDOWS.CONFIRM_START.hour, BTST_WINDOWS.CONFIRM_START.minute);
       // Do NOT mock evaluateEligibility — this asserts the real hard gate.
       await OvernightService.discover('BOTH', date, [illiquidAvg as any, illiquidRatio as any, liquid as any]);
       assert.strictEqual(upserted.includes('ILLIQ_AVG'), false, 'avgVolume < 100k must be hard-excluded');
@@ -511,9 +597,9 @@ describe('Overnight Engine Tests', () => {
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
+    const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
+    require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
 
     const upserted: any[] = [];
     prisma.overnightSignal.upsert = (async (args: { create: any }) => {
@@ -542,7 +628,7 @@ describe('Overnight Engine Tests', () => {
       prisma.overnightSignal.upsert = originalUpsert;
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
+      require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
     }
   });
 
@@ -603,15 +689,23 @@ describe('Overnight Engine Tests', () => {
   });
 
   test('discover() integrates quality without breaking backward compatibility if regime data is missing', async () => {
-    const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 2000000 }));
-    const mockStock = { symbol: 'REGIME_TEST', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 200, volume: 2000000, avgVolume: 2000000, marketCap: 10000, ltp: 200, history: makeHistory(100), longScoreOverride: 100, shortScoreOverride: 20 };
+    const makeHistory = (len: number) => {
+      const bars = Array.from({ length: len }).map((_, i) => ({
+        date: `2026-07-${(i + 1).toString().padStart(2, '0')}`,
+        open: 100, high: 105, low: 95, close: 100, volume: 2000000,
+      }));
+      // Ensure last bar matches the trading-day scan date (2026-07-15).
+      if (bars.length > 0) bars[bars.length - 1].date = '2026-07-15';
+      return bars;
+    };
+    const mockStock = { symbol: 'REGIME_TEST', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 101, volume: 2_500_000, avgVolume: 2_000_000, marketCap: 10000, ltp: 101, previousClose: 100, history: makeHistory(100), longScoreOverride: 100, shortScoreOverride: 20 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const originalElig = require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
+    const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
+    require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = () => ({ eligible: true, issues: [] });
 
     // Mock RegimeService to return default (error / missing data)
     const originalRegime = RegimeService.getMarketRegime;
@@ -646,7 +740,7 @@ describe('Overnight Engine Tests', () => {
       prisma.overnightSignal.upsert = originalUpsert;
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
+      require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
       RegimeService.getMarketRegime = originalRegime;
       EventCalendarService.getMacroEventRisk = _originalMacroEvent;
       EventCalendarService.getBulkEventRisk = originalBulkEvent;
