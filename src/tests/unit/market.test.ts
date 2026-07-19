@@ -172,6 +172,13 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.ok(data!.history!.length <= 22, 'history should be truncated to ~22 for CPR/ATR');
       assert.strictEqual(data!.ltp, data!.close);
       assert.ok(typeof data!.sma50Slope === 'number');
+      // BUG-3: previousClose must be prior session, not last.close (== ltp)
+      assert.ok(
+        data!.previousClose != null && data!.previousClose !== data!.ltp,
+        'Fyers previousClose must not collapse to ltp (extension gate needs real day-return)'
+      );
+      const hist = data!.history!;
+      assert.strictEqual(data!.previousClose, hist[hist.length - 2].close);
       assert.ok(cached, 'successful Fyers fallback should populate cache');
     } finally {
       (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
