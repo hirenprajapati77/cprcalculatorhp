@@ -73,7 +73,6 @@ describe('Extension / exhaustion gate (DIXON-class days)', () => {
   it('history fallback: when last bar is prior session, previousClose is last.close (not n-2)', () => {
     // previousClose omitted; last hist bar is not "today" — live LTP vs that close.
     const s = stock({
-      previousClose: undefined,
       history: [
         { date: '2026-07-14', open: 90, high: 92, low: 88, close: 90, volume: 500000 },
         { date: '2026-07-15', open: 100, high: 102, low: 98, close: 100, volume: 500000 },
@@ -84,6 +83,7 @@ describe('Extension / exhaustion gate (DIXON-class days)', () => {
       close: 105,
       ltp: 105, // +5% vs last.close=100; would be wrong vs n-2=90 (+16.7%)
     });
+    delete (s as { previousClose?: number }).previousClose;
     const prev = EntryManagerService.resolvePreviousClose(s);
     assert.equal(prev, 100);
     const result = EntryManagerService.evaluateExtension(s, 'LONG');
@@ -94,7 +94,6 @@ describe('Extension / exhaustion gate (DIXON-class days)', () => {
   it('history fallback: when last bar is today, previousClose is n-2', () => {
     const today = getISTDateString();
     const s = stock({
-      previousClose: undefined,
       history: [
         { date: '2026-07-14', open: 90, high: 92, low: 88, close: 90, volume: 500000 },
         { date: '2026-07-15', open: 100, high: 102, low: 98, close: 100, volume: 500000 },
@@ -106,6 +105,7 @@ describe('Extension / exhaustion gate (DIXON-class days)', () => {
       close: 105.7,
       ltp: 105.7,
     });
+    delete (s as { previousClose?: number }).previousClose;
     assert.equal(EntryManagerService.resolvePreviousClose(s), 100);
     const result = EntryManagerService.evaluateExtension(s, 'LONG');
     assert.equal(result.eligible, false);
