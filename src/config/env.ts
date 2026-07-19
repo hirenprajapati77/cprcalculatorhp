@@ -94,4 +94,18 @@ if (
   );
 }
 
+/**
+ * Production requires DATABASE_URL. Fail fast at startup rather than
+ * throwing a cryptic PrismaClientInitializationError on the first DB query.
+ */
+if (
+  parsedEnv.data.NODE_ENV === 'production' &&
+  !isProductionBuildPhase &&
+  !parsedEnv.data.DATABASE_URL
+) {
+  throw new Error(
+    'DATABASE_URL is required in production. Set it in the server .env before starting.'
+  );
+}
+
 export const env = parsedEnv.data;

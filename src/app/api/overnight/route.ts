@@ -125,9 +125,9 @@ export async function GET(req: NextRequest) {
           const enrichmentPromises = eligibleOvernight.map(async (r) => {
             const cleanSym = r.symbol.split(':')[0].trim();
             try {
-              const stockEntry = r.entry || r.ltp;
-              const stockSl = r.stopLoss || (r.direction === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
-              const stockTarget = r.target || (r.direction === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
+              const stockEntry = r.entry ?? r.ltp;
+              const stockSl = r.stopLoss != null ? r.stopLoss : (r.direction === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
+              const stockTarget = r.target != null ? r.target : (r.direction === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
               const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, r.ltp, r.direction as 'LONG' | 'SHORT', stockEntry, stockSl, stockTarget);
               return { symbol: r.symbol, suggestion };
             } catch (e) {
@@ -203,7 +203,7 @@ export async function GET(req: NextRequest) {
         insights,
       };
 
-      await CacheService.set(OVERNIGHT_KEY, cacheData, 86400);
+      await CacheService.set(OVERNIGHT_KEY, cacheData, 28800); // 8h: expires well before next market open
 
       const filtered = applyOvernightQueryFilters(signals, direction, activeOnly);
 

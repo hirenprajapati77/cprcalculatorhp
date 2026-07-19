@@ -767,7 +767,7 @@ export class MarketService {
     const todayStr = getISTDateString();
     const rangeTo = todayStr;
     const fromDate = new Date();
-    fromDate.setUTCDate(fromDate.getUTCDate() - 200);
+    fromDate.setUTCDate(fromDate.getUTCDate() - 250); // ~175 trading days; buffer for holiday clusters
     const rangeFrom = getISTDateString(fromDate);
 
     const url =
