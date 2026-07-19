@@ -354,7 +354,7 @@ export class SignalService {
     else if (priceChangePct > unwindThreshold && volumeRatio < 1.0)   signals.push('SHORT_COVER');
 
     return {
-      signals,
+      signals: Array.from(new Set(signals)),
       insideValue,
       higherValue,
       lowerValue,
