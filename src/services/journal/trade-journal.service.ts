@@ -22,26 +22,20 @@ export class TradeJournalService {
     score: number;
     confidence: number;
     signalSummary: string;
+    /** Exact OvernightSignal selected by discover/journal — required for BTST/STBT metadata. */
+    overnightSignalId?: string;
     // Shadow Mode: BTST v2 parallel scoring
     scoreV2?: number;
     v2Breakdown?: Record<string, unknown>;
   }): Promise<boolean> {
     try {
-      // Find matching OvernightSignal — filter by direction so BTST/STBT
-      // don't inherit the opposite model's entry/target/quality snapshots.
-      const signalDateStr = TradeJournalService.todayISTString();
-      const directionFilter =
-        params.signalType === 'BTST' ? 'LONG'
-        : params.signalType === 'STBT' ? 'SHORT'
-        : undefined;
-      const overnightSignal = await prisma.overnightSignal.findFirst({
-        where: {
-          symbol: params.symbol,
-          signalDate: signalDateStr,
-          ...(directionFilter ? { direction: directionFilter } : {}),
-        },
-        orderBy: { createdAt: 'desc' }
-      });
+      // Link the exact selected OvernightSignal (never "newest by createdAt").
+      // CPR and callers without an id intentionally skip overnight metadata.
+      const overnightSignal = params.overnightSignalId
+        ? await prisma.overnightSignal.findUnique({
+            where: { id: params.overnightSignalId },
+          })
+        : null;
 
       const entryCmp = await TradeJournalService.fetchOptionCmp(
         params.symbol,

@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { isCronSecretExemptApiPath } from '@/lib/api-auth-exemptions';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
@@ -44,10 +45,10 @@ export function middleware(request: NextRequest) {
 
   // 3. Gate /api routes
   if (url.pathname.startsWith('/api/')) {
-    // Exempt public routes
+    // Exempt public routes + cron-secret refresh (auth enforced in-route)
     if (
       url.pathname.startsWith('/api/health') ||
-      url.pathname.startsWith('/api/cron/') ||
+      isCronSecretExemptApiPath(url.pathname) ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
       url.pathname.startsWith('/api/broker/fyers/login') ||
       url.pathname.startsWith('/api/share/')
