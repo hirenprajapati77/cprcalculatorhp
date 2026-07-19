@@ -269,7 +269,7 @@ function CompareContent() {
               IT Leaders
             </Button>
             <Button
-              onClick={() => loadPresetGroup(['TATAMOTORS', 'M&M'])}
+              onClick={() => loadPresetGroup(['TMPV', 'M&M'])}
               size="sm"
               variant="secondary"
               className="h-6 px-2 text-[9px]"
