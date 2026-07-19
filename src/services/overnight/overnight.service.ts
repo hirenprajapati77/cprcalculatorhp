@@ -70,6 +70,7 @@ interface OvernightSignalCalc {
   cls: string;
   sl: number;
   target: number;
+  scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
 }
 
 export interface OvernightIntradayMetrics {
@@ -300,6 +301,10 @@ export class OvernightService {
       ? mockStocks.map(s => ({ symbol: s.symbol })) 
       : MarketService.getUniverse('NSE_FNO');
     const signalsToSave: Prisma.OvernightSignalCreateInput[] = [];
+    const scoreBreakdownBySymbol = new Map<
+      string,
+      import('./btst-ranking.service').AdvancedScoreBreakdown
+    >();
 
     // Pre-fetch async dependencies for the entire universe to prevent N+1 query bottlenecks
     const symbols = universeStocks.map(s => s.symbol);
@@ -420,9 +425,9 @@ export class OvernightService {
         // -- Evaluate LONG --
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
-          const score = mockStock.longScoreOverride !== undefined
-            ? mockStock.longScoreOverride
-            : BtstRankingService.calculateScore({
+          const details = mockStock.longScoreOverride !== undefined
+            ? { score: mockStock.longScoreOverride, breakdown: null as OvernightSignalCalc['scoreBreakdown'] }
+            : BtstRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 tomorrowCprWidth: tomorrowCpr.width,
                 tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
@@ -431,18 +436,19 @@ export class OvernightService {
                 vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
                 hasConfirmationCandles: intraday.hasIntraday
               });
+          const score = details.score;
           const cls = BtstRankingService.getClassification(score);
           const sl = Math.min(fullStock.low, tomorrowCpr.bc);
           const target = fullStock.ltp + Math.max((fullStock.ltp - sl) * 2.5, fullStock.ltp * 0.05);
-          longSig = { score, cls, sl, target };
+          longSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
         }
 
         // -- Evaluate SHORT --
         let shortSig: OvernightSignalCalc | null = null;
         if (direction === 'SHORT' || direction === 'BOTH') {
-          const score = mockStock.shortScoreOverride !== undefined
-            ? mockStock.shortScoreOverride
-            : StbtRankingService.calculateScore({
+          const details = mockStock.shortScoreOverride !== undefined
+            ? { score: mockStock.shortScoreOverride, breakdown: null as OvernightSignalCalc['scoreBreakdown'] }
+            : StbtRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 tomorrowCprWidth: tomorrowCpr.width,
                 tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
@@ -451,10 +457,11 @@ export class OvernightService {
                 vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
                 hasConfirmationCandles: intraday.hasIntraday
               });
+          const score = details.score;
           const cls = StbtRankingService.getClassification(score);
           const sl = Math.max(fullStock.high, tomorrowCpr.tc);
           const target = fullStock.ltp - Math.max((sl - fullStock.ltp) * 2.5, fullStock.ltp * 0.05);
-          shortSig = { score, cls, sl, target };
+          shortSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
         }
 
         // -- Conflict Resolution --
@@ -542,6 +549,9 @@ export class OvernightService {
             relativeStrength: quality.relativeStrength,
             regimeSnapshot: JSON.stringify(regime),
           });
+          if (finalSig.scoreBreakdown) {
+            scoreBreakdownBySymbol.set(stock.symbol, finalSig.scoreBreakdown);
+          }
         }
       } catch (err) {
         console.error(`Error processing Overnight scan for ${stock.symbol}:`, err);
@@ -568,7 +578,10 @@ export class OvernightService {
           update: sig,
           create: sig
         });
-        savedSignals.push(saved);
+        const breakdown = scoreBreakdownBySymbol.get(sig.symbol);
+        savedSignals.push(
+          breakdown ? { ...saved, scoreBreakdown: breakdown } : saved
+        );
       } catch (err) {
         console.error(`Error saving overnight signal for ${sig.symbol}:`, err);
       }
