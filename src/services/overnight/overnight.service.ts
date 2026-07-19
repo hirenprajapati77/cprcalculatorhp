@@ -287,7 +287,7 @@ export class OvernightService {
     direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', 
     dateOverride?: Date,
     mockStocks?: MockOvernightStock[]
-  ): Promise<OvernightSignal[]> {
+  ): Promise<(OvernightSignal & { scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null })[]> {
 
     const currentTime = dateOverride || new Date();
     
@@ -426,7 +426,7 @@ export class OvernightService {
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
           const details = mockStock.longScoreOverride !== undefined
-            ? { score: mockStock.longScoreOverride, breakdown: null as OvernightSignalCalc['scoreBreakdown'] }
+            ? { score: mockStock.longScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : BtstRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 tomorrowCprWidth: tomorrowCpr.width,
@@ -447,7 +447,7 @@ export class OvernightService {
         let shortSig: OvernightSignalCalc | null = null;
         if (direction === 'SHORT' || direction === 'BOTH') {
           const details = mockStock.shortScoreOverride !== undefined
-            ? { score: mockStock.shortScoreOverride, breakdown: null as OvernightSignalCalc['scoreBreakdown'] }
+            ? { score: mockStock.shortScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : StbtRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 tomorrowCprWidth: tomorrowCpr.width,
@@ -564,7 +564,9 @@ export class OvernightService {
       return (b.overnightScore || 0) - (a.overnightScore || 0);
     });
 
-    const savedSignals = [];
+    const savedSignals: (OvernightSignal & {
+      scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
+    })[] = [];
     for (const sig of signalsToSave) {
       try {
         const saved = await prisma.overnightSignal.upsert({
