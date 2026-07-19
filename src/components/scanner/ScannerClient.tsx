@@ -178,7 +178,6 @@ const BtstStateBanner = () => {
 
 interface ScannedStock {
   distPivot?: number;
-  cprQuality?: "A+" | "A" | "B" | "C";
   id: string;
   direction?: 'LONG' | 'SHORT';
   symbol: string;
@@ -822,7 +821,6 @@ export default function ScannerClient() {
 
   // Advanced CPR Filters
   const [advancedCprCollapsed, setAdvancedCprCollapsed] = useState<boolean>(true);
-  const [cprQualityFilter, setCprQualityFilter] = useState<string>('ALL'); // ALL, A+, A, B, C
   const [cprRelationshipFilter, setCprRelationshipFilter] = useState<string>('ALL'); // ALL, HIGHER_VALUE, LOWER_VALUE, INSIDE_VALUE, OUTSIDE_VALUE, OVERLAPPING
   const [virginCprOnly, setVirginCprOnly] = useState<boolean>(false);
   const [narrowCprOnly, setNarrowCprOnly] = useState<boolean>(false);
@@ -1268,7 +1266,6 @@ export default function ScannerClient() {
         ...(maxScore && { maxScore }),
         ...(minWidth && { minWidth }),
         ...(maxWidth && { maxWidth }),
-        ...(cprQualityFilter !== 'ALL' && { cprQuality: cprQualityFilter }),
         ...(cprRelationshipFilter !== 'ALL' && { cprRelationship: cprRelationshipFilter }),
         ...(virginCprOnly && { virginCpr: 'true' }),
         ...(narrowCprOnly && { narrowCpr: 'true' }),
@@ -1343,7 +1340,7 @@ export default function ScannerClient() {
         setIsLoading(false);
       }
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprQualityFilter, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {
@@ -2498,21 +2495,6 @@ export default function ScannerClient() {
                   
                   {!advancedCprCollapsed && (
                     <div className="p-3 bg-bg-secondary/10 grid grid-cols-2 md:grid-cols-4 gap-3 border-t border-border-primary/50">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-text-tertiary uppercase font-semibold">CPR Quality</label>
-                        <select 
-                          className="w-full bg-bg-tertiary border border-border-primary rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-brand-primary"
-                          value={cprQualityFilter}
-                          onChange={(e) => setCprQualityFilter(e.target.value)}
-                        >
-                          <option value="ALL">All Grades</option>
-                          <option value="A+">A+ Grade</option>
-                          <option value="A">A Grade</option>
-                          <option value="B">B Grade</option>
-                          <option value="C">C Grade</option>
-                        </select>
-                      </div>
-                      
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] text-text-tertiary uppercase font-semibold">Value Relationship</label>
                         <select 
