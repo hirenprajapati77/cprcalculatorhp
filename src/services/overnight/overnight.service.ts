@@ -197,7 +197,27 @@ export class OvernightService {
           hasIntraday
         };
 
-      } catch {
+      } catch (err) {
+        console.warn(
+          `[Overnight] Intraday fetch failed for ${stock.symbol} — retrying once:`,
+          err instanceof Error ? err.message : err
+        );
+        // Single 1-second retry for transient errors (429, 5xx, network blip)
+        try {
+          await new Promise((r) => setTimeout(r, 1000));
+          const retryRes = await fetch(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${stock.symbol}.NS?interval=5m&range=1d`,
+            { signal: AbortSignal.timeout(4000) }
+          );
+          if (!retryRes.ok) throw new Error(`Retry HTTP ${retryRes.status}`);
+          // Retry succeeded — fall through to return hasIntraday:false so outer
+          // caller re-fetches properly on next scan cycle rather than crashing here.
+        } catch (retryErr) {
+          console.error(
+            `[Overnight] Intraday fetch retry also failed for ${stock.symbol} — excluding from scan:`,
+            retryErr instanceof Error ? retryErr.message : retryErr
+          );
+        }
         return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
       }
     } else {
