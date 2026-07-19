@@ -238,7 +238,12 @@ export async function GET(req: NextRequest) {
       ]
     });
 
-    return NextResponse.json(signals);
+    return NextResponse.json({
+      success: true,
+      windowOpen: false,
+      cachedResult: false,
+      results: signals,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });

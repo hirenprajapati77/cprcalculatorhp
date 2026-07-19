@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       dateOverride = new Date(mockTime);
     }
 
-    const signals = await OvernightService.discover('LONG', dateOverride);
+    const signals = await OvernightService.discover('BOTH', dateOverride);
     return NextResponse.json({ success: true, count: signals.length, signals });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
