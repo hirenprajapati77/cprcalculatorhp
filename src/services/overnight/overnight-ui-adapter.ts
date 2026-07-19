@@ -36,7 +36,11 @@ function computeRr(entry: number, sl: number, target: number): string {
 }
 
 /** Map a persisted OvernightSignal into the legacy BTST UI shape. */
-export function overnightSignalToBtstUi(signal: OvernightSignal): OvernightUiResult {
+export function overnightSignalToBtstUi(
+  signal: OvernightSignal & {
+    scoreBreakdown?: BtstScoreResultEnriched['scoreBreakdown'];
+  }
+): OvernightUiResult {
   const score = signal.overnightScore ?? 0;
   const entry = signal.entry ?? 0;
   const sl = signal.stopLoss ?? 0;
@@ -67,6 +71,7 @@ export function overnightSignalToBtstUi(signal: OvernightSignal): OvernightUiRes
     qualityBucket: signal.qualityBucket ?? null,
     overnightScore: score,
     engine: 'advanced',
+    ...(signal.scoreBreakdown ? { scoreBreakdown: signal.scoreBreakdown } : {}),
   };
 }
 
