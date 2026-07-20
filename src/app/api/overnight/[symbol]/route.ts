@@ -24,9 +24,17 @@ export async function GET(
     const activeSignal = history.length > 0 ? history[0] : null;
 
     const stock = await MarketService.getStockData(symbol);
-    let risk = null;
+    let risk: Omit<
+      ReturnType<typeof OvernightRiskService.calculateOvernightRisk>,
+      'indexCorrelationEstimate'
+    > | null = null;
     if (stock) {
-      risk = OvernightRiskService.calculateOvernightRisk(stock);
+      // indexCorrelationEstimate is a placeholder (always null until real NIFTY-covariance
+      // data is wired in) and is explicitly not meant to reach clients — see the comment on
+      // OvernightRiskMetrics in overnight-risk.service.ts.
+      const { indexCorrelationEstimate: _unused, ...publicRisk } =
+        OvernightRiskService.calculateOvernightRisk(stock);
+      risk = publicRisk;
     }
 
     return NextResponse.json({
