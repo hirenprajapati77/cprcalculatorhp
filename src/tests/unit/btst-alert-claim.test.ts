@@ -24,10 +24,10 @@ async function withDiscoveryClock<T>(fn: () => Promise<T>): Promise<T> {
   const RealDate = globalThis.Date;
   class MockDate extends RealDate {
     constructor(...args: ConstructorParameters<typeof Date>) {
-      if (args.length === 0) {
-        super(DISCOVERY_INSTANT.getTime());
-      } else {
+      if (args.length) {
         super(...args);
+      } else {
+        super(DISCOVERY_INSTANT.getTime());
       }
     }
     static now() {
@@ -88,8 +88,8 @@ function mockBtstRouteDeps(handlers: {
 
   RegimeService.getMarketRegime = (async () => ({
     trend: 'BULL',
-    vix: 14,
-    breadth: 0.55,
+    volatility: 'LOW',
+    score: 70,
   })) as typeof RegimeService.getMarketRegime;
 
   OvernightService.discover = (async () => []) as typeof OvernightService.discover;
