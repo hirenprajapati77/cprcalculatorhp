@@ -1875,10 +1875,15 @@ export default function ScannerClient() {
               Automated Discovery Engine V3
             </span>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text-primary uppercase">
-              CPR Opportunity Scanner
+              {scannerMode === 'BTST' ? 'BTST Discovery Engine' : 
+               scannerMode === 'STBT' ? 'STBT Discovery Engine' :
+               scannerMode === 'OVERNIGHT' ? 'Overnight Meta Scanner' :
+               'CPR Opportunity Scanner'}
             </h1>
             <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
-              Auto-scans indices, evaluates 11 critical CPR rules, and ranks targets dynamically using dynamic filters, heatmap matrixes, and V3 scoring calibrations.
+              {isOvernightMode(scannerMode)
+                ? 'Auto-scans indices, evaluates 6 critical price-action rules for overnight momentum, and ranks targets dynamically using V3 scoring calibrations.'
+                : 'Auto-scans indices, evaluates 11 critical CPR rules, and ranks targets dynamically using dynamic filters, heatmap matrixes, and V3 scoring calibrations.'}
             </p>
           </div>
           {isDegraded && (
