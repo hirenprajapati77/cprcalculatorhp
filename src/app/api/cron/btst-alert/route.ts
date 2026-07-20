@@ -4,6 +4,8 @@ import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
+import { MarketService } from '@/services/market.service';
+import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import {
   overnightSignalToBtstUi,
   selectTradableOvernightPicks,
@@ -52,8 +54,27 @@ export async function GET(req: NextRequest) {
       suppressShort: suppressStbt,
     });
 
+    /** Re-check extension gate at alert time (stock may have extended since discover). */
+    const filterExtended = async (signals: typeof longs, direction: 'LONG' | 'SHORT') => {
+      const out: typeof longs = [];
+      for (const sig of signals) {
+        const stockData = await MarketService.getStockData(sig.symbol);
+        if (!stockData) {
+          out.push(sig);
+          continue;
+        }
+        const ext = EntryManagerService.evaluateExtension(stockData, direction);
+        if (ext.eligible) out.push(sig);
+        else console.warn(`[BtstAlert] ${sig.symbol} ${direction} skipped: ${ext.reason}`);
+      }
+      return out;
+    };
+
+    const filteredLongs = await filterExtended(longs, 'LONG');
+    const filteredShorts = await filterExtended(shorts, 'SHORT');
+
     const enrichedLongs = await Promise.all(
-      longs.map(async (sig) => {
+      filteredLongs.map(async (sig) => {
         const r = overnightSignalToBtstUi(sig);
         const suggestion = await OptionSuggestionService.suggestOptionForBtst(
           r.symbol,
@@ -68,7 +89,7 @@ export async function GET(req: NextRequest) {
     );
 
     const enrichedShorts = await Promise.all(
-      shorts.map(async (sig) => {
+      filteredShorts.map(async (sig) => {
         const r = overnightSignalToBtstUi(sig);
         const suggestion = await OptionSuggestionService.suggestOptionForBtst(
           r.symbol,

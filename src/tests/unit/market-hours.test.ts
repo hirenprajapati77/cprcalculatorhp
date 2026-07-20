@@ -10,6 +10,8 @@ import {
   isBtstDiscoveryOpen,
   isBtstConfirmOpen,
   isBtstJournalWindowOpen,
+  isInClosingLiquidityWindow,
+  BTST_WINDOW_MINUTES,
 } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
@@ -80,7 +82,8 @@ describe('Market Hours Utilities', () => {
     it('maps discovery / confirm / freeze / journal phases', () => {
       assert.strictEqual(getBtstWindowState(at(15, 9)), 'FROZEN');
       assert.strictEqual(getBtstWindowState(at(15, 10)), 'DISCOVERING');
-      assert.strictEqual(getBtstWindowState(at(15, 19)), 'DISCOVERING');
+      assert.strictEqual(getBtstWindowState(at(15, 14)), 'DISCOVERING');
+      assert.strictEqual(getBtstWindowState(at(15, 15)), 'ACTIVE');
       assert.strictEqual(getBtstWindowState(at(15, 20)), 'ACTIVE');
       assert.strictEqual(getBtstWindowState(at(15, 24)), 'ACTIVE');
       assert.strictEqual(getBtstWindowState(at(15, 25)), 'FROZEN');
@@ -89,7 +92,8 @@ describe('Market Hours Utilities', () => {
       assert.strictEqual(isBtstDiscoveryOpen(at(15, 24)), true);
       assert.strictEqual(isBtstDiscoveryOpen(at(15, 25)), false);
 
-      assert.strictEqual(isBtstConfirmOpen(at(15, 15)), false);
+      assert.strictEqual(isBtstConfirmOpen(at(15, 14)), false);
+      assert.strictEqual(isBtstConfirmOpen(at(15, 15)), true);
       assert.strictEqual(isBtstConfirmOpen(at(15, 20)), true);
       assert.strictEqual(isBtstConfirmOpen(at(15, 25)), false);
 
@@ -97,6 +101,13 @@ describe('Market Hours Utilities', () => {
       assert.strictEqual(isBtstJournalWindowOpen(at(15, 25)), true);
       assert.strictEqual(isBtstJournalWindowOpen(at(15, 30)), true);
       assert.strictEqual(isBtstJournalWindowOpen(at(15, 31)), false);
+    });
+
+    it('identifies the 15:15–15:30 EOD liquidity window', () => {
+      assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.CLOSING_WINDOW_START), true);
+      assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.MARKET_CLOSE - 5), true);
+      assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.CLOSING_WINDOW_START - 5), false);
+      assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.MARKET_CLOSE), false);
     });
   });
 });

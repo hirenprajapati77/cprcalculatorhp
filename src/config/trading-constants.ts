@@ -49,8 +49,10 @@ export const MARKET_SESSION = {
 export const BTST_WINDOWS = {
   /** Live discovery may run (UI + Advanced scan gate). */
   DISCOVERY_START: { hour: 15, minute: 10 },
-  /** Confirmation / entry slice (ranking Rule 5 + Telegram primary). */
-  CONFIRM_START: { hour: 15, minute: 20 },
+  /** EOD liquidity window start — Rule 5 uses highs/lows from [CLOSING_WINDOW_START, MARKET_CLOSE]. */
+  CLOSING_WINDOW_START: { hour: 15, minute: 15 },
+  /** Confirmation / entry slice (ranking Rule 5 + journal primary). Aligned with closing window. */
+  CONFIRM_START: { hour: 15, minute: 15 },
   /** Exclusive end of discovery + confirm (freeze). */
   DISCOVERY_END_EXCLUSIVE: { hour: 15, minute: 25 },
   /** Journal cron after freeze, through market close (inclusive end). */

@@ -99,6 +99,10 @@ const DISCOVERY_START_MIN = toTotalMinutes(
   BTST_WINDOWS.DISCOVERY_START.hour,
   BTST_WINDOWS.DISCOVERY_START.minute
 );
+const CLOSING_WINDOW_START_MIN = toTotalMinutes(
+  BTST_WINDOWS.CLOSING_WINDOW_START.hour,
+  BTST_WINDOWS.CLOSING_WINDOW_START.minute
+);
 const CONFIRM_START_MIN = toTotalMinutes(
   BTST_WINDOWS.CONFIRM_START.hour,
   BTST_WINDOWS.CONFIRM_START.minute
@@ -121,11 +125,27 @@ export const BTST_WINDOW_MINUTES = {
   MARKET_OPEN: MARKET_OPEN_MIN,
   MARKET_CLOSE: MARKET_CLOSE_MIN,
   DISCOVERY_START: DISCOVERY_START_MIN,
+  CLOSING_WINDOW_START: CLOSING_WINDOW_START_MIN,
   CONFIRM_START: CONFIRM_START_MIN,
   DISCOVERY_END: DISCOVERY_END_MIN,
   JOURNAL_START: JOURNAL_START_MIN,
   JOURNAL_END: JOURNAL_END_MIN,
 } as const;
+
+/**
+ * True when a 5m bar's IST open minute-of-day falls in [15:15, 15:30) — the
+ * canonical EOD liquidity window for BTST/STBT Rule 5.
+ */
+export function isInClosingLiquidityWindow(barOpenMinuteOfDay: number): boolean {
+  return barOpenMinuteOfDay >= CLOSING_WINDOW_START_MIN && barOpenMinuteOfDay < MARKET_CLOSE_MIN;
+}
+
+/** IST minute-of-day for a Unix timestamp (seconds). */
+export function istMinuteOfDayFromUnixSec(unixSec: number): number {
+  const d = new Date(unixSec * 1000);
+  const parts = getISTTime(d);
+  return parts.totalMinutes;
+}
 
 /** Preformatted HH:MM labels for UI/cron messages (derived — no clock literals here). */
 export const BTST_CLOCK = {

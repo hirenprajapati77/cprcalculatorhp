@@ -1,7 +1,8 @@
 export interface BtstScoringInputs {
   volume: number;
   avgVolume: number;
-  tomorrowCprWidth: number;
+  /** True when tomorrow CPR is NARROW per classifyCprWidth (single source of truth). */
+  tomorrowCprNarrow: boolean;
   tomorrowBc: number;
   tomorrowTc: number;   // needed for aligned higherValue condition
   todayBc: number;      // needed for aligned higherValue condition
@@ -61,8 +62,8 @@ export class BtstRankingService {
       breakdown.vdu = 25;
     }
 
-    // Rule 2: CPR Narrow (Tomorrow Width < 0.35%)
-    if (inputs.tomorrowCprWidth < 0.35) {
+    // Rule 2: CPR Narrow — uses calculateCPR → classifyCprWidth (ATR-aware)
+    if (inputs.tomorrowCprNarrow) {
       breakdown.cprNarrow = 30;
     }
 
@@ -77,7 +78,7 @@ export class BtstRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: 3:20-3:25 Confirmation (Price > Last 15m High)
+    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window
     if (inputs.close > inputs.last15mHigh) {
       breakdown.liquidity = 20;
     }

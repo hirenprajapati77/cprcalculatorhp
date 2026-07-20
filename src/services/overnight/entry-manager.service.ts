@@ -1,5 +1,6 @@
 import { getAtrPct } from '@/lib/atr';
 import { getCompletedHistory, getISTDateString } from '@/lib/market-hours';
+import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import { MarketStockData } from '../market.service';
 
 export interface ExclusionCheckResult {
@@ -56,9 +57,9 @@ export class EntryManagerService {
       return { eligible: false, reason: `volume ${volume} < 100000` };
     }
 
-    if (volumeRatio < 1.2) {
-      console.log(`[EligibilityGate] ${stock.symbol} rejected: volumeRatio ${volumeRatio.toFixed(2)} < 1.2`);
-      return { eligible: false, reason: `volumeRatio ${volumeRatio.toFixed(2)} < 1.2` };
+    if (volumeRatio < VOLUME_THRESHOLDS.BREAKOUT_RATIO) {
+      console.log(`[EligibilityGate] ${stock.symbol} rejected: volumeRatio ${volumeRatio.toFixed(2)} < ${VOLUME_THRESHOLDS.BREAKOUT_RATIO} (VDU hard gate)`);
+      return { eligible: false, reason: `volumeRatio ${volumeRatio.toFixed(2)} < ${VOLUME_THRESHOLDS.BREAKOUT_RATIO}` };
     }
 
     const intraVol = intradayVolume || 0;
