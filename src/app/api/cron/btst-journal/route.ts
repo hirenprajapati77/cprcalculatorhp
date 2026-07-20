@@ -61,32 +61,24 @@ export async function GET(req: NextRequest) {
     const suppressStbt = regime.trend === 'BULL';
 
     let overnightEnsured = false;
-    const anyToday = await prisma.overnightSignal.count({ where: { signalDate } });
-    if (anyToday === 0) {
-      // Same OvernightSignal pipeline — not the disconnected simple engine.
-      console.warn(
-        `[BtstJournal] No OvernightSignal for ${signalDate}; running OvernightService.discover() to populate.`
-      );
-      await OvernightService.discover('BOTH');
-      overnightEnsured = true;
-    }
+    // Always refresh at journal time so picks reflect the latest 15:25+ scan (not a stale 15:10 row).
+    console.log(`[BtstJournal] Refreshing OvernightSignal for ${signalDate} before journal selection.`);
+    await OvernightService.discover('BOTH');
+    overnightEnsured = true;
 
-    // Load all of today's rows, then select via the shared helper so journal
-    // and alerts apply the same TRADEABLE/READY+/score gates AND distinct-by-symbol
-    // (rescans can insert multiple signalTime rows for one name).
+    // Prefer latest signalTime per symbol, then highest score.
     const todaySignals = await prisma.overnightSignal.findMany({
       where: { signalDate },
-      orderBy: { overnightScore: 'desc' },
+      orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
     });
-    const { longs: topLongs, shorts: topShortsRaw } = selectTradableOvernightPicks(
+    const { longs: topLongs, shorts: topShorts } = selectTradableOvernightPicks(
       todaySignals,
-      { minScore: MIN_OVERNIGHT_SCORE, take: 2, suppressShort: false }
+      { minScore: MIN_OVERNIGHT_SCORE, take: 2, suppressShort: suppressStbt }
     );
-    const topShorts: OvernightSignal[] = suppressStbt ? [] : topShortsRaw;
 
     if (topLongs.length === 0 && topShorts.length === 0) {
-      const reason = suppressStbt && topShortsRaw.length > 0 && topLongs.length === 0
-        ? 'no_tradable_longs_stbt_suppressed_bull_regime'
+      const reason = suppressStbt
+        ? 'no_tradable_setups_stbt_suppressed_bull_regime'
         : 'no_tradable_setups';
       console.warn(
         `[BtstJournal] ${reason} for ${signalDate} (regime=${regime.trend}/${regime.volatility}, ensuredScan=${overnightEnsured})`
@@ -101,9 +93,6 @@ export async function GET(req: NextRequest) {
           `No TRADEABLE READY+ OvernightSignal picks for ${signalDate}. ` +
           (suppressStbt ? 'STBT suppressed (BULL regime). ' : '') +
           `Refusing weak/WATCH/UNKNOWN fills.`,
-        candidatesSkipped: {
-          shortsSuppressedByRegime: suppressStbt ? topShortsRaw.map((s) => s.symbol) : [],
-        },
         logged: [],
         skipped: [],
       }, { status: 200 });
@@ -307,13 +296,6 @@ export async function GET(req: NextRequest) {
           qualityBucket: s.qualityBucket,
           classification: s.classification,
         })),
-        shortsSuppressedByRegime: suppressStbt
-          ? topShortsRaw.map((s) => ({
-              symbol: s.symbol,
-              overnightScore: s.overnightScore,
-              qualityBucket: s.qualityBucket,
-            }))
-          : [],
       },
       logged,
       skipped,

@@ -33,16 +33,16 @@ describe('EntryManagerService hard liquidity gate (Advanced discover path)', () 
     assert.match(result.reason || '', /avgVolume/);
   });
 
-  it('rejects volume-ratio below 1.2 (hard exclude, not LOW_QUALITY flag)', () => {
-    // volume / avgVolume = 110000 / 100000 = 1.1 < 1.2
-    const stock = liquidBase({ avgVolume: 100_000, volume: 110_000 });
+  it('rejects volume-ratio below 1.5 VDU hard gate', () => {
+    // volume / avgVolume = 140000 / 100000 = 1.4 < 1.5
+    const stock = liquidBase({ avgVolume: 100_000, volume: 140_000 });
     const result = EntryManagerService.evaluateEligibility(stock, 100, 10_000, true);
     assert.equal(result.eligible, false);
     assert.match(result.reason || '', /volumeRatio/);
   });
 
-  it('allows stocks that clear avgVolume 100k and volume-ratio 1.2', () => {
-    const stock = liquidBase({ avgVolume: 100_000, volume: 120_000 });
+  it('allows stocks that clear avgVolume 100k and volume-ratio 1.5 (VDU)', () => {
+    const stock = liquidBase({ avgVolume: 100_000, volume: 150_000 });
     const result = EntryManagerService.evaluateEligibility(stock, 100, 10_000, true);
     assert.equal(result.eligible, true);
   });

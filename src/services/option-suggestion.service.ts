@@ -225,11 +225,12 @@ export class OptionSuggestionService {
       return { error: 'LOT_SIZE_UNAVAILABLE' };
     }
 
-    // 3. Find the target expiry (next valid monthly expiry)
+    // 3. Find the nearest valid expiry after today (weekly or monthly — closest date wins)
     let targetExpiryStr = '';
     if (chainRes.expiryData && chainRes.expiryData.length > 0) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      let nearestExpiry: Date | null = null;
       for (const exObj of chainRes.expiryData) {
         const exStr = typeof exObj === 'string' ? exObj : ((exObj as {date?: string, expiryDate?: string, expiry?: string}).date || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiryDate || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiry);
         if (!exStr) continue;
@@ -245,13 +246,17 @@ export class OptionSuggestionService {
         if (parsedDate && !isNaN(parsedDate.getTime())) {
           parsedDate.setHours(0, 0, 0, 0);
           if (parsedDate.getTime() > today.getTime()) {
-            const yy = parsedDate.getFullYear().toString().slice(2);
-            const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-            const mmm = months[parsedDate.getMonth()];
-            targetExpiryStr = `${yy}${mmm}`;
-            break;
+            if (!nearestExpiry || parsedDate.getTime() < nearestExpiry.getTime()) {
+              nearestExpiry = parsedDate;
+            }
           }
         }
+      }
+      if (nearestExpiry) {
+        const yy = nearestExpiry.getFullYear().toString().slice(2);
+        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+        const mmm = months[nearestExpiry.getMonth()];
+        targetExpiryStr = `${yy}${mmm}`;
       }
     }
 

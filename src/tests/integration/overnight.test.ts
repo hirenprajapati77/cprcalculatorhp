@@ -25,7 +25,7 @@ describe('Overnight Engine Tests', () => {
     const mockStock = {
       volume: 1200000,
       avgVolume: 800000,
-      tomorrowCprWidth: 0.2,
+      tomorrowCprNarrow: true,
       tomorrowBc: 101,
       tomorrowTc: 101.5,  // added: needed for aligned higherValue check
       todayBc: 99.5,      // added: needed for aligned higherValue check
@@ -48,7 +48,7 @@ describe('Overnight Engine Tests', () => {
     const mockStock = {
       volume: 1200000,
       avgVolume: 800000,
-      tomorrowCprWidth: 0.2,
+      tomorrowCprNarrow: true,
       tomorrowTc: 99,
       tomorrowBc: 98.5,   // added: needed for aligned lowerValue check
       todayBc: 100,
@@ -71,7 +71,7 @@ describe('Overnight Engine Tests', () => {
     const mockStock = {
       volume: 1200000,
       avgVolume: 800000,
-      tomorrowCprWidth: 0.2,
+      tomorrowCprNarrow: true,
       tomorrowTc: 99,
       tomorrowBc: 96,
       todayBc: 97,      // todayBc is 97
@@ -95,7 +95,7 @@ describe('Overnight Engine Tests', () => {
     const baseStock = {
       volume: 1300000, // > 1.5 * 800000 (Rule 1: VDU +25)
       avgVolume: 800000,
-      tomorrowCprWidth: 0.2, // < 0.35 (Rule 3: NarrowCPR +30)
+      tomorrowCprNarrow: true, // < 0.35 (Rule 3: NarrowCPR +30)
       tomorrowTc: 99,
       tomorrowBc: 96,
       todayBc: 97, 
@@ -159,8 +159,8 @@ describe('Overnight Engine Tests', () => {
       high: 110,
       low: 90,
       close: 105,
-      volume: 1000000,
-      avgVolume: 800000,
+      volume: 1_200_000,
+      avgVolume: 800_000,
       marketCap: 10000,
       ltp: 105,
       history: [
@@ -522,13 +522,13 @@ describe('Overnight Engine Tests', () => {
     };
     const illiquidRatio = {
       symbol: 'ILLIQ_RATIO', market: 'NSE' as const, sector: 'IT',
-      open: 100, high: 105, low: 95, close: 100, volume: 110000, avgVolume: 100000,
+      open: 100, high: 105, low: 95, close: 100, volume: 140_000, avgVolume: 100_000,
       marketCap: 10000, ltp: 100, history: makeHistory(15),
       longScoreOverride: 100, shortScoreOverride: 20,
     };
     const liquid = {
       symbol: 'LIQUID_OK', market: 'NSE' as const, sector: 'IT',
-      open: 100, high: 105, low: 95, close: 100, volume: 200000, avgVolume: 100000,
+      open: 100, high: 105, low: 95, close: 100, volume: 150_000, avgVolume: 100_000,
       marketCap: 10000, ltp: 100, history: makeHistory(15),
       longScoreOverride: 100, shortScoreOverride: 20,
     };
@@ -547,7 +547,7 @@ describe('Overnight Engine Tests', () => {
       // Do NOT mock evaluateEligibility — this asserts the real hard gate.
       await OvernightService.discover('BOTH', date, [illiquidAvg as any, illiquidRatio as any, liquid as any]);
       assert.strictEqual(upserted.includes('ILLIQ_AVG'), false, 'avgVolume < 100k must be hard-excluded');
-      assert.strictEqual(upserted.includes('ILLIQ_RATIO'), false, 'volumeRatio < 1.2 must be hard-excluded');
+      assert.strictEqual(upserted.includes('ILLIQ_RATIO'), false, 'volumeRatio < 1.5 must be hard-excluded');
       assert.strictEqual(upserted.includes('LIQUID_OK'), true, 'liquid stock should still produce a signal');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
@@ -558,8 +558,8 @@ describe('Overnight Engine Tests', () => {
   test('discover() skips stocks with < 15 daily candles (MIN_HISTORY_FOR_RELIABLE_ATR)', async () => {
     const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
     
-    const stock14 = { symbol: 'STOCK14', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(14), longScoreOverride: 80, shortScoreOverride: 50 };
-    const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15), longScoreOverride: 80, shortScoreOverride: 50 };
+    const stock14 = { symbol: 'STOCK14', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1_200_000, avgVolume: 800_000, marketCap: 10000, ltp: 100, history: makeHistory(14), longScoreOverride: 80, shortScoreOverride: 50 };
+    const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1_200_000, avgVolume: 800_000, marketCap: 10000, ltp: 100, history: makeHistory(15), longScoreOverride: 80, shortScoreOverride: 50 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
     const originalHistMode = env.HISTORICAL_MODE;
@@ -585,7 +585,7 @@ describe('Overnight Engine Tests', () => {
 
   test('discover() handles NEUTRAL_CONFLICT boundary (diff 9, 10, 11) and records conflict properly', async () => {
     const makeHistory = (len: number) => Array.from({ length: len }).map((_, i) => ({ date: `2026-07-${(i+1).toString().padStart(2, '0')}`, open: 100, high: 105, low: 95, close: 100, volume: 1000000 }));
-    const baseStock = { market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 800000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
+    const baseStock = { market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1_200_000, avgVolume: 800_000, marketCap: 10000, ltp: 100, history: makeHistory(15) };
     
     // diff = 9 (conflict) -> persisted with NEUTRAL_CONFLICT, direction LONG
     const stockDiff9 = { ...baseStock, symbol: 'DIFF9', longScoreOverride: 80, shortScoreOverride: 71 };
