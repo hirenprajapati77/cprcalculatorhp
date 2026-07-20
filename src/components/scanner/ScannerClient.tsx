@@ -62,7 +62,7 @@ function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinut
   return { hour, minute, totalMinutes: hour * 60 + minute };
 }
 
-function useBtstState() {
+function useBtstState(mode: ScannerMode = 'BTST') {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -74,8 +74,8 @@ function useBtstState() {
   const time = hours * 100 + minutes;
 
   let state = 'PREMARKET';
-  let message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
-  let emptyMessage = 'BTST discovery has not started.';
+  let message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
+  let emptyMessage = `${mode} discovery has not started.`;
   let nextRefresh = '';
 
   const istDateStr = new Intl.DateTimeFormat('en-IN', {
@@ -87,29 +87,29 @@ function useBtstState() {
   if (isWeekend) {
     state = 'MARKET_CLOSED';
     message = 'Market is closed';
-    emptyMessage = 'No qualified BTST setups today.';
+    emptyMessage = `No qualified ${mode} setups today.`;
     nextRefresh = 'Locked';
   } else if (time < BTST_HHMM.marketOpen) {
     state = 'PREMARKET';
-    message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
-    emptyMessage = 'BTST discovery has not started.';
+    message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
+    emptyMessage = `${mode} discovery has not started.`;
     const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
     nextRefresh = `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m`;
   } else if (time >= BTST_HHMM.marketOpen && time < BTST_HHMM.discoveryStart) {
     state = 'INTRADAY';
-    message = `BTST discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
-    emptyMessage = 'BTST discovery has not started.';
+    message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
+    emptyMessage = `${mode} discovery has not started.`;
     const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
     nextRefresh = `Opens in ${diffMinutes}m`;
   } else if (time >= BTST_HHMM.discoveryStart && time < BTST_HHMM.discoveryEnd) {
     state = 'ACTIVE';
-    message = 'Generating BTST candidates';
+    message = `Generating ${mode} candidates`;
     emptyMessage = 'Scanning live candidates…';
     nextRefresh = `Live until ${BTST_CLOCK.discoveryEnd}`;
   } else {
     state = 'FROZEN';
     message = 'Scan results frozen for today';
-    emptyMessage = 'No qualified BTST setups today.';
+    emptyMessage = `No qualified ${mode} setups today.`;
     nextRefresh = 'Locked';
   }
 
@@ -123,8 +123,8 @@ function useBtstState() {
   return { state, message, emptyMessage, nextRefresh, timeStr };
 }
 
-const BtstEmptyState = () => {
-  const { emptyMessage, nextRefresh } = useBtstState();
+const BtstEmptyState = ({ mode }: { mode?: ScannerMode }) => {
+  const { emptyMessage, nextRefresh } = useBtstState(mode);
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none animate-fade-in">
       <Radar size={48} className="text-accent-blue/40 mb-3 animate-pulse" />
@@ -2652,7 +2652,7 @@ export default function ScannerClient() {
                         No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
                       </p>
                     </div>
-                  ) : scannerMode !== 'CPR' ? <BtstEmptyState /> : (
+                  ) : scannerMode !== 'CPR' ? <BtstEmptyState mode={scannerMode} /> : (
                     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                       <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
                       <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
