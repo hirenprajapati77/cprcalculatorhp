@@ -43,6 +43,22 @@ interface ScoredCandidate extends ItmCandidate {
   };
 }
 
+const FALLBACK_LOT_SIZES: Record<string, number> = {
+  'NIFTY': 25, 'BANKNIFTY': 15, 'FINNIFTY': 40, 'MIDCPNIFTY': 75,
+  'HDFCBANK': 400, 'RELIANCE': 250, 'ICICIBANK': 700, 'INFY': 400,
+  'ITC': 1600, 'TCS': 175, 'LT': 300, 'SBIN': 750, 'BAJFINANCE': 125,
+  'BHARTIARTL': 950, 'KOTAKBANK': 400, 'AXISBANK': 625, 'M&M': 350,
+  'MARUTI': 50, 'TATAMOTORS': 1425, 'SUNPHARMA': 700, 'ASIANPAINT': 200,
+  'TITAN': 175, 'HINDUNILVR': 300, 'BAJAJFINSV': 500, 'WIPRO': 1500,
+  'HCLTECH': 700, 'ULTRACEMCO': 100, 'NTPC': 3000, 'TATASTEEL': 5500,
+  'POWERGRID': 3600, 'INDUSINDBK': 500, 'NESTLEIND': 400, 'GRASIM': 475,
+  'TECHM': 600, 'ADANIENT': 300, 'ADANIPORTS': 800, 'ONGC': 3850,
+  'HINDALCO': 1400, 'JSWSTEEL': 675, 'DRREDDY': 125, 'CIPLA': 650,
+  'DIVISLAB': 200, 'APOLLOHOSP': 125, 'EICHERMOT': 175, 'HEROMOTOCO': 300,
+  'BAJAJ-AUTO': 125, 'BRITANNIA': 200, 'TATACONSUM': 900, 'COALINDIA': 4200,
+  'BPCL': 1800, 'SHRIRAMFIN': 300, 'TRENT': 400, 'BEL': 3800, 'HAL': 300
+};
+
 export class OptionSuggestionService {
   private static async loadLotSizes(): Promise<Map<string, number>> {
     const cacheKey = 'fyers_lot_sizes_map';
@@ -89,6 +105,14 @@ export class OptionSuggestionService {
     } catch (err) {
       console.error('[OptionSuggestion] Error downloading/parsing lot sizes master:', err);
     }
+
+    if (lotSizesMap.size === 0) {
+      console.warn('[OptionSuggestion] Using hardcoded fallback lot sizes due to fetch failure & empty cache.');
+      for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
+        lotSizesMap.set(sym, size);
+      }
+    }
+
     return lotSizesMap;
   }
 
