@@ -296,6 +296,13 @@ model BreakoutAlertState {
   updatedAt   DateTime  @updatedAt
 }
 
+model BtstAlertState {
+  id        Int      @id @default(autoincrement())
+  date      String   @unique
+  sentAt    DateTime
+  updatedAt DateTime @updatedAt
+}
+
 model TradeJournal {
   id             String   @id @default(cuid())
   tradeDate      DateTime // stored as midnight IST for the signal date
