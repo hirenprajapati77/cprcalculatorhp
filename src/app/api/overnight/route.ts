@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
+import { buildInsightsFromOvernight } from '@/services/overnight/overnight-ui-adapter';
 import { getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
 
 /** Matches historical Prisma `activeOnly` filter (READY+ / WATCH classifications). */
@@ -155,42 +156,8 @@ export async function GET(req: NextRequest) {
         console.error('Error during option suggestion enrichment in Overnight route:', enrichErr);
       }
 
-      // Compute insights
-      let strongSignal = 0;
-      let breakoutReady = 0;
-      let avoid = 0;
-      let totalLong = 0;
-      let totalShort = 0;
-      let totalConflict = 0;
-
-      for (const sig of signals) {
-        const maxScore = sig.overnightScore || 0;
-        if (sig.classification === 'NEUTRAL_CONFLICT') {
-          totalConflict++;
-          avoid++;
-        } else if (sig.classification === 'IGNORE') {
-          avoid++;
-        } else {
-          if (maxScore >= 90) {
-            strongSignal++;
-          } else if (maxScore >= 70) {
-            breakoutReady++;
-          } else if (maxScore < 40) {
-            avoid++;
-          }
-          if (sig.direction === 'LONG') totalLong++;
-          if (sig.direction === 'SHORT') totalShort++;
-        }
-      }
-
-      const insights = {
-        strongSignal,
-        breakoutReady,
-        avoid,
-        totalLong,
-        totalShort,
-        totalConflict
-      };
+      // Compute insights (aligned with buildInsightsFromOvernight / ADVANCED_SCORE.STRONG=100)
+      const insights = buildInsightsFromOvernight(signals);
 
       const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
       const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });

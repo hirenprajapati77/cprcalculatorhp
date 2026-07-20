@@ -7,7 +7,7 @@ import { env } from '@/config/env';
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { LIQUIDITY } from '@/config/trading-constants';
 import { prisma } from '@/lib/db';
-import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
+import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
@@ -434,7 +434,7 @@ export class OvernightService {
 
         const mockStock = fullStock as MockOvernightStock;
 
-        // Hard liquidity gate (avgVolume < 100k / volumeRatio < 1.2 / etc.):
+        // Hard liquidity gate (avgVolume < 100k / volumeRatio < 1.5 VDU / etc.):
         // ineligible stocks never become signals — not even LOW_QUALITY.
         // LOW_QUALITY later is only for weaker tiers that already passed this gate.
         const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
@@ -505,8 +505,11 @@ export class OvernightService {
         }
 
         if (finalDir && finalSig) {
-          // Hard block STBT when NIFTY is in BULL regime (mirrors journal/alert suppression).
+          // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
           if (finalDir === 'SHORT' && regime.trend === 'BULL') {
+            continue;
+          }
+          if (finalDir === 'LONG' && regime.trend === 'BEAR') {
             continue;
           }
 

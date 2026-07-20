@@ -5,6 +5,7 @@ import {
   overnightSignalToBtstUi,
   buildInsightsFromOvernight,
   selectTradableOvernightPicks,
+  compareLatestScanRows,
 } from '../../services/overnight/overnight-ui-adapter';
 import { BTST_CLOCK } from '../../lib/market-hours';
 
@@ -87,6 +88,13 @@ describe('overnight-ui-adapter (Phase H)', () => {
     assert.strictEqual(insights.totalShort, 1);
   });
 
+  it('compareLatestScanRows prefers newer signalTime then score', () => {
+    const a = makeSignal({ signalTime: '15:10', overnightScore: 110 });
+    const b = makeSignal({ signalTime: '15:25', overnightScore: 95 });
+    assert.ok(compareLatestScanRows(b, a) < 0, '15:25 row sorts before 15:10');
+    assert.ok(compareLatestScanRows(a, b) > 0);
+  });
+
   it('dedupes by symbol so rescans cannot fill both top-N slots', () => {
     const signals = [
       makeSignal({
@@ -125,6 +133,7 @@ describe('overnight-ui-adapter (Phase H)', () => {
       ['JIOFIN', 'DIXON'],
       'second slot must be the next distinct symbol, not a rescan of #1'
     );
-    assert.strictEqual(longs[0].overnightScore, 110, 'keeps highest score for duplicate symbol');
+    assert.strictEqual(longs[0].overnightScore, 105, 'keeps latest scan row for duplicate symbol');
+    assert.strictEqual(longs[0].signalTime, '15:15');
   });
 });

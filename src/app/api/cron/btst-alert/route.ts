@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
     const signalDate = getISTDateString();
     const regime = await RegimeService.getMarketRegime(signalDate);
     const suppressStbt = regime.trend === 'BULL';
+    const suppressBtst = regime.trend === 'BEAR';
 
     // Same Advanced Engine pipeline as journal / UI
     const overnightSignals = await OvernightService.discover('BOTH');
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
       minScore: 85,
       take: 5,
       suppressShort: suppressStbt,
+      suppressLong: suppressBtst,
     });
 
     /** Re-check extension gate at alert time (stock may have extended since discover). */
@@ -122,6 +124,7 @@ export async function GET(req: NextRequest) {
           engine: 'advanced',
           regime,
           suppressStbt,
+          suppressBtst,
         });
       }
       throw err;
@@ -141,6 +144,7 @@ export async function GET(req: NextRequest) {
           engine: 'advanced',
           regime,
           suppressStbt,
+          suppressBtst,
         });
       }
 
@@ -153,6 +157,7 @@ export async function GET(req: NextRequest) {
         engine: 'advanced',
         regime,
         suppressStbt,
+        suppressBtst,
       });
     } catch (sendError) {
       if (claimedDate) {
