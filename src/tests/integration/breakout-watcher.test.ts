@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/db';
 import { BreakoutWatcherService } from '../../services/alert/breakout-watcher.service';
 
-// ─── In-process deduplication logic (mirrors BreakoutWatcherService) ──────────
-// We test the pure logic without hitting Prisma (which needs a live DB connection).
+// ─── Legacy in-memory shadow (NOT production logic) ───────────────────────────
+// detectNewBreakoutsPure omits score thresholds, atomic updateMany/create claim,
+// and P2002 retry — kept only for coarse transition/dedup smoke checks.
 
 interface BreakoutState {
   hadBreakout: boolean;
@@ -24,9 +26,8 @@ interface ScanResult {
 }
 
 /**
- * Pure function version of detectNewBreakouts for unit testing.
- * Same logic as BreakoutWatcherService.detectNewBreakouts, but takes
- * an in-memory state map instead of Prisma — so we can test without DB.
+ * Legacy shadow of pre-atomic dedup logic. Does NOT mirror production
+ * BreakoutWatcherService.detectNewBreakouts (no score gate, no atomic claim).
  */
 function detectNewBreakoutsPure(
   scanResults: ScanResult[],
@@ -54,7 +55,11 @@ function detectNewBreakoutsPure(
   return { newBreakouts, updatedState };
 }
 
-const makeScanResult = (symbol: string, hasBreakout: boolean): ScanResult => ({
+const makeScanResult = (
+  symbol: string,
+  hasBreakout: boolean,
+  score = 85
+): ScanResult => ({
   symbol,
   signals: hasBreakout ? ['NARROW', 'BREAKOUT'] : ['NARROW'],
   ltp: 500,
@@ -62,9 +67,86 @@ const makeScanResult = (symbol: string, hasBreakout: boolean): ScanResult => ({
   sl: 492,
   target: 522,
   rr: '1:2.0',
-  score: 85,
+  score,
   sector: 'Banking'
 });
+
+function makeUniqueConstraintError(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(
+    'Unique constraint failed',
+    { code: 'P2002', clientVersion: '6.19.3' }
+  );
+}
+
+type BreakoutPrismaMocks = {
+  restore: () => void;
+  updateManyCalls: unknown[];
+  createCalls: unknown[];
+  findUniqueCalls: unknown[];
+  upsertCalls: unknown[];
+};
+
+function mockBreakoutPrisma(handlers: {
+  updateMany?: (args: unknown) => Promise<{ count: number }>;
+  create?: (args: unknown) => Promise<unknown>;
+  findUnique?: (args: unknown) => Promise<{ hadBreakout: boolean } | null>;
+  upsert?: (args: unknown) => Promise<unknown>;
+}): BreakoutPrismaMocks {
+  const originalUpdateMany = prisma.breakoutAlertState.updateMany;
+  const originalCreate = prisma.breakoutAlertState.create;
+  const originalFindUnique = prisma.breakoutAlertState.findUnique;
+  const originalUpsert = prisma.breakoutAlertState.upsert;
+
+  const updateManyCalls: unknown[] = [];
+  const createCalls: unknown[] = [];
+  const findUniqueCalls: unknown[] = [];
+  const upsertCalls: unknown[] = [];
+
+  prisma.breakoutAlertState.updateMany = (async (args: unknown) => {
+    updateManyCalls.push(args);
+    if (handlers.updateMany) {
+      return handlers.updateMany(args);
+    }
+    return { count: 0 };
+  }) as unknown as typeof prisma.breakoutAlertState.updateMany;
+
+  prisma.breakoutAlertState.create = (async (args: unknown) => {
+    createCalls.push(args);
+    if (handlers.create) {
+      return handlers.create(args);
+    }
+    return { symbol: 'MOCK', hadBreakout: true, lastAlerted: new Date() };
+  }) as unknown as typeof prisma.breakoutAlertState.create;
+
+  prisma.breakoutAlertState.findUnique = (async (args: unknown) => {
+    findUniqueCalls.push(args);
+    if (handlers.findUnique) {
+      return handlers.findUnique(args);
+    }
+    return null;
+  }) as unknown as typeof prisma.breakoutAlertState.findUnique;
+
+  prisma.breakoutAlertState.upsert = (async (args: unknown) => {
+    upsertCalls.push(args);
+    if (handlers.upsert) {
+      return handlers.upsert(args);
+    }
+    return { symbol: 'MOCK', hadBreakout: false, lastAlerted: null };
+  }) as unknown as typeof prisma.breakoutAlertState.upsert;
+
+  return {
+    updateManyCalls,
+    createCalls,
+    findUniqueCalls,
+    upsertCalls,
+    restore: () => {
+      prisma.breakoutAlertState.updateMany = originalUpdateMany;
+      prisma.breakoutAlertState.create = originalCreate;
+      prisma.breakoutAlertState.findUnique = originalFindUnique;
+      prisma.breakoutAlertState.upsert = originalUpsert;
+    },
+  };
+}
 
 // ─── Test Suite ───────────────────────────────────────────────────────────────
 
@@ -173,34 +255,155 @@ test('BreakoutWatcher — deduplication logic', async (t) => {
     assert.strictEqual(updatedState.get('SBIN')?.hadBreakout, true);
   });
 
-  await t.test('BreakoutWatcherService skips alert if DB read throws', async () => {
-    const originalFindUnique = prisma.breakoutAlertState.findUnique;
-    const originalUpsert = prisma.breakoutAlertState.upsert;
-    let upsertCalled = false;
-    
-    prisma.breakoutAlertState.findUnique = (async () => {
-      throw new Error('Simulated DB connection error');
-    }) as unknown as typeof prisma.breakoutAlertState.findUnique;
+  await t.test('BreakoutWatcherService skips alert if atomic claim throws', async () => {
+    const mocks = mockBreakoutPrisma({
+      updateMany: async () => {
+        throw new Error('Simulated DB connection error');
+      },
+      upsert: async (args: unknown) => {
+        if (typeof args === 'object' && args !== null && 'update' in args) {
+          const updateArgs = args.update as { lastAlerted?: Date };
+          assert.strictEqual(updateArgs.lastAlerted, undefined, 'should not update lastAlerted');
+        }
+        return { symbol: 'SBIN', hadBreakout: true, lastAlerted: null };
+      },
+    });
 
-    prisma.breakoutAlertState.upsert = (async (args: unknown) => {
-      upsertCalled = true;
-      if (typeof args === 'object' && args !== null && 'update' in args) {
-        const updateArgs = args.update as { lastAlerted?: Date };
-        assert.ok(updateArgs, 'should have update block');
-        assert.strictEqual(updateArgs.lastAlerted, undefined, 'should not update lastAlerted');
-      }
-      return { symbol: 'SBIN', hadBreakout: true, lastAlerted: null } as unknown as Awaited<ReturnType<typeof prisma.breakoutAlertState.upsert>>;
-    }) as unknown as typeof prisma.breakoutAlertState.upsert;
-    
     try {
-      const scan = [makeScanResult('SBIN', true)]; // has BREAKOUT
+      const scan = [makeScanResult('SBIN', true)];
       const results = await BreakoutWatcherService.detectNewBreakouts(scan);
-      
-      assert.strictEqual(results.length, 0, 'Should not return any new breakouts due to state read failure');
-      assert.strictEqual(upsertCalled, true, 'Should still update DB with current state');
+
+      assert.strictEqual(results.length, 0, 'Should not return any new breakouts due to claim failure');
+      assert.strictEqual(mocks.updateManyCalls.length, 1, 'Should attempt atomic claim');
+      assert.strictEqual(mocks.upsertCalls.length, 1, 'Should still update DB with current state');
     } finally {
-      prisma.breakoutAlertState.findUnique = originalFindUnique;
-      prisma.breakoutAlertState.upsert = originalUpsert;
+      mocks.restore();
+    }
+  });
+});
+
+test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t) => {
+  await t.test('clean claim: updateMany count 1 → new breakout, create never called', async () => {
+    const mocks = mockBreakoutPrisma({
+      updateMany: async () => ({ count: 1 }),
+    });
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('SBIN', true),
+      ]);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].symbol, 'SBIN');
+      assert.strictEqual(mocks.updateManyCalls.length, 1);
+      assert.strictEqual(mocks.createCalls.length, 0);
+      assert.strictEqual(mocks.findUniqueCalls.length, 0);
+      assert.strictEqual(mocks.upsertCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('no existing row: updateMany 0 then create succeeds → new breakout once', async () => {
+    const mocks = mockBreakoutPrisma({
+      updateMany: async () => ({ count: 0 }),
+      create: async () => ({ symbol: 'RELIANCE', hadBreakout: true, lastAlerted: new Date() }),
+    });
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('RELIANCE', true),
+      ]);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].symbol, 'RELIANCE');
+      assert.strictEqual(mocks.updateManyCalls.length, 1);
+      assert.strictEqual(mocks.createCalls.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('concurrent winner: P2002 on create, retry updateMany count 1 → new breakout', async () => {
+    let updateManyCall = 0;
+    const mocks = mockBreakoutPrisma({
+      updateMany: async () => {
+        updateManyCall += 1;
+        return { count: updateManyCall === 2 ? 1 : 0 };
+      },
+      create: async () => {
+        throw makeUniqueConstraintError();
+      },
+    });
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('TCS', true),
+      ]);
+
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].symbol, 'TCS');
+      assert.strictEqual(mocks.updateManyCalls.length, 2);
+      assert.strictEqual(mocks.createCalls.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('concurrent loser: P2002 on create, retry updateMany count 0 → NOT new breakout', async () => {
+    const mocks = mockBreakoutPrisma({
+      updateMany: async () => ({ count: 0 }),
+      create: async () => {
+        throw makeUniqueConstraintError();
+      },
+      findUnique: async () => ({ hadBreakout: true }),
+      upsert: async () => ({ symbol: 'INFY', hadBreakout: true, lastAlerted: new Date() }),
+    });
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('INFY', true),
+      ]);
+
+      assert.strictEqual(
+        results.length,
+        0,
+        'loser in concurrent race must not emit a duplicate breakout alert'
+      );
+      assert.strictEqual(mocks.updateManyCalls.length, 2);
+      assert.strictEqual(mocks.createCalls.length, 1);
+      assert.strictEqual(mocks.findUniqueCalls.length, 1);
+      assert.strictEqual(mocks.upsertCalls.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('weak breakout: score < 75 → no updateMany/create, legacy upsert does not lock', async () => {
+    const mocks = mockBreakoutPrisma({
+      findUnique: async () => null,
+      upsert: async () => ({ symbol: 'HDFC', hadBreakout: false, lastAlerted: null }),
+    });
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('HDFC', true, 70),
+      ]);
+
+      assert.strictEqual(results.length, 0);
+      assert.strictEqual(mocks.updateManyCalls.length, 0);
+      assert.strictEqual(mocks.createCalls.length, 0);
+      assert.strictEqual(mocks.findUniqueCalls.length, 1);
+      assert.strictEqual(mocks.upsertCalls.length, 1);
+
+      const upsertArgs = mocks.upsertCalls[0] as {
+        create: { hadBreakout: boolean };
+        update: { hadBreakout: boolean };
+      };
+      assert.strictEqual(upsertArgs.create.hadBreakout, false);
+      assert.strictEqual(upsertArgs.update.hadBreakout, false);
+    } finally {
+      mocks.restore();
     }
   });
 });
