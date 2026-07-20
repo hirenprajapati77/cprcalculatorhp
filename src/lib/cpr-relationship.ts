@@ -36,14 +36,6 @@ export function compareCpr(todayCpr: Pick<CPRResult, 'tc' | 'bc'>, tomorrowCpr: 
     displayValue = 'OVERLAPPING_VALUE';
   }
 
-  // Fallback if none match (should be impossible in theory)
-  if (displayValue === 'UNKNOWN') {
-    if (isHigherValue) displayValue = 'HIGHER_VALUE';
-    else if (isLowerValue) displayValue = 'LOWER_VALUE';
-    else if (isInsideValue) displayValue = 'INSIDE_VALUE';
-    else if (isOverlappingValue) displayValue = 'OVERLAPPING_VALUE';
-  }
-
   return {
     isInsideValue,
     isHigherValue,
