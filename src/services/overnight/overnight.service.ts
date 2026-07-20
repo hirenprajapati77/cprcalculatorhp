@@ -5,7 +5,7 @@ import { env } from '@/config/env';
  * Simple Engine (BtstService) remains for backtests and V2 shadow scoring only.
  */
 import { OvernightSignal, Prisma } from '@prisma/client';
-import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
+import { LIQUIDITY } from '@/config/trading-constants';
 import { prisma } from '@/lib/db';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
@@ -18,8 +18,6 @@ import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTE
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
-
-const MIN_HISTORY_FOR_RELIABLE_ATR = 15; // Minimum daily candles for stable ATR computation
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
@@ -404,8 +402,8 @@ export class OvernightService {
           continue;
         }
 
-        if (history.length < MIN_HISTORY_FOR_RELIABLE_ATR) {
-          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} < MIN_HISTORY_FOR_RELIABLE_ATR (${MIN_HISTORY_FOR_RELIABLE_ATR}).`);
+        if (history.length < LIQUIDITY.MIN_HISTORY_FOR_RELIABLE_ATR) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} < MIN_HISTORY_FOR_RELIABLE_ATR (${LIQUIDITY.MIN_HISTORY_FOR_RELIABLE_ATR}).`);
           continue;
         }
 
