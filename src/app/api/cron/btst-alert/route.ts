@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
@@ -9,6 +10,14 @@ import {
 } from '@/services/overnight/overnight-ui-adapter';
 import { isBtstDiscoveryOpen, getISTTime, getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
+import { prisma } from '@/lib/db';
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === 'P2002'
+  );
+}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -74,18 +83,62 @@ export async function GET(req: NextRequest) {
     );
 
     const alertPayload = [...enrichedLongs, ...enrichedShorts];
-    const result = await TelegramService.sendBtstAlert(alertPayload);
 
-    return NextResponse.json({
-      sent: result.sent,
-      reason: result.reason,
-      count: alertPayload.length,
-      longs: enrichedLongs.length,
-      shorts: enrichedShorts.length,
-      engine: 'advanced',
-      regime,
-      suppressStbt,
-    });
+    let claimedDate = false;
+    try {
+      await prisma.btstAlertState.create({
+        data: { date: signalDate, sentAt: new Date() },
+      });
+      claimedDate = true;
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        return NextResponse.json({
+          sent: false,
+          reason: 'already sent today',
+          count: alertPayload.length,
+          longs: enrichedLongs.length,
+          shorts: enrichedShorts.length,
+          engine: 'advanced',
+          regime,
+          suppressStbt,
+        });
+      }
+      throw err;
+    }
+
+    try {
+      const result = await TelegramService.sendBtstAlert(alertPayload);
+
+      if (!result.sent) {
+        await prisma.btstAlertState.delete({ where: { date: signalDate } });
+        return NextResponse.json({
+          sent: false,
+          reason: result.reason,
+          count: alertPayload.length,
+          longs: enrichedLongs.length,
+          shorts: enrichedShorts.length,
+          engine: 'advanced',
+          regime,
+          suppressStbt,
+        });
+      }
+
+      return NextResponse.json({
+        sent: result.sent,
+        reason: result.reason,
+        count: alertPayload.length,
+        longs: enrichedLongs.length,
+        shorts: enrichedShorts.length,
+        engine: 'advanced',
+        regime,
+        suppressStbt,
+      });
+    } catch (sendError) {
+      if (claimedDate) {
+        await prisma.btstAlertState.delete({ where: { date: signalDate } }).catch(() => {});
+      }
+      throw sendError;
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
