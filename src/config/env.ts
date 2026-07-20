@@ -49,6 +49,11 @@ const envSchema = z.object({
   
   HISTORICAL_MODE: z.string().optional(),
   BACKTEST_EXECUTION_MODE: z.string().optional(),
+  // Off by default: marketEvent has no writer yet, so an empty table would otherwise be
+  // indistinguishable from "checked recently, found nothing" and force max event-risk on
+  // every signal (see EventCalendarService). Flip to 'true' only once a real calendar
+  // populator job exists and runs regularly.
+  EVENT_CALENDAR_ENFORCE_FRESHNESS: z.string().default('false'),
   /**
    * DISPLAY-ONLY. Used for UI banners / health payloads (e.g. SHADOW vs LIVE label).
    * Does NOT gate any broker order placement — no real order-routing path exists

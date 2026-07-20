@@ -61,9 +61,10 @@ export class EventCalendarService {
       });
       
       const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-      
+      const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+
       let isCalendarStale = false;
-      if (!isHistoricalMode) {
+      if (!isHistoricalMode && enforceFreshness) {
          if (!latestGlobalEvent) {
            isCalendarStale = true;
          } else {
@@ -160,9 +161,10 @@ export class EventCalendarService {
       });
       
       const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-      
+      const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+
       let isCalendarStale = false;
-      if (!isHistoricalMode) {
+      if (!isHistoricalMode && enforceFreshness) {
          if (!latestGlobalEvent) {
            isCalendarStale = true;
          } else {
