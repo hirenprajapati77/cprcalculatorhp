@@ -126,12 +126,22 @@ export function filterOvernightByUniverse(
   return signals.filter((s) => allowed.has(s.symbol.trim()));
 }
 
+/** Sort scan rows: latest signalTime first, then highest score. */
+export function compareLatestScanRows(
+  a: { signalTime?: string | null; overnightScore?: number | null },
+  b: { signalTime?: string | null; overnightScore?: number | null }
+): number {
+  const timeCmp = (b.signalTime ?? '').localeCompare(a.signalTime ?? '');
+  if (timeCmp !== 0) return timeCmp;
+  return (b.overnightScore ?? 0) - (a.overnightScore ?? 0);
+}
+
 /**
- * Keep the highest-scoring row per symbol (input must already be score-desc).
+ * Keep one row per symbol from a list sorted by compareLatestScanRows (latest scan wins).
  * OvernightSignal is unique on [symbol, signalDate, signalTime], so rescans can
  * return the same name twice and steal both top-N journal/alert slots.
  */
-export function distinctHighestScoreBySymbol<T extends { symbol: string }>(
+export function distinctLatestScanBySymbol<T extends { symbol: string }>(
   signals: T[]
 ): T[] {
   const seen = new Set<string>();
@@ -145,28 +155,39 @@ export function distinctHighestScoreBySymbol<T extends { symbol: string }>(
   return out;
 }
 
+/** @deprecated Use distinctLatestScanBySymbol — input must be latest-scan sorted. */
+export const distinctHighestScoreBySymbol = distinctLatestScanBySymbol;
+
 /** Journal-aligned alert picks: TRADEABLE + READY+ + score floor. */
 export function selectTradableOvernightPicks(
   signals: OvernightSignal[],
-  opts: { minScore?: number; take?: number; suppressShort?: boolean } = {}
+  opts: {
+    minScore?: number;
+    take?: number;
+    suppressShort?: boolean;
+    suppressLong?: boolean;
+  } = {}
 ) {
   const minScore = opts.minScore ?? 85;
   const take = opts.take ?? 5;
-  const longs = distinctHighestScoreBySymbol(
-    signals
-      .filter(
-        (s) =>
-          s.direction === 'LONG' &&
-          s.qualityBucket === 'TRADEABLE' &&
-          LONG_READY.includes(s.classification) &&
-          (s.overnightScore ?? 0) >= minScore
-      )
-      .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
-  ).slice(0, take);
+
+  const longs = opts.suppressLong
+    ? []
+    : distinctLatestScanBySymbol(
+        signals
+          .filter(
+            (s) =>
+              s.direction === 'LONG' &&
+              s.qualityBucket === 'TRADEABLE' &&
+              LONG_READY.includes(s.classification) &&
+              (s.overnightScore ?? 0) >= minScore
+          )
+          .sort(compareLatestScanRows)
+      ).slice(0, take);
 
   const shorts = opts.suppressShort
     ? []
-    : distinctHighestScoreBySymbol(
+    : distinctLatestScanBySymbol(
         signals
           .filter(
             (s) =>
@@ -175,7 +196,7 @@ export function selectTradableOvernightPicks(
               SHORT_READY.includes(s.classification) &&
               (s.overnightScore ?? 0) >= minScore
           )
-          .sort((a, b) => (b.overnightScore ?? 0) - (a.overnightScore ?? 0))
+          .sort(compareLatestScanRows)
       ).slice(0, take);
 
   return { longs, shorts };

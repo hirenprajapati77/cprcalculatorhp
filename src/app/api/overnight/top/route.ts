@@ -10,13 +10,15 @@ export async function GET(req: NextRequest) {
     const signals = await prisma.overnightSignal.findMany({
       where: {
         signalDate: date,
+        qualityBucket: 'TRADEABLE',
         classification: {
           in: ['STRONG_BTST', 'STRONG_STBT']
         }
       },
-      orderBy: {
-        overnightScore: 'desc'
-      }
+      orderBy: [
+        { signalTime: 'desc' },
+        { overnightScore: 'desc' },
+      ]
     });
 
     return NextResponse.json(signals);

@@ -7,14 +7,14 @@ import { env } from '@/config/env';
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { LIQUIDITY } from '@/config/trading-constants';
 import { prisma } from '@/lib/db';
-import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
+import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, istMinuteOfDayFromUnixSec } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -100,7 +100,82 @@ export class OvernightService {
   }
 
   /**
-   * Fetches/simulates intraday 5m candle data to compute VWAP and 15m high/low.
+   * Parse Yahoo 5m chart JSON into VWAP and 15:15–15:30 IST closing-window extremes.
+   */
+  private static parseYahooIntradayResponse(
+    json: YahooFinanceChartResponse,
+    currentTime: Date
+  ): OvernightIntradayMetrics {
+    const result = json?.chart?.result?.[0];
+    if (!result || !result.timestamp) {
+      throw new Error('Live fetch returned empty data');
+    }
+
+    const timestamps = result.timestamp;
+    const quotes = result.indicators?.quote?.[0];
+    if (!quotes) throw new Error('Live fetch returned empty data');
+
+    if (
+      !quotes.high || !quotes.low || !quotes.close || !quotes.volume ||
+      quotes.high.length !== timestamps.length ||
+      quotes.low.length !== timestamps.length ||
+      quotes.close.length !== timestamps.length ||
+      quotes.volume.length !== timestamps.length
+    ) {
+      throw new Error('Live fetch returned misaligned quote arrays');
+    }
+
+    const currentTimestampSec = Math.floor(currentTime.getTime() / 1000);
+    let sumPriceVol = 0;
+    let sumVol = 0;
+    let hasIntraday = false;
+    let closingHigh = 0;
+    let closingLow = Infinity;
+    let closingBarCount = 0;
+
+    const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
+    const isLastCandleForming = (currentTimestampSec - lastTimestamp) < 300;
+
+    for (let i = 0; i < timestamps.length; i++) {
+      const ts = timestamps[i];
+      if (ts > currentTimestampSec) continue;
+
+      const high = quotes.high[i];
+      const low = quotes.low[i];
+      const close = quotes.close[i];
+      const volume = quotes.volume[i] || 0;
+
+      if (high == null || low == null || close == null) continue;
+
+      const typicalPrice = (high + low + close) / 3;
+      sumPriceVol += typicalPrice * volume;
+      sumVol += volume;
+      hasIntraday = true;
+
+      const barOpenMin = istMinuteOfDayFromUnixSec(ts);
+      const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
+      const isFormingBar = isLastCandleForming && ts === lastTimestamp;
+      // Include forming bar when it belongs to the 15:15–15:30 window (partial MOC data).
+      if (inClosingWindow && (!isFormingBar || barOpenMin >= BTST_WINDOW_MINUTES.CLOSING_WINDOW_START)) {
+        closingHigh = Math.max(closingHigh, high);
+        closingLow = Math.min(closingLow, low);
+        closingBarCount++;
+      }
+    }
+
+    const vwap = sumVol > 0 ? sumPriceVol / sumVol : null;
+
+    return {
+      vwap,
+      intradayVolume: sumVol > 0 ? sumVol : null,
+      last15mHigh: closingBarCount > 0 && closingHigh > 0 ? closingHigh : null,
+      last15mLow: closingBarCount > 0 && closingLow !== Infinity ? closingLow : null,
+      hasIntraday,
+    };
+  }
+
+  /**
+   * Fetches/simulates intraday 5m candle data to compute VWAP and 15:15–15:30 high/low.
    */
   static async getIntradayData(stock: MarketStockData, currentTime: Date): Promise<OvernightIntradayMetrics> {
     const mode = env.HISTORICAL_MODE || 'mock';
@@ -109,114 +184,36 @@ export class OvernightService {
       const symbol = stock.symbol;
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.NS?interval=5m&range=1d`;
 
-      try {
+      const fetchAndParse = async (): Promise<OvernightIntradayMetrics> => {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout
-
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeout);
-
-        if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
-
-        const json = await response.json() as YahooFinanceChartResponse;
-        const result = json?.chart?.result?.[0];
-        if (!result || !result.timestamp) throw new Error('Live fetch returned empty data');
-
-        const timestamps = result.timestamp;
-        const quotes = result.indicators?.quote?.[0];
-        if (!quotes) throw new Error('Live fetch returned empty data');
-
-        if (!quotes.high || !quotes.low || !quotes.close || !quotes.volume || 
-            quotes.high.length !== timestamps.length || 
-            quotes.low.length !== timestamps.length || 
-            quotes.close.length !== timestamps.length || 
-            quotes.volume.length !== timestamps.length) {
-          throw new Error('Live fetch returned misaligned quote arrays');
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
+          const json = await response.json() as YahooFinanceChartResponse;
+          return this.parseYahooIntradayResponse(json, currentTime);
+        } finally {
+          clearTimeout(timeout);
         }
+      };
 
-        let sumPriceVol = 0;
-        let sumVol = 0;
-        let last15mHigh = 0;
-        let last15mLow = Infinity;
-        let hasIntraday = false;
-
-        const currentTimestampSec = Math.floor(currentTime.getTime() / 1000);
-
-        for (let i = 0; i < timestamps.length; i++) {
-          if (timestamps[i] <= currentTimestampSec) {
-            const high = quotes.high[i];
-            const low = quotes.low[i];
-            const close = quotes.close[i];
-            const volume = quotes.volume[i] || 0;
-
-            if (high != null && low != null && close != null) {
-              const typicalPrice = (high + low + close) / 3;
-              sumPriceVol += typicalPrice * volume;
-              sumVol += volume;
-              hasIntraday = true;
-            }
-          }
-        }
-
-        let count = 0;
-        let maxHigh = 0;
-        let minLow = Infinity;
-        // Only skip the newest bar if it is still forming (< 5 min since candle open).
-        // Post-market, the last bar is fully closed and must be included in last-15m.
-        const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
-        const isLastCandleForming = (currentTimestampSec - lastTimestamp) < 300;
-        let skippedCurrent = false;
-        for (let i = timestamps.length - 1; i >= 0; i--) {
-          if (timestamps[i] <= currentTimestampSec) {
-            if (isLastCandleForming && !skippedCurrent) {
-              skippedCurrent = true;
-              continue;
-            }
-            const high = quotes.high[i];
-            const low = quotes.low[i];
-            if (high != null && low != null) {
-              maxHigh = Math.max(maxHigh, high);
-              minLow = Math.min(minLow, low);
-              count++;
-              if (count === 3) break;
-            }
-          }
-        }
-        last15mHigh = maxHigh;
-        last15mLow = minLow !== Infinity ? minLow : 0;
-
-        const vwap = sumVol > 0 ? sumPriceVol / sumVol : null;
-
-        return {
-          vwap,
-          intradayVolume: sumVol > 0 ? sumVol : null,
-          last15mHigh: last15mHigh > 0 ? last15mHigh : null,
-          last15mLow: last15mLow > 0 ? last15mLow : null,
-          hasIntraday
-        };
-
+      try {
+        return await fetchAndParse();
       } catch (err) {
         console.warn(
           `[Overnight] Intraday fetch failed for ${stock.symbol} — retrying once:`,
           err instanceof Error ? err.message : err
         );
-        // Single 1-second retry for transient errors (429, 5xx, network blip)
         try {
           await new Promise((r) => setTimeout(r, 1000));
-          const retryRes = await fetch(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${stock.symbol}.NS?interval=5m&range=1d`,
-            { signal: AbortSignal.timeout(4000) }
-          );
-          if (!retryRes.ok) throw new Error(`Retry HTTP ${retryRes.status}`);
-          // Retry succeeded — fall through to return hasIntraday:false so outer
-          // caller re-fetches properly on next scan cycle rather than crashing here.
+          return await fetchAndParse();
         } catch (retryErr) {
           console.error(
             `[Overnight] Intraday fetch retry also failed for ${stock.symbol} — excluding from scan:`,
             retryErr instanceof Error ? retryErr.message : retryErr
           );
+          return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
         }
-        return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
       }
     } else {
       const { totalMinutes } = OvernightService.getISTTime(currentTime);
@@ -230,8 +227,6 @@ export class OvernightService {
 
       let sumPriceVol = 0;
       let sumVol = 0;
-      let maxHigh = 0;
-      let minLow = Infinity;
 
       const activeCandles = allCandles.slice(0, elapsedCandles + 1);
 
@@ -240,23 +235,25 @@ export class OvernightService {
         sumVol += candle.volume;
       }
 
-      // Only exclude the last (forming) candle when market is currently open.
-      // Post-close, all candles are settled — include the final bar in last-15m.
-      const marketIsOpen = OvernightService.determineState(currentTime) === 'ACTIVE';
-      const last3 = activeCandles.length > 1 && marketIsOpen
-        ? activeCandles.slice(0, -1).slice(-3) // exclude forming candle during live market
-        : activeCandles.slice(-3);             // all candles settled post-close
+      const settledCandles = activeCandles;
 
-      for (const c of last3) {
-        maxHigh = Math.max(maxHigh, c.high);
-        minLow = Math.min(minLow, c.low);
+      let closingHigh = 0;
+      let closingLow = Infinity;
+      let closingBarCount = 0;
+      for (let i = 0; i < settledCandles.length; i++) {
+        const barOpenMin = BTST_WINDOW_MINUTES.MARKET_OPEN + i * 5;
+        if (!isInClosingLiquidityWindow(barOpenMin)) continue;
+        const c = settledCandles[i];
+        closingHigh = Math.max(closingHigh, c.high);
+        closingLow = Math.min(closingLow, c.low);
+        closingBarCount++;
       }
 
       return {
         vwap: sumVol > 0 ? sumPriceVol / sumVol : null,
         intradayVolume: sumVol > 0 ? sumVol : null,
-        last15mHigh: maxHigh > 0 ? maxHigh : null,
-        last15mLow: minLow !== Infinity ? minLow : null,
+        last15mHigh: closingBarCount > 0 && closingHigh > 0 ? closingHigh : null,
+        last15mLow: closingBarCount > 0 && closingLow !== Infinity ? closingLow : null,
         hasIntraday: activeCandles.length > 0
       };
     }
@@ -437,7 +434,7 @@ export class OvernightService {
 
         const mockStock = fullStock as MockOvernightStock;
 
-        // Hard liquidity gate (avgVolume < 100k / volumeRatio < 1.2 / etc.):
+        // Hard liquidity gate (avgVolume < 100k / volumeRatio < 1.5 VDU / etc.):
         // ineligible stocks never become signals — not even LOW_QUALITY.
         // LOW_QUALITY later is only for weaker tiers that already passed this gate.
         const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
@@ -452,7 +449,7 @@ export class OvernightService {
             ? { score: mockStock.longScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : BtstRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                tomorrowCprWidth: tomorrowCpr.width,
+                tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
                 tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                 close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
@@ -466,14 +463,14 @@ export class OvernightService {
           longSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
         }
 
-        // -- Evaluate SHORT --
+        // -- Evaluate SHORT (always scored for conflict/quality; persisted only outside BULL) --
         let shortSig: OvernightSignalCalc | null = null;
         if (direction === 'SHORT' || direction === 'BOTH') {
           const details = mockStock.shortScoreOverride !== undefined
             ? { score: mockStock.shortScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : StbtRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
-                tomorrowCprWidth: tomorrowCpr.width,
+                tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
                 tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                 close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
@@ -508,6 +505,14 @@ export class OvernightService {
         }
 
         if (finalDir && finalSig) {
+          // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
+          if (finalDir === 'SHORT' && regime.trend === 'BULL') {
+            continue;
+          }
+          if (finalDir === 'LONG' && regime.trend === 'BEAR') {
+            continue;
+          }
+
           const ext = EntryManagerService.evaluateExtension(fullStock, finalDir);
           if (!ext.eligible) {
             console.warn(`[OvernightScan] ${fullStock.symbol} ${finalDir} skipped: ${ext.reason}`);

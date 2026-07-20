@@ -78,8 +78,20 @@ export class TelegramService {
     const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
     const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
 
-    const strongSignalCount = results.filter(r => r.signals && r.signals.some(s => s.includes('STRONG') || s.includes('BREAKOUT') || s.includes('HIGHER_VALUE') || s.includes('LOWER_VALUE'))).length;
-    const breakoutCount = results.filter(r => r.signals && r.signals.includes('BREAKOUT')).length;
+    const strongSignalCount = results.filter(
+      (r) =>
+        (r as { classification?: string }).classification?.startsWith('STRONG_') ||
+        Math.max(r.longScore, r.shortScore) >= ADVANCED_SCORE.STRONG
+    ).length;
+    const breakoutCount = results.filter((r) => {
+      const score = Math.max(r.longScore, r.shortScore);
+      const cls = (r as { classification?: string }).classification ?? '';
+      return (
+        score >= ADVANCED_SCORE.READY &&
+        score < ADVANCED_SCORE.STRONG &&
+        (cls === 'BTST_READY' || cls === 'STBT_READY')
+      );
+    }).length;
 
     const totalConflict = results.filter(r => r.tag === 'NEUTRAL_CONFLICT').length;
     const avoid = results.filter(r => Math.max(r.longScore, r.shortScore) < 30).length;
