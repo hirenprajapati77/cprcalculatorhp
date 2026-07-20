@@ -11,13 +11,15 @@ export async function GET(req: NextRequest) {
       where: {
         signalDate: date,
         direction: 'LONG',
+        qualityBucket: 'TRADEABLE',
         classification: {
           in: ['STRONG_BTST', 'BTST_READY']
         }
       },
-      orderBy: {
-        overnightScore: 'desc'
-      }
+      orderBy: [
+        { signalTime: 'desc' },
+        { overnightScore: 'desc' },
+      ]
     });
 
     return NextResponse.json(signals);

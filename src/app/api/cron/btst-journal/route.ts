@@ -28,7 +28,7 @@ const MIN_OVERNIGHT_SCORE = 85;
  * 2. If today's rows are missing, run OvernightService.discover() once (same pipeline —
  *    never BtstService.discover(), which caused the 60% UNKNOWN quality gap)
  * 3. Journal only qualityBucket=TRADEABLE + READY+ score (>=85)
- * 4. Suppress STBT when NIFTY regime is BULL (month of evidence: STBT 32% vs BTST 54%)
+ * 4. Suppress STBT when NIFTY regime is BULL; suppress BTST when BEAR
  * 5. Keep Simple V2 shadow scoring (scoreV2) for research — Advanced overnightScore is authoritative
  */
 export async function GET(req: NextRequest) {
@@ -59,35 +59,38 @@ export async function GET(req: NextRequest) {
     const signalDate = TradeJournalService.todayISTString();
     const regime = await RegimeService.getMarketRegime(signalDate);
     const suppressStbt = regime.trend === 'BULL';
+    const suppressBtst = regime.trend === 'BEAR';
 
     let overnightEnsured = false;
-    const anyToday = await prisma.overnightSignal.count({ where: { signalDate } });
-    if (anyToday === 0) {
-      // Same OvernightSignal pipeline — not the disconnected simple engine.
-      console.warn(
-        `[BtstJournal] No OvernightSignal for ${signalDate}; running OvernightService.discover() to populate.`
-      );
-      await OvernightService.discover('BOTH');
-      overnightEnsured = true;
-    }
+    // Always refresh at journal time so picks reflect the latest 15:25+ scan (not a stale 15:10 row).
+    console.log(`[BtstJournal] Refreshing OvernightSignal for ${signalDate} before journal selection.`);
+    await OvernightService.discover('BOTH');
+    overnightEnsured = true;
 
-    // Load all of today's rows, then select via the shared helper so journal
-    // and alerts apply the same TRADEABLE/READY+/score gates AND distinct-by-symbol
-    // (rescans can insert multiple signalTime rows for one name).
+    // Prefer latest signalTime per symbol, then highest score.
     const todaySignals = await prisma.overnightSignal.findMany({
       where: { signalDate },
-      orderBy: { overnightScore: 'desc' },
+      orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
     });
-    const { longs: topLongs, shorts: topShortsRaw } = selectTradableOvernightPicks(
+    const { longs: topLongs, shorts: topShorts } = selectTradableOvernightPicks(
       todaySignals,
-      { minScore: MIN_OVERNIGHT_SCORE, take: 2, suppressShort: false }
+      {
+        minScore: MIN_OVERNIGHT_SCORE,
+        take: 2,
+        suppressShort: suppressStbt,
+        suppressLong: suppressBtst,
+      }
     );
-    const topShorts: OvernightSignal[] = suppressStbt ? [] : topShortsRaw;
 
     if (topLongs.length === 0 && topShorts.length === 0) {
-      const reason = suppressStbt && topShortsRaw.length > 0 && topLongs.length === 0
-        ? 'no_tradable_longs_stbt_suppressed_bull_regime'
-        : 'no_tradable_setups';
+      const reason =
+        suppressStbt && suppressBtst
+          ? 'no_tradable_setups_regime_suppressed_both'
+          : suppressStbt
+            ? 'no_tradable_setups_stbt_suppressed_bull_regime'
+            : suppressBtst
+              ? 'no_tradable_setups_btst_suppressed_bear_regime'
+              : 'no_tradable_setups';
       console.warn(
         `[BtstJournal] ${reason} for ${signalDate} (regime=${regime.trend}/${regime.volatility}, ensuredScan=${overnightEnsured})`
       );
@@ -100,10 +103,8 @@ export async function GET(req: NextRequest) {
         message:
           `No TRADEABLE READY+ OvernightSignal picks for ${signalDate}. ` +
           (suppressStbt ? 'STBT suppressed (BULL regime). ' : '') +
+          (suppressBtst ? 'BTST suppressed (BEAR regime). ' : '') +
           `Refusing weak/WATCH/UNKNOWN fills.`,
-        candidatesSkipped: {
-          shortsSuppressedByRegime: suppressStbt ? topShortsRaw.map((s) => s.symbol) : [],
-        },
         logged: [],
         skipped: [],
       }, { status: 200 });
@@ -293,6 +294,7 @@ export async function GET(req: NextRequest) {
       mode: 'TRADEABLE_READY_PLUS',
       regime,
       suppressStbt,
+      suppressBtst,
       overnightEnsured,
       picked: {
         longs: topLongs.map((s) => ({
@@ -307,13 +309,6 @@ export async function GET(req: NextRequest) {
           qualityBucket: s.qualityBucket,
           classification: s.classification,
         })),
-        shortsSuppressedByRegime: suppressStbt
-          ? topShortsRaw.map((s) => ({
-              symbol: s.symbol,
-              overnightScore: s.overnightScore,
-              qualityBucket: s.qualityBucket,
-            }))
-          : [],
       },
       logged,
       skipped,

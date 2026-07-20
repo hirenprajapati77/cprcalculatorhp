@@ -3,7 +3,8 @@ import type { AdvancedScoreBreakdown } from './btst-ranking.service';
 export interface StbtScoringInputs {
   volume: number;
   avgVolume: number;
-  tomorrowCprWidth: number;
+  /** True when tomorrow CPR is NARROW per classifyCprWidth (single source of truth). */
+  tomorrowCprNarrow: boolean;
   tomorrowTc: number;
   tomorrowBc: number;   // needed for aligned lowerValue condition
   todayBc: number;
@@ -58,8 +59,8 @@ export class StbtRankingService {
       breakdown.higherValue = 20;
     }
 
-    // Rule 3: Narrow CPR (Tomorrow Width < 0.35%) [mirrors BTST Rule 2: +30]
-    if (inputs.tomorrowCprWidth < 0.35) {
+    // Rule 3: Narrow CPR — uses calculateCPR → classifyCprWidth (ATR-aware)
+    if (inputs.tomorrowCprNarrow) {
       breakdown.cprNarrow = 30;
     }
 
@@ -69,7 +70,7 @@ export class StbtRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: Break Last 15m Low (3:20-3:25 weakness confirmed) [mirrors BTST Rule 5: +20]
+    // Rule 5: EOD Weakness — close < lowest price in 15:15–15:30 IST window
     if (inputs.close < inputs.last15mLow) {
       breakdown.liquidity = 20;
     }
