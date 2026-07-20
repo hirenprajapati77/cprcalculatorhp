@@ -25,7 +25,7 @@ The following files were modified beyond the strict CPR Analytics scope. Their i
 ### Baseline Comparison
 The baseline for this regression verification is `1081b56` (the commit immediately before any work on this task began). 
 - All unit tests and regression-lock tests pass successfully.
-- BTST/STBT candidate generation logic (including `evaluateOvernight`) returns identical scores (excluding the expected change to `CPR_WEIGHT = 0`). The CPR boolean logic `isHigherValue`, `isInsideValue`, etc. evaluates precisely the same because the exact legacy boundary checks were restored in `cpr-relationship.ts`.
+- Legacy `evaluateOvernight()` (research/backtest-only, exercised via `scripts/analyze_cpr_matrix.ts` with `strategyVariant: 'no_vdu_weighted'`) returns identical scores excluding the expected `CPR_WEIGHT` behavior change. **This does not cover the live production path**: `evaluateOvernightV2()`, which drives the BTST cron alert and journal pipelines, does not accept a `strategyVariant` and does not read `CPR_WEIGHT` at all — its CPR scoring is entirely hardcoded in `btst-ranking.service.ts` / `stbt-ranking.service.ts`. The CPR boolean logic `isHigherValue`, `isInsideValue`, etc. evaluates precisely the same because the exact legacy boundary checks were restored in `cpr-relationship.ts`.
 
 ## 4. Breaking Changes
 - **`env.CPR_WEIGHT` Parsing**: Previously, `process.env.CPR_WEIGHT ? parseInt(process.env.CPR_WEIGHT, 10) : 35` would treat a literal `"0"` as falsy and fall back to a weight of 35. The new Zod-validated `env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : 35` correctly respects `"0"` as a valid weight. This is an intentional bug fix, not an accidental regression, and is explicitly declared here.
