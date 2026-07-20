@@ -62,12 +62,20 @@ function pickTradableTops(
   regimeTrend: 'BULL' | 'BEAR' | 'CHOPPY'
 ) {
   const today = rows.filter((r) => r.signalDate === signalDate);
-  const { longs: topLongs, shorts: topShortsRaw } = selectTradableOvernightPicks(
+  const { longs: topLongsRaw, shorts: topShortsRaw } = selectTradableOvernightPicks(
     asOvernight(today),
-    { minScore: MIN_SCORE, take: 2, suppressShort: false }
+    { minScore: MIN_SCORE, take: 2, suppressShort: false, suppressLong: false }
   );
-  const topShorts = regimeTrend === 'BULL' ? [] : topShortsRaw;
-  return { topLongs, topShorts, topShortsRaw };
+  const { longs: topLongs, shorts: topShorts } = selectTradableOvernightPicks(
+    asOvernight(today),
+    {
+      minScore: MIN_SCORE,
+      take: 2,
+      suppressShort: regimeTrend === 'BULL',
+      suppressLong: regimeTrend === 'BEAR',
+    }
+  );
+  return { topLongs, topShorts, topShortsRaw, topLongsRaw };
 }
 
 describe('btst-journal premium TRADEABLE pipeline', () => {
@@ -101,6 +109,12 @@ describe('btst-journal premium TRADEABLE pipeline', () => {
     assert.ok(topShortsRaw.length >= 1, 'would have had shorts without regime gate');
   });
 
+  it('suppresses BTST entirely in BEAR regime', () => {
+    const { topLongs, topShorts } = pickTradableTops(rows, today, 'BEAR');
+    assert.equal(topLongs.length, 0);
+    assert.deepEqual(topShorts.map((r) => r.symbol), ['E', 'F']);
+  });
+
   it('allows STBT in BEAR regime', () => {
     const { topShorts } = pickTradableTops(rows, today, 'BEAR');
     assert.deepEqual(topShorts.map((r) => r.symbol), ['E', 'F']);
@@ -115,13 +129,15 @@ describe('btst-journal premium TRADEABLE pipeline', () => {
     assert.equal(topShorts.length, 0);
   });
 
-  it('does not let duplicate signalTime rows for one symbol fill both top-2 slots', () => {
+  it('prefers latest signalTime over higher score when deduping rescans', () => {
     const dupes: FakeSignal[] = [
       { symbol: 'JIOFIN', signalDate: today, direction: 'LONG', overnightScore: 110, classification: 'STRONG_BTST', qualityBucket: 'TRADEABLE', signalTime: '15:10' },
-      { symbol: 'JIOFIN', signalDate: today, direction: 'LONG', overnightScore: 108, classification: 'BTST_READY', qualityBucket: 'TRADEABLE', signalTime: '15:20' },
+      { symbol: 'JIOFIN', signalDate: today, direction: 'LONG', overnightScore: 108, classification: 'BTST_READY', qualityBucket: 'TRADEABLE', signalTime: '15:25' },
       { symbol: 'HDFCBANK', signalDate: today, direction: 'LONG', overnightScore: 95, classification: 'BTST_READY', qualityBucket: 'TRADEABLE', signalTime: '15:10' },
     ];
     const { topLongs } = pickTradableTops(dupes, today, 'CHOPPY');
     assert.deepEqual(topLongs.map((r) => r.symbol), ['JIOFIN', 'HDFCBANK']);
+    assert.strictEqual(topLongs[0].overnightScore, 108);
+    assert.strictEqual(topLongs[0].signalTime, '15:25');
   });
 });

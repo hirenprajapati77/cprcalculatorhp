@@ -28,7 +28,7 @@ const MIN_OVERNIGHT_SCORE = 85;
  * 2. If today's rows are missing, run OvernightService.discover() once (same pipeline —
  *    never BtstService.discover(), which caused the 60% UNKNOWN quality gap)
  * 3. Journal only qualityBucket=TRADEABLE + READY+ score (>=85)
- * 4. Suppress STBT when NIFTY regime is BULL (month of evidence: STBT 32% vs BTST 54%)
+ * 4. Suppress STBT when NIFTY regime is BULL; suppress BTST when BEAR
  * 5. Keep Simple V2 shadow scoring (scoreV2) for research — Advanced overnightScore is authoritative
  */
 export async function GET(req: NextRequest) {
@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
     const signalDate = TradeJournalService.todayISTString();
     const regime = await RegimeService.getMarketRegime(signalDate);
     const suppressStbt = regime.trend === 'BULL';
+    const suppressBtst = regime.trend === 'BEAR';
 
     let overnightEnsured = false;
     // Always refresh at journal time so picks reflect the latest 15:25+ scan (not a stale 15:10 row).
@@ -73,13 +74,23 @@ export async function GET(req: NextRequest) {
     });
     const { longs: topLongs, shorts: topShorts } = selectTradableOvernightPicks(
       todaySignals,
-      { minScore: MIN_OVERNIGHT_SCORE, take: 2, suppressShort: suppressStbt }
+      {
+        minScore: MIN_OVERNIGHT_SCORE,
+        take: 2,
+        suppressShort: suppressStbt,
+        suppressLong: suppressBtst,
+      }
     );
 
     if (topLongs.length === 0 && topShorts.length === 0) {
-      const reason = suppressStbt
-        ? 'no_tradable_setups_stbt_suppressed_bull_regime'
-        : 'no_tradable_setups';
+      const reason =
+        suppressStbt && suppressBtst
+          ? 'no_tradable_setups_regime_suppressed_both'
+          : suppressStbt
+            ? 'no_tradable_setups_stbt_suppressed_bull_regime'
+            : suppressBtst
+              ? 'no_tradable_setups_btst_suppressed_bear_regime'
+              : 'no_tradable_setups';
       console.warn(
         `[BtstJournal] ${reason} for ${signalDate} (regime=${regime.trend}/${regime.volatility}, ensuredScan=${overnightEnsured})`
       );
@@ -92,6 +103,7 @@ export async function GET(req: NextRequest) {
         message:
           `No TRADEABLE READY+ OvernightSignal picks for ${signalDate}. ` +
           (suppressStbt ? 'STBT suppressed (BULL regime). ' : '') +
+          (suppressBtst ? 'BTST suppressed (BEAR regime). ' : '') +
           `Refusing weak/WATCH/UNKNOWN fills.`,
         logged: [],
         skipped: [],
@@ -282,6 +294,7 @@ export async function GET(req: NextRequest) {
       mode: 'TRADEABLE_READY_PLUS',
       regime,
       suppressStbt,
+      suppressBtst,
       overnightEnsured,
       picked: {
         longs: topLongs.map((s) => ({
