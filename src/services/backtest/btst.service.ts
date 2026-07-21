@@ -11,7 +11,7 @@ import { getAtrPct, calculateATR } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
 import { GapProbabilityService } from '../overnight/gap-probability.service';
-import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen } from '@/lib/market-hours';
+import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen, getCompletedHistory } from '@/lib/market-hours';
 import { discoverViaAdvancedEngine } from '../overnight/advanced-discover-bridge';
 
 export interface BtstScoreResult {
@@ -279,7 +279,12 @@ export class BtstService {
         : lastCandle;
     }
 
-    const atrPct = getAtrPct(stock.history || [], stock.close);
+    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const atrRefClose =
+      completedHistory.length > 0
+        ? completedHistory[completedHistory.length - 1].close
+        : stock.close;
+    const atrPct = getAtrPct(completedHistory, atrRefClose);
 
     const todayCpr = calculateCPR({
       high: yesterdayCandle.high,
@@ -463,7 +468,12 @@ export class BtstService {
         : lastCandle;
     }
 
-    const atrPct = getAtrPct(stock.history || [], stock.close);
+    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const atrRefClose =
+      completedHistory.length > 0
+        ? completedHistory[completedHistory.length - 1].close
+        : stock.close;
+    const atrPct = getAtrPct(completedHistory, atrRefClose);
 
     const todayCpr = calculateCPR({
       high: yesterdayCandle.high,
