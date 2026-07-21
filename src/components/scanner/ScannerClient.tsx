@@ -955,6 +955,28 @@ export default function ScannerClient() {
   };
   const telState = getTelemetryState();
 
+  /** INDEX mode uses cash-session hours, not the BTST 15:10–15:25 discovery window. */
+  const getIndexTelemetryState = () => {
+    const parts = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const h = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+    const m = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+    const t = h * 100 + m;
+    if (t < BTST_HHMM.marketOpen) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
+    // Match isMarketOpen: cash session [09:15, 15:30) IST.
+    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.journalEnd) {
+      return { label: 'SESSION OPEN', color: 'bg-accent-green animate-pulse' };
+    }
+    return { label: 'SESSION CLOSED', color: 'bg-accent-purple' };
+  };
+  const indexTelState = getIndexTelemetryState();
+  const indexActiveCount = indexResults.filter((r) => r.classification !== 'IGNORE').length;
+  const indexIgnoreCount = indexResults.filter((r) => r.classification === 'IGNORE').length;
+
   // List of all column definitions for Show/Hide Checklist
   const COLUMN_DEFS = [
     { key: 'checkbox', label: 'Select Checkbox' },
@@ -2665,40 +2687,74 @@ export default function ScannerClient() {
             )}
           </div>
 
-          {/* BTST Telemetry Panel */}
+          {/* BTST / INDEX Telemetry Panel */}
           {scannerMode !== 'CPR' && (
             <div className="bg-bg-primary/30 border border-border-primary rounded p-4 font-mono text-xs flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-text-secondary">
                 <Activity size={13} className="text-accent-blue" />
                 Live Telemetry
               </div>
-              <div className="flex flex-wrap items-center gap-4 text-[11px]">
-                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
-                  <span className="text-text-tertiary">Discovery State:</span>
-                  <div className="flex items-center gap-1">
-                    <span className={`h-2 w-2 rounded-full ${telState.color}`} />
-                    <span className="font-bold text-text-primary uppercase">
-                      {telState.label}
-                    </span>
+              {scannerMode === 'INDEX' ? (
+                <div className="flex flex-wrap items-center gap-4 text-[11px]">
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Session:</span>
+                    <div className="flex items-center gap-1">
+                      <span className={`h-2 w-2 rounded-full ${indexTelState.color}`} />
+                      <span className="font-bold text-text-primary uppercase">
+                        {indexTelState.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Active:</span>
+                    <span className="font-bold text-accent-blue">{indexActiveCount}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Ignore:</span>
+                    <span className="font-bold text-accent-red">{indexIgnoreCount}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Rows:</span>
+                    <span className="font-bold text-text-primary">{indexResults.length}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Session Close:</span>
+                    <span className="font-bold text-text-primary">{BTST_CLOCK.marketClose} IST</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-text-tertiary">Latency:</span>
+                    <span className="font-bold text-accent-green">{latency}ms</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
-                  <span className="text-text-tertiary">Candidates:</span>
-                  <span className="font-bold text-accent-blue">{results.length}</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-4 text-[11px]">
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Discovery State:</span>
+                    <div className="flex items-center gap-1">
+                      <span className={`h-2 w-2 rounded-full ${telState.color}`} />
+                      <span className="font-bold text-text-primary uppercase">
+                        {telState.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Candidates:</span>
+                    <span className="font-bold text-accent-blue">{results.length}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Rejected:</span>
+                    <span className="font-bold text-accent-red">{results.filter(r => r.rejectionReason).length}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Freeze Time:</span>
+                    <span className="font-bold text-text-primary">{BTST_CLOCK.discoveryEnd} IST</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-text-tertiary">Latency:</span>
+                    <span className="font-bold text-accent-green">{latency}ms</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
-                  <span className="text-text-tertiary">Rejected:</span>
-                  <span className="font-bold text-accent-red">{results.filter(r => r.rejectionReason).length}</span>
-                </div>
-                <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
-                  <span className="text-text-tertiary">Freeze Time:</span>
-                  <span className="font-bold text-text-primary">{BTST_CLOCK.discoveryEnd} IST</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-text-tertiary">Latency:</span>
-                  <span className="font-bold text-accent-green">{latency}ms</span>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
