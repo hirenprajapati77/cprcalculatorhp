@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { IndexRankingService, IndexScoringInputs } from '../../services/overnight/index-ranking.service';
+import { IndexRankingService, IndexScoringInputs, INDEX_SCORE } from '../../services/overnight/index-ranking.service';
 
 function baseInputs(partial: Partial<IndexScoringInputs> = {}): IndexScoringInputs {
   return {
@@ -89,5 +89,11 @@ describe('IndexRankingService.getClassification', () => {
     const cls = IndexRankingService.getClassification(100);
     assert.notEqual(cls, 'STRONG_BTST');
     assert.notEqual(cls, 'BTST_READY');
+  });
+
+  it('exposes INDEX_SCORE.READY=70 as the option-suggestion floor (not WATCH=40)', () => {
+    assert.equal(INDEX_SCORE.WATCH, 40);
+    assert.equal(INDEX_SCORE.READY, 70);
+    assert.ok(INDEX_SCORE.READY > INDEX_SCORE.WATCH);
   });
 });
