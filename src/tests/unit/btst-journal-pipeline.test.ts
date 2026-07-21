@@ -30,6 +30,7 @@ function asOvernight(rows: FakeSignal[]): OvernightSignal[] {
     entry: 100,
     stopLoss: 98,
     target: 104,
+    instrumentType: null,
     overnightScore: r.overnightScore,
     expectedGap: null,
     expectedMove: null,

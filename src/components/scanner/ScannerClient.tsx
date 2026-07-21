@@ -31,10 +31,11 @@ import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST } from '@/utils/format';
+import { IndexSignalRow } from './IndexSignalRow';
 import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 
-type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT';
+type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
 function isOvernightMode(mode: ScannerMode): boolean {
   return mode === 'BTST' || mode === 'STBT' || mode === 'OVERNIGHT';
@@ -865,6 +866,7 @@ export default function ScannerClient() {
 
   // Main Scanned Data
   const [results, setResults] = useState<ScannedStock[]>([]);
+  const [indexResults, setIndexResults] = useState<any[]>([]);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [universeCount, setUniverseCount] = useState<number>(0);
@@ -1451,6 +1453,39 @@ export default function ScannerClient() {
   }, [fetchScannerData, debouncedSearchQuery]);
 
   useEffect(() => {
+    if (scannerMode !== 'INDEX') return;
+    let isActive = true;
+    const fetchIndexData = async () => {
+      setIsLoading(true);
+      try {
+        const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
+        const res = await fetch(`/api/index-scan${bypassVal ? '?bypass=true' : ''}`);
+        if (!res.ok) throw new Error('Failed to retrieve live INDEX signals');
+        const data = await res.json();
+        
+        if (!isActive) return;
+        
+        setExecutionWindowOpen(data.executionWindowOpen ?? true);
+        setCachedResult(data.cachedResult ?? false);
+        setScannedAt(data.scannedAt || '');
+        setIsDegraded(!!data.degraded);
+        
+        setIndexResults(data.results || []);
+      } catch (err: any) {
+        if (isActive) {
+          showToast(err.message, 'error');
+          setIndexResults([]);
+        }
+      } finally {
+        if (isActive) setIsLoading(false);
+      }
+    };
+    
+    fetchIndexData();
+    return () => { isActive = false; };
+  }, [scannerMode, showToast]);
+
+  useEffect(() => {
     fetchTopOpportunities();
     fetchHistoryRuns();
   }, [fetchTopOpportunities, fetchHistoryRuns]);
@@ -1878,6 +1913,7 @@ export default function ScannerClient() {
               {scannerMode === 'BTST' ? 'BTST Discovery Engine' : 
                scannerMode === 'STBT' ? 'STBT Discovery Engine' :
                scannerMode === 'OVERNIGHT' ? 'Overnight Meta Scanner' :
+               scannerMode === 'INDEX' ? 'Index Signal Scanner' :
                'CPR Opportunity Scanner'}
             </h1>
             <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
@@ -2231,11 +2267,12 @@ export default function ScannerClient() {
                   if (scannerMode === 'CPR') setScannerMode('BTST');
                   else if (scannerMode === 'BTST') setScannerMode('STBT');
                   else if (scannerMode === 'STBT') setScannerMode('OVERNIGHT');
+                  else if (scannerMode === 'OVERNIGHT') setScannerMode('INDEX');
                   else setScannerMode('CPR');
                 }}
                 size="sm"
                 variant="secondary"
-                className={`text-[10px] h-7 font-bold ${scannerMode !== 'CPR' ? (scannerMode === 'BTST' ? 'bg-accent-green/20 text-accent-green border border-accent-green/50' : scannerMode === 'STBT' ? 'bg-accent-red/20 text-accent-red border border-accent-red/50' : 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50') : ''}`}
+                className={`text-[10px] h-7 font-bold ${scannerMode !== 'CPR' ? (scannerMode === 'BTST' ? 'bg-accent-green/20 text-accent-green border border-accent-green/50' : scannerMode === 'STBT' ? 'bg-accent-red/20 text-accent-red border border-accent-red/50' : scannerMode === 'OVERNIGHT' ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/50' : 'bg-accent-purple/20 text-accent-purple border border-accent-purple/50') : ''}`}
               >
                 Mode: {scannerMode}
               </Button>
@@ -2648,7 +2685,7 @@ export default function ScannerClient() {
                     <div className="h-8 w-8 rounded-full border-2 border-accent-blue border-t-transparent animate-spin mb-4" />
                     <span className="text-xs text-text-secondary animate-pulse">Running quantitative analysis...</span>
                   </div>
-                ) : results.length === 0 ? (
+                ) : (scannerMode === 'INDEX' ? indexResults.length === 0 : results.length === 0) ? (
                   showWatchlistOnly ? (
                     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                       <Star size={48} className="text-accent-amber/40 mb-3 animate-pulse" />
@@ -2668,7 +2705,27 @@ export default function ScannerClient() {
                   )
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
+                    {scannerMode === 'INDEX' ? (
+                      <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
+                        <thead>
+                          <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
+                            <th className="p-2.5">Symbol</th>
+                            <th className="p-2.5">Direction</th>
+                            <th className="p-2.5">Score</th>
+                            <th className="p-2.5">Classification</th>
+                            <th className="p-2.5">Entry</th>
+                            <th className="p-2.5">Stop Loss</th>
+                            <th className="p-2.5">Target</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-primary/50">
+                          {indexResults.map((row) => (
+                            <IndexSignalRow key={`${row.symbol}-${row.signalTime}`} signal={row} />
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
                         {visibleColumns.includes('checkbox') && <th className="p-2.5 w-8"></th>}
@@ -2769,6 +2826,7 @@ export default function ScannerClient() {
                       })}
                     </tbody>
                   </table>
+                    )}
                   </div>
                 )}
               </div>

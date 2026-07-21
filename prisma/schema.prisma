@@ -232,6 +232,8 @@ model OvernightSignal {
 
   direction String @default("LONG")
 
+  instrumentType String? // "STOCK" | "INDEX", null = STOCK (no backfill needed)
+
   entry    Float?
   stopLoss Float?
   target   Float?
