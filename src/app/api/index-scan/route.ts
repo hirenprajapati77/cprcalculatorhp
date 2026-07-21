@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
-import { isMarketOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
+import { IndexRegimeService } from '@/services/overnight/index-regime.service';
+import { isMarketOpen, getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
@@ -15,12 +16,15 @@ export async function GET(request: Request) {
 
     const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
     const CACHE_KEY = indexScanCacheKey(today);
+    const dateStr = getISTDateString(now);
+    const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
 
     interface CachedIndexData {
       scannedAt: string;
       results: unknown[];
       insights: unknown;
       engine?: string;
+      marketRegime?: unknown;
     }
 
     if (!executionWindowOpen) {
@@ -36,6 +40,7 @@ export async function GET(request: Request) {
           insights: cached.insights,
           engine: cached.engine ?? 'index-advanced-unified',
           state: windowState,
+          marketRegime: (cached as CachedIndexData).marketRegime ?? marketRegime,
         });
       }
       return NextResponse.json({
@@ -50,6 +55,7 @@ export async function GET(request: Request) {
         },
         engine: 'index-advanced-unified',
         state: windowState,
+        marketRegime,
       });
     }
 
@@ -158,8 +164,8 @@ export async function GET(request: Request) {
     }
 
     const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
-    const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
-    const scannedAt = `${timeStr} IST, ${dateStr}`;
+    const scannedDateLabel = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
+    const scannedAt = `${timeStr} IST, ${scannedDateLabel}`;
 
     const insights = {
       strongSignal: btstResults.filter((r) => r.classification === 'INDEX_STRONG').length,
@@ -175,6 +181,7 @@ export async function GET(request: Request) {
       results: resultsList,
       insights,
       engine: 'index-advanced-unified',
+      marketRegime,
     };
 
     await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
@@ -188,6 +195,7 @@ export async function GET(request: Request) {
       insights,
       engine: 'index-advanced-unified',
       state: windowState,
+      marketRegime,
     });
 
   } catch (error) {

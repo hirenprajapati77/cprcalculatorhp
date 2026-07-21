@@ -887,15 +887,25 @@ export default function ScannerClient() {
     symbol: string;
     direction: 'LONG' | 'SHORT';
     score: number | null;
+    confidence?: number | null;
     classification: string;
+    signalType?: 'CALL_BUY' | 'PUT_BUY' | 'NO_TRADE';
     entry: number | null;
     stopLoss: number | null;
     target: number | null;
+    riskReward?: string | null;
     signalDate: string;
     signalTime: string;
     scanType?: string;
+    reasons?: string[];
+    regime?: { trend: string; volatility: string; adjustment: number } | null;
     optionSuggestion?: Record<string, unknown> | null;
   }>>([]);
+  const [indexMarketRegime, setIndexMarketRegime] = useState<{
+    trend: string;
+    volatility: string;
+    score?: number;
+  } | null>(null);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [universeCount, setUniverseCount] = useState<number>(0);
@@ -1530,6 +1540,7 @@ export default function ScannerClient() {
         setLatency(Date.now() - startFetchTime);
         
         setIndexResults(data.results || []);
+        setIndexMarketRegime(data.marketRegime ?? null);
         if (data.insights) {
           setInsightCounts({
             strongBuy: data.insights.strongSignal || 0,
@@ -2728,6 +2739,14 @@ export default function ScannerClient() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
+                    <span className="text-text-tertiary">Regime:</span>
+                    <span className="font-bold text-text-primary uppercase">
+                      {indexMarketRegime
+                        ? `${indexMarketRegime.trend} / ${indexMarketRegime.volatility}`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
                     <span className="text-text-tertiary">Active:</span>
                     <span className="font-bold text-accent-blue">{indexActiveCount}</span>
                   </div>
@@ -2894,9 +2913,10 @@ export default function ScannerClient() {
                           <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
                             <th className="p-2.5">Symbol</th>
                             <th className="p-2.5">Type</th>
-                            <th className="p-2.5">Direction</th>
-                            <th className="p-2.5">Score</th>
+                            <th className="p-2.5">Signal</th>
+                            <th className="p-2.5">Confidence</th>
                             <th className="p-2.5">Classification</th>
+                            <th className="p-2.5">R:R</th>
                             <th className="p-2.5">Entry</th>
                             <th className="p-2.5">Stop Loss</th>
                             <th className="p-2.5">Target</th>

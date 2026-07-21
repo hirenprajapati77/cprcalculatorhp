@@ -24,10 +24,15 @@ describe('IndexDiscoverService.discover', () => {
     for (const r of results) {
       assert.equal(r.direction, 'LONG');
       assert.equal(r.score, null);
+      assert.equal(r.confidence, null);
       assert.equal(r.classification, 'IGNORE');
+      assert.equal(r.signalType, 'NO_TRADE');
       assert.equal(r.entry, null);
       assert.equal(r.stopLoss, null);
       assert.equal(r.target, null);
+      assert.ok(Array.isArray(r.reasons));
+      assert.ok(r.reasons.length > 0);
+      assert.equal(r.riskReward, null);
     }
   });
 
@@ -79,11 +84,14 @@ describe('IndexDiscoverService.discoverIntraday', () => {
     const results = await IndexDiscoverService.discoverIntraday(new Date('2026-07-21T10:00:00+05:30'));
     for (const r of results) {
       assert.match(r.classification, /^(INDEX_STRONG|INDEX_READY|INDEX_WATCH|IGNORE)$/);
+      assert.match(r.signalType, /^(CALL_BUY|PUT_BUY|NO_TRADE)$/);
+      assert.ok(Array.isArray(r.reasons));
       // IGNORE must never advertise trade levels (even if BULLISH/BEARISH fired).
       if (r.classification === 'IGNORE') {
         assert.equal(r.entry, null);
         assert.equal(r.stopLoss, null);
         assert.equal(r.target, null);
+        assert.equal(r.signalType, 'NO_TRADE');
       }
     }
   });
