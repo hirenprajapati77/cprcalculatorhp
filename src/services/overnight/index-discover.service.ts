@@ -242,13 +242,36 @@ export class IndexDiscoverService {
   }
 
   /**
+   * Map CPR RankingService letter grades onto index classification strings so
+   * INDEX UI KPIs / filters stay consistent (never leak A+/A/B into OvernightSignal
+   * stock filters — INTRA rows are not persisted).
+   */
+  static mapIntraClassification(score: number): IndexClassification {
+    const grade = RankingService.getClassification(score);
+    if (grade === 'A+') return 'INDEX_STRONG';
+    if (grade === 'A') return 'INDEX_READY';
+    if (grade === 'B') return 'INDEX_WATCH';
+    return 'IGNORE';
+  }
+
+  /**
    * Scans the fixed index instrument list and returns scored INTRA signals.
    * Leverages SignalService and RankingService to match the stock CPR logic.
    */
   static async discoverIntraday(dateOverride?: Date): Promise<IndexSignalResult[]> {
     const currentTime = dateOverride || new Date();
     const dateStr = getISTDateString(currentTime);
-    const timeStr = currentTime.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+    const timeStr = currentTime.toLocaleTimeString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    const { isTradingDay } = getISTTime(currentTime);
+    if (!isTradingDay) {
+      return [];
+    }
 
     const results: IndexSignalResult[] = [];
 
@@ -264,39 +287,84 @@ export class IndexDiscoverService {
           continue;
         }
 
-        const { isTradingDay } = getISTTime(currentTime);
         const lastCandle = history[history.length - 1];
-        const isLastToday = lastCandle.date === dateStr;
-
-        // In live mode, Yahoo might not have the very latest tick.
-        // For accurate intraday scoring, we need the live LTP. Since we don't have a live
-        // tick feed here for indices, we use the last candle's close as a proxy.
+        // Daily history close as LTP proxy — no live index tick feed in Phase 1.
         const ltp = lastCandle.close;
+        const previousClose =
+          history.length >= 2 ? history[history.length - 2].close : lastCandle.close;
 
-        const stockData = {
+        const stockData: MarketStockData = {
           symbol: instrument.symbol,
-          ltp: ltp,
+          market: 'NSE',
+          sector: 'INDEX',
+          ltp,
           open: lastCandle.open,
           high: lastCandle.high,
           low: lastCandle.low,
           close: lastCandle.close,
           volume: lastCandle.volume || 0,
           avgVolume: 0,
-          previousClose: history.length >= 2 ? history[history.length - 2].close : lastCandle.close,
-          history: history,
-        } as unknown as MarketStockData;
+          marketCap: 0,
+          previousClose,
+          history,
+        };
 
         const signalResult = SignalService.getSignals(stockData);
-        const score = RankingService.calculateScore({ ...signalResult, volume: 0, avgVolume: 0 } as unknown as ScannerSignalResult);
-        
-        // Map signals
-        const direction = signalResult.signals.includes('BULLISH') ? 'LONG' : (signalResult.signals.includes('BEARISH') ? 'SHORT' : 'LONG');
-        
-        // Approximate Entry/SL/Target from CPR
-        const atrPct = getAtrPct(history.slice(0, -1), stockData.previousClose || lastCandle.close);
-        const yesterdayCandle = history.length >= 2 ? history[history.length - 2] : lastCandle;
-        const realCpr = calculateCPR({ high: yesterdayCandle.high, low: yesterdayCandle.low, close: yesterdayCandle.close }, atrPct);
+        // Volume is meaningless for spot-index charts here — force ratio fallback off
+        // by passing zeros (RankingService treats avgVolume<=0 as ratio=1, no spike pts).
+        const score = RankingService.calculateScore({
+          ...stockData,
+          ...signalResult,
+          pivot: 0,
+          bc: 0,
+          tc: 0,
+          r1: 0,
+          r2: 0,
+          r3: 0,
+          r4: 0,
+          s1: 0,
+          s2: 0,
+          s3: 0,
+          s4: 0,
+          width: 0,
+          classification: 'NORMAL',
+          entry: 0,
+          sl: 0,
+          target: 0,
+          rr: '1:0',
+          volume: 0,
+          avgVolume: 0,
+        } as ScannerSignalResult);
 
+        const bullish = signalResult.signals.includes('BULLISH');
+        const bearish = signalResult.signals.includes('BEARISH');
+        // Do not invent LONG when price is inside CPR with no directional tag.
+        if (!bullish && !bearish) {
+          results.push({
+            symbol: instrument.symbol,
+            signalDate: dateStr,
+            signalTime: timeStr,
+            direction: 'LONG',
+            score: null,
+            classification: 'IGNORE',
+            entry: null,
+            stopLoss: null,
+            target: null,
+          });
+          continue;
+        }
+
+        const direction: 'LONG' | 'SHORT' = bullish ? 'LONG' : 'SHORT';
+
+        const atrPct = getAtrPct(history.slice(0, -1), previousClose);
+        const yesterdayCandle = history.length >= 2 ? history[history.length - 2] : lastCandle;
+        const realCpr = calculateCPR(
+          { high: yesterdayCandle.high, low: yesterdayCandle.low, close: yesterdayCandle.close },
+          atrPct
+        );
+
+        // LONG enters near TC / SHORT near BC — never reuse TC for both sides.
+        const entry = direction === 'LONG' ? realCpr.tc : realCpr.bc;
         const sl = direction === 'LONG' ? realCpr.bc : realCpr.tc;
         const target = direction === 'LONG' ? realCpr.r1 : realCpr.s1;
 
@@ -304,14 +372,13 @@ export class IndexDiscoverService {
           symbol: instrument.symbol,
           signalDate: dateStr,
           signalTime: timeStr,
-          direction: direction as 'LONG' | 'SHORT',
-          score: score,
-          classification: RankingService.getClassification(score) as string,
-          entry: realCpr.tc,
+          direction,
+          score,
+          classification: this.mapIntraClassification(score),
+          entry,
           stopLoss: sl,
-          target: target,
-        } as IndexSignalResult);
-
+          target,
+        });
       } catch (err) {
         console.error(`[IndexDiscover] Error scanning INTRA for ${instrument.symbol}:`, err);
       }
