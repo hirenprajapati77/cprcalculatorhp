@@ -24,10 +24,19 @@ import { HistoricalProvider } from '../backtest/historical.provider';
 import {
   IndexRankingService,
   IndexClassification,
+  IndexScoreBreakdown,
   INDEX_SCORE,
   INDIA_VIX_CALM_MAX,
   INDIA_VIX_ELEVATED_MIN,
 } from './index-ranking.service';
+import { IndexRegimeService, IndexRegimeContext } from './index-regime.service';
+import {
+  resolveSignalType,
+  buildBtstReasons,
+  buildIntraReasons,
+  computeRiskReward,
+  IndexSignalType,
+} from './index-signal.util';
 import { SignalService } from '../signal.service';
 import { RankingService } from '../ranking.service';
 import { MarketStockData } from '../market.service';
@@ -51,11 +60,20 @@ export interface IndexSignalResult {
   signalDate: string;
   signalTime: string;
   direction: 'LONG' | 'SHORT';
+  /** Raw CPR score before regime adjustment (classification gate). */
   score: number | null;
+  /** Score after regime boost/penalty — displayed as confidence. */
+  confidence: number | null;
   classification: IndexClassification;
+  /** CALL BUY / PUT BUY / NO_TRADE — options-native signal label. */
+  signalType: IndexSignalType;
   entry: number | null;
   stopLoss: number | null;
   target: number | null;
+  riskReward: string | null;
+  scoreBreakdown: IndexScoreBreakdown | null;
+  reasons: string[];
+  regime: IndexRegimeContext | null;
 }
 
 interface IndexIntradayMetrics {
@@ -91,6 +109,69 @@ interface YahooFinanceChartResponse {
 }
 
 export class IndexDiscoverService {
+  private static buildSignalResult(
+    partial: Omit<
+      IndexSignalResult,
+      'signalType' | 'confidence' | 'riskReward' | 'scoreBreakdown' | 'reasons' | 'regime'
+    > & {
+      scoreBreakdown?: IndexScoreBreakdown | null;
+      reasons: string[];
+      regime: IndexRegimeContext | null;
+      maxScore?: number;
+    }
+  ): IndexSignalResult {
+    const maxScore = partial.maxScore ?? INDEX_SCORE.MAX;
+    const confidence = IndexRegimeService.applyConfidence(
+      partial.score,
+      partial.regime?.adjustment ?? 0,
+      maxScore
+    );
+    const signalType = resolveSignalType(partial.direction, partial.classification);
+    const entry = partial.entry;
+    const stopLoss = partial.stopLoss;
+    const target = partial.target;
+
+    return {
+      symbol: partial.symbol,
+      signalDate: partial.signalDate,
+      signalTime: partial.signalTime,
+      direction: partial.direction,
+      score: partial.score,
+      confidence,
+      classification: partial.classification,
+      signalType,
+      entry,
+      stopLoss,
+      target,
+      riskReward: computeRiskReward(entry, stopLoss, target),
+      scoreBreakdown: partial.scoreBreakdown ?? null,
+      reasons: partial.reasons,
+      regime: partial.regime,
+    };
+  }
+
+  private static ignoreResult(
+    symbol: string,
+    signalDate: string,
+    signalTime: string,
+    direction: 'LONG' | 'SHORT',
+    reasons: string[],
+    regime: IndexRegimeContext | null
+  ): IndexSignalResult {
+    return this.buildSignalResult({
+      symbol,
+      signalDate,
+      signalTime,
+      direction,
+      score: null,
+      classification: 'IGNORE',
+      entry: null,
+      stopLoss: null,
+      target: null,
+      reasons,
+      regime,
+    });
+  }
   /**
    * Fetches intraday 5m data for VWAP + last-15m high (15:15–15:30 IST),
    * matching OvernightService's closing-liquidity window logic.
@@ -251,22 +332,23 @@ export class IndexDiscoverService {
 
     const results: IndexSignalResult[] = [];
     const vixState = await this.getIndiaVixState(currentTime);
+    const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
+    const longRegime = IndexRegimeService.computeAdjustment('LONG', marketRegime);
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
         // Elevated VIX: force IGNORE with null score/levels — do not invent setups.
         if (vixState.elevated) {
-          results.push({
-            symbol: instrument.symbol,
-            signalDate: dateStr,
-            signalTime: timeStr,
-            direction: 'LONG',
-            score: null,
-            classification: 'IGNORE',
-            entry: null,
-            stopLoss: null,
-            target: null,
-          });
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              buildBtstReasons(null, true, longRegime),
+              longRegime
+            )
+          );
           continue;
         }
 
@@ -326,18 +408,25 @@ export class IndexDiscoverService {
         const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
         const risk = todayCandle.close - sl;
         const target = risk > 0 ? todayCandle.close + risk * 2 : null;
+        const reasons = buildBtstReasons(details.breakdown, false, longRegime);
 
-        results.push({
-          symbol: instrument.symbol,
-          signalDate: dateStr,
-          signalTime: timeStr,
-          direction: 'LONG',
-          score: details.score,
-          classification: cls,
-          entry: details.score !== null ? todayCandle.close : null,
-          stopLoss: details.score !== null ? sl : null,
-          target: details.score !== null ? target : null,
-        });
+        results.push(
+          this.buildSignalResult({
+            symbol: instrument.symbol,
+            signalDate: dateStr,
+            signalTime: timeStr,
+            direction: 'LONG',
+            score: details.score,
+            classification: cls,
+            entry: details.score !== null ? todayCandle.close : null,
+            stopLoss: details.score !== null ? sl : null,
+            target: details.score !== null ? target : null,
+            scoreBreakdown: details.breakdown,
+            reasons,
+            regime: longRegime,
+            maxScore: INDEX_SCORE.MAX,
+          })
+        );
       } catch (err) {
         console.error(`[IndexDiscover] Error scanning ${instrument.symbol}:`, err instanceof Error ? err.message : err);
       }
@@ -378,9 +467,26 @@ export class IndexDiscoverService {
     }
 
     const results: IndexSignalResult[] = [];
+    const vixState = await this.getIndiaVixState(currentTime);
+    const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
+        // Elevated VIX: same hard gate as BTST — block intraday option signals.
+        if (vixState.elevated) {
+          const regimeCtx = IndexRegimeService.computeAdjustment('LONG', marketRegime);
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              buildIntraReasons([], 'LONG', true, regimeCtx),
+              regimeCtx
+            )
+          );
+          continue;
+        }
         const endDateObj = new Date(currentTime);
         const startDateObj = new Date(currentTime);
         startDateObj.setDate(startDateObj.getDate() - 90);
@@ -444,36 +550,42 @@ export class IndexDiscoverService {
         const bearish = signalResult.signals.includes('BEARISH');
         // Do not invent LONG when price is inside CPR with no directional tag.
         if (!bullish && !bearish) {
-          results.push({
-            symbol: instrument.symbol,
-            signalDate: dateStr,
-            signalTime: timeStr,
-            direction: 'LONG',
-            score: null,
-            classification: 'IGNORE',
-            entry: null,
-            stopLoss: null,
-            target: null,
-          });
+          const regimeCtx = IndexRegimeService.computeAdjustment('LONG', marketRegime);
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              ['Price inside CPR — no directional bias'],
+              regimeCtx
+            )
+          );
           continue;
         }
 
         const direction: 'LONG' | 'SHORT' = bullish ? 'LONG' : 'SHORT';
+        const regimeCtx = IndexRegimeService.computeAdjustment(direction, marketRegime);
         const classification = this.mapIntraClassification(score);
 
         // IGNORE setups must not advertise entry/SL/target (matches BTST score-safety UX).
         if (classification === 'IGNORE') {
-          results.push({
-            symbol: instrument.symbol,
-            signalDate: dateStr,
-            signalTime: timeStr,
-            direction,
-            score,
-            classification,
-            entry: null,
-            stopLoss: null,
-            target: null,
-          });
+          results.push(
+            this.buildSignalResult({
+              symbol: instrument.symbol,
+              signalDate: dateStr,
+              signalTime: timeStr,
+              direction,
+              score,
+              classification,
+              entry: null,
+              stopLoss: null,
+              target: null,
+              reasons: buildIntraReasons(signalResult.signals, direction, false, regimeCtx),
+              regime: regimeCtx,
+              maxScore: 100,
+            })
+          );
           continue;
         }
 
@@ -489,17 +601,22 @@ export class IndexDiscoverService {
         const sl = direction === 'LONG' ? realCpr.bc : realCpr.tc;
         const target = direction === 'LONG' ? realCpr.r1 : realCpr.s1;
 
-        results.push({
-          symbol: instrument.symbol,
-          signalDate: dateStr,
-          signalTime: timeStr,
-          direction,
-          score,
-          classification,
-          entry,
-          stopLoss: sl,
-          target,
-        });
+        results.push(
+          this.buildSignalResult({
+            symbol: instrument.symbol,
+            signalDate: dateStr,
+            signalTime: timeStr,
+            direction,
+            score,
+            classification,
+            entry,
+            stopLoss: sl,
+            target,
+            reasons: buildIntraReasons(signalResult.signals, direction, false, regimeCtx),
+            regime: regimeCtx,
+            maxScore: 100,
+          })
+        );
       } catch (err) {
         console.error(`[IndexDiscover] Error scanning INTRA for ${instrument.symbol}:`, err);
       }
