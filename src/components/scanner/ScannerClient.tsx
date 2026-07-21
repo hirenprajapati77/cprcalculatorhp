@@ -955,7 +955,7 @@ export default function ScannerClient() {
   };
   const telState = getTelemetryState();
 
-  /** INDEX mode uses cash-session hours, not the BTST 15:10–15:25 discovery window. */
+  /** INDEX mode uses NSE cash session 09:15–15:30 IST (not BTST 15:10–15:25). */
   const getIndexTelemetryState = () => {
     const parts = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -967,8 +967,8 @@ export default function ScannerClient() {
     const m = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
     const t = h * 100 + m;
     if (t < BTST_HHMM.marketOpen) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
-    // Match isMarketOpen: cash session [09:15, 15:30) IST.
-    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.journalEnd) {
+    // Cash session [09:15, 15:30) IST — same gate as isMarketOpen / /api/index-scan.
+    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.marketClose) {
       return { label: 'SESSION OPEN', color: 'bg-accent-green animate-pulse' };
     }
     return { label: 'SESSION CLOSED', color: 'bg-accent-purple' };
@@ -2764,7 +2764,7 @@ export default function ScannerClient() {
               <span className="text-lg">🛑</span>
               <p className="text-sm font-medium text-red-400 font-mono">
                 {scannerMode === 'CPR' || scannerMode === 'INDEX'
-                  ? 'Markets closed. See you Monday at 09:15 IST.'
+                  ? `Markets closed. See you Monday at ${BTST_CLOCK.marketOpen} IST.`
                   : `Markets closed. See you Monday at ${BTST_CLOCK.discoveryStart} IST.`}
               </p>
             </div>
@@ -2790,14 +2790,14 @@ export default function ScannerClient() {
                       {cachedResult
                         ? `Showing cached scan from ${scannedAt}`
                         : scannerMode === 'INDEX'
-                          ? `Index Scanner — Active during market hours (09:15–15:30 IST)${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                          ? `Index Scanner — Active during market hours (${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST)${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                           : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {cachedResult
                         ? scannerMode === 'INDEX'
-                          ? 'Next live scan at market open (09:15 IST)'
+                          ? `Next live scan at market open (${BTST_CLOCK.marketOpen} IST)`
                           : `Next live scan today at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST`
                         : 'Results will appear here automatically when window opens'
                       }

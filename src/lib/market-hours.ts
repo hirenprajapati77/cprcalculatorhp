@@ -161,6 +161,8 @@ export const BTST_CLOCK = {
 /** HHMM integer form for UI comparisons (e.g. hour*100+minute). */
 export const BTST_HHMM = {
   marketOpen: MARKET_SESSION.OPEN.hour * 100 + MARKET_SESSION.OPEN.minute,
+  /** Exclusive end of cash session — matches isMarketOpen [open, close). */
+  marketClose: MARKET_SESSION.CLOSE.hour * 100 + MARKET_SESSION.CLOSE.minute,
   discoveryStart: BTST_WINDOWS.DISCOVERY_START.hour * 100 + BTST_WINDOWS.DISCOVERY_START.minute,
   confirmStart: BTST_WINDOWS.CONFIRM_START.hour * 100 + BTST_WINDOWS.CONFIRM_START.minute,
   discoveryEnd: BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.hour * 100 + BTST_WINDOWS.DISCOVERY_END_EXCLUSIVE.minute,
