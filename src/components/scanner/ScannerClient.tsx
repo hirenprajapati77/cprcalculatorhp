@@ -74,7 +74,7 @@ function useBtstState(mode: ScannerMode = 'BTST') {
   const { hour: hours, minute: minutes } = getISTTimeParts(now);
   const time = hours * 100 + minutes;
 
-  let state = 'PREMARKET';
+  let state = 'MARKET_CLOSED';
   let message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
   let emptyMessage = `${mode} discovery has not started.`;
   let nextRefresh = '';
