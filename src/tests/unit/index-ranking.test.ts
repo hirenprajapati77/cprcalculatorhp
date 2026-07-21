@@ -75,12 +75,14 @@ describe('IndexRankingService.getClassification', () => {
     assert.equal(IndexRankingService.getClassification(null), 'IGNORE');
   });
 
-  it('maps thresholds to INDEX_STRONG / INDEX_READY / INDEX_WATCH / IGNORE', () => {
+  it('maps discrete 40+30+30 buckets to INDEX_STRONG / INDEX_READY / INDEX_WATCH / IGNORE', () => {
+    // Achievable totals: 0, 30, 40, 60, 70, 100 — READY=85 is unreachable.
     assert.equal(IndexRankingService.getClassification(100), 'INDEX_STRONG');
-    assert.equal(IndexRankingService.getClassification(85), 'INDEX_READY');
-    assert.equal(IndexRankingService.getClassification(84), 'INDEX_WATCH');
-    assert.equal(IndexRankingService.getClassification(70), 'INDEX_WATCH');
-    assert.equal(IndexRankingService.getClassification(69), 'IGNORE');
+    assert.equal(IndexRankingService.getClassification(70), 'INDEX_READY');
+    assert.equal(IndexRankingService.getClassification(60), 'INDEX_WATCH');
+    assert.equal(IndexRankingService.getClassification(40), 'INDEX_WATCH');
+    assert.equal(IndexRankingService.getClassification(30), 'IGNORE');
+    assert.equal(IndexRankingService.getClassification(0), 'IGNORE');
   });
 
   it('uses index-specific classification strings that cannot collide with stock filters', () => {

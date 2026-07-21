@@ -6,11 +6,11 @@ import { fmt } from '@/utils/format';
 interface IndexSignal {
   symbol: string;
   direction: 'LONG' | 'SHORT';
-  score: number;
+  score: number | null;
   classification: string;
-  entry: number;
-  stopLoss: number;
-  target: number;
+  entry: number | null;
+  stopLoss: number | null;
+  target: number | null;
   signalDate: string;
   signalTime: string;
 }
@@ -41,7 +41,7 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
         </Badge>
       </td>
       <td className="p-2 align-middle font-bold text-text-primary">
-        {signal.score}
+        {signal.score == null ? '—' : signal.score}
       </td>
       <td className="p-2 align-middle">
         <span className={`text-[9px] font-bold ${signal.classification.includes('STRONG') ? 'text-accent-purple' : 'text-accent-blue'}`}>
@@ -49,13 +49,13 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
         </span>
       </td>
       <td className="p-2 align-middle font-bold text-accent-amber">
-        {fmt(signal.entry)}
+        {fmt(signal.entry as number)}
       </td>
       <td className="p-2 align-middle text-accent-red font-semibold">
-        {fmt(signal.stopLoss)}
+        {fmt(signal.stopLoss as number)}
       </td>
       <td className="p-2 align-middle text-accent-green font-semibold">
-        {fmt(signal.target)}
+        {fmt(signal.target as number)}
       </td>
     </tr>
   );

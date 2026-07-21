@@ -4,6 +4,7 @@ import { IndexDiscoverService } from '@/services/overnight/index-discover.servic
 import { isBtstDiscoveryOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
+import { env } from '@/config/env';
 
 export async function GET(request: Request) {
   try {
@@ -11,7 +12,11 @@ export async function GET(request: Request) {
     const bypassQuery = searchParams.get('bypass') === 'true';
 
     const now = new Date();
-    const executionWindowOpen = isBtstDiscoveryOpen(now) || bypassQuery;
+    // Match BtstService.isExecutionWindowOpen: query bypass OR non-prod env flag.
+    const bypassAllowed =
+      bypassQuery ||
+      (env.NODE_ENV !== 'production' && env.BTST_BYPASS_WINDOW === 'true');
+    const executionWindowOpen = isBtstDiscoveryOpen(now) || bypassAllowed;
     const windowState = getBtstWindowState(now);
 
     const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
