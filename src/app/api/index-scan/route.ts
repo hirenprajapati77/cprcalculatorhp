@@ -47,7 +47,7 @@ export async function GET(request: Request) {
         success: true,
         executionWindowOpen: false,
         cachedResult: false,
-        message: `Index scanner is active during market hours. Check back then.`,
+        message: `Index scanner is active during live market hours (${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST). Pre-session ${BTST_CLOCK.preOpen}–${BTST_CLOCK.marketOpen}.`,
         results: [],
         insights: {
           strongSignal: 0, breakoutReady: 0, avoid: 0,

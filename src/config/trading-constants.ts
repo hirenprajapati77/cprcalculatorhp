@@ -35,9 +35,13 @@ export const SIMPLE_SCORE = {
   WATCH: 40,
 } as const;
 
-/** NSE cash-session open/close (IST). Sole home for these clock literals. */
+/** NSE cash-session clock (IST). Sole home for these literals site-wide. */
 export const MARKET_SESSION = {
+  /** Pre-session / pre-open window start (order book / prep). */
+  PRE_OPEN: { hour: 9, minute: 0 },
+  /** Live cash-market open. */
   OPEN: { hour: 9, minute: 15 },
+  /** Live cash-market close (exclusive end for isMarketOpen). */
   CLOSE: { hour: 15, minute: 30 },
 } as const;
 
