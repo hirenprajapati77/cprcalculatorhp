@@ -5,7 +5,7 @@
  * for backtests / V2 shadow only.
  *
  * Liquidity: OvernightService.discover hard-excludes avgVolume < 100k /
- * volumeRatio < 1.2 via EntryManagerService.evaluateEligibility (continue
+ * volumeRatio < 1.5 via EntryManagerService.evaluateEligibility (continue
  * before scoring). This bridge does NOT re-apply that gate.
  * Note: qualityBucket LOW_QUALITY is a separate flag for weaker tiers that
  * already passed eligibility — NOT excluded here; journal/Telegram keep

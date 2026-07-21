@@ -14,10 +14,11 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, istMinuteOfDayFromUnixSec } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, istMinuteOfDayFromUnixSec, getCompletedHistory } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
+import { resolveOvernightConflict } from './overnight-conflict';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
@@ -412,10 +413,13 @@ export class OvernightService {
           ? history[history.length - 2]
           : lastCandle;
 
+        // Same completed-history ATR input as signal.service / Simple BtstService
+        // (exclude in-progress today bar; ref close = last completed close).
+        const completedHistory = getCompletedHistory(history);
         const atrPct = getAtrPct(
-          isLastToday && !isTodayCandleFinal ? history.slice(0, -1) : history,
-          isLastToday && !isTodayCandleFinal && history.length >= 2
-            ? history[history.length - 2].close
+          completedHistory.length ? completedHistory : history,
+          completedHistory.length
+            ? completedHistory[completedHistory.length - 1].close
             : fullStock.close
         );
 
@@ -484,24 +488,15 @@ export class OvernightService {
           shortSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
         }
 
-        // -- Conflict Resolution --
-        let finalDir: 'LONG' | 'SHORT' | null = null;
-        let finalSig: OvernightSignalCalc | null = null;
-        let finalCls = 'IGNORE';
+        // -- Conflict Resolution (null scores are ineligible — never coerced to 0) --
+        const conflict = resolveOvernightConflict(longSig, shortSig);
+        let finalDir = conflict.finalDir;
+        let finalSig = conflict.finalSig as OvernightSignalCalc | null;
+        let finalCls = conflict.finalCls;
 
-        if (longSig && shortSig) {
-          const diff = Math.abs((longSig.score || 0) - (shortSig.score || 0));
-          if ((longSig.score || 0) >= (shortSig.score || 0)) { finalDir = 'LONG'; finalSig = longSig; }
-          else { finalDir = 'SHORT'; finalSig = shortSig; }
-          
-          if (diff < 10) {
-            console.warn(`[OvernightScan] ${fullStock.symbol}: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
-            finalCls = 'NEUTRAL_CONFLICT';
-          }
-        } else if (longSig) {
-          finalDir = 'LONG'; finalSig = longSig;
-        } else if (shortSig) {
-          finalDir = 'SHORT'; finalSig = shortSig;
+        if (finalCls === 'NEUTRAL_CONFLICT' && longSig && shortSig) {
+          const diff = Math.abs((longSig.score as number) - (shortSig.score as number));
+          console.warn(`[OvernightScan] ${fullStock.symbol}: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
         }
 
         if (finalDir && finalSig) {

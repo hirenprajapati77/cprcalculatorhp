@@ -1,3 +1,5 @@
+import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
+
 export interface BtstScoringInputs {
   volume: number;
   avgVolume: number;
@@ -57,8 +59,10 @@ export class BtstRankingService {
       closeStrength: 0,
     };
 
-    // Rule 1: VDU (Volume > 1.5x 20D Avg)
-    if (inputs.volume > 1.5 * inputs.avgVolume) {
+    // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
+    // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×
+    // separates strong volume days within the eligible universe (Option B).
+    if (inputs.avgVolume > 0 && inputs.volume >= VOLUME_THRESHOLDS.SPIKE_RATIO * inputs.avgVolume) {
       breakdown.vdu = 25;
     }
 
