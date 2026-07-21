@@ -27,6 +27,16 @@ export const ADVANCED_SCORE = {
   WATCH: 70,
 } as const;
 
+/**
+ * Index regime confidence modifiers (Phase 1 — boost/penalty only, no hard blocks).
+ * Applied on top of base CPR score to produce `confidence`.
+ */
+export const INDEX_REGIME = {
+  ALIGNED_BOOST: 10,
+  COUNTER_PENALTY: -15,
+  HIGH_VOL_PENALTY: -5,
+} as const;
+
 /** Legacy Simple / CPR scanner score scale (0–100). */
 export const SIMPLE_SCORE = {
   MAX: 100,

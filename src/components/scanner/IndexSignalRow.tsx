@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, Zap, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, Clock, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { fmt } from '@/utils/format';
 
@@ -7,13 +7,22 @@ interface IndexSignal {
   symbol: string;
   direction: 'LONG' | 'SHORT';
   score: number | null;
+  confidence?: number | null;
   classification: string;
+  signalType?: 'CALL_BUY' | 'PUT_BUY' | 'NO_TRADE';
   entry: number | null;
   stopLoss: number | null;
   target: number | null;
+  riskReward?: string | null;
   signalDate: string;
   signalTime: string;
   scanType?: string;
+  reasons?: string[];
+  regime?: {
+    trend: string;
+    volatility: string;
+    adjustment: number;
+  } | null;
   optionSuggestion?: {
     symbol?: string;
     strike?: number;
@@ -29,9 +38,18 @@ interface IndexSignalRowProps {
   signal: IndexSignal;
 }
 
+function signalTypeVariant(type?: string): 'green' | 'red' | 'gray' {
+  if (type === 'CALL_BUY') return 'green';
+  if (type === 'PUT_BUY') return 'red';
+  return 'gray';
+}
+
 export function IndexSignalRow({ signal }: IndexSignalRowProps) {
   const isLong = signal.direction === 'LONG';
-  
+  const signalType = signal.signalType ?? (signal.classification === 'IGNORE' ? 'NO_TRADE' : isLong ? 'CALL_BUY' : 'PUT_BUY');
+  const confidence = signal.confidence ?? signal.score;
+  const reasonTitle = signal.reasons?.length ? signal.reasons.join('\n') : undefined;
+
   return (
     <tr className="border-b border-border-primary/50 hover:bg-bg-tertiary/20 group font-mono text-[10px]">
       <td className="p-2 align-middle">
@@ -55,18 +73,29 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
         )}
       </td>
       <td className="p-2 align-middle">
-        <Badge variant={isLong ? 'green' : 'red'} className="text-[9px] px-1.5 py-0">
-          {isLong ? <TrendingUp size={10} className="mr-1" /> : <TrendingDown size={10} className="mr-1" />}
-          {signal.direction}
+        <Badge variant={signalTypeVariant(signalType)} className="text-[9px] px-1.5 py-0">
+          {signalType === 'CALL_BUY' ? <TrendingUp size={10} className="mr-1" /> :
+           signalType === 'PUT_BUY' ? <TrendingDown size={10} className="mr-1" /> : null}
+          {signalType.replace('_', ' ')}
         </Badge>
       </td>
-      <td className="p-2 align-middle font-bold text-text-primary">
-        {signal.score == null ? '—' : signal.score}
+      <td className="p-2 align-middle font-bold text-text-primary" title={`Base score: ${signal.score ?? '—'}`}>
+        {confidence == null ? '—' : confidence}
       </td>
       <td className="p-2 align-middle">
-        <span className={`text-[9px] font-bold ${signal.classification.includes('STRONG') ? 'text-accent-purple' : 'text-accent-blue'}`}>
-          {signal.classification.replace('INDEX_', '')}
-        </span>
+        <div className="flex items-center gap-1">
+          <span className={`text-[9px] font-bold ${signal.classification.includes('STRONG') ? 'text-accent-purple' : 'text-accent-blue'}`}>
+            {signal.classification.replace('INDEX_', '')}
+          </span>
+          {reasonTitle && (
+            <span title={reasonTitle} className="text-text-tertiary cursor-help">
+              <Info size={10} />
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="p-2 align-middle text-[9px] text-text-secondary">
+        {signal.riskReward ?? '—'}
       </td>
       <td className="p-2 align-middle font-bold text-accent-amber">
         {fmt(signal.entry as number)}
