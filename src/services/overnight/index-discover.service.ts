@@ -12,9 +12,22 @@
 import { env } from '@/config/env';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
-import { getISTDateString, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
+import {
+  getISTDateString,
+  getISTTime,
+  BTST_CLOCK,
+  BTST_WINDOW_MINUTES,
+  isInClosingLiquidityWindow,
+  istMinuteOfDayFromUnixSec,
+} from '@/lib/market-hours';
 import { HistoricalProvider } from '../backtest/historical.provider';
-import { IndexRankingService, IndexClassification } from './index-ranking.service';
+import {
+  IndexRankingService,
+  IndexClassification,
+  INDEX_SCORE,
+  INDIA_VIX_CALM_MAX,
+  INDIA_VIX_ELEVATED_MIN,
+} from './index-ranking.service';
 import { SignalService } from '../signal.service';
 import { RankingService } from '../ranking.service';
 import { MarketStockData } from '../market.service';
@@ -48,6 +61,17 @@ export interface IndexSignalResult {
 interface IndexIntradayMetrics {
   vwap: number | null;
   hasIntraday: boolean;
+  last15mHigh: number | null;
+}
+
+export interface IndiaVixState {
+  /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG forced IGNORE. */
+  elevated: boolean;
+  /**
+   * true → award Rule 1 calm pts; false → scoreable but no calm pts;
+   * null → unavailable / mock (score-safety INVALID).
+   */
+  vixCalm: boolean | null;
 }
 
 interface YahooFinanceChartResponse {
@@ -68,23 +92,20 @@ interface YahooFinanceChartResponse {
 
 export class IndexDiscoverService {
   /**
-   * Fetches intraday 5m data for VWAP. Mirrors the shape of
-   * OvernightService.getIntradayData's live branch but simplified — Phase 1
-   * only needs VWAP, not last-15m high/low (index scoring has no liquidity
-   * rule). On any failure, returns hasIntraday: false so the caller's
-   * score-safety check returns a null score rather than guessing.
+   * Fetches intraday 5m data for VWAP + last-15m high (15:15–15:30 IST),
+   * matching OvernightService's closing-liquidity window logic.
+   * On any failure, returns hasIntraday: false so the caller's score-safety
+   * check returns a null score rather than guessing.
    */
-  private static async getIntradayVwap(
+  private static async getIntradayMetrics(
     yahooSymbol: string,
     currentTime: Date
   ): Promise<IndexIntradayMetrics> {
     const mode = env.HISTORICAL_MODE || 'mock';
     if (mode !== 'live') {
-      // Mock mode: no live VWAP source. Score-safety will correctly return
-      // null scores in mock mode — this is expected and matches how the
-      // stock pipeline's mock path supplies vwap via MockOvernightStock
-      // overrides instead of a real fetch.
-      return { vwap: null, hasIntraday: false };
+      // Mock mode: no live VWAP / last15m source. Score-safety will correctly
+      // return null scores — expected and matches the stock mock path.
+      return { vwap: null, hasIntraday: false, last15mHigh: null };
     }
 
     try {
@@ -104,16 +125,22 @@ export class IndexDiscoverService {
       const timestamps = result?.timestamp;
       const quotes = result?.indicators?.quote?.[0];
       if (!result || !timestamps || !quotes || !quotes.high || !quotes.low || !quotes.close || !quotes.volume) {
-        return { vwap: null, hasIntraday: false };
+        return { vwap: null, hasIntraday: false, last15mHigh: null };
       }
 
       const currentTimestampSec = Math.floor(currentTime.getTime() / 1000);
       let sumPriceVol = 0;
       let sumVol = 0;
       let hasIntraday = false;
+      let closingHigh = 0;
+      let closingBarCount = 0;
+
+      const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
+      const isLastCandleForming = currentTimestampSec - lastTimestamp < 300;
 
       for (let i = 0; i < timestamps.length; i++) {
-        if (timestamps[i] > currentTimestampSec) continue;
+        const ts = timestamps[i];
+        if (ts > currentTimestampSec) continue;
         const high = quotes.high[i];
         const low = quotes.low[i];
         const close = quotes.close[i];
@@ -124,7 +151,19 @@ export class IndexDiscoverService {
         sumPriceVol += typicalPrice * volume;
         sumVol += volume;
         hasIntraday = true;
+
+        const barOpenMin = istMinuteOfDayFromUnixSec(ts);
+        const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
+        const isFormingBar = isLastCandleForming && ts === lastTimestamp;
+        // Include forming bar when it belongs to the 15:15–15:30 window (partial MOC data).
+        if (inClosingWindow && (!isFormingBar || barOpenMin >= BTST_WINDOW_MINUTES.CLOSING_WINDOW_START)) {
+          closingHigh = Math.max(closingHigh, high);
+          closingBarCount++;
+        }
       }
+
+      const last15mHigh =
+        closingBarCount > 0 && closingHigh > 0 ? closingHigh : null;
 
       // Index futures volume can be legitimately thin/zero on the underlying
       // spot chart depending on source; fall back to a simple average price
@@ -140,16 +179,61 @@ export class IndexDiscoverService {
           sumClose += close;
           count++;
         }
-        return { vwap: count > 0 ? sumClose / count : null, hasIntraday: count > 0 };
+        return {
+          vwap: count > 0 ? sumClose / count : null,
+          hasIntraday: count > 0,
+          last15mHigh,
+        };
       }
 
       return {
         vwap: sumVol > 0 ? sumPriceVol / sumVol : null,
         hasIntraday,
+        last15mHigh,
       };
     } catch (err) {
       console.warn(`[IndexDiscover] Intraday fetch failed for ${yahooSymbol}:`, err instanceof Error ? err.message : err);
-      return { vwap: null, hasIntraday: false };
+      return { vwap: null, hasIntraday: false, last15mHigh: null };
+    }
+  }
+
+  /**
+   * India VIX regime for overnight LONG gating / Rule 1 calm points.
+   * - elevated (close >= 25): discover forces IGNORE
+   * - calm (close < 20): award 25 pts
+   * - otherwise: scoreable, calm=false (no calm pts)
+   * - mock / unavailable: vixCalm null → score-safety INVALID
+   */
+  static async getIndiaVixState(date: Date): Promise<IndiaVixState> {
+    const mode = env.HISTORICAL_MODE || 'mock';
+    if (mode !== 'live') {
+      return { elevated: false, vixCalm: null };
+    }
+
+    try {
+      const endDateObj = new Date(date);
+      const startDateObj = new Date(date);
+      startDateObj.setDate(startDateObj.getDate() - 30);
+
+      const history = await HistoricalProvider.getHistory('^INDIAVIX', startDateObj, endDateObj);
+      if (!history || history.length === 0) {
+        return { elevated: false, vixCalm: null };
+      }
+
+      const latestClose = history[history.length - 1].close;
+      if (latestClose >= INDIA_VIX_ELEVATED_MIN) {
+        return { elevated: true, vixCalm: false };
+      }
+      if (latestClose < INDIA_VIX_CALM_MAX) {
+        return { elevated: false, vixCalm: true };
+      }
+      return { elevated: false, vixCalm: false };
+    } catch (err) {
+      console.warn(
+        '[IndexDiscover] India VIX fetch failed:',
+        err instanceof Error ? err.message : err
+      );
+      return { elevated: false, vixCalm: null };
     }
   }
 
@@ -166,9 +250,26 @@ export class IndexDiscoverService {
     const timeStr = BTST_CLOCK.discoveryStart;
 
     const results: IndexSignalResult[] = [];
+    const vixState = await this.getIndiaVixState(currentTime);
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
+        // Elevated VIX: force IGNORE with null score/levels — do not invent setups.
+        if (vixState.elevated) {
+          results.push({
+            symbol: instrument.symbol,
+            signalDate: dateStr,
+            signalTime: timeStr,
+            direction: 'LONG',
+            score: null,
+            classification: 'IGNORE',
+            entry: null,
+            stopLoss: null,
+            target: null,
+          });
+          continue;
+        }
+
         const endDateObj = new Date(currentTime);
         const startDateObj = new Date(currentTime);
         startDateObj.setDate(startDateObj.getDate() - 90);
@@ -204,7 +305,7 @@ export class IndexDiscoverService {
           atrPct
         );
 
-        const intraday = await this.getIntradayVwap(instrument.yahooSymbol, currentTime);
+        const intraday = await this.getIntradayMetrics(instrument.yahooSymbol, currentTime);
 
         const details = IndexRankingService.calculateScoreDetails({
           tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
@@ -213,7 +314,11 @@ export class IndexDiscoverService {
           todayBc: todayCpr.bc,
           todayTc: todayCpr.tc,
           close: todayCandle.close,
+          high: todayCandle.high,
+          low: todayCandle.low,
           vwap: intraday.vwap,
+          last15mHigh: intraday.last15mHigh,
+          vixCalm: vixState.vixCalm,
           hasConfirmationCandles: intraday.hasIntraday,
         });
 
@@ -242,15 +347,14 @@ export class IndexDiscoverService {
   }
 
   /**
-   * Map CPR RankingService letter grades onto index classification strings so
-   * INDEX UI KPIs / filters stay consistent (never leak A+/A/B into OvernightSignal
-   * stock filters — INTRA rows are not persisted).
+   * Map INTRA CPR scores onto INDEX_* using INDEX_SCORE floors (aligned with
+   * stock ADVANCED_SCORE / overnight BTST gates). Never leak A+/A/B into
+   * OvernightSignal stock filters — INTRA rows are not persisted.
    */
   static mapIntraClassification(score: number): IndexClassification {
-    const grade = RankingService.getClassification(score);
-    if (grade === 'A+') return 'INDEX_STRONG';
-    if (grade === 'A') return 'INDEX_READY';
-    if (grade === 'B') return 'INDEX_WATCH';
+    if (score >= INDEX_SCORE.STRONG) return 'INDEX_STRONG';
+    if (score >= INDEX_SCORE.READY) return 'INDEX_READY';
+    if (score >= INDEX_SCORE.WATCH) return 'INDEX_WATCH';
     return 'IGNORE';
   }
 

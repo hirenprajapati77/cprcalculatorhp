@@ -1,15 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { IndexDiscoverService, INDEX_INSTRUMENTS } from '../../services/overnight/index-discover.service';
+import { INDEX_SCORE } from '../../services/overnight/index-ranking.service';
 
 /**
  * These tests run against HistoricalProvider's deterministic mock mode
  * (HISTORICAL_MODE unset/!= 'live' in the test environment), which needs no
- * network access. VWAP has no live source in mock mode by design (see
- * IndexDiscoverService.getIntradayVwap), so every BTST result is expected to
- * have a null score here — that's the score-safety contract working correctly,
- * not a bug. This suite verifies structure/shape and that discovery never
- * throws or silently fabricates a score, not the live scoring path.
+ * network access. VWAP / last15m / VIX have no live source in mock mode by
+ * design, so every BTST result is expected to have a null score here — that's
+ * the score-safety contract working correctly, not a bug. This suite verifies
+ * structure/shape and that discovery never throws or silently fabricates a
+ * score, not the live scoring path.
  */
 describe('IndexDiscoverService.discover', () => {
   it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY) — no F&O universe loop', async () => {
@@ -18,7 +19,7 @@ describe('IndexDiscoverService.discover', () => {
     assert.deepEqual(symbols, INDEX_INSTRUMENTS.map((i) => i.symbol).sort());
   });
 
-  it('returns LONG direction and IGNORE classification with null score in mock mode (no live VWAP source)', async () => {
+  it('returns LONG direction and IGNORE classification with null score in mock mode (no live VWAP/VIX)', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     for (const r of results) {
       assert.equal(r.direction, 'LONG');
@@ -46,11 +47,23 @@ describe('IndexDiscoverService.discover', () => {
   });
 });
 
+describe('IndexDiscoverService.getIndiaVixState', () => {
+  it('returns vixCalm null in mock mode (score-safety INVALID path)', async () => {
+    const state = await IndexDiscoverService.getIndiaVixState(new Date('2026-07-21T10:00:00+05:30'));
+    assert.equal(state.elevated, false);
+    assert.equal(state.vixCalm, null);
+  });
+});
+
 describe('IndexDiscoverService.mapIntraClassification', () => {
-  it('maps CPR RankingService letter grades onto INDEX_* (never A+/A/B leakage)', () => {
-    assert.equal(IndexDiscoverService.mapIntraClassification(80), 'INDEX_STRONG');
-    assert.equal(IndexDiscoverService.mapIntraClassification(65), 'INDEX_READY');
-    assert.equal(IndexDiscoverService.mapIntraClassification(45), 'INDEX_WATCH');
+  it('maps scores onto INDEX_* using INDEX_SCORE floors (100 / 85 / 70)', () => {
+    assert.equal(IndexDiscoverService.mapIntraClassification(100), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.STRONG), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(90), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.READY), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.WATCH), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(69), 'IGNORE');
     assert.equal(IndexDiscoverService.mapIntraClassification(10), 'IGNORE');
   });
 });
