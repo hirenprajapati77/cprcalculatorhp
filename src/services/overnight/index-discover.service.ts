@@ -438,7 +438,7 @@ export class IndexDiscoverService {
           rr: '1:0',
           volume: 0,
           avgVolume: 0,
-        } as ScannerSignalResult);
+        } as unknown as ScannerSignalResult);
 
         const bullish = signalResult.signals.includes('BULLISH');
         const bearish = signalResult.signals.includes('BEARISH');
