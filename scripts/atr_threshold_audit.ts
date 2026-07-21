@@ -182,6 +182,15 @@ async function main() {
   const universeStocks = MarketService.getUniverse(UNIVERSE);
   const symbols = universeStocks.map((s) => s.symbol.trim());
 
+  // getISTTime() warns once per call when NSE holiday list is missing for the year;
+  // live Yahoo fetches invoke it per candle — suppress the spam for readable audit output.
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    const msg = args.map(String).join(' ');
+    if (msg.includes('No holiday list defined')) return;
+    origWarn(...args);
+  };
+
   console.log('='.repeat(80));
   console.log('ATR THRESHOLD AUDIT — 14-period vs legacy whole-history average');
   console.log('='.repeat(80));
@@ -297,6 +306,8 @@ async function main() {
   console.log('');
   console.log('Note: Multipliers NOT adjusted — audit only. Recalibration is a separate step.');
   console.log('='.repeat(80));
+
+  console.warn = origWarn;
 }
 
 main().catch((err) => {
