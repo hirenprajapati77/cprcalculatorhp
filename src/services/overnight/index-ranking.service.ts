@@ -91,14 +91,20 @@ export class IndexRankingService {
 
   /**
    * Categorizes the signal based on the calculated score.
-   * Thresholds mirror ADVANCED_SCORE (STRONG=100, READY=85, WATCH=70) so
-   * index and stock tiers mean the same thing on the same 100-point scale.
+   *
+   * Index scoring is three binary rules (40 + 30 + 30) → discrete totals
+   * {0, 30, 40, 60, 70, 100}. Stock ADVANCED_SCORE.READY=85 is unreachable
+   * on this scale, so tiers map to the achievable buckets:
+   *   100 → STRONG (all three rules)
+   *   ≥70 → READY  (narrow + one confirmation)
+   *   ≥40 → WATCH  (narrow alone, or both 30-pt confirms without narrow)
+   *   else IGNORE
    */
   static getClassification(score: number | null): IndexClassification {
     if (score === null) return 'IGNORE';
     if (score >= 100) return 'INDEX_STRONG';
-    if (score >= 85) return 'INDEX_READY';
-    if (score >= 70) return 'INDEX_WATCH';
+    if (score >= 70) return 'INDEX_READY';
+    if (score >= 40) return 'INDEX_WATCH';
     return 'IGNORE';
   }
 }
