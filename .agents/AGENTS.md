@@ -38,3 +38,5 @@ Rules that close prior failure modes, explicitly:
 6. **Diffs before actions, always.** For any change touching the database, deployment scripts, or server config, show the full diff/SQL/plan first, in full, and stop. Do not bundle "here's the plan" and "I already ran it" into the same message.
 
 If any of this is unclear or you're unsure whether a specific message counts as approval, the default is: it doesn't. Ask explicitly: "Do you approve this exact plan? Reply 'approved' to proceed." and wait.
+
+7. **No unprompted secret extraction.** Never read credentials or secrets from .env or any config file on a live server without asking first, even to verify something I asked you to verify. If a step fails due to authorization and requires a live production secret to proceed, stop and ask for explicit permission before retrieving or using that secret.

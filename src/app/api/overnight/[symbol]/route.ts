@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { MarketService } from '@/services/market.service';
 import { OvernightRiskService } from '@/services/overnight/overnight-risk.service';
+import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 export async function GET(
   req: NextRequest,
@@ -16,7 +17,7 @@ export async function GET(
 
   try {
     const history = await prisma.overnightSignal.findMany({
-      where: { symbol },
+      where: { symbol, ...STOCK_OVERNIGHT_INSTRUMENT_WHERE },
       orderBy: { createdAt: 'desc' },
       take: 10
     });
