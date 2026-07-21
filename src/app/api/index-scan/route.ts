@@ -105,8 +105,8 @@ export async function GET(request: Request) {
     }
 
     // F&O Option Suggestion Enrichment Layer
-    // READY+ only (score >= 70) — matches stock BTST gate intent (ADVANCED_SCORE.READY).
-    // WATCH (40) is CPR-narrow alone and must not advertise Calls/Puts.
+    // READY+ only (score >= INDEX_SCORE.READY=85) — matches stock BTST (ADVANCED_SCORE.READY).
+    // WATCH (70) must not advertise Calls/Puts.
     const eligibleResults = resultsList.filter(
       (r) =>
         (r.direction === 'LONG' || r.direction === 'SHORT') &&
