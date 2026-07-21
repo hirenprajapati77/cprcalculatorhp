@@ -1515,6 +1515,7 @@ export default function ScannerClient() {
     let isActive = true;
     const fetchIndexData = async () => {
       setIsLoading(true);
+      const startFetchTime = Date.now();
       try {
         const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
         const res = await fetch(`/api/index-scan${bypassVal ? '?bypass=true' : ''}`);
@@ -1527,6 +1528,7 @@ export default function ScannerClient() {
         setCachedResult(data.cachedResult ?? false);
         setScannedAt(data.scannedAt || '');
         setIsDegraded(!!data.degraded);
+        setLatency(Date.now() - startFetchTime);
         
         setIndexResults(data.results || []);
         if (data.insights) {
@@ -2828,12 +2830,29 @@ export default function ScannerClient() {
               )}
 
               {executionWindowOpen && (
-                <div className="rounded-lg px-4 py-3 mb-4 flex 
-                  items-center gap-3 bg-green-500/10 
-                  border border-green-500/30 font-mono">
-                  <span className="animate-pulse text-green-400">●</span>
-                  <p className="text-sm font-medium text-green-400">
-                    LIVE SCAN ACTIVE — {BTST_CLOCK.discoveryStart} IST Window Open{countdownDisplay ? ' (Bypass/Testing Mode)' : ''}
+                <div className={`rounded-lg px-4 py-3 mb-4 flex 
+                  items-center gap-3 font-mono ${
+                    scannerMode === 'INDEX' && indexTelState.label !== 'LIVE'
+                      ? 'bg-amber-500/10 border border-amber-500/30'
+                      : 'bg-green-500/10 border border-green-500/30'
+                  }`}>
+                  <span className={`animate-pulse ${
+                    scannerMode === 'INDEX' && indexTelState.label !== 'LIVE'
+                      ? 'text-amber-400'
+                      : 'text-green-400'
+                  }`}>●</span>
+                  <p className={`text-sm font-medium ${
+                    scannerMode === 'INDEX' && indexTelState.label !== 'LIVE'
+                      ? 'text-amber-400'
+                      : 'text-green-400'
+                  }`}>
+                    {scannerMode === 'INDEX'
+                      ? (indexTelState.label === 'LIVE'
+                          ? `LIVE SCAN ACTIVE — cash session ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST`
+                          : indexTelState.label === 'PRESESSION'
+                            ? `PRE-SESSION — live opens at ${BTST_CLOCK.marketOpen} IST (bypass may force scan)`
+                            : `OUTSIDE CASH SESSION — live window is ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST (bypass/testing)`)
+                      : `LIVE SCAN ACTIVE — ${BTST_CLOCK.discoveryStart} IST Window Open${countdownDisplay ? ' (Bypass/Testing Mode)' : ''}`}
                   </p>
                 </div>
               )}
