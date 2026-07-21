@@ -490,8 +490,8 @@ export class OvernightService {
 
         // -- Conflict Resolution (null scores are ineligible — never coerced to 0) --
         const conflict = resolveOvernightConflict(longSig, shortSig);
-        let finalDir = conflict.finalDir;
-        let finalSig = conflict.finalSig as OvernightSignalCalc | null;
+        const finalDir = conflict.finalDir;
+        const finalSig = conflict.finalSig as OvernightSignalCalc | null;
         let finalCls = conflict.finalCls;
 
         if (finalCls === 'NEUTRAL_CONFLICT' && longSig && shortSig) {
