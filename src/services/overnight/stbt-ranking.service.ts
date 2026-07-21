@@ -1,3 +1,4 @@
+import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import type { AdvancedScoreBreakdown } from './btst-ranking.service';
 
 export interface StbtScoringInputs {
@@ -48,8 +49,10 @@ export class StbtRankingService {
     };
     const range = inputs.high - inputs.low;
 
-    // Rule 1: VDU — Volume Expansion (> 1.5x 20D avg) [mirrors BTST Rule 1: +25]
-    if (inputs.volume > 1.5 * inputs.avgVolume) {
+    // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
+    // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×
+    // separates strong volume days within the eligible universe (Option B).
+    if (inputs.avgVolume > 0 && inputs.volume >= VOLUME_THRESHOLDS.SPIKE_RATIO * inputs.avgVolume) {
       breakdown.vdu = 25;
     }
 

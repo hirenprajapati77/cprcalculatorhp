@@ -69,7 +69,7 @@ describe('Overnight Engine Tests', () => {
 
   test('STBT Rule 4 scores 0 when close < vwap but close > todayBc', () => {
     const mockStock = {
-      volume: 1200000,
+      volume: 1_600_000, // ≥ 2.0 × 800000 → VDU +25 (Option B)
       avgVolume: 800000,
       tomorrowCprNarrow: true,
       tomorrowTc: 99,
@@ -88,12 +88,12 @@ describe('Overnight Engine Tests', () => {
     const score = StbtRankingService.calculateScore(mockStock);
     // VDU(25) + LowerValue(20) + NarrowCPR(30) + BreakLast15mLow(20) + ClosingWeakness(15)
     // Rule 4 (0) because close (98) is NOT < todayBc (97)
-    assert.strictEqual(score, 85, `Expected score 85, got ${score}`);
+    assert.strictEqual(score, 110, `Expected score 110, got ${score}`);
   });
 
   test('STBT Rule 6 strictly requires closingWeakness < 0.30 (boundary test)', () => {
     const baseStock = {
-      volume: 1300000, // > 1.5 * 800000 (Rule 1: VDU +25)
+      volume: 1_600_000, // ≥ 2.0 × 800000 (Rule 1: VDU +25)
       avgVolume: 800000,
       tomorrowCprNarrow: true, // < 0.35 (Rule 3: NarrowCPR +30)
       tomorrowTc: 99,
