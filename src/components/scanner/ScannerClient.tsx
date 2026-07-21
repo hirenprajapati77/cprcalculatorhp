@@ -1517,8 +1517,7 @@ export default function ScannerClient() {
       setIsLoading(true);
       const startFetchTime = Date.now();
       try {
-        const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
-        const res = await fetch(`/api/index-scan${bypassVal ? '?bypass=true' : ''}`);
+        const res = await fetch(`/api/index-scan`);
         if (!res.ok) throw new Error('Failed to retrieve live INDEX signals');
         const data = await res.json();
         

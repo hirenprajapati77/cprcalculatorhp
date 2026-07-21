@@ -9,14 +9,8 @@ import { env } from '@/config/env';
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const bypassQuery = searchParams.get('bypass') === 'true';
-
     const now = new Date();
-    const bypassAllowed =
-      bypassQuery ||
-      (env.NODE_ENV !== 'production' && env.BTST_BYPASS_WINDOW === 'true');
-    const executionWindowOpen = isMarketOpen(now) || bypassAllowed;
+    const executionWindowOpen = true; // Index scanner always runs live, no bypass needed since it also shows INTRA
     const windowState = getBtstWindowState(now);
 
     const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
