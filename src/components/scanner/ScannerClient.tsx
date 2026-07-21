@@ -1402,7 +1402,7 @@ export default function ScannerClient() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [universe, market, refreshInterval, fetchScannerData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
+  }, [universe, market, refreshInterval, scannerMode, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
   const fetchBtstData = useCallback(async () => {
     await fetchScannerData(true);
