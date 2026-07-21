@@ -66,8 +66,8 @@ describe('IndexDiscoverService.discoverIntraday', () => {
     const results = await IndexDiscoverService.discoverIntraday(new Date('2026-07-21T10:00:00+05:30'));
     for (const r of results) {
       assert.match(r.classification, /^(INDEX_STRONG|INDEX_READY|INDEX_WATCH|IGNORE)$/);
-      // Neutral (no BULLISH/BEARISH) rows must not invent trade levels.
-      if (r.classification === 'IGNORE' && r.score === null) {
+      // IGNORE must never advertise trade levels (even if BULLISH/BEARISH fired).
+      if (r.classification === 'IGNORE') {
         assert.equal(r.entry, null);
         assert.equal(r.stopLoss, null);
         assert.equal(r.target, null);

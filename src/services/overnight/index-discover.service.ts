@@ -355,6 +355,23 @@ export class IndexDiscoverService {
         }
 
         const direction: 'LONG' | 'SHORT' = bullish ? 'LONG' : 'SHORT';
+        const classification = this.mapIntraClassification(score);
+
+        // IGNORE setups must not advertise entry/SL/target (matches BTST score-safety UX).
+        if (classification === 'IGNORE') {
+          results.push({
+            symbol: instrument.symbol,
+            signalDate: dateStr,
+            signalTime: timeStr,
+            direction,
+            score,
+            classification,
+            entry: null,
+            stopLoss: null,
+            target: null,
+          });
+          continue;
+        }
 
         const atrPct = getAtrPct(history.slice(0, -1), previousClose);
         const yesterdayCandle = history.length >= 2 ? history[history.length - 2] : lastCandle;
@@ -374,7 +391,7 @@ export class IndexDiscoverService {
           signalTime: timeStr,
           direction,
           score,
-          classification: this.mapIntraClassification(score),
+          classification,
           entry,
           stopLoss: sl,
           target,
