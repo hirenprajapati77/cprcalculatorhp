@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
-import { isMarketOpen, getBtstWindowState } from '@/lib/market-hours';
+import { isMarketOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
           executionWindowOpen: false,
           cachedResult: true,
           scannedAt: cached.scannedAt,
-          message: `Showing last scan from ${cached.scannedAt}. Next live scan at 09:15 IST.`,
+          message: `Showing last scan from ${cached.scannedAt}. Next live scan at ${BTST_CLOCK.marketOpen} IST.`,
           results: cached.results,
           insights: cached.insights,
           engine: cached.engine ?? 'index-advanced-unified',
