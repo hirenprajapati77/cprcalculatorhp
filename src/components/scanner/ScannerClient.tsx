@@ -876,6 +876,8 @@ export default function ScannerClient() {
     target: number | null;
     signalDate: string;
     signalTime: string;
+    scanType?: string;
+    optionSuggestion?: Record<string, unknown> | null;
   }>>([]);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -2792,12 +2794,14 @@ export default function ScannerClient() {
                         <thead>
                           <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
                             <th className="p-2.5">Symbol</th>
+                            <th className="p-2.5">Type</th>
                             <th className="p-2.5">Direction</th>
                             <th className="p-2.5">Score</th>
                             <th className="p-2.5">Classification</th>
                             <th className="p-2.5">Entry</th>
                             <th className="p-2.5">Stop Loss</th>
                             <th className="p-2.5">Target</th>
+                            <th className="p-2.5">Options</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border-primary/50">

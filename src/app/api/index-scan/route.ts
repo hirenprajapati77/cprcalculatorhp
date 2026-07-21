@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
-import { isBtstDiscoveryOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
+import { isMarketOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
@@ -12,11 +12,10 @@ export async function GET(request: Request) {
     const bypassQuery = searchParams.get('bypass') === 'true';
 
     const now = new Date();
-    // Match BtstService.isExecutionWindowOpen: query bypass OR non-prod env flag.
     const bypassAllowed =
       bypassQuery ||
       (env.NODE_ENV !== 'production' && env.BTST_BYPASS_WINDOW === 'true');
-    const executionWindowOpen = isBtstDiscoveryOpen(now) || bypassAllowed;
+    const executionWindowOpen = isMarketOpen(now) || bypassAllowed;
     const windowState = getBtstWindowState(now);
 
     const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
@@ -37,10 +36,10 @@ export async function GET(request: Request) {
           executionWindowOpen: false,
           cachedResult: true,
           scannedAt: cached.scannedAt,
-          message: `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
+          message: `Showing last scan from ${cached.scannedAt}. Next live scan at 09:15 IST.`,
           results: cached.results,
           insights: cached.insights,
-          engine: cached.engine ?? 'index-advanced',
+          engine: cached.engine ?? 'index-advanced-unified',
           state: windowState,
         });
       }
@@ -48,21 +47,30 @@ export async function GET(request: Request) {
         success: true,
         executionWindowOpen: false,
         cachedResult: false,
-        message: `Index scanner runs only at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST. Check back then.`,
+        message: `Index scanner is active during market hours. Check back then.`,
         results: [],
         insights: {
           strongSignal: 0, breakoutReady: 0, avoid: 0,
           totalLong: 0, totalShort: 0, totalConflict: 0,
         },
-        engine: 'index-advanced',
+        engine: 'index-advanced-unified',
         state: windowState,
       });
     }
 
-    const resultsList = await IndexDiscoverService.discover(now);
+    // Run both scans concurrently
+    const [btstResults, intraResults] = await Promise.all([
+      IndexDiscoverService.discover(now),
+      IndexDiscoverService.discoverIntraday(now)
+    ]);
 
-    // Persist to DB
-    for (const r of resultsList) {
+    // Tag and combine
+    const taggedBtst = btstResults.map(r => ({ ...r, scanType: 'BTST' }));
+    const taggedIntra = intraResults.map(r => ({ ...r, scanType: 'INTRA' }));
+    const resultsList = [...taggedIntra, ...taggedBtst];
+
+    // Persist only BTST to DB (to keep historical Overnight signals clean)
+    for (const r of btstResults) {
       await prisma.overnightSignal.upsert({
         where: {
           symbol_signalDate_signalTime: {
@@ -95,16 +103,69 @@ export async function GET(request: Request) {
       });
     }
 
+    // F&O Option Suggestion Enrichment Layer
+    const eligibleResults = resultsList.filter(r => 
+      (r.direction === 'LONG' || r.direction === 'SHORT') && 
+      r.score !== null && r.score >= 40 // WATCH or above
+    );
+
+    if (eligibleResults.length > 0) {
+      try {
+        const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
+        const enrichmentPromises = eligibleResults.map(async (r) => {
+          try {
+            // For indices, entry/sl/target are approximated if missing
+            const ltp = r.entry || 0; // Using entry as LTP proxy if needed, though OptionSuggestion pulls real LTP from chain
+            const stockEntry = r.entry || 0;
+            const stockSl = r.stopLoss || (r.direction === 'SHORT' ? stockEntry * 1.01 : stockEntry * 0.99);
+            const stockTarget = r.target || (r.direction === 'SHORT' ? stockEntry * 0.98 : stockEntry * 1.02);
+            
+            const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+              r.symbol,
+              ltp,
+              r.direction,
+              stockEntry,
+              stockSl,
+              stockTarget
+            );
+            // Return with scanType to match perfectly since the same symbol might exist twice
+            return { symbol: r.symbol, scanType: r.scanType, suggestion };
+          } catch (e) {
+            console.warn(`Failed option suggestion for ${r.symbol} (${r.scanType}):`, e);
+            return { symbol: r.symbol, scanType: r.scanType, suggestion: { error: 'FETCH_EXCEPTION' } };
+          }
+        });
+
+        const enrichedResults = await Promise.allSettled(enrichmentPromises);
+        const suggestionMap = new Map<string, unknown>();
+
+        for (const res of enrichedResults) {
+          if (res.status === 'fulfilled' && res.value && res.value.suggestion) {
+            suggestionMap.set(`${res.value.symbol}_${res.value.scanType}`, res.value.suggestion);
+          }
+        }
+
+        for (const r of resultsList) {
+          const key = `${r.symbol}_${r.scanType}`;
+          if (suggestionMap.has(key)) {
+            (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(key);
+          }
+        }
+      } catch (enrichErr) {
+        console.error('Error during option suggestion enrichment in index route:', enrichErr);
+      }
+    }
+
     const timeStr = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
     const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
     const scannedAt = `${timeStr} IST, ${dateStr}`;
 
     const insights = {
-      strongSignal: resultsList.filter((r) => r.classification === 'INDEX_STRONG').length,
-      breakoutReady: resultsList.filter((r) => r.classification === 'INDEX_READY').length,
-      avoid: resultsList.filter((r) => r.classification === 'IGNORE').length,
+      strongSignal: btstResults.filter((r) => r.classification === 'INDEX_STRONG').length,
+      breakoutReady: btstResults.filter((r) => r.classification === 'INDEX_READY').length,
+      avoid: btstResults.filter((r) => r.classification === 'IGNORE').length,
       totalLong: resultsList.filter((r) => r.direction === 'LONG').length,
-      totalShort: 0,
+      totalShort: resultsList.filter((r) => r.direction === 'SHORT').length,
       totalConflict: 0,
     };
 
@@ -112,7 +173,7 @@ export async function GET(request: Request) {
       scannedAt,
       results: resultsList,
       insights,
-      engine: 'index-advanced',
+      engine: 'index-advanced-unified',
     };
 
     await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
@@ -124,7 +185,7 @@ export async function GET(request: Request) {
       degraded: false,
       results: resultsList,
       insights,
-      engine: 'index-advanced',
+      engine: 'index-advanced-unified',
       state: windowState,
     });
 
