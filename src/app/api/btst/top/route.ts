@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
+import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
         qualityBucket: 'TRADEABLE',
         classification: {
           in: ['STRONG_BTST', 'BTST_READY']
-        }
+        },
+        ...STOCK_OVERNIGHT_INSTRUMENT_WHERE,
       },
       orderBy: [
         { signalTime: 'desc' },

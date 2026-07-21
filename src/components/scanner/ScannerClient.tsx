@@ -866,7 +866,17 @@ export default function ScannerClient() {
 
   // Main Scanned Data
   const [results, setResults] = useState<ScannedStock[]>([]);
-  const [indexResults, setIndexResults] = useState<any[]>([]);
+  const [indexResults, setIndexResults] = useState<Array<{
+    symbol: string;
+    direction: 'LONG' | 'SHORT';
+    score: number | null;
+    classification: string;
+    entry: number | null;
+    stopLoss: number | null;
+    target: number | null;
+    signalDate: string;
+    signalTime: string;
+  }>>([]);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [universeCount, setUniverseCount] = useState<number>(0);
@@ -1092,6 +1102,9 @@ export default function ScannerClient() {
 
   // Main Fetch Function
   const fetchScannerData = useCallback(async (silent = false) => {
+    // INDEX mode has its own fetch effect + API — never fall through to CPR/BTST.
+    if (scannerMode === 'INDEX') return;
+
     if (!silent) setIsLoading(true);
     const requestId = ++activeRequestRef.current;
     const startFetchTime = Date.now();
@@ -1471,9 +1484,18 @@ export default function ScannerClient() {
         setIsDegraded(!!data.degraded);
         
         setIndexResults(data.results || []);
-      } catch (err: any) {
+        if (data.insights) {
+          setInsightCounts({
+            strongBuy: data.insights.strongSignal || 0,
+            breakoutReady: data.insights.breakoutReady || 0,
+            avoid: data.insights.avoid || 0,
+          });
+        }
+        setTotal((data.results || []).length);
+      } catch (err: unknown) {
         if (isActive) {
-          showToast(err.message, 'error');
+          const message = err instanceof Error ? err.message : 'Failed to retrieve live INDEX signals';
+          showToast(message, 'error');
           setIndexResults([]);
         }
       } finally {
@@ -1788,7 +1810,7 @@ export default function ScannerClient() {
   }, [results]);
 
   const btstMetrics = useMemo(() => {
-    if (scannerMode === 'CPR' || results.length === 0) return { ready: 0, strong: 0, avgGap: 0, avgConf: 0 };
+    if (!isOvernightMode(scannerMode) || results.length === 0) return { ready: 0, strong: 0, avgGap: 0, avgConf: 0 };
     let ready = 0, strong = 0, gapSum = 0, confSum = 0;
     results.forEach(r => {
       ready++;
@@ -1809,6 +1831,21 @@ export default function ScannerClient() {
       avgConf: confSum / results.length
     };
   }, [results, scannerMode]);
+
+  const indexMetrics = useMemo(() => {
+    if (scannerMode !== 'INDEX' || indexResults.length === 0) {
+      return { strong: 0, ready: 0, watch: 0, ignore: 0 };
+    }
+    let strong = 0, ready = 0, watch = 0, ignore = 0;
+    for (const r of indexResults) {
+      const cls = String(r.classification || '');
+      if (cls === 'INDEX_STRONG') strong++;
+      else if (cls === 'INDEX_READY') ready++;
+      else if (cls === 'INDEX_WATCH') watch++;
+      else ignore++;
+    }
+    return { strong, ready, watch, ignore };
+  }, [indexResults, scannerMode]);
 
   // Countdown display calculation
   const getCountdownDisplay = () => {
@@ -1843,7 +1880,7 @@ export default function ScannerClient() {
   return (
     <div className="space-y-6 relative pb-20 terminal-grid">
       
-      {scannerMode !== 'CPR' && <BtstStateBanner />}
+      {isOvernightMode(scannerMode) && <BtstStateBanner />}
 
       {/* V3 KPI Top status bar */}
       <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
@@ -2016,7 +2053,7 @@ export default function ScannerClient() {
       )}
 
       {/* V3 Insights Cards */}
-      {scannerMode !== 'CPR' ? (
+      {isOvernightMode(scannerMode) ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
@@ -2052,6 +2089,49 @@ export default function ScannerClient() {
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
               <Target size={18} />
+            </div>
+          </div>
+        </div>
+      ) : scannerMode === 'INDEX' ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Index Strong</span>
+              <p className="text-[9px] opacity-70">Score 100</p>
+              <h2 className="text-2xl font-bold text-accent-purple">{indexMetrics.strong}</h2>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+              <Award size={18} />
+            </div>
+          </div>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Index Ready</span>
+              <p className="text-[9px] opacity-70">Score ≥ 70</p>
+              <h2 className="text-2xl font-bold text-accent-green">{indexMetrics.ready}</h2>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Index Watch</span>
+              <p className="text-[9px] opacity-70">Score ≥ 40</p>
+              <h2 className="text-2xl font-bold text-accent-amber">{indexMetrics.watch}</h2>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
+              <Activity size={18} />
+            </div>
+          </div>
+          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[10px] text-text-tertiary uppercase">Ignore</span>
+              <p className="text-[9px] opacity-70">Score &lt; 40 / no VWAP</p>
+              <h2 className="text-2xl font-bold text-accent-red">{indexMetrics.ignore}</h2>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
+              <AlertTriangle size={18} />
             </div>
           </div>
         </div>
@@ -2102,7 +2182,8 @@ export default function ScannerClient() {
         </div>
       )}
 
-      {/* Sector Signal Heatmap Grid */}
+      {/* Sector Signal Heatmap Grid — stock/CPR only; INDEX has no sector universe */}
+      {scannerMode !== 'INDEX' && (
       <Card title="Market Sector Concentration Heatmap" icon={<LayoutGrid size={14} className="text-accent-blue" />}>
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center font-mono select-none">
@@ -2255,6 +2336,7 @@ export default function ScannerClient() {
           </div>
         )}
       </Card>
+      )}
 
       {/* Main Terminal Scanner Controls and Table */}
       <Card 
