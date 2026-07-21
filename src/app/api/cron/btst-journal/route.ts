@@ -16,6 +16,7 @@ import {
 } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { prisma } from '@/lib/db';
+import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 /** Aligns with BtstRankingService BTST_READY floor. */
 const MIN_OVERNIGHT_SCORE = 85;
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     // Prefer latest signalTime per symbol, then highest score.
     const todaySignals = await prisma.overnightSignal.findMany({
-      where: { signalDate },
+      where: { signalDate, ...STOCK_OVERNIGHT_INSTRUMENT_WHERE },
       orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
     });
     const { longs: topLongs, shorts: topShorts } = selectTradableOvernightPicks(

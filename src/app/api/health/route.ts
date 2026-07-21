@@ -4,6 +4,7 @@ import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
 import { prisma } from '@/lib/db';
 import redis from '@/lib/redis';
+import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export async function GET() {
     
     // Check Latest Signal
     const latestSignal = await prisma.overnightSignal.findFirst({
+      where: { ...STOCK_OVERNIGHT_INSTRUMENT_WHERE },
       orderBy: { signalDate: 'desc' },
       select: { signalDate: true }
     });

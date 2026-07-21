@@ -35,11 +35,13 @@ describe('IndexDiscoverService.discover', () => {
     await assert.doesNotReject(() => IndexDiscoverService.discover(new Date('2026-07-25T10:00:00+05:30')));
   });
 
-  it('produces valid IST signalDate (YYYY-MM-DD) and signalTime (HH:MM) formats', async () => {
+  it('produces valid IST signalDate (YYYY-MM-DD) and stable discoveryStart signalTime', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     for (const r of results) {
       assert.match(r.signalDate, /^\d{4}-\d{2}-\d{2}$/);
       assert.match(r.signalTime, /^\d{2}:\d{2}$/);
+      // Stable per-day time — not wall-clock minute — so upserts do not flood.
+      assert.equal(r.signalTime, '15:10');
     }
   });
 });

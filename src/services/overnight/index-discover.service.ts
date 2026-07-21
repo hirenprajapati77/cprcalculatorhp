@@ -12,7 +12,7 @@
 import { env } from '@/config/env';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
-import { getISTDateString, getISTTime } from '@/lib/market-hours';
+import { getISTDateString, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
 import { HistoricalProvider } from '../backtest/historical.provider';
 import { IndexRankingService, IndexClassification } from './index-ranking.service';
 
@@ -45,13 +45,6 @@ interface IndexIntradayMetrics {
   vwap: number | null;
   hasIntraday: boolean;
 }
-
-const TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'Asia/Kolkata',
-  hour12: false,
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 interface YahooFinanceChartResponse {
   chart?: {
@@ -164,7 +157,9 @@ export class IndexDiscoverService {
   static async discover(dateOverride?: Date): Promise<IndexSignalResult[]> {
     const currentTime = dateOverride || new Date();
     const dateStr = getISTDateString(currentTime);
-    const timeStr = TIME_FORMATTER.format(currentTime);
+    // Stable per-day signalTime so OvernightSignal upserts update one row
+    // per index/day instead of inserting a new row on every refresh minute.
+    const timeStr = BTST_CLOCK.discoveryStart;
 
     const results: IndexSignalResult[] = [];
 
