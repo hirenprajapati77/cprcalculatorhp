@@ -90,15 +90,20 @@ function useBtstState(mode: ScannerMode = 'BTST') {
     message = 'Market is closed';
     emptyMessage = `No qualified ${mode} setups today.`;
     nextRefresh = 'Locked';
-  } else if (time < BTST_HHMM.marketOpen) {
-    state = 'PREMARKET';
-    message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
+  } else if (time < BTST_HHMM.preOpen) {
+    state = 'MARKET_CLOSED';
+    message = `Pre-session starts at ${BTST_CLOCK.preOpen} IST`;
+    emptyMessage = `Market opens at ${BTST_CLOCK.marketOpen} IST.`;
+    nextRefresh = 'Locked';
+  } else if (time >= BTST_HHMM.preOpen && time < BTST_HHMM.marketOpen) {
+    state = 'PRESESSION';
+    message = `Pre-session ${BTST_CLOCK.preOpen}–${BTST_CLOCK.marketOpen} IST · live at ${BTST_CLOCK.marketOpen}`;
     emptyMessage = `${mode} discovery has not started.`;
-    const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
+    const diffMinutes = BTST_WINDOW_MINUTES.MARKET_OPEN - (hours * 60 + minutes);
     nextRefresh = `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m`;
   } else if (time >= BTST_HHMM.marketOpen && time < BTST_HHMM.discoveryStart) {
     state = 'INTRADAY';
-    message = `${mode} discovery activates at ${BTST_CLOCK.discoveryStart} IST`;
+    message = `Live session ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST · ${mode} discovery at ${BTST_CLOCK.discoveryStart}`;
     emptyMessage = `${mode} discovery has not started.`;
     const diffMinutes = BTST_WINDOW_MINUTES.DISCOVERY_START - (hours * 60 + minutes);
     nextRefresh = `Opens in ${diffMinutes}m`;
@@ -107,9 +112,14 @@ function useBtstState(mode: ScannerMode = 'BTST') {
     message = `Generating ${mode} candidates`;
     emptyMessage = 'Scanning live candidates…';
     nextRefresh = `Live until ${BTST_CLOCK.discoveryEnd}`;
-  } else {
+  } else if (time >= BTST_HHMM.discoveryEnd && time < BTST_HHMM.marketClose) {
     state = 'FROZEN';
-    message = 'Scan results frozen for today';
+    message = 'Scan results frozen · cash session still live until close';
+    emptyMessage = `No qualified ${mode} setups today.`;
+    nextRefresh = 'Locked';
+  } else {
+    state = 'MARKET_CLOSED';
+    message = `Cash session closed at ${BTST_CLOCK.marketClose} IST`;
     emptyMessage = `No qualified ${mode} setups today.`;
     nextRefresh = 'Locked';
   }
@@ -145,11 +155,13 @@ const BtstStateBanner = () => {
   
   const getColors = () => {
     switch (state) {
+      case 'PRESESSION': return 'bg-bg-secondary text-text-secondary border-border-primary';
       case 'PREMARKET': return 'bg-bg-secondary text-text-secondary border-border-primary';
       case 'INTRADAY': return 'bg-bg-secondary text-text-secondary border-border-primary/50';
       case 'DISCOVERING': return 'bg-accent-amber/10 text-accent-amber border-accent-amber/30';
       case 'ACTIVE': return 'bg-accent-blue/10 text-accent-blue border-accent-blue/30';
       case 'FROZEN': return 'bg-accent-purple/10 text-accent-purple border-accent-purple/30';
+      case 'MARKET_CLOSED': return 'bg-bg-tertiary text-text-tertiary border-border-secondary';
       default: return 'bg-bg-tertiary text-text-tertiary border-border-secondary';
     }
   };
@@ -158,7 +170,12 @@ const BtstStateBanner = () => {
     <div className={`flex items-center justify-between p-3 rounded-lg border font-mono text-[11px] mb-4 ${getColors()}`}>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          {(state === 'ACTIVE' || state === 'INTRADAY') && <span className={`h-2 w-2 rounded-full ${state === 'ACTIVE' ? 'bg-accent-green animate-pulse' : 'bg-accent-blue'} `} />}
+          {(state === 'ACTIVE' || state === 'INTRADAY' || state === 'PRESESSION') && (
+            <span className={`h-2 w-2 rounded-full ${
+              state === 'ACTIVE' ? 'bg-accent-green animate-pulse' :
+              state === 'PRESESSION' ? 'bg-accent-amber' : 'bg-accent-blue'
+            } `} />
+          )}
           <span className="font-bold tracking-wider">{state}</span>
         </div>
         <span className="hidden sm:inline">{message}</span>
@@ -947,15 +964,17 @@ export default function ScannerClient() {
     const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
     const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
     const t = h * 100 + m;
-    
-    if (t < BTST_HHMM.marketOpen) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
-    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.discoveryStart) return { label: 'INTRADAY', color: 'bg-accent-blue' };
+
+    if (t < BTST_HHMM.preOpen) return { label: 'CLOSED', color: 'bg-bg-secondary' };
+    if (t >= BTST_HHMM.preOpen && t < BTST_HHMM.marketOpen) return { label: 'PRESESSION', color: 'bg-accent-amber' };
+    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.discoveryStart) return { label: 'LIVE', color: 'bg-accent-blue' };
     if (t >= BTST_HHMM.discoveryStart && t < BTST_HHMM.discoveryEnd) return { label: 'ACTIVE', color: 'bg-accent-green animate-pulse' };
-    return { label: 'FROZEN', color: 'bg-accent-purple' };
+    if (t >= BTST_HHMM.discoveryEnd && t < BTST_HHMM.marketClose) return { label: 'FROZEN', color: 'bg-accent-purple' };
+    return { label: 'CLOSED', color: 'bg-bg-secondary' };
   };
   const telState = getTelemetryState();
 
-  /** INDEX mode uses NSE cash session 09:15–15:30 IST (not BTST 15:10–15:25). */
+  /** INDEX mode: site-wide cash session — PRESESSION 09:00–09:15, LIVE 09:15–15:30. */
   const getIndexTelemetryState = () => {
     const parts = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -966,12 +985,14 @@ export default function ScannerClient() {
     const h = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
     const m = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
     const t = h * 100 + m;
-    if (t < BTST_HHMM.marketOpen) return { label: 'PREMARKET', color: 'bg-bg-secondary' };
-    // Cash session [09:15, 15:30) IST — same gate as isMarketOpen / /api/index-scan.
-    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.marketClose) {
-      return { label: 'SESSION OPEN', color: 'bg-accent-green animate-pulse' };
+    if (t < BTST_HHMM.preOpen) return { label: 'CLOSED', color: 'bg-bg-secondary' };
+    if (t >= BTST_HHMM.preOpen && t < BTST_HHMM.marketOpen) {
+      return { label: 'PRESESSION', color: 'bg-accent-amber' };
     }
-    return { label: 'SESSION CLOSED', color: 'bg-accent-purple' };
+    if (t >= BTST_HHMM.marketOpen && t < BTST_HHMM.marketClose) {
+      return { label: 'LIVE', color: 'bg-accent-green animate-pulse' };
+    }
+    return { label: 'CLOSED', color: 'bg-accent-purple' };
   };
   const indexTelState = getIndexTelemetryState();
   const indexActiveCount = indexResults.filter((r) => r.classification !== 'IGNORE').length;
@@ -2790,7 +2811,7 @@ export default function ScannerClient() {
                       {cachedResult
                         ? `Showing cached scan from ${scannedAt}`
                         : scannerMode === 'INDEX'
-                          ? `Index Scanner — Active during market hours (${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST)${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                          ? `Index Scanner — Pre-session ${BTST_CLOCK.preOpen}–${BTST_CLOCK.marketOpen}, live ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                           : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
