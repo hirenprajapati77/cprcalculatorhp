@@ -1404,7 +1404,7 @@ export default function ScannerClient() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [universe, market, refreshInterval, scannerMode, fetchTopOpportunities, fetchHistoryRuns, showToast]);
+  }, [universe, market, refreshInterval, fetchScannerData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
   const fetchBtstData = useCallback(async () => {
     await fetchScannerData(true);
@@ -2707,7 +2707,7 @@ export default function ScannerClient() {
             <div className="rounded-lg px-4 py-3 mb-4 flex items-center gap-3 bg-red-500/10 border border-red-500/30">
               <span className="text-lg">🛑</span>
               <p className="text-sm font-medium text-red-400 font-mono">
-                {scannerMode === 'CPR'
+                {scannerMode === 'CPR' || scannerMode === 'INDEX'
                   ? 'Markets closed. See you Monday at 09:15 IST.'
                   : `Markets closed. See you Monday at ${BTST_CLOCK.discoveryStart} IST.`}
               </p>
@@ -2733,12 +2733,16 @@ export default function ScannerClient() {
                     }`}>
                       {cachedResult
                         ? `Showing cached scan from ${scannedAt}`
-                        : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                        : scannerMode === 'INDEX'
+                          ? `Index Scanner — Active during market hours (09:15–15:30 IST)${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                          : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {cachedResult
-                        ? `Next live scan today at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST`
+                        ? scannerMode === 'INDEX'
+                          ? 'Next live scan at market open (09:15 IST)'
+                          : `Next live scan today at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST`
                         : 'Results will appear here automatically when window opens'
                       }
                     </p>
@@ -2806,7 +2810,10 @@ export default function ScannerClient() {
                         </thead>
                         <tbody className="divide-y divide-border-primary/50">
                           {indexResults.map((row) => (
-                            <IndexSignalRow key={`${row.symbol}-${row.signalTime}`} signal={row} />
+                            <IndexSignalRow
+                              key={`${row.symbol}-${row.scanType ?? 'BTST'}-${row.signalTime}`}
+                              signal={row}
+                            />
                           ))}
                         </tbody>
                       </table>

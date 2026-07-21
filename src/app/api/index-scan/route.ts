@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
-import { isMarketOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
+import { isMarketOpen, getBtstWindowState } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
@@ -104,9 +104,16 @@ export async function GET(request: Request) {
     }
 
     // F&O Option Suggestion Enrichment Layer
-    const eligibleResults = resultsList.filter(r => 
-      (r.direction === 'LONG' || r.direction === 'SHORT') && 
-      r.score !== null && r.score >= 40 // WATCH or above
+    // Require real entry/SL/target — never call option chain with fabricated 0/±1% levels.
+    const eligibleResults = resultsList.filter(
+      (r) =>
+        (r.direction === 'LONG' || r.direction === 'SHORT') &&
+        r.score !== null &&
+        r.score >= 40 &&
+        r.entry != null &&
+        r.entry > 0 &&
+        r.stopLoss != null &&
+        r.target != null
     );
 
     if (eligibleResults.length > 0) {
@@ -114,21 +121,19 @@ export async function GET(request: Request) {
         const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
         const enrichmentPromises = eligibleResults.map(async (r) => {
           try {
-            // For indices, entry/sl/target are approximated if missing
-            const ltp = r.entry || 0; // Using entry as LTP proxy if needed, though OptionSuggestion pulls real LTP from chain
-            const stockEntry = r.entry || 0;
-            const stockSl = r.stopLoss || (r.direction === 'SHORT' ? stockEntry * 1.01 : stockEntry * 0.99);
-            const stockTarget = r.target || (r.direction === 'SHORT' ? stockEntry * 0.98 : stockEntry * 1.02);
-            
+            const stockEntry = r.entry as number;
+            const stockSl = r.stopLoss as number;
+            const stockTarget = r.target as number;
+
             const suggestion = await OptionSuggestionService.suggestOptionForBtst(
               r.symbol,
-              ltp,
+              stockEntry,
               r.direction,
               stockEntry,
               stockSl,
               stockTarget
             );
-            // Return with scanType to match perfectly since the same symbol might exist twice
+            // scanType disambiguates NIFTY appearing once as INTRA and once as BTST
             return { symbol: r.symbol, scanType: r.scanType, suggestion };
           } catch (e) {
             console.warn(`Failed option suggestion for ${r.symbol} (${r.scanType}):`, e);
