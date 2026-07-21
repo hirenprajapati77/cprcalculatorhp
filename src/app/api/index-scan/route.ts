@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
+import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { isMarketOpen, getBtstWindowState, BTST_CLOCK } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { prisma } from '@/lib/db';
@@ -104,12 +105,13 @@ export async function GET(request: Request) {
     }
 
     // F&O Option Suggestion Enrichment Layer
-    // Require real entry/SL/target — never call option chain with fabricated 0/±1% levels.
+    // READY+ only (score >= 70) — matches stock BTST gate intent (ADVANCED_SCORE.READY).
+    // WATCH (40) is CPR-narrow alone and must not advertise Calls/Puts.
     const eligibleResults = resultsList.filter(
       (r) =>
         (r.direction === 'LONG' || r.direction === 'SHORT') &&
         r.score !== null &&
-        r.score >= 40 &&
+        r.score >= INDEX_SCORE.READY &&
         r.entry != null &&
         r.entry > 0 &&
         r.stopLoss != null &&

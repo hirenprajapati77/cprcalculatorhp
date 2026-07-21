@@ -44,6 +44,16 @@ export interface IndexScoreDetails {
  */
 export type IndexClassification = 'INDEX_STRONG' | 'INDEX_READY' | 'INDEX_WATCH' | 'IGNORE';
 
+/**
+ * Discrete score floors for the 40+30+30 index rule set.
+ * Option suggestions must use READY+ (same intent as ADVANCED_SCORE.READY on stocks).
+ */
+export const INDEX_SCORE = {
+  STRONG: 100,
+  READY: 70,
+  WATCH: 40,
+} as const;
+
 export class IndexRankingService {
   /**
    * Calculates the quantitative Index LONG score (max 100) with per-rule breakdown.
@@ -102,9 +112,9 @@ export class IndexRankingService {
    */
   static getClassification(score: number | null): IndexClassification {
     if (score === null) return 'IGNORE';
-    if (score >= 100) return 'INDEX_STRONG';
-    if (score >= 70) return 'INDEX_READY';
-    if (score >= 40) return 'INDEX_WATCH';
+    if (score >= INDEX_SCORE.STRONG) return 'INDEX_STRONG';
+    if (score >= INDEX_SCORE.READY) return 'INDEX_READY';
+    if (score >= INDEX_SCORE.WATCH) return 'INDEX_WATCH';
     return 'IGNORE';
   }
 }
