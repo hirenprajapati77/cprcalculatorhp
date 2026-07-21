@@ -92,6 +92,10 @@ export function formatIstClock(parts: { hour: number; minute: number }): string 
   return formatIstHm(toTotalMinutes(parts.hour, parts.minute));
 }
 
+const MARKET_PRE_OPEN_MIN = toTotalMinutes(
+  MARKET_SESSION.PRE_OPEN.hour,
+  MARKET_SESSION.PRE_OPEN.minute
+);
 const MARKET_OPEN_MIN = toTotalMinutes(MARKET_SESSION.OPEN.hour, MARKET_SESSION.OPEN.minute);
 const MARKET_CLOSE_MIN = toTotalMinutes(MARKET_SESSION.CLOSE.hour, MARKET_SESSION.CLOSE.minute);
 
@@ -122,6 +126,7 @@ const JOURNAL_END_MIN = toTotalMinutes(
 
 /** Derived IST minute-of-day bounds (from trading-constants only). */
 export const BTST_WINDOW_MINUTES = {
+  MARKET_PRE_OPEN: MARKET_PRE_OPEN_MIN,
   MARKET_OPEN: MARKET_OPEN_MIN,
   MARKET_CLOSE: MARKET_CLOSE_MIN,
   DISCOVERY_START: DISCOVERY_START_MIN,
@@ -149,6 +154,7 @@ export function istMinuteOfDayFromUnixSec(unixSec: number): number {
 
 /** Preformatted HH:MM labels for UI/cron messages (derived — no clock literals here). */
 export const BTST_CLOCK = {
+  preOpen: formatIstHm(MARKET_PRE_OPEN_MIN),
   marketOpen: formatIstHm(MARKET_OPEN_MIN),
   marketClose: formatIstHm(MARKET_CLOSE_MIN),
   discoveryStart: formatIstHm(DISCOVERY_START_MIN),
@@ -160,6 +166,7 @@ export const BTST_CLOCK = {
 
 /** HHMM integer form for UI comparisons (e.g. hour*100+minute). */
 export const BTST_HHMM = {
+  preOpen: MARKET_SESSION.PRE_OPEN.hour * 100 + MARKET_SESSION.PRE_OPEN.minute,
   marketOpen: MARKET_SESSION.OPEN.hour * 100 + MARKET_SESSION.OPEN.minute,
   /** Exclusive end of cash session — matches isMarketOpen [open, close). */
   marketClose: MARKET_SESSION.CLOSE.hour * 100 + MARKET_SESSION.CLOSE.minute,
@@ -169,10 +176,29 @@ export const BTST_HHMM = {
   journalEnd: BTST_WINDOWS.JOURNAL_END_INCLUSIVE.hour * 100 + BTST_WINDOWS.JOURNAL_END_INCLUSIVE.minute,
 } as const;
 
-export function isMarketOpen(date: Date = new Date()): boolean {
+/**
+ * Site-wide NSE cash-session phase (IST):
+ * - CLOSED: weekend / holiday / before 09:00 / at-or-after 15:30
+ * - PRESESSION: [09:00, 09:15)
+ * - LIVE: [09:15, 15:30)
+ */
+export type CashSessionState = 'CLOSED' | 'PRESESSION' | 'LIVE';
+
+export function getCashSessionState(date: Date = new Date()): CashSessionState {
   const { totalMinutes, isTradingDay } = getISTTime(date);
-  if (!isTradingDay) return false;
-  return totalMinutes >= MARKET_OPEN_MIN && totalMinutes < MARKET_CLOSE_MIN;
+  if (!isTradingDay) return 'CLOSED';
+  if (totalMinutes >= MARKET_OPEN_MIN && totalMinutes < MARKET_CLOSE_MIN) return 'LIVE';
+  if (totalMinutes >= MARKET_PRE_OPEN_MIN && totalMinutes < MARKET_OPEN_MIN) return 'PRESESSION';
+  return 'CLOSED';
+}
+
+/** True during pre-session [09:00, 09:15) IST on a trading day. */
+export function isPreSession(date: Date = new Date()): boolean {
+  return getCashSessionState(date) === 'PRESESSION';
+}
+
+export function isMarketOpen(date: Date = new Date()): boolean {
+  return getCashSessionState(date) === 'LIVE';
 }
 
 export function isTodayCandleClosed(date: Date = new Date()): boolean {

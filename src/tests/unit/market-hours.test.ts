@@ -5,6 +5,8 @@ import {
   getISTTime,
   isTodayCandleClosed,
   isMarketOpen,
+  isPreSession,
+  getCashSessionState,
   getCompletedHistory,
   getBtstWindowState,
   isBtstDiscoveryOpen,
@@ -12,6 +14,7 @@ import {
   isBtstJournalWindowOpen,
   isInClosingLiquidityWindow,
   BTST_WINDOW_MINUTES,
+  BTST_CLOCK,
 } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
@@ -72,6 +75,49 @@ describe('Market Hours Utilities', () => {
       const result = getCompletedHistory(history, '2026-07-09');
       assert.equal(result.length, 2);
       assert.deepEqual(result, history);
+    });
+  });
+
+  describe('Cash session (site-wide PRESESSION + LIVE)', () => {
+    // 2026-07-08 is a Wednesday trading day
+    const at = (h: number, m: number) =>
+      new Date(`2026-07-08T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+05:30`);
+
+    it('exposes 09:00 pre-open and 09:15–15:30 live labels', () => {
+      assert.equal(BTST_CLOCK.preOpen, '09:00');
+      assert.equal(BTST_CLOCK.marketOpen, '09:15');
+      assert.equal(BTST_CLOCK.marketClose, '15:30');
+    });
+
+    it('maps CLOSED / PRESESSION / LIVE phases', () => {
+      assert.equal(getCashSessionState(at(8, 59)), 'CLOSED');
+      assert.equal(isPreSession(at(8, 59)), false);
+      assert.equal(isMarketOpen(at(8, 59)), false);
+
+      assert.equal(getCashSessionState(at(9, 0)), 'PRESESSION');
+      assert.equal(isPreSession(at(9, 0)), true);
+      assert.equal(isMarketOpen(at(9, 0)), false);
+
+      assert.equal(getCashSessionState(at(9, 14)), 'PRESESSION');
+      assert.equal(isPreSession(at(9, 14)), true);
+
+      assert.equal(getCashSessionState(at(9, 15)), 'LIVE');
+      assert.equal(isPreSession(at(9, 15)), false);
+      assert.equal(isMarketOpen(at(9, 15)), true);
+
+      assert.equal(getCashSessionState(at(15, 29)), 'LIVE');
+      assert.equal(isMarketOpen(at(15, 29)), true);
+
+      assert.equal(getCashSessionState(at(15, 30)), 'CLOSED');
+      assert.equal(isMarketOpen(at(15, 30)), false);
+    });
+
+    it('treats weekends as CLOSED', () => {
+      // 2026-07-11 is a Saturday
+      const sat = new Date('2026-07-11T10:00:00+05:30');
+      assert.equal(getCashSessionState(sat), 'CLOSED');
+      assert.equal(isPreSession(sat), false);
+      assert.equal(isMarketOpen(sat), false);
     });
   });
 
