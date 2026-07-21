@@ -16,6 +16,7 @@ function makeSignal(partial: Partial<OvernightSignal>): OvernightSignal {
     signalDate: '2026-07-08',
     signalTime: BTST_CLOCK.confirmStart,
     direction: 'LONG',
+    instrumentType: null,
     entry: 1000,
     stopLoss: 980,
     target: 1040,
