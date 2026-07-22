@@ -186,7 +186,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const matchingSnapshots = await DatabaseCircuitBreaker.execute(() =>
+    const matchingSnapshots = await DatabaseCircuitBreaker.execute<MarketSnapshot[]>(() =>
       prisma.marketSnapshot.findMany({
         where: snapshotWhere
       })
@@ -306,7 +306,16 @@ export async function GET(request: NextRequest) {
     });
 
     if (isMarketOpen()) {
-      const topForOptions = await DatabaseCircuitBreaker.execute(() =>
+      type OptionEnrichmentRow = {
+        symbol: string;
+        ltp: number;
+        signalSummary?: string | null;
+        entry?: number | null;
+        sl?: number | null;
+        target?: number | null;
+        score: number;
+      };
+      const topForOptions = await DatabaseCircuitBreaker.execute<OptionEnrichmentRow[]>(() =>
         prisma.scannerResult.findMany({
           where: { ...where, score: { gte: 75 } },
           orderBy: { score: 'desc' },
