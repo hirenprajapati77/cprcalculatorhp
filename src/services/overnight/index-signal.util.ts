@@ -17,7 +17,7 @@ const INTRA_SIGNAL_REASONS: Record<string, string> = {
   GAP_DOWN: 'Gap down open',
   HOT_ZONE: 'Hot zone near pivot',
   BREAKOUT: 'Volume breakout above TC',
-  BREAKDOWN: 'Volume breakdown below BC',
+  BREAKDOWN: 'Breakdown below BC',
   MOMENTUM: 'Momentum beyond R1/S1',
   VIRGIN: 'Virgin CPR (untouched band)',
   VOLUME_SPIKE: 'Volume spike',

@@ -44,7 +44,7 @@ interface ScoredCandidate extends ItmCandidate {
 }
 
 const FALLBACK_LOT_SIZES: Record<string, number> = {
-  'NIFTY': 25, 'BANKNIFTY': 15, 'FINNIFTY': 40, 'MIDCPNIFTY': 75,
+  'NIFTY': 25, 'BANKNIFTY': 15, 'SENSEX': 10, 'FINNIFTY': 40, 'MIDCPNIFTY': 75,
   'HDFCBANK': 400, 'RELIANCE': 250, 'ICICIBANK': 700, 'INFY': 400,
   'ITC': 1600, 'TCS': 175, 'LT': 300, 'SBIN': 750, 'BAJFINANCE': 125,
   'BHARTIARTL': 950, 'KOTAKBANK': 400, 'AXISBANK': 625, 'M&M': 350,
