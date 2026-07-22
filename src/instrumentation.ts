@@ -55,5 +55,9 @@ export async function register() {
     } catch (_e) {
       console.log('❌ EVENTS:  DB Error during check');
     }
+
+    // In-process BTST Telegram scheduler (fallback when host crontab is missing).
+    const { startMarketCronScheduler } = await import('@/services/scheduler/market-cron.scheduler');
+    startMarketCronScheduler();
   }
 }
