@@ -25,6 +25,11 @@ const envSchema = z.object({
   FYERS_AUTH_PROXY_URL: optionalUrl,
   
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  /**
+   * ⚠️ WARNING: If you change CRON_SECRET, you MUST also update the curl commands
+   * in the production server's crontab (via `crontab -e`), otherwise background jobs
+   * will fail with 401 Unauthorized.
+   */
   CRON_SECRET: z.string().optional(),
   APP_ACCESS_TOKEN: z.string().optional(),
   
