@@ -55,5 +55,8 @@ export async function register() {
     } catch (_e) {
       console.log('❌ EVENTS:  DB Error during check');
     }
+
+    const { startMarketCronScheduler } = await import('@/services/scheduler/market-cron.scheduler');
+    startMarketCronScheduler();
   }
 }
