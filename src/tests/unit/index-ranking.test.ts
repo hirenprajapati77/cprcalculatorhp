@@ -6,6 +6,8 @@ import {
   INDEX_SCORE,
   INDIA_VIX_CALM_MAX,
   INDIA_VIX_ELEVATED_MIN,
+  INDEX_BTST_RED_SESSION_BLOCK_PCT,
+  isIndexBtstRedSession,
 } from '../../services/overnight/index-ranking.service';
 import { ADVANCED_SCORE } from '../../config/trading-constants';
 
@@ -186,5 +188,25 @@ describe('INDEX_SCORE / India VIX constants', () => {
   it('exposes India VIX calm/elevated thresholds', () => {
     assert.equal(INDIA_VIX_CALM_MAX, 20);
     assert.equal(INDIA_VIX_ELEVATED_MIN, 25);
+  });
+});
+
+describe('Index BTST red-session guard', () => {
+  it('blocks when session is down at least INDEX_BTST_RED_SESSION_BLOCK_PCT', () => {
+    // Nifty Jul 21: −50.8 / 24238.5 ≈ −0.21%
+    const niftyJul21 = (24187.7 - 24238.5) / 24238.5;
+    assert.ok(isIndexBtstRedSession(niftyJul21));
+
+    // Bank Nifty Jul 21: −109.65 / 57945 ≈ −0.19%
+    const bankJul21 = (57835.35 - 57945) / 57945;
+    assert.ok(isIndexBtstRedSession(bankJul21));
+
+    assert.equal(INDEX_BTST_RED_SESSION_BLOCK_PCT, -0.001);
+  });
+
+  it('allows flat or green sessions above threshold', () => {
+    assert.equal(isIndexBtstRedSession(0), false);
+    assert.equal(isIndexBtstRedSession(0.005), false);
+    assert.equal(isIndexBtstRedSession(-0.0005), false);
   });
 });

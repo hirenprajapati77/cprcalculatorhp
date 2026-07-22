@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
+import { INDEX_INTRA_SCORE } from '@/services/overnight/index-intra-ranking.service';
 import { IndexRegimeService } from '@/services/overnight/index-regime.service';
 import { isMarketOpen, getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
@@ -105,13 +106,14 @@ export async function GET(request: Request) {
     }
 
     // F&O Option Suggestion Enrichment Layer
-    // READY+ only (score >= INDEX_SCORE.READY=85) — matches stock BTST (ADVANCED_SCORE.READY).
-    // WATCH (70) must not advertise Calls/Puts.
+    // BTST: READY+ at INDEX_SCORE.READY (85). INTRA: READY+ at INDEX_INTRA_SCORE.READY (60).
+    const intraReadyFloor = INDEX_INTRA_SCORE.READY;
+    const btstReadyFloor = INDEX_SCORE.READY;
     const eligibleResults = resultsList.filter(
       (r) =>
         (r.direction === 'LONG' || r.direction === 'SHORT') &&
         r.score !== null &&
-        r.score >= INDEX_SCORE.READY &&
+        r.score >= (r.scanType === 'INTRA' ? intraReadyFloor : btstReadyFloor) &&
         r.entry != null &&
         r.entry > 0 &&
         r.stopLoss != null &&

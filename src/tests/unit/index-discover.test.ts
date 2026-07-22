@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { IndexDiscoverService, INDEX_INSTRUMENTS } from '../../services/overnight/index-discover.service';
-import { INDEX_SCORE } from '../../services/overnight/index-ranking.service';
+import { INDEX_INTRA_SCORE } from '../../services/overnight/index-intra-ranking.service';
 
 /**
  * These tests run against HistoricalProvider's deterministic mock mode
@@ -13,7 +13,7 @@ import { INDEX_SCORE } from '../../services/overnight/index-ranking.service';
  * score, not the live scoring path.
  */
 describe('IndexDiscoverService.discover', () => {
-  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY) — no F&O universe loop', async () => {
+  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY, SENSEX) — no F&O universe loop', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     const symbols = results.map((r) => r.symbol).sort();
     assert.deepEqual(symbols, INDEX_INSTRUMENTS.map((i) => i.symbol).sort());
@@ -60,15 +60,66 @@ describe('IndexDiscoverService.getIndiaVixState', () => {
   });
 });
 
+describe('IndexDiscoverService.resolveIndexSessionCandles', () => {
+  const history = [
+    { date: '2026-07-18', open: 1, high: 2, low: 0.5, close: 1.5, volume: 0 },
+    { date: '2026-07-21', open: 10, high: 12, low: 9, close: 11, volume: 0 },
+  ];
+
+  it('uses live session as today when hasLive', () => {
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      history,
+      {
+        hasLive: true,
+        ltp: 100,
+        open: 98,
+        high: 101,
+        low: 97,
+        previousClose: 99,
+      },
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+    assert.ok(resolved);
+    assert.equal(resolved!.today.close, 100);
+    assert.equal(resolved!.yesterday.date, '2026-07-21');
+    assert.equal(resolved!.usesLiveSession, true);
+  });
+
+  it('uses last completed bar as today after EOD when live unavailable', () => {
+    const eodHistory = [
+      ...history,
+      { date: '2026-07-22', open: 20, high: 22, low: 19, close: 21, volume: 0 },
+    ];
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      eodHistory,
+      { hasLive: false, ltp: null, open: null, high: null, low: null, previousClose: null },
+      new Date('2026-07-22T18:00:00+05:30')
+    );
+    assert.ok(resolved);
+    assert.equal(resolved!.today.close, 21);
+    assert.equal(resolved!.yesterday.date, '2026-07-21');
+    assert.equal(resolved!.usesLiveSession, false);
+  });
+
+  it('returns null mid-session without live feed (score-safety)', () => {
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      history,
+      { hasLive: false, ltp: null, open: null, high: null, low: null, previousClose: null },
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+    assert.equal(resolved, null);
+  });
+});
+
 describe('IndexDiscoverService.mapIntraClassification', () => {
-  it('maps scores onto INDEX_* using INDEX_SCORE floors (100 / 85 / 70)', () => {
-    assert.equal(IndexDiscoverService.mapIntraClassification(100), 'INDEX_STRONG');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.STRONG), 'INDEX_STRONG');
-    assert.equal(IndexDiscoverService.mapIntraClassification(90), 'INDEX_READY');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.READY), 'INDEX_READY');
-    assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_WATCH');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.WATCH), 'INDEX_WATCH');
-    assert.equal(IndexDiscoverService.mapIntraClassification(69), 'IGNORE');
+  it('maps scores onto INDEX_* using INTRA floors (75 / 60 / 40)', () => {
+    assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.STRONG), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(65), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.READY), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(45), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.WATCH), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(39), 'IGNORE');
     assert.equal(IndexDiscoverService.mapIntraClassification(10), 'IGNORE');
   });
 });

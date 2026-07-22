@@ -69,6 +69,16 @@ export const INDIA_VIX_CALM_MAX = 20;
  */
 export const INDIA_VIX_ELEVATED_MIN = 25;
 
+/**
+ * Block index BTST LONG when session is down vs previous close by at least this
+ * fraction (e.g. −0.10% catches Nifty −50 / Bank Nifty −109 type days).
+ */
+export const INDEX_BTST_RED_SESSION_BLOCK_PCT = -0.001;
+
+export function isIndexBtstRedSession(sessionChangePct: number): boolean {
+  return sessionChangePct <= INDEX_BTST_RED_SESSION_BLOCK_PCT;
+}
+
 export class IndexRankingService {
   /**
    * Calculates the quantitative Index LONG score (max 130) with per-rule breakdown.

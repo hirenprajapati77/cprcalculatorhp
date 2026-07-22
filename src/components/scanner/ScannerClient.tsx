@@ -2158,7 +2158,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Strong</span>
-              <p className="text-[9px] opacity-70">Score 100</p>
+              <p className="text-[9px] opacity-70">INTRA ≥75 / BTST 100</p>
               <h2 className="text-2xl font-bold text-accent-purple">{indexMetrics.strong}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
@@ -2168,7 +2168,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Ready</span>
-              <p className="text-[9px] opacity-70">Score ≥ 70</p>
+              <p className="text-[9px] opacity-70">INTRA ≥60 / BTST ≥85</p>
               <h2 className="text-2xl font-bold text-accent-green">{indexMetrics.ready}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
@@ -2178,7 +2178,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Watch</span>
-              <p className="text-[9px] opacity-70">Score ≥ 40</p>
+              <p className="text-[9px] opacity-70">INTRA ≥40 / BTST ≥70</p>
               <h2 className="text-2xl font-bold text-accent-amber">{indexMetrics.watch}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
@@ -2188,7 +2188,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Ignore</span>
-              <p className="text-[9px] opacity-70">Score &lt; 40 / no VWAP</p>
+              <p className="text-[9px] opacity-70">Below watch / inside CPR</p>
               <h2 className="text-2xl font-bold text-accent-red">{indexMetrics.ignore}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
