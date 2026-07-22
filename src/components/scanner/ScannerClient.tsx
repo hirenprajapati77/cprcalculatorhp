@@ -851,7 +851,7 @@ export default function ScannerClient() {
 
   // Advanced CPR Filters
   const [advancedCprCollapsed, setAdvancedCprCollapsed] = useState<boolean>(true);
-  const [cprRelationshipFilter, setCprRelationshipFilter] = useState<string>('ALL'); // ALL, HIGHER_VALUE, LOWER_VALUE, INSIDE_VALUE, OUTSIDE_VALUE, OVERLAPPING
+  const [cprRelationshipFilter, setCprRelationshipFilter] = useState<string>('ALL'); // ALL, HIGHER_VALUE, LOWER_VALUE, INSIDE_VALUE, OVERLAPPING
   const [virginCprOnly, setVirginCprOnly] = useState<boolean>(false);
   const [narrowCprOnly, setNarrowCprOnly] = useState<boolean>(false);
 
@@ -2735,7 +2735,6 @@ export default function ScannerClient() {
                           <option value="HIGHER_VALUE">Higher Value</option>
                           <option value="LOWER_VALUE">Lower Value</option>
                           <option value="INSIDE_VALUE">Inside Value</option>
-                          <option value="OUTSIDE_VALUE">Outside Value</option>
                           <option value="OVERLAPPING">Overlapping</option>
                         </select>
                       </div>
@@ -3341,8 +3340,9 @@ export default function ScannerClient() {
                         {(drawerStock.signals || []).map(sig => {
                           const explMap: Record<string, string> = {
                             HIGHER_VALUE: "Today CPR is above yesterday's CPR. Bullish value migration.",
-                            INSIDE_VALUE: "Today CPR overlaps yesterday. Consolidation, await breakout.",
+                            INSIDE_VALUE: "Today CPR is fully inside yesterday's CPR band. Consolidation, await breakout.",
                             LOWER_VALUE: "Today CPR below yesterday's CPR. Bearish value migration.",
+                            OVERLAPPING_VALUE: "Today and yesterday CPR bands partially overlap (neither higher, lower, nor fully inside). Mixed/transition value zone.",
                             BREAKOUT: "Heavy volume + price above TC. Strong bullish breakout.",
                             NARROW: "CPR width < 0.3%. High probability trending day ahead.",
                             VIRGIN: "CPR never tested. Strong magnet zone.",
