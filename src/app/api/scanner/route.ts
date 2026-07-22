@@ -139,22 +139,11 @@ export async function GET(request: NextRequest) {
 
 
 
-    // If circuit is open, fallback to cache immediately
+    // If circuit is open, fallback to cache immediately — before any of the
+    // three DB query sites below (marketSnapshot.findMany, scannerResult batch,
+    // topForOptions findMany) are reached.
     if (DatabaseCircuitBreaker.isOpen()) {
-      const { CacheService } = await import('@/services/cache.service');
-      const cached = await CacheService.get('AUTO_SCAN_RESULT');
-      if (cached && typeof cached === 'object' && 'data' in cached) {
-        const cachedData = cached as { data: unknown[]; timestamp?: string };
-        return NextResponse.json({
-          success: true,
-          degraded: true,
-          message: 'Serving cached data because the database is temporarily unavailable.',
-          cachedAt: cachedData.timestamp,
-          results: cachedData.data,
-          fromCache: true
-        });
-      }
-      return NextResponse.json({ success: false, degraded: true, message: 'Database is unavailable and no cache is available', results: [] }, { status: 503 });
+      return await serveDegradedScannerCache();
     }
 
     // 1. Auto-initialize today's database records if empty
@@ -197,9 +186,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const matchingSnapshots = await prisma.marketSnapshot.findMany({
-      where: snapshotWhere
-    });
+    const matchingSnapshots = await DatabaseCircuitBreaker.execute(() =>
+      prisma.marketSnapshot.findMany({
+        where: snapshotWhere
+      })
+    );
     
     const finalDbSymbols = matchingSnapshots.map((s: MarketSnapshot) => s.symbol);
     
@@ -315,20 +306,22 @@ export async function GET(request: NextRequest) {
     });
 
     if (isMarketOpen()) {
-      const topForOptions = await prisma.scannerResult.findMany({
-        where: { ...where, score: { gte: 75 } },
-        orderBy: { score: 'desc' },
-        take: 10,
-        select: { 
-          symbol: true, 
-          ltp: true, 
-          signalSummary: true, 
-          entry: true, 
-          sl: true, 
-          target: true,
-          score: true
-        }
-      });
+      const topForOptions = await DatabaseCircuitBreaker.execute(() =>
+        prisma.scannerResult.findMany({
+          where: { ...where, score: { gte: 75 } },
+          orderBy: { score: 'desc' },
+          take: 10,
+          select: { 
+            symbol: true, 
+            ltp: true, 
+            signalSummary: true, 
+            entry: true, 
+            sl: true, 
+            target: true,
+            score: true
+          }
+        })
+      );
       const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
       for (const r of formattedResults) {
         if (suggestionMap.has(r.symbol)) {
@@ -357,10 +350,36 @@ export async function GET(request: NextRequest) {
       }
     }, { status: 200 });
   } catch (err) {
+    // Forced DB failure in any wrapped query trips the breaker and throws
+    // CIRCUIT_OPEN — fall back to cache the same way the isOpen() early-return does.
+    if (err instanceof Error && err.message === 'CIRCUIT_OPEN') {
+      return await serveDegradedScannerCache();
+    }
     console.error('Error fetching V2 scanner data:', err);
     return NextResponse.json(
       { error: 'Internal server error while fetching scanner data' },
       { status: 500 }
     );
   }
+}
+
+/** Shared degraded response for isOpen() early-return and CIRCUIT_OPEN catch. */
+async function serveDegradedScannerCache(): Promise<NextResponse> {
+  const { CacheService } = await import('@/services/cache.service');
+  const cached = await CacheService.get('AUTO_SCAN_RESULT');
+  if (cached && typeof cached === 'object' && 'data' in cached) {
+    const cachedData = cached as { data: unknown[]; timestamp?: string };
+    return NextResponse.json({
+      success: true,
+      degraded: true,
+      message: 'Serving cached data because the database is temporarily unavailable.',
+      cachedAt: cachedData.timestamp,
+      results: cachedData.data,
+      fromCache: true
+    });
+  }
+  return NextResponse.json(
+    { success: false, degraded: true, message: 'Database is unavailable and no cache is available', results: [] },
+    { status: 503 }
+  );
 }
