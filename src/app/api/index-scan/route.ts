@@ -5,7 +5,7 @@ import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { IndexRegimeService } from '@/services/overnight/index-regime.service';
 import { isMarketOpen, getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
-import { prisma } from '@/lib/db';
+import { persistIndexBtstOvernightSignals } from '@/services/overnight/index-overnight-persist';
 import { env } from '@/config/env';
 
 export async function GET(request: Request) {
@@ -71,38 +71,7 @@ export async function GET(request: Request) {
     const resultsList = [...taggedIntra, ...taggedBtst];
 
     // Persist only BTST to DB (to keep historical Overnight signals clean)
-    for (const r of btstResults) {
-      await prisma.overnightSignal.upsert({
-        where: {
-          symbol_signalDate_signalTime: {
-            symbol: r.symbol,
-            signalDate: r.signalDate,
-            signalTime: r.signalTime,
-          },
-        },
-        update: {
-          direction: r.direction,
-          entry: r.entry,
-          stopLoss: r.stopLoss,
-          target: r.target,
-          overnightScore: r.score,
-          classification: r.classification,
-          instrumentType: 'INDEX',
-        },
-        create: {
-          symbol: r.symbol,
-          signalDate: r.signalDate,
-          signalTime: r.signalTime,
-          direction: r.direction,
-          entry: r.entry,
-          stopLoss: r.stopLoss,
-          target: r.target,
-          overnightScore: r.score,
-          classification: r.classification,
-          instrumentType: 'INDEX',
-        },
-      });
-    }
+    await persistIndexBtstOvernightSignals(btstResults);
 
     // F&O Option Suggestion Enrichment Layer
     // READY+ only (score >= INDEX_SCORE.READY=85) — matches stock BTST (ADVANCED_SCORE.READY).
