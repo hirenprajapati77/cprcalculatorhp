@@ -6,6 +6,7 @@ import { MarketService } from '@/services/market.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
+import { logIndexBtstJournalEntries } from '@/services/overnight/index-overnight-persist';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import { selectTradableOvernightPicks } from '@/services/overnight/overnight-ui-adapter';
@@ -83,36 +84,22 @@ export async function GET(req: NextRequest) {
       }
     );
 
+    const logged: string[] = [];
+    const skipped: string[] = [];
+
     if (topLongs.length === 0 && topShorts.length === 0) {
       const reason =
         suppressStbt && suppressBtst
-          ? 'no_tradable_setups_regime_suppressed_both'
+          ? 'no_tradable_stock_setups_regime_suppressed_both'
           : suppressStbt
-            ? 'no_tradable_setups_stbt_suppressed_bull_regime'
+            ? 'no_tradable_stock_setups_stbt_suppressed_bull_regime'
             : suppressBtst
-              ? 'no_tradable_setups_btst_suppressed_bear_regime'
-              : 'no_tradable_setups';
+              ? 'no_tradable_stock_setups_btst_suppressed_bear_regime'
+              : 'no_tradable_stock_setups';
       console.warn(
         `[BtstJournal] ${reason} for ${signalDate} (regime=${regime.trend}/${regime.volatility}, ensuredScan=${overnightEnsured})`
       );
-      return NextResponse.json({
-        success: false,
-        reason,
-        signalDate,
-        regime,
-        overnightEnsured,
-        message:
-          `No TRADEABLE READY+ OvernightSignal picks for ${signalDate}. ` +
-          (suppressStbt ? 'STBT suppressed (BULL regime). ' : '') +
-          (suppressBtst ? 'BTST suppressed (BEAR regime). ' : '') +
-          `Refusing weak/WATCH/UNKNOWN fills.`,
-        logged: [],
-        skipped: [],
-      }, { status: 200 });
     }
-
-    const logged: string[] = [];
-    const skipped: string[] = [];
 
     // Log BTST (LONG → CE)
     for (const signal of topLongs) {
@@ -288,8 +275,16 @@ export async function GET(req: NextRequest) {
       else skipped.push(`${signal.symbol}:STBT`);
     }
 
+    const indexJournal = await logIndexBtstJournalEntries({
+      signalDate,
+      suppressLong: suppressBtst,
+      regimeTrend: regime.trend,
+    });
+
+    const anyLogged = logged.length > 0 || indexJournal.logged.length > 0;
+
     return NextResponse.json({
-      success: true,
+      success: anyLogged,
       signalDate,
       source: 'OvernightSignal',
       mode: 'TRADEABLE_READY_PLUS',
@@ -313,6 +308,16 @@ export async function GET(req: NextRequest) {
       },
       logged,
       skipped,
+      index: {
+        picked: indexJournal.picks.map((s) => ({
+          symbol: s.symbol,
+          overnightScore: s.overnightScore,
+          qualityBucket: s.qualityBucket,
+          classification: s.classification,
+        })),
+        logged: indexJournal.logged,
+        skipped: indexJournal.skipped,
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
