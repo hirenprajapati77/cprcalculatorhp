@@ -415,7 +415,7 @@ export class OvernightService {
 
         // Same completed-history ATR input as signal.service / Simple BtstService
         // (exclude in-progress today bar; ref close = last completed close).
-        const completedHistory = getCompletedHistory(history);
+        const completedHistory = getCompletedHistory(history, dateOverride ? dateStr : undefined);
         const atrPct = getAtrPct(
           completedHistory.length ? completedHistory : history,
           completedHistory.length
