@@ -1490,6 +1490,17 @@ export default function ScannerClient() {
         return;
       }
 
+      if (isOvernightMode(scannerMode)) {
+        await fetchScannerData(true);
+        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+        setLatency(Date.now() - startFetchTime);
+        showToast('BTST/STBT discovery scan complete.', 'success');
+        if (refreshInterval !== 'Off') {
+          setCountdown(refreshIntervalSeconds(refreshInterval));
+        }
+        return;
+      }
+
       const res = await fetch('/api/scanner/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1518,9 +1529,13 @@ export default function ScannerClient() {
     }
   }, [universe, market, refreshInterval, scannerMode, fetchScannerData, fetchIndexData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
-  const fetchBtstData = useCallback(async () => {
-    await fetchScannerData(true);
-  }, [fetchScannerData]);
+  const refreshActiveData = useCallback(async (silent = true) => {
+    if (scannerMode === 'INDEX') {
+      await fetchIndexData(silent);
+    } else {
+      await fetchScannerData(silent);
+    }
+  }, [scannerMode, fetchIndexData, fetchScannerData]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') {
@@ -1533,18 +1548,14 @@ export default function ScannerClient() {
 
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     autoRefreshRef.current = setInterval(() => {
-      if (scannerMode === 'INDEX') {
-        fetchIndexData(true);
-      } else {
-        fetchScannerData(true);
-      }
+      void refreshActiveData(true);
       setCountdown(ms / 1000);
     }, ms);
 
     return () => {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     };
-  }, [refreshInterval, scannerMode, fetchScannerData, fetchIndexData]);
+  }, [refreshInterval, refreshActiveData]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') return;
@@ -1557,37 +1568,36 @@ export default function ScannerClient() {
   const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const getISTMinutes = () => {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: false,
-      }).formatToParts(new Date());
-      const h = parseInt(
-        parts.find(p => p.type === 'hour')?.value || '0', 10
-      );
-      const m = parseInt(
-        parts.find(p => p.type === 'minute')?.value || '0', 10
-      );
-      // Match canonical discovery window [DISCOVERY_START, DISCOVERY_END)
-      return { h, m, inWindow: (h * 60 + m) >= BTST_WINDOW_MINUTES.DISCOVERY_START && (h * 60 + m) < BTST_WINDOW_MINUTES.DISCOVERY_END };
+    hasFetchedRef.current = false;
+  }, [scannerMode]);
+
+  useEffect(() => {
+    const shouldFastPoll = (mode: ScannerMode, totalMinutes: number) => {
+      if (mode === 'INDEX') {
+        return totalMinutes >= BTST_WINDOW_MINUTES.MARKET_OPEN
+          && totalMinutes < BTST_WINDOW_MINUTES.MARKET_CLOSE;
+      }
+      if (isOvernightMode(mode)) {
+        return totalMinutes >= BTST_WINDOW_MINUTES.DISCOVERY_START
+          && totalMinutes < BTST_WINDOW_MINUTES.DISCOVERY_END;
+      }
+      return false;
     };
 
     const checkAndRefresh = async () => {
-      const { inWindow } = getISTMinutes();
-      // Always fetch on mount to show cached or status
-      // But only auto-refresh during window
-      if (inWindow || !hasFetchedRef.current) {
-        await fetchBtstData();
+      const { totalMinutes } = getISTTimeParts(new Date());
+      if (shouldFastPoll(scannerMode, totalMinutes) || !hasFetchedRef.current) {
+        await refreshActiveData(true);
         hasFetchedRef.current = true;
       }
     };
 
-    checkAndRefresh(); // run on mount
-    const interval = setInterval(checkAndRefresh, 60000);
+    void checkAndRefresh();
+    const interval = setInterval(() => {
+      void checkAndRefresh();
+    }, 60_000);
     return () => clearInterval(interval);
-  }, [fetchBtstData]);
+  }, [refreshActiveData, scannerMode]);
 
   useEffect(() => {
     fetchScannerData();
