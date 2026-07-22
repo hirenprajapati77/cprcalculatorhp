@@ -1,7 +1,7 @@
 /**
  * Phase 1 index discovery — deliberately isolated from OvernightService.
  * INTRA Phase 2: live LTP + index-specific symmetric scorer (see index-intra-ranking.service.ts).
- * Fixed instrument list (NIFTY, BANKNIFTY), no F&O universe loop, no
+ * Fixed instrument list (NIFTY, BANKNIFTY, SENSEX), no F&O universe loop, no
  * EntryManagerService liquidity gate (that gate exists for stock
  * avgVolume/volumeRatio concerns that don't apply to an index).
  *
@@ -53,6 +53,7 @@ export interface IndexInstrument {
 export const INDEX_INSTRUMENTS: IndexInstrument[] = [
   { symbol: 'NIFTY', yahooSymbol: '^NSEI' },
   { symbol: 'BANKNIFTY', yahooSymbol: '^NSEBANK' },
+  { symbol: 'SENSEX', yahooSymbol: '^BSESN' },
 ];
 
 export interface IndexSignalResult {

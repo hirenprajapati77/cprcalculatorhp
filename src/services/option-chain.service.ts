@@ -23,6 +23,7 @@ export class OptionChainService {
   public static getStrikeIncrement(symbol: string, price: number): number {
     const cleanSym = symbol.toUpperCase().trim();
     if (cleanSym.includes('BANKNIFTY')) return 100;
+    if (cleanSym.includes('SENSEX')) return 100;
     if (cleanSym.includes('FINNIFTY')) return 50;
     if (cleanSym.includes('NIFTY')) return 50;
 
@@ -64,14 +65,15 @@ export class OptionChainService {
       return { error: 'CREDENTIALS_MISSING' };
     }
 
-    const isIndex = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'MIDCPNIFTY'].some(idx => cleanSym.includes(idx));
+    const isIndex = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY'].some(idx => cleanSym.includes(idx));
     const suffix = isIndex ? 'INDEX' : 'EQ';
+    const exchange = cleanSym.includes('SENSEX') ? 'BSE' : 'NSE';
     
     let fyersSym = cleanSym;
     if (fyersSym === 'NIFTY') fyersSym = 'NIFTY50';
     if (fyersSym === 'BANKNIFTY') fyersSym = 'NIFTYBANK';
     
-    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(`NSE:${fyersSym}-${suffix}`)}&strikecount=30`;
+    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(`${exchange}:${fyersSym}-${suffix}`)}&strikecount=30`;
 
     try {
       // 1. Attempt DIRECT call first
@@ -201,7 +203,7 @@ export class OptionChainService {
         return { error: 'PROXY_NOT_CONFIGURED' };
       }
       console.log(`[OptionChain] Attempting proxy fetch for ${cleanSym} via ${proxyUrl}...`);
-      const proxySymbol = encodeURIComponent(`NSE:${fyersSym}-${suffix}`);
+      const proxySymbol = encodeURIComponent(`${exchange}:${fyersSym}-${suffix}`);
       const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`, {
         headers: {
           'Authorization': `${appId}:${token}`,
