@@ -76,6 +76,33 @@ describe('Market Hours Utilities', () => {
       assert.equal(result.length, 2);
       assert.deepEqual(result, history);
     });
+
+    it('with asOfDate equal to last candle date, returns full history even if wall-clock session is open', () => {
+      // Regression: OvernightService.discover(dateOverride) must pass dateStr so
+      // getCompletedHistory does not fall back to wall-clock getISTDateString()
+      // and incorrectly slice a candle that dateOverride treats as completed.
+      const todayStr = getISTDateString();
+      const history = [
+        { date: '2026-07-08', close: 100 },
+        { date: todayStr, close: 101 },
+      ];
+
+      const withAsOf = getCompletedHistory(history, todayStr);
+      assert.equal(withAsOf.length, 2, 'asOfDate branch must return unsliced history');
+      assert.deepEqual(withAsOf, history);
+
+      // Contrast: without asOfDate, live path may slice when today's candle is open.
+      const withoutAsOf = getCompletedHistory(history);
+      if (!isTodayCandleClosed()) {
+        assert.equal(
+          withoutAsOf.length,
+          1,
+          'wall-clock path should exclude in-progress today bar when session is open'
+        );
+      } else {
+        assert.equal(withoutAsOf.length, 2);
+      }
+    });
   });
 
   describe('Cash session (site-wide PRESESSION + LIVE)', () => {
