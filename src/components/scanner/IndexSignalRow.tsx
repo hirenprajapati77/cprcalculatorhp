@@ -2,6 +2,7 @@ import React from 'react';
 import { TrendingUp, TrendingDown, Zap, Clock, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { fmt } from '@/utils/format';
+import { primaryIndexReason } from '@/lib/index-display';
 
 interface IndexSignal {
   symbol: string;
@@ -49,6 +50,7 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
   const signalType = signal.signalType ?? (signal.classification === 'IGNORE' ? 'NO_TRADE' : isLong ? 'CALL_BUY' : 'PUT_BUY');
   const confidence = signal.confidence ?? signal.score;
   const reasonTitle = signal.reasons?.length ? signal.reasons.join('\n') : undefined;
+  const primaryReason = primaryIndexReason(signal.reasons);
 
   return (
     <tr className="border-b border-border-primary/50 hover:bg-bg-tertiary/20 group font-mono text-[10px]">
@@ -82,14 +84,24 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
       <td className="p-2 align-middle font-bold text-text-primary" title={`Base score: ${signal.score ?? '—'}`}>
         {confidence == null ? '—' : confidence}
       </td>
-      <td className="p-2 align-middle">
-        <div className="flex items-center gap-1">
-          <span className={`text-[9px] font-bold ${signal.classification.includes('STRONG') ? 'text-accent-purple' : 'text-accent-blue'}`}>
-            {signal.classification.replace('INDEX_', '')}
-          </span>
-          {reasonTitle && (
-            <span title={reasonTitle} className="text-text-tertiary cursor-help">
-              <Info size={10} />
+      <td className="p-2 align-middle max-w-[220px]">
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1">
+            <span className={`text-[9px] font-bold ${signal.classification.includes('STRONG') ? 'text-accent-purple' : 'text-accent-blue'}`}>
+              {signal.classification.replace('INDEX_', '')}
+            </span>
+            {reasonTitle && (
+              <span title={reasonTitle} className="text-text-tertiary cursor-help shrink-0">
+                <Info size={10} />
+              </span>
+            )}
+          </div>
+          {primaryReason && (
+            <span
+              className="text-[8px] text-text-tertiary normal-case font-normal truncate max-w-[200px]"
+              title={reasonTitle}
+            >
+              {primaryReason}
             </span>
           )}
         </div>
