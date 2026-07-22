@@ -29,6 +29,7 @@ import {
   INDEX_SCORE,
   INDIA_VIX_CALM_MAX,
   INDIA_VIX_ELEVATED_MIN,
+  isIndexBtstRedSession,
 } from './index-ranking.service';
 import { IndexIntraRankingService, INDEX_INTRA_SCORE } from './index-intra-ranking.service';
 import { IndexRegimeService, IndexRegimeContext } from './index-regime.service';
@@ -593,6 +594,29 @@ export class IndexDiscoverService {
 
         const { today: todayCandle, yesterday: yesterdayCandle, usesLiveSession } =
           sessionCandles;
+
+        const prevClose =
+          live.hasLive && live.previousClose != null
+            ? live.previousClose
+            : yesterdayCandle.close;
+        const sessionChangePct =
+          prevClose > 0 ? (todayCandle.close - prevClose) / prevClose : 0;
+
+        if (isIndexBtstRedSession(sessionChangePct)) {
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              [
+                `Red session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — BTST CALL blocked`,
+              ],
+              longRegime
+            )
+          );
+          continue;
+        }
 
         const atrPct = getAtrPct(history.slice(0, -1), yesterdayCandle.close);
 
