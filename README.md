@@ -7,7 +7,9 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 ## ⚡ Features
 
 - **Overnight Validation Engine:** Advanced Engine (`OvernightService`, score 0–130) drives live UI, Telegram alerts, and Trade Journal picks from one `OvernightSignal` source of truth. Simple Engine remains for backtests and research Shadow scoring only.
-- **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and relationship matching (Higher/Lower/Inside/Overlapping). Extra CPR labels (Outside Value, Overlapping Higher/Lower, Quality grades) are specified but deferred — see `cpr_deferred_implementation_notes.md`.
+- **End-to-End Journaling UI (Phase 3):** Full-stack trade journal with interactive data tables, inline editing for manual exits, CSV export, and signal analytics dashboards tracking Win Rate, Avg PnL, and Exec Variance.
+- **Intraday Snapshots (T+1):** Automated cron jobs capture exact option prices at 9:16, 9:30, 9:45, and 10:00 AM on the next trading day, locking in true execution data for journal fidelity.
+- **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and relationship matching (Higher/Lower/Inside/Overlapping).
 - **Strict Quality Gates:** Filters low-probability setups utilizing broader market regime alignment (NIFTY 50 trend), structural liquidity rules, and 15-day ATR momentum histories.
 - **Event-Risk Profiling:** Automatically cross-references setups against corporate (Earnings/Dividends) and macro events, applying a hard fallback if calendar data goes stale.
 - **Server-Side Journaling:** Immutable signal metadata snapshots — **Advanced** score (authoritative) plus optional **Shadow** (Simple V2 research), regime, and event risk — bound to every generated trade.
@@ -45,7 +47,13 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
 
 ## 📜 Releases & Changelog
 For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
-Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine, completely audited and fortified with permanent regression safeguards against look-ahead and scanner dynamic shifting biases.
+Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
+
+**Recent Updates (July 2026):**
+- Completed Phase 3 Linkage: Shipped interactive Trade Journal UI (with analytics charts, CSV export, and signal breakdowns).
+- Implemented T+1 morning automated option price snapshots via cron (9:16 AM, 9:30 AM, 9:45 AM, 10:00 AM) to build realistic outcome data.
+- Added full telemetry metrics mapping (Regime, Quality, Event Risk) to the frontend.
+- Standardized security deployment for API cron endpoints via strict token validation (`CRON_SECRET`).
 
 ---
 
