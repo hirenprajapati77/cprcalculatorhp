@@ -60,6 +60,57 @@ describe('IndexDiscoverService.getIndiaVixState', () => {
   });
 });
 
+describe('IndexDiscoverService.resolveIndexSessionCandles', () => {
+  const history = [
+    { date: '2026-07-18', open: 1, high: 2, low: 0.5, close: 1.5, volume: 0 },
+    { date: '2026-07-21', open: 10, high: 12, low: 9, close: 11, volume: 0 },
+  ];
+
+  it('uses live session as today when hasLive', () => {
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      history,
+      {
+        hasLive: true,
+        ltp: 100,
+        open: 98,
+        high: 101,
+        low: 97,
+        previousClose: 99,
+      },
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+    assert.ok(resolved);
+    assert.equal(resolved!.today.close, 100);
+    assert.equal(resolved!.yesterday.date, '2026-07-21');
+    assert.equal(resolved!.usesLiveSession, true);
+  });
+
+  it('uses last completed bar as today after EOD when live unavailable', () => {
+    const eodHistory = [
+      ...history,
+      { date: '2026-07-22', open: 20, high: 22, low: 19, close: 21, volume: 0 },
+    ];
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      eodHistory,
+      { hasLive: false, ltp: null, open: null, high: null, low: null, previousClose: null },
+      new Date('2026-07-22T18:00:00+05:30')
+    );
+    assert.ok(resolved);
+    assert.equal(resolved!.today.close, 21);
+    assert.equal(resolved!.yesterday.date, '2026-07-21');
+    assert.equal(resolved!.usesLiveSession, false);
+  });
+
+  it('returns null mid-session without live feed (score-safety)', () => {
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      history,
+      { hasLive: false, ltp: null, open: null, high: null, low: null, previousClose: null },
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+    assert.equal(resolved, null);
+  });
+});
+
 describe('IndexDiscoverService.mapIntraClassification', () => {
   it('maps scores onto INDEX_* using INTRA floors (75 / 60 / 40)', () => {
     assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_STRONG');

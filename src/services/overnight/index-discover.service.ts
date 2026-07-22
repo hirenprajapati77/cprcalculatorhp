@@ -93,6 +93,13 @@ export interface LiveIndexSession {
   hasLive: boolean;
 }
 
+/** Today/yesterday candles for index BTST CPR + scoring. */
+export interface IndexSessionCandles {
+  today: { open: number; high: number; low: number; close: number };
+  yesterday: OHLC;
+  usesLiveSession: boolean;
+}
+
 interface YahooChartMeta {
   regularMarketPrice?: number;
   chartPreviousClose?: number;
@@ -227,7 +234,7 @@ export class IndexDiscoverService {
       const result = json?.chart?.result?.[0];
       const timestamps = result?.timestamp;
       const quotes = result?.indicators?.quote?.[0];
-      if (!result || !timestamps || !quotes || !quotes.high || !quotes.low || !quotes.close || !quotes.volume) {
+      if (!result || !timestamps || !quotes || !quotes.high || !quotes.low || !quotes.close) {
         return { vwap: null, hasIntraday: false, last15mHigh: null };
       }
 
@@ -247,7 +254,7 @@ export class IndexDiscoverService {
         const high = quotes.high[i];
         const low = quotes.low[i];
         const close = quotes.close[i];
-        const volume = quotes.volume[i] || 0;
+        const volume = quotes.volume?.[i] || 0;
         if (high == null || low == null || close == null) continue;
 
         const typicalPrice = (high + low + close) / 3;
@@ -427,6 +434,52 @@ export class IndexDiscoverService {
   }
 
   /**
+   * Resolve today/yesterday OHLC for index BTST.
+   * Live session → today from Yahoo LTP; yesterday = last completed daily bar.
+   * After EOD → last completed bar is today. Mid-session without live → null (score-safety).
+   */
+  static resolveIndexSessionCandles(
+    history: OHLC[],
+    live: LiveIndexSession,
+    currentTime: Date
+  ): IndexSessionCandles | null {
+    if (!history || history.length < 2) return null;
+
+    const lastCompleted = history[history.length - 1];
+    const priorCompleted = history[history.length - 2];
+    const todayStr = getISTDateString(currentTime);
+
+    if (
+      live.hasLive &&
+      live.ltp != null &&
+      live.open != null &&
+      live.high != null &&
+      live.low != null
+    ) {
+      return {
+        today: {
+          open: live.open,
+          high: live.high,
+          low: live.low,
+          close: live.ltp,
+        },
+        yesterday: lastCompleted,
+        usesLiveSession: true,
+      };
+    }
+
+    if (lastCompleted.date === todayStr) {
+      return {
+        today: lastCompleted,
+        yesterday: priorCompleted,
+        usesLiveSession: false,
+      };
+    }
+
+    return null;
+  }
+
+  /**
    * India VIX regime for overnight LONG gating / Rule 1 calm points.
    * - elevated (close >= 25): discover forces IGNORE
    * - calm (close < 20): award 25 pts
@@ -467,9 +520,9 @@ export class IndexDiscoverService {
   }
 
   /**
-   * Scans the fixed index instrument list and returns scored LONG signals.
-   * Never persists to the database — callers decide whether/how to store
-   * (kept out of this file so Stage 1 has zero Prisma dependency).
+   * Scans the fixed index instrument list and returns scored LONG BTST signals.
+   * Uses live session OHLC during the cash session (Phase 2); after EOD uses
+   * the finalized daily bar. Mid-session without live data → score-safety INVALID.
    */
   static async discover(dateOverride?: Date): Promise<IndexSignalResult[]> {
     const currentTime = dateOverride || new Date();
@@ -516,13 +569,30 @@ export class IndexDiscoverService {
           continue;
         }
 
-        // Same today/yesterday candle selection intent as OvernightService:
-        // the most recent completed candle is "today", the one before it is
-        // "yesterday" — Phase 1 always works off completed daily bars (no
-        // in-progress-candle handling yet, since index EOD data settles
-        // cleanly via HistoricalProvider unlike the stock live-quote path).
-        const todayCandle = history[history.length - 1];
-        const yesterdayCandle = history[history.length - 2];
+        const [live, intraday] = await Promise.all([
+          this.getLiveIndexSession(instrument.yahooSymbol, currentTime),
+          this.getIntradayMetrics(instrument.yahooSymbol, currentTime),
+        ]);
+
+        const sessionCandles = this.resolveIndexSessionCandles(history, live, currentTime);
+        if (!sessionCandles) {
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              [
+                'Live session OHLC unavailable — BTST scoring deferred until EOD bar or live feed',
+              ],
+              longRegime
+            )
+          );
+          continue;
+        }
+
+        const { today: todayCandle, yesterday: yesterdayCandle, usesLiveSession } =
+          sessionCandles;
 
         const atrPct = getAtrPct(history.slice(0, -1), yesterdayCandle.close);
 
@@ -534,8 +604,6 @@ export class IndexDiscoverService {
           { high: todayCandle.high, low: todayCandle.low, close: todayCandle.close },
           atrPct
         );
-
-        const intraday = await this.getIntradayMetrics(instrument.yahooSymbol, currentTime);
 
         const details = IndexRankingService.calculateScoreDetails({
           tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
@@ -557,6 +625,9 @@ export class IndexDiscoverService {
         const risk = todayCandle.close - sl;
         const target = risk > 0 ? todayCandle.close + risk * 2 : null;
         const reasons = buildBtstReasons(details.breakdown, false, longRegime);
+        if (usesLiveSession) {
+          reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
+        }
 
         results.push(
           this.buildSignalResult({
