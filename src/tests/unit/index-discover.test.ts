@@ -13,7 +13,7 @@ import { INDEX_INTRA_SCORE } from '../../services/overnight/index-intra-ranking.
  * score, not the live scoring path.
  */
 describe('IndexDiscoverService.discover', () => {
-  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY) — no F&O universe loop', async () => {
+  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY, SENSEX) — no F&O universe loop', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     const symbols = results.map((r) => r.symbol).sort();
     assert.deepEqual(symbols, INDEX_INSTRUMENTS.map((i) => i.symbol).sort());
