@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { IndexDiscoverService, INDEX_INSTRUMENTS } from '../../services/overnight/index-discover.service';
-import { INDEX_SCORE } from '../../services/overnight/index-ranking.service';
+import { INDEX_INTRA_SCORE } from '../../services/overnight/index-intra-ranking.service';
 
 /**
  * These tests run against HistoricalProvider's deterministic mock mode
@@ -61,14 +61,14 @@ describe('IndexDiscoverService.getIndiaVixState', () => {
 });
 
 describe('IndexDiscoverService.mapIntraClassification', () => {
-  it('maps scores onto INDEX_* using INDEX_SCORE floors (100 / 85 / 70)', () => {
-    assert.equal(IndexDiscoverService.mapIntraClassification(100), 'INDEX_STRONG');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.STRONG), 'INDEX_STRONG');
-    assert.equal(IndexDiscoverService.mapIntraClassification(90), 'INDEX_READY');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.READY), 'INDEX_READY');
-    assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_WATCH');
-    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_SCORE.WATCH), 'INDEX_WATCH');
-    assert.equal(IndexDiscoverService.mapIntraClassification(69), 'IGNORE');
+  it('maps scores onto INDEX_* using INTRA floors (75 / 60 / 40)', () => {
+    assert.equal(IndexDiscoverService.mapIntraClassification(75), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.STRONG), 'INDEX_STRONG');
+    assert.equal(IndexDiscoverService.mapIntraClassification(65), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.READY), 'INDEX_READY');
+    assert.equal(IndexDiscoverService.mapIntraClassification(45), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(INDEX_INTRA_SCORE.WATCH), 'INDEX_WATCH');
+    assert.equal(IndexDiscoverService.mapIntraClassification(39), 'IGNORE');
     assert.equal(IndexDiscoverService.mapIntraClassification(10), 'IGNORE');
   });
 });
