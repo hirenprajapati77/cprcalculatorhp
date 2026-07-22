@@ -38,6 +38,17 @@ import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
+const REFRESH_INTERVAL_MS: Record<string, number> = {
+  '5m': 300_000,
+  '15m': 900_000,
+  '30m': 1_800_000,
+};
+
+function refreshIntervalSeconds(interval: string): number {
+  const ms = REFRESH_INTERVAL_MS[interval];
+  return ms ? ms / 1000 : 0;
+}
+
 function isOvernightMode(mode: ScannerMode): boolean {
   return mode === 'BTST' || mode === 'STBT' || mode === 'OVERNIGHT';
 }
@@ -1429,12 +1440,67 @@ export default function ScannerClient() {
     }
   }, [market]);
 
+  const fetchIndexData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
+    const startFetchTime = Date.now();
+    try {
+      const res = await fetch('/api/index-scan');
+      if (!res.ok) throw new Error('Failed to retrieve live INDEX signals');
+      const data = await res.json();
+
+      setExecutionWindowOpen(data.executionWindowOpen ?? true);
+      setCachedResult(data.cachedResult ?? false);
+      setScannedAt(data.scannedAt || '');
+      setIsDegraded(!!data.degraded);
+      setLatency(Date.now() - startFetchTime);
+      setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+
+      setIndexResults(data.results || []);
+      setIndexMarketRegime(data.marketRegime ?? null);
+      if (data.insights) {
+        setInsightCounts({
+          strongBuy: data.insights.strongSignal || 0,
+          breakoutReady: data.insights.breakoutReady || 0,
+          avoid: data.insights.avoid || 0,
+        });
+      }
+      setTotal((data.results || []).length);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to retrieve live INDEX signals';
+      if (!silent) showToast(message, 'error');
+      setIndexResults([]);
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  }, [showToast]);
+
   // Recalculate Scan runs
   const handleScanRefresh = useCallback(async () => {
     setIsRefreshing(true);
     showToast('Executing scanner algorithm...', 'info');
     const startFetchTime = Date.now();
     try {
+      if (scannerMode === 'INDEX') {
+        await fetchIndexData(true);
+        setLatency(Date.now() - startFetchTime);
+        showToast('Index scan complete.', 'success');
+        if (refreshInterval !== 'Off') {
+          setCountdown(refreshIntervalSeconds(refreshInterval));
+        }
+        return;
+      }
+
+      if (isOvernightMode(scannerMode)) {
+        await fetchScannerData(true);
+        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+        setLatency(Date.now() - startFetchTime);
+        showToast('BTST/STBT discovery scan complete.', 'success');
+        if (refreshInterval !== 'Off') {
+          setCountdown(refreshIntervalSeconds(refreshInterval));
+        }
+        return;
+      }
+
       const res = await fetch('/api/scanner/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1453,7 +1519,7 @@ export default function ScannerClient() {
         
         // Reset countdown clock
         if (refreshInterval !== 'Off') {
-          setCountdown(parseInt(refreshInterval, 10) * 60);
+          setCountdown(refreshIntervalSeconds(refreshInterval));
         }
       }
     } catch {
@@ -1461,64 +1527,77 @@ export default function ScannerClient() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [universe, market, refreshInterval, fetchScannerData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
+  }, [universe, market, refreshInterval, scannerMode, fetchScannerData, fetchIndexData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
-  const fetchBtstData = useCallback(async () => {
-    await fetchScannerData(true);
-  }, [fetchScannerData]);
+  const refreshActiveData = useCallback(async (silent = true) => {
+    if (scannerMode === 'INDEX') {
+      await fetchIndexData(silent);
+    } else {
+      await fetchScannerData(silent);
+    }
+  }, [scannerMode, fetchIndexData, fetchScannerData]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+      setCountdown(0);
       return;
     }
-    const msMap: Record<string, number> = { '5m': 300000, '15m': 900000, '30m': 1800000 };
-    const ms = msMap[refreshInterval] || 300000;
-    
+    const ms = REFRESH_INTERVAL_MS[refreshInterval] ?? REFRESH_INTERVAL_MS['15m'];
+    setCountdown(ms / 1000);
+
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     autoRefreshRef.current = setInterval(() => {
-      fetchScannerData(true);
+      void refreshActiveData(true);
+      setCountdown(ms / 1000);
     }, ms);
-    
+
     return () => {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     };
-  }, [refreshInterval, fetchScannerData]);
+  }, [refreshInterval, refreshActiveData]);
+
+  useEffect(() => {
+    if (refreshInterval === 'Off') return;
+    const tick = setInterval(() => {
+      setCountdown((c) => (c > 0 ? c - 1 : c));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [refreshInterval]);
 
   const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const getISTMinutes = () => {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: false,
-      }).formatToParts(new Date());
-      const h = parseInt(
-        parts.find(p => p.type === 'hour')?.value || '0', 10
-      );
-      const m = parseInt(
-        parts.find(p => p.type === 'minute')?.value || '0', 10
-      );
-      // Match canonical discovery window [DISCOVERY_START, DISCOVERY_END)
-      return { h, m, inWindow: (h * 60 + m) >= BTST_WINDOW_MINUTES.DISCOVERY_START && (h * 60 + m) < BTST_WINDOW_MINUTES.DISCOVERY_END };
+    hasFetchedRef.current = false;
+  }, [scannerMode]);
+
+  useEffect(() => {
+    const shouldFastPoll = (mode: ScannerMode, totalMinutes: number) => {
+      if (mode === 'INDEX') {
+        return totalMinutes >= BTST_WINDOW_MINUTES.MARKET_OPEN
+          && totalMinutes < BTST_WINDOW_MINUTES.MARKET_CLOSE;
+      }
+      if (isOvernightMode(mode)) {
+        return totalMinutes >= BTST_WINDOW_MINUTES.DISCOVERY_START
+          && totalMinutes < BTST_WINDOW_MINUTES.DISCOVERY_END;
+      }
+      return false;
     };
 
     const checkAndRefresh = async () => {
-      const { inWindow } = getISTMinutes();
-      // Always fetch on mount to show cached or status
-      // But only auto-refresh during window
-      if (inWindow || !hasFetchedRef.current) {
-        await fetchBtstData();
+      const { totalMinutes } = getISTTimeParts(new Date());
+      if (shouldFastPoll(scannerMode, totalMinutes) || !hasFetchedRef.current) {
+        await refreshActiveData(true);
         hasFetchedRef.current = true;
       }
     };
 
-    checkAndRefresh(); // run on mount
-    const interval = setInterval(checkAndRefresh, 60000);
+    void checkAndRefresh();
+    const interval = setInterval(() => {
+      void checkAndRefresh();
+    }, 60_000);
     return () => clearInterval(interval);
-  }, [fetchBtstData]);
+  }, [refreshActiveData, scannerMode]);
 
   useEffect(() => {
     fetchScannerData();
@@ -1526,47 +1605,8 @@ export default function ScannerClient() {
 
   useEffect(() => {
     if (scannerMode !== 'INDEX') return;
-    let isActive = true;
-    const fetchIndexData = async () => {
-      setIsLoading(true);
-      const startFetchTime = Date.now();
-      try {
-        const res = await fetch(`/api/index-scan`);
-        if (!res.ok) throw new Error('Failed to retrieve live INDEX signals');
-        const data = await res.json();
-        
-        if (!isActive) return;
-        
-        setExecutionWindowOpen(data.executionWindowOpen ?? true);
-        setCachedResult(data.cachedResult ?? false);
-        setScannedAt(data.scannedAt || '');
-        setIsDegraded(!!data.degraded);
-        setLatency(Date.now() - startFetchTime);
-        
-        setIndexResults(data.results || []);
-        setIndexMarketRegime(data.marketRegime ?? null);
-        if (data.insights) {
-          setInsightCounts({
-            strongBuy: data.insights.strongSignal || 0,
-            breakoutReady: data.insights.breakoutReady || 0,
-            avoid: data.insights.avoid || 0,
-          });
-        }
-        setTotal((data.results || []).length);
-      } catch (err: unknown) {
-        if (isActive) {
-          const message = err instanceof Error ? err.message : 'Failed to retrieve live INDEX signals';
-          showToast(message, 'error');
-          setIndexResults([]);
-        }
-      } finally {
-        if (isActive) setIsLoading(false);
-      }
-    };
-    
-    fetchIndexData();
-    return () => { isActive = false; };
-  }, [scannerMode, showToast]);
+    fetchIndexData(true);
+  }, [scannerMode, fetchIndexData]);
 
   useEffect(() => {
     fetchTopOpportunities();
@@ -2048,7 +2088,11 @@ export default function ScannerClient() {
               </div>
               <select
                 value={refreshInterval}
-                onChange={(e) => setRefreshInterval(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setRefreshInterval(value);
+                  localStorage.setItem('cpr_settings_auto_refresh', value);
+                }}
                 className="bg-bg-secondary border border-border-secondary text-text-secondary font-bold focus:outline-none cursor-pointer p-1 rounded-lg text-[9px]"
               >
                 <option value="Off">Interval: Off</option>
@@ -2158,7 +2202,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Strong</span>
-              <p className="text-[9px] opacity-70">Score 100</p>
+              <p className="text-[9px] opacity-70">INTRA ≥75 / BTST 100</p>
               <h2 className="text-2xl font-bold text-accent-purple">{indexMetrics.strong}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
@@ -2168,7 +2212,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Ready</span>
-              <p className="text-[9px] opacity-70">Score ≥ 70</p>
+              <p className="text-[9px] opacity-70">INTRA ≥60 / BTST ≥85</p>
               <h2 className="text-2xl font-bold text-accent-green">{indexMetrics.ready}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
@@ -2178,7 +2222,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Index Watch</span>
-              <p className="text-[9px] opacity-70">Score ≥ 40</p>
+              <p className="text-[9px] opacity-70">INTRA ≥40 / BTST ≥70</p>
               <h2 className="text-2xl font-bold text-accent-amber">{indexMetrics.watch}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
@@ -2188,7 +2232,7 @@ export default function ScannerClient() {
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] text-text-tertiary uppercase">Ignore</span>
-              <p className="text-[9px] opacity-70">Score &lt; 40 / no VWAP</p>
+              <p className="text-[9px] opacity-70">Below watch / inside CPR</p>
               <h2 className="text-2xl font-bold text-accent-red">{indexMetrics.ignore}</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
