@@ -32,7 +32,8 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST } from '@/utils/format';
 import { IndexSignalRow } from './IndexSignalRow';
-import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
+import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen } from '@/lib/market-hours';
+import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
@@ -1005,8 +1006,11 @@ export default function ScannerClient() {
     return { label: 'CLOSED', color: 'bg-accent-purple' };
   };
   const indexTelState = getIndexTelemetryState();
-  const indexActiveCount = indexResults.filter((r) => r.classification !== 'IGNORE').length;
-  const indexIgnoreCount = indexResults.filter((r) => r.classification === 'IGNORE').length;
+  const btstDiscoveryOpen = isBtstDiscoveryOpen();
+  const indexVisibleResults = filterIndexRowsForDisplay(indexResults, btstDiscoveryOpen);
+  const indexBtstHiddenCount = indexResults.length - indexVisibleResults.length;
+  const indexActiveCount = indexVisibleResults.filter((r) => r.classification !== 'IGNORE').length;
+  const indexIgnoreCount = indexVisibleResults.filter((r) => r.classification === 'IGNORE').length;
 
   // List of all column definitions for Show/Hide Checklist
   const COLUMN_DEFS = [
@@ -2756,7 +2760,12 @@ export default function ScannerClient() {
                   </div>
                   <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
                     <span className="text-text-tertiary">Rows:</span>
-                    <span className="font-bold text-text-primary">{indexResults.length}</span>
+                    <span className="font-bold text-text-primary">{indexVisibleResults.length}</span>
+                    {indexBtstHiddenCount > 0 && (
+                      <span className="text-[9px] text-text-tertiary normal-case font-normal">
+                        ({indexBtstHiddenCount} BTST hidden until {BTST_CLOCK.discoveryStart})
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-4">
                     <span className="text-text-tertiary">Session Close:</span>
@@ -2887,8 +2896,16 @@ export default function ScannerClient() {
                     <div className="h-8 w-8 rounded-full border-2 border-accent-blue border-t-transparent animate-spin mb-4" />
                     <span className="text-xs text-text-secondary animate-pulse">Running quantitative analysis...</span>
                   </div>
-                ) : (scannerMode === 'INDEX' ? indexResults.length === 0 : results.length === 0) ? (
-                  showWatchlistOnly ? (
+                ) : (scannerMode === 'INDEX' ? indexVisibleResults.length === 0 : results.length === 0) ? (
+                  scannerMode === 'INDEX' && indexBtstHiddenCount > 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
+                      <Clock size={48} className="text-accent-purple/40 mb-3" />
+                      <p className="text-xs text-text-primary font-bold">BTST awaiting discovery window</p>
+                      <p className="text-[9px] text-text-secondary mt-1 max-w-[320px]">
+                        Null-score BTST rows are hidden until {BTST_CLOCK.discoveryStart} IST (closing liquidity). INTRA signals will appear when CPR bias is present.
+                      </p>
+                    </div>
+                  ) : showWatchlistOnly ? (
                     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                       <Star size={48} className="text-accent-amber/40 mb-3 animate-pulse" />
                       <p className="text-xs text-text-primary font-bold">Watchlist Empty</p>
@@ -2924,7 +2941,7 @@ export default function ScannerClient() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border-primary/50">
-                          {indexResults.map((row) => (
+                          {indexVisibleResults.map((row) => (
                             <IndexSignalRow
                               key={`${row.symbol}-${row.scanType ?? 'BTST'}-${row.signalTime}`}
                               signal={row}
