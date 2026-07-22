@@ -155,7 +155,7 @@ export async function GET(request: Request) {
       marketRegime,
     };
 
-    await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
+    await CacheService.set(CACHE_KEY, cacheData, 60); // 60s cache TTL so option suggestions stay fresh
 
     return NextResponse.json({
       success: true,

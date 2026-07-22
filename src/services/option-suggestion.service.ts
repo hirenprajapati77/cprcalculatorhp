@@ -65,7 +65,11 @@ export class OptionSuggestionService {
     try {
       const cached = await CacheService.get<Record<string, number>>(cacheKey);
       if (cached) {
-        return new Map(Object.entries(cached));
+        const map = new Map(Object.entries(cached));
+        for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
+          if (!map.has(sym)) map.set(sym, size);
+        }
+        return map;
       }
     } catch (e) {
       console.warn('[OptionSuggestion] Failed to get lot sizes from cache, fetching...', e);
@@ -85,11 +89,11 @@ export class OptionSuggestionService {
             const lotSize = parseInt(parts[3]?.trim(), 10);
             if (symbol && !isNaN(lotSize) && lotSize > 0) {
               lotSizesMap.set(symbol, lotSize);
-              const match = symbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
+              const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
               if (match) {
                 lotSizesMap.set(match[1], lotSize);
               }
-              const futMatch = symbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
+              const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
               if (futMatch) {
                 lotSizesMap.set(futMatch[1], lotSize);
               }
@@ -106,9 +110,9 @@ export class OptionSuggestionService {
       console.error('[OptionSuggestion] Error downloading/parsing lot sizes master:', err);
     }
 
-    if (lotSizesMap.size === 0) {
-      console.warn('[OptionSuggestion] Using hardcoded fallback lot sizes due to fetch failure & empty cache.');
-      for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
+    // Always merge fallback lot sizes (ensuring SENSEX, NIFTY, etc. are always populated even if CSV format lacks BSE)
+    for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
+      if (!lotSizesMap.has(sym)) {
         lotSizesMap.set(sym, size);
       }
     }
@@ -220,7 +224,9 @@ export class OptionSuggestionService {
 
     // 2. Fetch Lot Size
     const lotSizes = await this.loadLotSizes();
-    const lotSize = lotSizes.get(cleanSym);
+    let lotSizeKey = cleanSym;
+    if (lotSizeKey === 'SENSEX') lotSizeKey = 'BSESENSEX';
+    const lotSize = lotSizes.get(cleanSym) || lotSizes.get(lotSizeKey) || lotSizes.get('BSESENSEX') || lotSizes.get('SENSEX');
     if (!lotSize) {
       return { error: 'LOT_SIZE_UNAVAILABLE' };
     }
@@ -262,7 +268,7 @@ export class OptionSuggestionService {
 
     // 4. Filter valid options for this type (exclude equity row where strikePrice <= 0) and MUST match target expiry
     const validOptions = chainRes.optionsChain
-      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
+      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr) || o.symbol.includes('SENSEX')))
       .sort((a, b) => a.strikePrice - b.strikePrice);
 
     if (validOptions.length === 0) {
