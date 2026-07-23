@@ -7,6 +7,7 @@ import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
 import { RegimeService } from '../overnight/regime.service';
+import { EventCalendarService } from '../overnight/event.service';
 import { prisma } from '@/lib/db';
 import { INDEX_INSTRUMENTS } from '../overnight/index-discover.service';
 import { INDEX_SCORE } from '../overnight/index-ranking.service';
@@ -190,6 +191,8 @@ export class BacktestService {
           let vixTotalEvaluated = 0;
           let indexSetupEvaluated = 0;
           let indexSetupTradable = 0;
+          const macroEventCache = new Map<string, Awaited<ReturnType<typeof EventCalendarService.getMacroEventRisk>>>();
+          const stockEventCache = new Map<string, Awaited<ReturnType<typeof EventCalendarService.getEventRisk>>>();
           const isScannerDriven = run.strategyMode === 'SCANNER_DRIVEN';
           const isBtstDriven = run.strategyMode === 'BTST_STBT_DRIVEN';
 
@@ -398,6 +401,18 @@ export class BacktestService {
               )) as YahooFinanceChartResponse | null;
               await new Promise((r) => setTimeout(r, 200));
 
+              let macroEvent = macroEventCache.get(today.date);
+              if (!macroEvent) {
+                macroEvent = await EventCalendarService.getMacroEventRisk(today.date);
+                macroEventCache.set(today.date, macroEvent);
+              }
+              const stockEventKey = `${symbol}_${today.date}`;
+              let stockEvent = stockEventCache.get(stockEventKey);
+              if (!stockEvent) {
+                stockEvent = await EventCalendarService.getEventRisk(symbol, today.date);
+                stockEventCache.set(stockEventKey, stockEvent);
+              }
+
               const evaluation = evaluateStockBtstDay({
                 symbol,
                 yesterday,
@@ -407,6 +422,8 @@ export class BacktestService {
                 asOfTime: stockBtstDiscoveryAsOfUtc(today.date),
                 regime,
                 directionFilter,
+                stockEvent,
+                macroEvent,
               });
 
               if (

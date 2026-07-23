@@ -8,6 +8,7 @@ import { StbtRankingService } from '../overnight/stbt-ranking.service';
 import { EntryManagerService } from '../overnight/entry-manager.service';
 import { resolveOvernightConflict } from '../overnight/overnight-conflict';
 import { SignalQualityService } from '../overnight/signal-quality.service';
+import type { EventRiskResult } from '../overnight/event.service';
 import type { MarketRegime } from '../overnight/regime.service';
 import type { MarketStockData } from '../market.service';
 import {
@@ -47,6 +48,9 @@ export interface StockBtstDayContext {
   regime: MarketRegime;
   /** Backtest execution filter — mirrors run.executionMode. */
   directionFilter: 'LONG' | 'SHORT' | 'BOTH';
+  /** Mirrors live discover — defaults to neutral when omitted (legacy tests). */
+  stockEvent?: EventRiskResult;
+  macroEvent?: EventRiskResult;
 }
 
 export interface StockBtstDayEvaluation {
@@ -291,8 +295,8 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
     shortSig?.score ?? 0,
     ctx.regime,
     stock.history?.length ?? 0,
-    NEUTRAL_EVENT,
-    NEUTRAL_EVENT,
+    ctx.stockEvent ?? NEUTRAL_EVENT,
+    ctx.macroEvent ?? NEUTRAL_EVENT,
     0
   );
 
