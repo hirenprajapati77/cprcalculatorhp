@@ -43,6 +43,9 @@ export class BreakoutWatcherService {
 
       if (qualifiesForAlert) {
         try {
+          // Attempt an atomic claim. If no row exists yet for the symbol, the updateMany count is 0,
+          // and we safely fall back to creating the row. If unique constraint fails during concurrent
+          // creation, we catch P2002 and run updateMany again to safely settle the claim state.
           const claim = await prisma.breakoutAlertState.updateMany({
             where: { symbol: result.symbol, hadBreakout: false },
             data: { hadBreakout: true, lastAlerted: new Date() },
@@ -130,12 +133,12 @@ export class BreakoutWatcherService {
     return newBreakouts;
   }
 
-  /**
-   * Resets all hadBreakout flags to false.
-   * Called daily before market open so that stocks which broke out yesterday
-   * and break out again today generate a fresh alert (not permanently suppressed).
-   */
   static async resetDailyState(): Promise<void> {
+    const { isMarketOpen } = await import('@/lib/market-hours');
+    if (isMarketOpen()) {
+      console.warn('[BreakoutWatcher] Aborting daily state reset: market is currently open!');
+      return;
+    }
     await prisma.breakoutAlertState.updateMany({
       data: { hadBreakout: false },
     });
