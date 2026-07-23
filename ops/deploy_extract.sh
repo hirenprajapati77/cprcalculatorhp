@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 APP=/home/ubuntu/cpr-calculator-platform
@@ -48,7 +48,7 @@ npx prisma generate
 
 echo "=== Restarting PM2 fresh (delete + start; never restart --update-env) ==="
 cd $APP/.next/standalone
-# Rulebook: PM2 caches env at process creation — delete then start so .env is reloaded.
+# Rulebook: PM2 caches env at process creation â€” delete then start so .env is reloaded.
 pm2 delete cpr-platform || true
 pm2 start server.js --name cpr-platform
 pm2 save
