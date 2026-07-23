@@ -16,6 +16,7 @@ export default function BacktestPage() {
   const [riskPercent, setRiskPercent] = useState(1.0);
   const [exitStrategy, setExitStrategy] = useState('target');
   const [executionMode, setExecutionMode] = useState('conservative');
+  const [strategyMode, setStrategyMode] = useState('LEGACY_NARROW_CPR');
   
   // We'll mock the hook for now to satisfy the render
   const { data: runs, isLoading } = useQuery({
@@ -40,7 +41,8 @@ export default function BacktestPage() {
           capital,
           riskPercent,
           exitStrategy,
-          executionMode
+          executionMode,
+          strategyMode,
         })
       });
       if (res.status === 503) {
@@ -106,6 +108,26 @@ export default function BacktestPage() {
                 <label className="text-sm font-medium mb-1 block text-muted-foreground">End Date</label>
                 <input type="date" className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block text-muted-foreground">Strategy Mode</label>
+              <select
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground"
+                value={strategyMode}
+                onChange={(e) => setStrategyMode(e.target.value)}
+              >
+                <option value="LEGACY_NARROW_CPR">Legacy Narrow CPR</option>
+                <option value="SCANNER_DRIVEN">Scanner Driven</option>
+                <option value="BTST_STBT_DRIVEN">Stock BTST/STBT</option>
+                <option value="INDEX_BTST_DRIVEN">Index BTST (NIFTY/BANKNIFTY/SENSEX)</option>
+              </select>
+              {strategyMode === 'INDEX_BTST_DRIVEN' && (
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
+                  Uses production IndexRankingService (130pt) with historical 5m VWAP/liquidity.
+                  Requires HISTORICAL_MODE=live. P&amp;L is index spot proxy — not option premium.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
