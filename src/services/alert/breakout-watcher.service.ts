@@ -88,42 +88,15 @@ export class BreakoutWatcherService {
         newBreakouts.push(result);
       }
 
-      if (!isNewAlert) {
-        let hadBreakoutBefore = false;
-        if (!stateReadFailed) {
-          try {
-            const state = await prisma.breakoutAlertState.findUnique({
-              where: { symbol: result.symbol },
-            });
-            hadBreakoutBefore = state?.hadBreakout ?? false;
-          } catch (err) {
-            stateReadFailed = true;
-            console.warn(
-              `[BreakoutWatcher] Could not read state for ${result.symbol}:`,
-              err
-            );
-          }
-        }
-
-        const newLockState =
-          hasBreakoutNow &&
-          (hadBreakoutBefore || result.score >= MIN_BREAKOUT_ALERT_SCORE);
-
+      if (!isNewAlert && !hasBreakoutNow) {
         try {
-          await prisma.breakoutAlertState.upsert({
-            where: { symbol: result.symbol },
-            create: {
-              symbol: result.symbol,
-              hadBreakout: newLockState,
-              lastAlerted: null,
-            },
-            update: {
-              hadBreakout: newLockState,
-            },
+          await prisma.breakoutAlertState.updateMany({
+            where: { symbol: result.symbol, hadBreakout: true },
+            data: { hadBreakout: false },
           });
         } catch (err) {
           console.warn(
-            `[BreakoutWatcher] Could not update state for ${result.symbol}:`,
+            `[BreakoutWatcher] Could not clear breakout state for ${result.symbol}:`,
             err
           );
         }

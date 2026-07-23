@@ -324,13 +324,14 @@ export class OvernightService {
           continue;
         }
 
-        const todayCandle = isTodayCandleFinal
-          ? lastCandle
-          : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
+        const todayCandle = isLastToday
+          ? (isTodayCandleFinal ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
+          : lastCandle;
 
-        const yesterdayCandle = isLastToday
+        const yesterdayCandle = history.length >= 2
           ? history[history.length - 2]
           : lastCandle;
+
 
         // Same completed-history ATR input as signal.service / Simple BtstService
         // (exclude in-progress today bar; ref close = last completed close).
