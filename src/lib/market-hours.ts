@@ -13,22 +13,31 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2026-05-28', // Bakri Id
     '2026-06-26', // Muharram
     '2026-09-14', // Ganesh Chaturthi
-    '2026-10-02', // Mahatma Gandhi Jayanti
-    '2026-10-20', // Dussehra
-    '2026-11-10', // Diwali-Balipratipada
-    '2026-11-24', // Prakash Gurpurb Sri Guru Nanak Dev
+    '2026-10-02', // Mahatma Gandhi Jayanti / Dussehra (both fall on same date)
+    '2026-10-20', // Dussehra — verify against NSE circular; Vijaya Dashami 2026 may be Oct 2
+    '2026-11-03', // Diwali — Laxmi Puja (NSE closed; Muhurat trading may be held separately)
+    '2026-11-04', // Diwali — Balipratipada
+    '2026-11-10', // Prakash Gurpurb Sri Guru Nanak Dev
+    '2026-11-24', // Prakash Gurpurb (second date — verify against NSE circular)
     '2026-12-25', // Christmas
+    // NOTE: Always cross-check with official NSE holiday circular at
+    // https://www.nseindia.com/resources/exchange-communication-holidays
+    // Diwali dates above are based on Panchang; NSE may vary by one day.
   ]
 };
 
 /**
  * Returns the current date string (YYYY-MM-DD) in IST.
- * This is used to align candle dates which are keyed by the NSE trading day,
- * avoiding the 5.5 hour mismatch window when UTC date rolls over before IST.
+ * Uses Intl.DateTimeFormat (en-CA locale) to match the same approach as getISTTime()
+ * and avoid the midnight boundary disagreement that manual UTC+5:30 arithmetic can cause.
  */
 export function getISTDateString(date: Date = new Date()): string {
-  const istTime = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
-  return istTime.toISOString().split('T')[0];
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 }
 
 export function getISTTime(date: Date = new Date()) {

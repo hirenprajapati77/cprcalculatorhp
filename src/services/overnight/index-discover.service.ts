@@ -207,6 +207,8 @@ export class IndexDiscoverService {
     if (hit && Date.now() - hit.atMs < this.YAHOO_5M_MEMO_MS) {
       return hit.promise;
     }
+    // Evict stale entry before creating a new one
+    this.yahoo5mChartMemo.delete(yahooSymbol);
 
     const promise = (async () => {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=5m&range=1d`;
@@ -221,7 +223,7 @@ export class IndexDiscoverService {
       } finally {
         clearTimeout(timeout);
       }
-    })();
+    })().catch(() => null); // prevent a rejected promise from poisoning the memo
 
     this.yahoo5mChartMemo.set(yahooSymbol, { atMs: Date.now(), promise });
     return promise;
@@ -654,6 +656,8 @@ export class IndexDiscoverService {
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
         // Elevated VIX: same hard gate as BTST — block intraday option signals.
+        // Use 'LONG' as the default direction for the IGNORE result (INTRA direction
+        // is resolved later from SignalService; we haven't determined it yet at this point).
         if (vixState.elevated) {
           const regimeCtx = IndexRegimeService.computeAdjustment('LONG', marketRegime);
           results.push(
@@ -678,7 +682,9 @@ export class IndexDiscoverService {
           continue;
         }
 
-        const live = await this.getLiveIndexSession(instrument.yahooSymbol, currentTime);
+        // Fetch chart once and share it with getLiveIndexSession (avoids a second HTTP call).
+        const chartJson = await this.fetchYahoo5mChart(instrument.yahooSymbol);
+        const live = await this.getLiveIndexSession(instrument.yahooSymbol, currentTime, chartJson);
         const lastCandle = history[history.length - 1];
         const previousClose =
           live.hasLive && live.previousClose != null

@@ -4,14 +4,17 @@ import { IndexDiscoverService } from '@/services/overnight/index-discover.servic
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { INDEX_INTRA_SCORE } from '@/services/overnight/index-intra-ranking.service';
 import { IndexRegimeService } from '@/services/overnight/index-regime.service';
-import { getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
+import { getBtstWindowState, BTST_CLOCK, getISTDateString, getCashSessionState } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { persistIndexBtstOvernightSignals } from '@/services/overnight/index-overnight-persist';
 
 export async function GET(_request: Request) {
   try {
     const now = new Date();
-    const executionWindowOpen = true; // Index scanner always runs live, no bypass needed since it also shows INTRA
+    // Index scanner is valid during pre-session (09:00–09:15) and live session (09:15–15:30).
+    // This resolves the dead-code branch that had executionWindowOpen hardcoded to true.
+    const cashState = getCashSessionState(now);
+    const executionWindowOpen = cashState === 'LIVE' || cashState === 'PRESESSION';
     const windowState = getBtstWindowState(now);
 
     const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
@@ -164,8 +167,10 @@ export async function GET(_request: Request) {
       strongSignal: btstResults.filter((r) => r.classification === 'INDEX_STRONG').length,
       breakoutReady: btstResults.filter((r) => r.classification === 'INDEX_READY').length,
       avoid: btstResults.filter((r) => r.classification === 'IGNORE').length,
-      totalLong: resultsList.filter((r) => r.direction === 'LONG').length,
-      totalShort: resultsList.filter((r) => r.direction === 'SHORT').length,
+      // Scoped to BTST rows only (consistent with strongSignal/breakoutReady/avoid above).
+      // INTRA direction counts are separate — combining them with BTST would mislead the UI.
+      totalLong: btstResults.filter((r) => r.direction === 'LONG').length,
+      totalShort: btstResults.filter((r) => r.direction === 'SHORT').length,
       totalConflict: 0,
     };
 

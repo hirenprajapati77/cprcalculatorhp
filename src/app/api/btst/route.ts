@@ -59,7 +59,8 @@ export async function GET(request: Request) {
       });
     }
 
-    // Bypass ON or window open — check cache first, then run discover if needed
+    // Bypass ON — serve cache if available; do NOT trigger a fresh live scan
+    // (bypass is for reading existing results outside the window, not for initiating scans).
     if (bypassQuery) {
       const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
       if (cached) {
@@ -78,6 +79,17 @@ export async function GET(request: Request) {
           ...(cached.coverage ? { coverage: cached.coverage } : {}),
         });
       }
+      // No cache + bypass = scan hasn't run today yet
+      return NextResponse.json({
+        success: true,
+        executionWindowOpen: false,
+        cachedResult: false,
+        message: `Bypass active but no scan data found for today. BTST/STBT scan runs at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
+        results: [],
+        insights: { strongSignal: 0, breakoutReady: 0, avoid: 0, totalLong: 0, totalShort: 0, totalConflict: 0 },
+        engine: 'advanced',
+        state: windowState,
+      });
     }
 
     // Window open — single source of truth: same discover path as the
