@@ -202,6 +202,47 @@ export class IndexDiscoverService {
       regime,
     });
   }
+  /** Short-lived memo so discover + discoverIntraday (parallel) share one 5m chart per symbol. */
+  private static yahoo5mChartMemo = new Map<
+    string,
+    { atMs: number; promise: Promise<YahooFinanceChartResponse | null> }
+  >();
+  private static readonly YAHOO_5M_MEMO_MS = 10_000;
+
+  /**
+   * Shared Yahoo 5m chart fetch — one HTTP call per symbol per request path.
+   * getLiveIndexSession + getIntradayMetrics both need the same payload.
+   */
+  private static async fetchYahoo5mChart(
+    yahooSymbol: string
+  ): Promise<YahooFinanceChartResponse | null> {
+    const mode = env.HISTORICAL_MODE || 'mock';
+    if (mode !== 'live') return null;
+
+    const hit = this.yahoo5mChartMemo.get(yahooSymbol);
+    if (hit && Date.now() - hit.atMs < this.YAHOO_5M_MEMO_MS) {
+      return hit.promise;
+    }
+
+    const promise = (async () => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=5m&range=1d`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
+        return (await response.json()) as YahooFinanceChartResponse;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+
+    this.yahoo5mChartMemo.set(yahooSymbol, { atMs: Date.now(), promise });
+    return promise;
+  }
+
   /**
    * Fetches intraday 5m data for VWAP + last-15m high (15:15–15:30 IST),
    * matching OvernightService's closing-liquidity window logic.
@@ -210,7 +251,8 @@ export class IndexDiscoverService {
    */
   private static async getIntradayMetrics(
     yahooSymbol: string,
-    currentTime: Date
+    currentTime: Date,
+    chartJson?: YahooFinanceChartResponse | null
   ): Promise<IndexIntradayMetrics> {
     const mode = env.HISTORICAL_MODE || 'mock';
     if (mode !== 'live') {
@@ -220,17 +262,9 @@ export class IndexDiscoverService {
     }
 
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=5m&range=1d`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      let json: YahooFinanceChartResponse;
-      try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
-        json = (await response.json()) as YahooFinanceChartResponse;
-      } finally {
-        clearTimeout(timeout);
-      }
+      const json =
+        chartJson !== undefined ? chartJson : await this.fetchYahoo5mChart(yahooSymbol);
+      if (!json) return { vwap: null, hasIntraday: false, last15mHigh: null };
 
       const result = json?.chart?.result?.[0];
       const timestamps = result?.timestamp;
@@ -315,7 +349,8 @@ export class IndexDiscoverService {
    */
   static async getLiveIndexSession(
     yahooSymbol: string,
-    currentTime: Date
+    currentTime: Date,
+    chartJson?: YahooFinanceChartResponse | null
   ): Promise<LiveIndexSession> {
     const empty: LiveIndexSession = {
       ltp: null,
@@ -332,17 +367,9 @@ export class IndexDiscoverService {
     }
 
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=5m&range=1d`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      let json: YahooFinanceChartResponse;
-      try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
-        json = (await response.json()) as YahooFinanceChartResponse;
-      } finally {
-        clearTimeout(timeout);
-      }
+      const json =
+        chartJson !== undefined ? chartJson : await this.fetchYahoo5mChart(yahooSymbol);
+      if (!json) return empty;
 
       const result = json?.chart?.result?.[0];
       const meta = result?.meta;
@@ -570,9 +597,11 @@ export class IndexDiscoverService {
           continue;
         }
 
+        // One Yahoo 5m fetch shared by live session + intraday VWAP/last15m.
+        const chartJson = await this.fetchYahoo5mChart(instrument.yahooSymbol);
         const [live, intraday] = await Promise.all([
-          this.getLiveIndexSession(instrument.yahooSymbol, currentTime),
-          this.getIntradayMetrics(instrument.yahooSymbol, currentTime),
+          this.getLiveIndexSession(instrument.yahooSymbol, currentTime, chartJson),
+          this.getIntradayMetrics(instrument.yahooSymbol, currentTime, chartJson),
         ]);
 
         const sessionCandles = this.resolveIndexSessionCandles(history, live, currentTime);
