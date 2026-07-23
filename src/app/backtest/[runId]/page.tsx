@@ -8,6 +8,7 @@ import { formatIST } from '@/utils/format';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import IndexBtstSlicePanel from '@/components/backtest/IndexBtstSlicePanel';
+import StockBtstSlicePanel from '@/components/backtest/StockBtstSlicePanel';
 
 export default function RunDetailsPage() {
   const params = useParams();
@@ -54,6 +55,7 @@ export default function RunDetailsPage() {
     { id: 'summary', label: 'Summary', icon: FileText },
     { id: 'trades', label: 'Trades', icon: List },
     { id: 'index-btst', label: 'Index BTST', icon: BarChart2 },
+    { id: 'stock-btst', label: 'Stock BTST', icon: BarChart2 },
     { id: 'metrics', label: 'Metrics', icon: BarChart2 },
     { id: 'snapshots', label: 'Snapshots', icon: Database },
   ];
@@ -210,6 +212,13 @@ export default function RunDetailsPage() {
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-cyan-400">Index BTST — VIX & Regime Slices</h3>
               <IndexBtstSlicePanel runId={runId} />
+            </div>
+          )}
+
+          {activeTab === 'stock-btst' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-cyan-400">Stock BTST — Regime, VDU & Score Slices</h3>
+              <StockBtstSlicePanel runId={runId} />
             </div>
           )}
 
