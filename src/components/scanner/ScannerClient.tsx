@@ -2928,7 +2928,9 @@ export default function ScannerClient() {
                         ? `Showing cached scan from ${scannedAt}`
                         : scannerMode === 'INDEX'
                           ? `Index Scanner — Pre-session ${BTST_CLOCK.preOpen}–${BTST_CLOCK.marketOpen}, live ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
-                          : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
+                          : btstBypassActive
+                            ? `⚡ BTST/STBT Bypass Mode Active — Scans running outside ${BTST_CLOCK.discoveryStart} IST window`
+                            : `BTST/STBT Scanner — Activates at ${BTST_CLOCK.discoveryStart} IST${countdownDisplay ? ` (${countdownDisplay})` : ''}`
                       }
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
