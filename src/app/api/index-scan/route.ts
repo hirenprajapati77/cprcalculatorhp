@@ -4,12 +4,11 @@ import { IndexDiscoverService } from '@/services/overnight/index-discover.servic
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { INDEX_INTRA_SCORE } from '@/services/overnight/index-intra-ranking.service';
 import { IndexRegimeService } from '@/services/overnight/index-regime.service';
-import { isMarketOpen, getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
+import { getBtstWindowState, BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { indexScanCacheKey } from '@/lib/index-cache-key';
 import { persistIndexBtstOvernightSignals } from '@/services/overnight/index-overnight-persist';
-import { env } from '@/config/env';
 
-export async function GET(request: Request) {
+export async function GET(_request: Request) {
   try {
     const now = new Date();
     const executionWindowOpen = true; // Index scanner always runs live, no bypass needed since it also shows INTRA
