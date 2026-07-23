@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
     const date = searchParams.get('date') || getISTDateString();
     const direction = searchParams.get('direction');
     const activeOnly = searchParams.get('activeOnly') === 'true';
+    const bypass = searchParams.get('bypass') === 'true';
 
     // Get today's date in IST
     const todayStr = getISTDateString();
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Live discovery spans DISCOVERING + ACTIVE (BTST_WINDOWS via getBtstWindowState)
-      if (state !== 'ACTIVE' && state !== 'DISCOVERING') {
+      if (state !== 'ACTIVE' && state !== 'DISCOVERING' && !bypass) {
         const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
         if (cached) {
           const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
