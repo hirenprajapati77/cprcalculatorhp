@@ -60,10 +60,8 @@ export class EventCalendarService {
       });
       
       const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-      // Default to enforcing calendar freshness check in live production; only disable explicitly.
-      const enforceFreshness = env.HISTORICAL_MODE === 'live'
-        ? env.EVENT_CALENDAR_ENFORCE_FRESHNESS !== 'false'
-        : env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+      // marketEvent has no populator yet, so freshness enforcement must be opt-in.
+      const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
 
       let isCalendarStale = false;
       if (!isHistoricalMode && enforceFreshness) {
@@ -168,10 +166,8 @@ export class EventCalendarService {
         });
         
         const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-        // Default to enforcing calendar freshness check in live production; only disable explicitly.
-        const enforceFreshness = env.HISTORICAL_MODE === 'live'
-          ? env.EVENT_CALENDAR_ENFORCE_FRESHNESS !== 'false'
-          : env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+        // marketEvent has no populator yet, so freshness enforcement must be opt-in.
+        const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
 
         if (!isHistoricalMode && enforceFreshness) {
            if (!latestGlobalEvent) {
