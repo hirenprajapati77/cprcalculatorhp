@@ -703,6 +703,7 @@ export class BacktestService {
               let entryPrice: number, sl: number, target: number;
               let direction: 'LONG' | 'SHORT';
               let _targetType: 'R2' | 'R1' | 'fallback' = 'fallback';
+              let isCloseEntry = false;
 
               if (bias === 'BULLISH') {
                 direction = 'LONG';
@@ -712,6 +713,7 @@ export class BacktestService {
                   // Gap-up open: breakout confirmed, fill at open
                   entryPrice = today.open;
                   entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false));
+                  isCloseEntry = false;
                 } else if (today.high < cpr.tc) {
                   continue; // TC never reached today — skip
                 } else {
@@ -721,6 +723,7 @@ export class BacktestService {
                   if (today.close <= cpr.tc || today.close <= today.open) continue;
                   entryPrice = today.close;
                   entryPrice *= (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false));
+                  isCloseEntry = true;
                 }
 
                 // CPR-based SL: use BC as natural support (known pre-market).
@@ -747,6 +750,7 @@ export class BacktestService {
                   // Gap-down open: breakdown confirmed, fill at open
                   entryPrice = today.open;
                   entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
+                  isCloseEntry = false;
                 } else if (today.low > cpr.bc) {
                   continue; // BC never reached — skip
                 } else {
@@ -756,6 +760,7 @@ export class BacktestService {
                   if (today.close >= cpr.bc || today.close >= today.open) continue;
                   entryPrice = today.close;
                   entryPrice *= (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
+                  isCloseEntry = true;
                 }
 
                 // CPR-based SL: use TC as natural resistance (known pre-market).
@@ -781,7 +786,8 @@ export class BacktestService {
 
               // Bound the holding window: 1-2 day CPR/BTST hold + 1 day buffer
               const MAX_HOLDING_DAYS = 2;
-              const tradeOhlc = ohlc.slice(i, i + MAX_HOLDING_DAYS);
+              const startIndex = isCloseEntry ? i + 1 : i;
+              const tradeOhlc = ohlc.slice(startIndex, startIndex + MAX_HOLDING_DAYS);
               const tradeResult = TradeEngineService.simulateTrade(
                 direction,
                 entryPrice,

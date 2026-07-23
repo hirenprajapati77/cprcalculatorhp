@@ -133,92 +133,97 @@ export class ScannerController {
 
     // Background database persist (upserts)
     try {
-      await Promise.all(
-        filtered.map(async (r) => {
-          const signalsStr = r.signals.join(',');
-          const dbSymbol = r.market === 'NSE' ? r.symbol : `${r.symbol}:BSE`;
+      // Process database upserts in chunks of 15 to avoid connection pool exhaustion
+      const CHUNK_SIZE = 15;
+      for (let chunkIdx = 0; chunkIdx < filtered.length; chunkIdx += CHUNK_SIZE) {
+        const chunk = filtered.slice(chunkIdx, chunkIdx + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(async (r) => {
+            const signalsStr = r.signals.join(',');
+            const dbSymbol = r.market === 'NSE' ? r.symbol : `${r.symbol}:BSE`;
 
-          // 1. Upsert ScannerResult (Stores calculation outputs)
-          await prisma.scannerResult.upsert({
-            where: {
-              symbol_date: {
+            // 1. Upsert ScannerResult (Stores calculation outputs)
+            await prisma.scannerResult.upsert({
+              where: {
+                symbol_date: {
+                  symbol: dbSymbol,
+                  date: today,
+                },
+              },
+              update: {
+                ltp: r.ltp,
+                volume: r.volume,
+                pivot: r.pivot,
+                bc: r.bc,
+                tc: r.tc,
+                r1: r.r1,
+                r2: r.r2,
+                r3: r.r3,
+                r4: r.r4,
+                s1: r.s1,
+                s2: r.s2,
+                s3: r.s3,
+                s4: r.s4,
+                width: r.width,
+                classification: r.classification,
+                score: r.score,
+                confidence: r.confidence,
+                signalSummary: signalsStr,
+                entry: r.entry,
+                sl: r.sl,
+                target: r.target,
+                rr: r.rr,
+              },
+              create: {
                 symbol: dbSymbol,
                 date: today,
+                ltp: r.ltp,
+                volume: r.volume,
+                pivot: r.pivot,
+                bc: r.bc,
+                tc: r.tc,
+                r1: r.r1,
+                r2: r.r2,
+                r3: r.r3,
+                r4: r.r4,
+                s1: r.s1,
+                s2: r.s2,
+                s3: r.s3,
+                s4: r.s4,
+                width: r.width,
+                classification: r.classification,
+                score: r.score,
+                confidence: r.confidence,
+                signalSummary: signalsStr,
+                entry: r.entry,
+                sl: r.sl,
+                target: r.target,
+                rr: r.rr,
               },
-            },
-            update: {
-              ltp: r.ltp,
-              volume: r.volume,
-              pivot: r.pivot,
-              bc: r.bc,
-              tc: r.tc,
-              r1: r.r1,
-              r2: r.r2,
-              r3: r.r3,
-              r4: r.r4,
-              s1: r.s1,
-              s2: r.s2,
-              s3: r.s3,
-              s4: r.s4,
-              width: r.width,
-              classification: r.classification,
-              score: r.score,
-              confidence: r.confidence,
-              signalSummary: signalsStr,
-              entry: r.entry,
-              sl: r.sl,
-              target: r.target,
-              rr: r.rr,
-            },
-            create: {
-              symbol: dbSymbol,
-              date: today,
-              ltp: r.ltp,
-              volume: r.volume,
-              pivot: r.pivot,
-              bc: r.bc,
-              tc: r.tc,
-              r1: r.r1,
-              r2: r.r2,
-              r3: r.r3,
-              r4: r.r4,
-              s1: r.s1,
-              s2: r.s2,
-              s3: r.s3,
-              s4: r.s4,
-              width: r.width,
-              classification: r.classification,
-              score: r.score,
-              confidence: r.confidence,
-              signalSummary: signalsStr,
-              entry: r.entry,
-              sl: r.sl,
-              target: r.target,
-              rr: r.rr,
-            },
-          });
+            });
 
-          // 2. Upsert MarketSnapshot (Real-time metadata cache)
-          await prisma.marketSnapshot.upsert({
-            where: { symbol: dbSymbol },
-            update: {
-              price: r.ltp,
-              volume: r.volume,
-              avgVolume: r.avgVolume,
-              marketCap: r.marketCap,
-              sector: r.sector,
-            },
-            create: {
-              symbol: dbSymbol,
-              price: r.ltp,
-              volume: r.volume,
-              avgVolume: r.avgVolume,
-              marketCap: r.marketCap,
-              sector: r.sector,
-            },
-          });
-        })
-      );
+            // 2. Upsert MarketSnapshot (Real-time metadata cache)
+            await prisma.marketSnapshot.upsert({
+              where: { symbol: dbSymbol },
+              update: {
+                price: r.ltp,
+                volume: r.volume,
+                avgVolume: r.avgVolume,
+                marketCap: r.marketCap,
+                sector: r.sector,
+              },
+              create: {
+                symbol: dbSymbol,
+                price: r.ltp,
+                volume: r.volume,
+                avgVolume: r.avgVolume,
+                marketCap: r.marketCap,
+                sector: r.sector,
+              },
+            });
+          })
+        );
+      }
       
       const durationMs = Date.now() - startTime;
       const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
