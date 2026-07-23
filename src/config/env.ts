@@ -68,7 +68,6 @@ const envSchema = z.object({
   RETENTION_DRY_RUN: z.string().optional(),
   RETENTION_LIMIT: z.coerce.number().optional(),
   SAVE_IGNORE_SIGNALS: z.string().optional(),
-  ENABLE_EXPERIMENTAL_CPR_QUALITY: z.string().optional(),
   CPR_WEIGHT: z.coerce.number().optional(),
   
   APP_VERSION: z.string().optional(),
