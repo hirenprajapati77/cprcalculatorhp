@@ -9,6 +9,8 @@ import { ScannerService } from '@/services/scanner.service';
 import { RegimeService } from '../overnight/regime.service';
 import { BtstService } from './btst.service';
 import { prisma } from '@/lib/db';
+import { INDEX_INSTRUMENTS } from '../overnight/index-discover.service';
+import { INDIA_VIX_CALM_MAX, INDIA_VIX_ELEVATED_MIN, isIndexBtstRedSession } from '../overnight/index-ranking.service';
 
 const connection = {
   host: env.REDIS_HOST || 'localhost',
@@ -108,11 +110,27 @@ export class BacktestService {
     // Track tag distribution pre-filtering
     const tagDistribution = { LONG: 0, SHORT: 0, NEUTRAL_CONFLICT: 0, WEAK: 0 };
 
-    // Fetch actual universe symbols using MarketService
-    const universeStocks = MarketService.getUniverse(
-      run.universe as 'NIFTY50' | 'NIFTY200' | 'NSE_FNO'
-    );
-    const symbols = universeStocks.map(s => s.symbol);
+    // Fetch actual universe symbols using MarketService or INDEX_INSTRUMENTS
+    const isIndexBtstDriven = run.strategyMode === 'INDEX_BTST_DRIVEN';
+    const symbols = isIndexBtstDriven
+      ? INDEX_INSTRUMENTS.map(i => i.symbol)
+      : MarketService.getUniverse(
+          run.universe as 'NIFTY50' | 'NIFTY200' | 'NSE_FNO'
+        ).map(s => s.symbol);
+
+    const vixMap = new Map<string, number>();
+    if (isIndexBtstDriven) {
+      try {
+        const vixHistory = await HistoricalProvider.getHistory('^INDIAVIX', run.startDate, run.endDate);
+        for (const v of vixHistory) {
+          vixMap.set(v.date, v.close);
+        }
+        console.log(`[BacktestService] Loaded ${vixHistory.length} ^INDIAVIX historical daily candles.`);
+      } catch (vixErr) {
+        console.error('[BacktestService] Failed to fetch ^INDIAVIX historical data:', vixErr);
+        throw new Error('Historical ^INDIAVIX data fetch failed for INDEX_BTST_DRIVEN backtest.');
+      }
+    }
 
     const BATCH_SIZE = 50;
     const batches = Math.ceil(symbols.length / BATCH_SIZE);
@@ -133,7 +151,10 @@ export class BacktestService {
       for (const symbol of batchSymbols) {
         try {
           // Mock signals and historical data
-          const ohlc = await HistoricalProvider.getHistory(symbol, run.startDate, run.endDate);
+          const fetchSymbol = isIndexBtstDriven
+            ? (INDEX_INSTRUMENTS.find(inst => inst.symbol === symbol)?.yahooSymbol || symbol)
+            : symbol;
+          const ohlc = await HistoricalProvider.getHistory(fetchSymbol, run.startDate, run.endDate);
           
           // Rate limit protection: 300ms between Yahoo Finance 
           // requests to prevent IP-level 429 on large universes
@@ -144,6 +165,8 @@ export class BacktestService {
           if (ohlc.length < 2) continue;
 
           let blockedUntilIndex = -1; // per-symbol cooldown tracker
+          let vixMatchCount = 0;
+          let vixTotalEvaluated = 0;
           const isScannerDriven = run.strategyMode === 'SCANNER_DRIVEN';
           const isBtstDriven = run.strategyMode === 'BTST_STBT_DRIVEN';
 
@@ -479,6 +502,153 @@ export class BacktestService {
               processedTrades++;
               blockedUntilIndex = i + 1; // Hold for 1 day — block next day from new setup
 
+            } else if (isIndexBtstDriven) {
+              const regime = await RegimeService.getMarketRegime(today.date);
+              const volatility = regime.volatility;
+
+              // Need day i+1 to exist for exit simulation
+              if (i + 1 >= ohlc.length) continue;
+
+              // Index BTST is LONG-only by design. In BEAR regime, suppress LONG BTST picks.
+              if (regime.trend === 'BEAR') continue;
+
+              const todayCpr = calculateCPR({
+                high: yesterday.high,
+                low: yesterday.low,
+                close: yesterday.close,
+              });
+
+              const tomorrowCpr = calculateCPR({
+                high: today.high,
+                low: today.low,
+                close: today.close,
+              });
+
+              const tomorrowCprNarrow = (tomorrowCpr.classification === 'NARROW');
+
+              // Red session block (<= -0.10% vs previous close)
+              const sessionChangePct = (today.close - yesterday.close) / yesterday.close;
+              if (isIndexBtstRedSession(sessionChangePct)) continue;
+
+              vixTotalEvaluated++;
+              const vixClose = vixMap.get(today.date);
+              if (vixClose === undefined || vixClose === null) {
+                // Strict score safety (matches production contract): missing VIX -> score invalid, skip
+                console.warn(`[BacktestService] Missing ^INDIAVIX data for ${today.date} — skipping setup (score invalid)`);
+                continue;
+              }
+              vixMatchCount++;
+
+              if (vixClose >= INDIA_VIX_ELEVATED_MIN) {
+                // Elevated VIX (>= 25) -> forced IGNORE / skip
+                continue;
+              }
+
+              const vixCalmPts = vixClose <= INDIA_VIX_CALM_MAX ? 25 : 0;
+              const cprNarrowPts = tomorrowCprNarrow ? 30 : 0;
+              const higherValuePts = (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc) ? 20 : 0;
+              const closeStrengthPts = (today.high > today.low && (today.close - today.low) / (today.high - today.low) > 0.70) ? 15 : 0;
+
+              const totalScore = vixCalmPts + cprNarrowPts + higherValuePts + closeStrengthPts; // Max 90
+
+              // Score floor for READY+ status out of 90 (equivalent to 85 out of 130 -> Math.round(85 * 90 / 130) = 59)
+              if (totalScore < 59) continue;
+
+              tagDistribution['LONG']++;
+
+              const slippage = TradeEngineService.calculateSlippage(0, volatility, false);
+              const btstEntry = today.close * (1 + slippage);
+
+              // Target and SL: Exact production IndexDiscoverService.discover() formula (entry + (entry - sl) * 2)
+              const btstSl = Math.min(today.low, tomorrowCpr.bc);
+              const risk = btstEntry - btstSl;
+              if (risk <= 0) continue;
+              const btstTarget = btstEntry + risk * 2.0;
+
+              const btstTradeOhlc = ohlc.slice(i + 1, i + 2);
+              const btstTradeResult = TradeEngineService.simulateTrade(
+                'LONG',
+                btstEntry,
+                btstSl,
+                btstTarget,
+                btstTradeOhlc,
+                {
+                  capital: run.capital,
+                  riskModel: run.riskModel,
+                  riskValue: run.riskValue ?? 1,
+                  executionMode: 'conservative',
+                  avgVolume: 0,
+                  volatility,
+                  entryDate: today.date,
+                }
+              );
+
+              const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
+              const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+              const btstNetPnl = btstTradeResult.pnl - btstFees;
+
+              const btstSignalsPayload = JSON.stringify({
+                signals: ['INDEX_BTST_CALL'],
+                scoreBreakdown: {
+                  vixCalm: vixCalmPts,
+                  cprNarrow: cprNarrowPts,
+                  higherValue: higherValuePts,
+                  vwap: 0,
+                  liquidity: 0,
+                  closeStrength: closeStrengthPts,
+                },
+                longScore: totalScore,
+                shortScore: 0,
+                tag: 'LONG',
+                _backtestNote: 'vwap(20pt)+liquidity(20pt) excluded — no intraday data; max score=90'
+              });
+
+              const btstTrade = await prisma.trade.create({
+                data: {
+                  backtestRunId: runId,
+                  symbol,
+                  type: 'LONG',
+                  signal: 'INDEX_BTST_CALL',
+                  status: btstTradeResult.status,
+                  strategyMode: 'INDEX_BTST_DRIVEN',
+                  entryDate: new Date(today.date),
+                  entryPrice: btstEntry,
+                  entryReason: `Index BTST EOD entry (INDEX_BTST_CALL, score ${totalScore}/90)`,
+                  exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
+                  exitPrice: btstTradeResult.exitPrice,
+                  exitReason: btstTradeResult.exitReason,
+                  stopLoss: btstSl,
+                  target: btstTarget,
+                  riskAmount: btstTradeResult.riskAmount,
+                  fees: btstFees,
+                  slippage: slippage * 2 * 100,
+                  executionDelayMs: 0,
+                  rr: btstTradeResult.rr,
+                  durationDays: btstTradeResult.durationDays,
+                  positionSize: btstTradeResult.positionSize,
+                  pnl: btstNetPnl,
+                  pnlPercent: (btstNetPnl / run.capital) * 100,
+                  score: totalScore,
+                  signalsJson: btstSignalsPayload,
+                  triggerDelayDays: 0,
+                }
+              });
+
+              if (btstTradeResult.journalEvents.length > 0) {
+                const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
+                await prisma.journal.createMany({
+                  data: limitedEvents.map(e => ({
+                    tradeId: btstTrade.id,
+                    timestamp: e.timestamp,
+                    event: e.event,
+                    details: e.details
+                  }))
+                });
+              }
+
+              processedTrades++;
+              blockedUntilIndex = i + 1;
+
             } else {
               const validHistory = ohlc.slice(0, i);
               const avgVolume = validHistory.length > 0
@@ -650,6 +820,11 @@ export class BacktestService {
               processedTrades++;
               blockedUntilIndex = i + (tradeOhlc.length - 1);
             }
+          }
+
+          if (isIndexBtstDriven && vixTotalEvaluated > 0) {
+            const matchPct = ((vixMatchCount / vixTotalEvaluated) * 100).toFixed(1);
+            console.log(`[BacktestService] INDEX_BTST_DRIVEN telemetry for ${symbol}: VIX date match rate = ${vixMatchCount}/${vixTotalEvaluated} (${matchPct}%).`);
           }
         } catch (e) {
           // Failure Rule: If one symbol fails, record failure and continue

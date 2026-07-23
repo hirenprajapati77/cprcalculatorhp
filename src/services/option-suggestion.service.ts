@@ -61,6 +61,16 @@ const FALLBACK_LOT_SIZES: Record<string, number> = {
 
 export class OptionSuggestionService {
   /**
+   * When true, suggestOptionForBtst (Index BTST path only) biases strike selection toward
+   * itmDepth === 2 (second-closest ITM strike) instead of the default itmDepth === 1.
+   * Rationale: shallower ITM (depth=1) carries more extrinsic/theta value relative to intrinsic;
+   * depth=2 has higher intrinsic fraction, reducing overnight theta drag.
+   *
+   * Set to false to restore original itmDepth=1 preference with no further code changes.
+   * Does NOT affect suggestOption (stock BTST/STBT path) — that always uses the original scoring.
+   */
+  public static readonly INDEX_BTST_PREFER_DEEPER_ITM = false;
+  /**
    * Constructs the Fyers option symbol expiry token for both BSE (SENSEX) and NSE (NIFTY/BANKNIFTY) index options.
    * 
    * Format rules:
@@ -170,7 +180,8 @@ export class OptionSuggestionService {
     candidate: ItmCandidate,
     allItmCandidates: ItmCandidate[],
     pcr: number,
-    type: 'CE' | 'PE'
+    type: 'CE' | 'PE',
+    preferDeeperItm: boolean = false
   ): ScoredCandidate {
     const opt = candidate.option;
 
@@ -213,10 +224,13 @@ export class OptionSuggestionService {
         : 0;
     }
 
-    // 5. ITM Depth Score (max 10): prefer 1st ITM (closest to spot)
-    const itmDepthScore = candidate.itmDepth === 1 ? 10
-      : candidate.itmDepth === 2 ? 6
-      : 3;
+    // 5. ITM Depth Score (max 10):
+    //    Default (preferDeeperItm=false): prefer depth 1 (closest-to-spot, most liquid)
+    //    Deeper ITM (preferDeeperItm=true): prefer depth 2 (higher intrinsic fraction,
+    //    lower theta-to-intrinsic ratio — used for Index BTST CE path only)
+    const itmDepthScore = preferDeeperItm
+      ? (candidate.itmDepth === 2 ? 10 : candidate.itmDepth === 1 ? 6 : 3)
+      : (candidate.itmDepth === 1 ? 10 : candidate.itmDepth === 2 ? 6 : 3);
 
     const score = oiScore + pcrContextScore + volumeScore + spreadScore + itmDepthScore;
 
@@ -233,7 +247,8 @@ export class OptionSuggestionService {
     type: 'CE' | 'PE',
     stockEntry: number,
     stockSl: number,
-    stockTarget: number
+    stockTarget: number,
+    preferDeeperItm: boolean = false
   ): Promise<OptionSuggestion> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
 
@@ -361,7 +376,7 @@ export class OptionSuggestionService {
 
     // 6. Score all ITM candidates
     const scored: ScoredCandidate[] = itmCandidates
-      .map(c => this.scoreCandidate(c, itmCandidates, pcr, type))
+      .map(c => this.scoreCandidate(c, itmCandidates, pcr, type, preferDeeperItm))
       .sort((a, b) => b.score - a.score);
 
     console.log(`[OptionSuggestion] ${cleanSym} ${type} scored candidates:`, scored.map(c => ({
@@ -422,6 +437,10 @@ export class OptionSuggestionService {
     };
   }
 
+  /**
+   * Stock BTST/STBT path — uses original itmDepth=1 preference (preferDeeperItm=false).
+   * Do not change this default; stock liquidity favours the closest ITM strike.
+   */
   public static async suggestOption(
     symbol: string,
     ltp: number,
@@ -431,9 +450,14 @@ export class OptionSuggestionService {
     stockTarget: number
   ): Promise<OptionSuggestion> {
     const type = bias === 'BEARISH' ? 'PE' : 'CE';
-    return this.buildSuggestion(symbol, ltp, type, stockEntry, stockSl, stockTarget);
+    return this.buildSuggestion(symbol, ltp, type, stockEntry, stockSl, stockTarget, false);
   }
 
+  /**
+   * Index BTST path — applies INDEX_BTST_PREFER_DEEPER_ITM flag.
+   * When true (default): biases toward itmDepth=2 to reduce theta drag on overnight holds.
+   * When false: reverts to original itmDepth=1 preference, identical to suggestOption behaviour.
+   */
   public static async suggestOptionForBtst(
     symbol: string,
     ltp: number,
@@ -443,6 +467,9 @@ export class OptionSuggestionService {
     stockTarget: number
   ): Promise<OptionSuggestion> {
     const type = tag === 'SHORT' ? 'PE' : 'CE';
-    return this.buildSuggestion(symbol, ltp, type, stockEntry, stockSl, stockTarget);
+    return this.buildSuggestion(
+      symbol, ltp, type, stockEntry, stockSl, stockTarget,
+      OptionSuggestionService.INDEX_BTST_PREFER_DEEPER_ITM
+    );
   }
 }
