@@ -84,6 +84,60 @@ export class HistoricalProvider {
     };
   }
 
+  /**
+   * Historical 5m Yahoo chart for one IST session day (09:15–15:30).
+   * Used by INDEX_BTST_DRIVEN backtest for VWAP + closing-window liquidity.
+   */
+  static async getIntraday5mChartForDate(
+    yahooSymbol: string,
+    dateStr: string
+  ): Promise<unknown | null> {
+    const mode = this.getMode();
+    if (mode === 'mock') {
+      return null;
+    }
+
+    const cacheKey = `history:5m:${yahooSymbol}:${dateStr}`;
+    if (mode === 'cached') {
+      const cached = await CacheService.get<unknown>(cacheKey);
+      if (cached) return cached;
+    }
+
+    // 09:15 IST = 03:45 UTC; 15:30 IST = 10:00 UTC
+    const period1 = Math.floor(new Date(`${dateStr}T03:45:00.000Z`).getTime() / 1000);
+    const period2 = Math.floor(new Date(`${dateStr}T10:00:00.000Z`).getTime() / 1000);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?period1=${period1}&period2=${period2}&interval=5m`;
+
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (!response.ok) throw new Error(`5m fetch HTTP ${response.status}`);
+        const json = await response.json();
+        const result = (json as { chart?: { result?: unknown[] } })?.chart?.result?.[0];
+        if (!result) throw new Error('5m fetch returned empty data');
+        if (mode === 'cached') {
+          await CacheService.set(cacheKey, json, 86400 * 7);
+        }
+        return json;
+      } catch (err) {
+        attempts++;
+        if (attempts >= 3) {
+          console.warn(
+            `[HistoricalProvider] 5m fetch failed for ${yahooSymbol} ${dateStr}:`,
+            err instanceof Error ? err.message : err
+          );
+          return null;
+        }
+        await new Promise((r) => setTimeout(r, 500 * attempts));
+      }
+    }
+    return null;
+  }
+
   private static validateOHLC(data: OHLC[]) {
     for (let i = 0; i < data.length; i++) {
       const candle = data[i];
