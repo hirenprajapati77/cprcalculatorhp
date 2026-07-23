@@ -4,6 +4,10 @@ import {
   computeIndexBtstSliceMetrics,
   indexSliceStatsToSnapshots,
 } from './index-btst-slice-metrics';
+import {
+  computeStockBtstSliceMetrics,
+  stockSliceStatsToSnapshots,
+} from './stock-btst-slice-metrics';
 
 export class MetricsService {
   /**
@@ -20,8 +24,8 @@ export class MetricsService {
 
     if (trades.length === 0) return null;
 
-    const { metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
-    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics);
+    const { metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics, stockSliceMetrics } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
+    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics, stockSliceMetrics);
   }
 
   /**
@@ -238,6 +242,10 @@ export class MetricsService {
     const indexSliceMetrics =
       indexTrades.length > 0 ? computeIndexBtstSliceMetrics(indexTrades) : null;
 
+    const stockTrades = trades.filter((t) => t.strategyMode === 'BTST_STBT_DRIVEN');
+    const stockSliceMetrics =
+      stockTrades.length > 0 ? computeStockBtstSliceMetrics(stockTrades) : null;
+
     return { 
       metrics: metricsData, 
       monthlyPnL, 
@@ -246,11 +254,12 @@ export class MetricsService {
       scoreBandAnalysis, 
       fillRateData,
       indexSliceMetrics,
+      stockSliceMetrics,
     };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any, indexSliceMetrics?: ReturnType<typeof computeIndexBtstSliceMetrics> | null) {
+  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any, indexSliceMetrics?: ReturnType<typeof computeIndexBtstSliceMetrics> | null, stockSliceMetrics?: ReturnType<typeof computeStockBtstSliceMetrics> | null) {
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
       data: {
@@ -399,6 +408,18 @@ export class MetricsService {
         indexSliceMetrics.byRegime
       );
       for (const row of [...vixRows, ...regimeRows]) {
+        await prisma.backtestMetricSnapshot.create({ data: row });
+      }
+    }
+
+    if (stockSliceMetrics) {
+      const stockRows = [
+        ...stockSliceStatsToSnapshots(runId, 'STOCK_REGIME', stockSliceMetrics.byRegime),
+        ...stockSliceStatsToSnapshots(runId, 'STOCK_VDU', stockSliceMetrics.byVduBand),
+        ...stockSliceStatsToSnapshots(runId, 'STOCK_SCORE', stockSliceMetrics.byScoreBand),
+        ...stockSliceStatsToSnapshots(runId, 'STOCK_DIRECTION', stockSliceMetrics.byDirection),
+      ];
+      for (const row of stockRows) {
         await prisma.backtestMetricSnapshot.create({ data: row });
       }
     }

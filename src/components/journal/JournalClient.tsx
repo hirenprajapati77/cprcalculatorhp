@@ -10,6 +10,7 @@ import {
   TrendingUp, TrendingDown, Award, Activity,
 } from 'lucide-react';
 import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
+import StockBtstComparePanel from '@/components/journal/StockBtstComparePanel';
 import { BTST_CLOCK } from '@/lib/market-hours';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -423,7 +424,7 @@ function formatRegime(regime: string | null | undefined) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
-  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS' | 'COMPARE'>('LOG');
+  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS' | 'COMPARE' | 'STOCK_COMPARE'>('LOG');
   const [reportingData]               = useState<ReportingResponse | null>(initialReportingData || null);
   const [entries, setEntries]         = useState<JournalEntry[]>([]);
   const [stats, setStats]             = useState<JournalStats | null>(null);
@@ -667,6 +668,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 }`}
               >
                 Index BTST
+              </button>
+              <button
+                onClick={() => setActiveTab('STOCK_COMPARE')}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === 'STOCK_COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
+                }`}
+              >
+                Stock BTST
               </button>
             </div>
             
@@ -1158,6 +1167,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         {activeTab === 'COMPARE' && (
           <div className="p-4">
             <IndexBtstComparePanel />
+          </div>
+        )}
+
+        {/* ── Stock BTST Compare Tab ───────────────────────────────────────── */}
+        {activeTab === 'STOCK_COMPARE' && (
+          <div className="p-4">
+            <StockBtstComparePanel />
           </div>
         )}
 
