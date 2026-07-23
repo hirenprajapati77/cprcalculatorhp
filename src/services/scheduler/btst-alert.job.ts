@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type OvernightSignal } from '@prisma/client';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
@@ -9,6 +9,12 @@ import {
   overnightSignalToBtstUi,
   selectTradableOvernightPicks,
 } from '@/services/overnight/overnight-ui-adapter';
+import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
+import {
+  persistIndexBtstOvernightSignals,
+  selectTradableIndexBtstPicks,
+} from '@/services/overnight/index-overnight-persist';
+import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { prisma } from '@/lib/db';
 
@@ -25,11 +31,29 @@ export type BtstAlertJobResult = {
   count: number;
   longs: number;
   shorts: number;
+  indexLongs: number;
   engine: 'advanced';
   regime: Awaited<ReturnType<typeof RegimeService.getMarketRegime>>;
   suppressStbt: boolean;
   suppressBtst: boolean;
 };
+
+async function buildEnrichedIndexLongs(picks: OvernightSignal[]) {
+  return Promise.all(
+    picks.map(async (sig) => {
+      const r = overnightSignalToBtstUi(sig);
+      const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+        r.symbol,
+        r.ltp,
+        'LONG',
+        r.entry,
+        r.sl,
+        r.target
+      );
+      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
+    })
+  );
+}
 
 /** Shared BTST Telegram alert pipeline for cron route and in-process scheduler. */
 export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
@@ -64,6 +88,35 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const filteredLongs = await filterExtended(longs, 'LONG');
   const filteredShorts = await filterExtended(shorts, 'SHORT');
 
+  // Index (NIFTY/BANKNIFTY/SENSEX) BTST is LONG-only by design — IndexDiscoverService.discover()
+  // does not produce overnight SHORT signals (see index-discover.service.ts header). No
+  // EntryManagerService extension filter here either: that gate exists for stock
+  // avgVolume/volumeRatio concerns that don't apply to an index (same rationale as
+  // logIndexBtstJournalEntries in index-overnight-persist.ts, which this mirrors).
+  let enrichedIndexLongs: Awaited<ReturnType<typeof buildEnrichedIndexLongs>> = [];
+  try {
+    console.log(`[BtstAlert] Refreshing Index BTST OvernightSignal for ${signalDate}.`);
+    const indexDiscoverResults = await IndexDiscoverService.discover();
+    await persistIndexBtstOvernightSignals(indexDiscoverResults);
+
+    const indexSignalsRaw = await prisma.overnightSignal.findMany({
+      where: { signalDate, instrumentType: 'INDEX' },
+      orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
+    });
+
+    const indexPicks = selectTradableIndexBtstPicks(indexSignalsRaw, {
+      minScore: INDEX_SCORE.READY,
+      take: 2,
+      suppressLong: suppressBtst,
+    });
+
+    enrichedIndexLongs = await buildEnrichedIndexLongs(indexPicks);
+  } catch (indexErr) {
+    // Index BTST is additive — never let a Yahoo/DB hiccup on the index leg
+    // block the stock BTST/STBT alert, which already worked before this existed.
+    console.warn('[BtstAlert] Index BTST discovery failed; sending stock-only alert:', indexErr);
+  }
+
   const enrichedLongs = await Promise.all(
     filteredLongs.map(async (sig) => {
       const r = overnightSignalToBtstUi(sig);
@@ -94,12 +147,13 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     })
   );
 
-  const alertPayload = [...enrichedLongs, ...enrichedShorts];
+  const alertPayload = [...enrichedLongs, ...enrichedShorts, ...enrichedIndexLongs];
 
   const baseResult = {
     count: alertPayload.length,
     longs: enrichedLongs.length,
     shorts: enrichedShorts.length,
+    indexLongs: enrichedIndexLongs.length,
     engine: 'advanced' as const,
     regime,
     suppressStbt,

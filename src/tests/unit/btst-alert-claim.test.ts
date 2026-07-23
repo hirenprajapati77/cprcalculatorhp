@@ -8,6 +8,7 @@ import { env } from '../../config/env';
 import { TelegramService } from '../../services/alert/telegram.service';
 import { RegimeService } from '../../services/overnight/regime.service';
 import { OvernightService } from '../../services/overnight/overnight.service';
+import { IndexDiscoverService } from '../../services/overnight/index-discover.service';
 import { getISTDateString } from '../../lib/market-hours';
 
 /** Monday 2026-07-20 15:15 IST — inside BTST discovery window. */
@@ -64,6 +65,8 @@ function mockBtstRouteDeps(handlers: {
   const originalDelete = prisma.btstAlertState.delete;
   const originalRegime = RegimeService.getMarketRegime;
   const originalDiscover = OvernightService.discover;
+  const originalIndexDiscover = IndexDiscoverService.discover;
+  const originalOvernightSignalFindMany = prisma.overnightSignal.findMany;
   const originalSend = TelegramService.sendBtstAlert;
 
   const createCalls: unknown[] = [];
@@ -94,6 +97,11 @@ function mockBtstRouteDeps(handlers: {
 
   OvernightService.discover = (async () => []) as typeof OvernightService.discover;
 
+  // Index BTST leg (added alongside stock discovery): no index signals today,
+  // and no real overnightSignal table lookup — keeps this a pure unit test.
+  IndexDiscoverService.discover = (async () => []) as typeof IndexDiscoverService.discover;
+  prisma.overnightSignal.findMany = (async () => []) as unknown as typeof prisma.overnightSignal.findMany;
+
   TelegramService.sendBtstAlert = (async (payload: unknown) => {
     sendCalls.push(payload);
     if (handlers.sendBtstAlert) {
@@ -111,6 +119,8 @@ function mockBtstRouteDeps(handlers: {
       prisma.btstAlertState.delete = originalDelete;
       RegimeService.getMarketRegime = originalRegime;
       OvernightService.discover = originalDiscover;
+      IndexDiscoverService.discover = originalIndexDiscover;
+      prisma.overnightSignal.findMany = originalOvernightSignalFindMany;
       TelegramService.sendBtstAlert = originalSend;
     },
   };
