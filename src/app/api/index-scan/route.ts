@@ -20,28 +20,51 @@ export async function GET(request: Request) {
     const dateStr = getISTDateString(now);
     const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
 
+    /** Fresh enough to skip Yahoo re-scan (live UI polls every 60s). */
+    const LIVE_CACHE_TTL_MS = 45_000;
+
     interface CachedIndexData {
       scannedAt: string;
       results: unknown[];
       insights: unknown;
       engine?: string;
       marketRegime?: unknown;
+      cachedAtMs?: number;
+    }
+
+    const cachedLive = await CacheService.get<CachedIndexData>(CACHE_KEY);
+    if (
+      cachedLive &&
+      typeof cachedLive.cachedAtMs === 'number' &&
+      Date.now() - cachedLive.cachedAtMs < LIVE_CACHE_TTL_MS
+    ) {
+      return NextResponse.json({
+        success: true,
+        executionWindowOpen: true,
+        cachedResult: true,
+        scannedAt: cachedLive.scannedAt,
+        degraded: false,
+        results: cachedLive.results,
+        insights: cachedLive.insights,
+        engine: cachedLive.engine ?? 'index-advanced-unified',
+        state: windowState,
+        marketRegime: cachedLive.marketRegime ?? marketRegime,
+      });
     }
 
     if (!executionWindowOpen) {
-      const cached = await CacheService.get<CachedIndexData>(CACHE_KEY);
-      if (cached) {
+      if (cachedLive) {
         return NextResponse.json({
           success: true,
           executionWindowOpen: false,
           cachedResult: true,
-          scannedAt: cached.scannedAt,
-          message: `Showing last scan from ${cached.scannedAt}. Next live scan at ${BTST_CLOCK.marketOpen} IST.`,
-          results: cached.results,
-          insights: cached.insights,
-          engine: cached.engine ?? 'index-advanced-unified',
+          scannedAt: cachedLive.scannedAt,
+          message: `Showing last scan from ${cachedLive.scannedAt}. Next live scan at ${BTST_CLOCK.marketOpen} IST.`,
+          results: cachedLive.results,
+          insights: cachedLive.insights,
+          engine: cachedLive.engine ?? 'index-advanced-unified',
           state: windowState,
-          marketRegime: (cached as CachedIndexData).marketRegime ?? marketRegime,
+          marketRegime: (cachedLive as CachedIndexData).marketRegime ?? marketRegime,
         });
       }
       return NextResponse.json({
@@ -153,9 +176,10 @@ export async function GET(request: Request) {
       insights,
       engine: 'index-advanced-unified',
       marketRegime,
+      cachedAtMs: Date.now(),
     };
 
-    await CacheService.set(CACHE_KEY, cacheData, 60); // 60s cache TTL so option suggestions stay fresh
+    await CacheService.set(CACHE_KEY, cacheData, 60); // 60s TTL; live path reuses for 45s
 
     return NextResponse.json({
       success: true,
