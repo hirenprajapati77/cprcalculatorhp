@@ -1181,6 +1181,7 @@ export default function ScannerClient() {
     try {
       if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
         const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
+        setBtstBypassActive(bypassVal);
         // Advanced Engine via /api/btst adapter (OvernightService → UI DTO)
         const res = await fetch(`/api/btst?universe=${universe}${bypassVal ? '&bypass=true' : ''}`);
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
@@ -1566,9 +1567,29 @@ export default function ScannerClient() {
   }, [refreshInterval]);
 
   const hasFetchedRef = useRef(false);
+  const [btstBypassActive, setBtstBypassActive] = useState(false);
 
   useEffect(() => {
     hasFetchedRef.current = false;
+    // Drop prior mode's rows/pagination immediately so the spinner isn't
+    // paired with stale CPR "207 stocks / page 21" while BTST/INDEX loads.
+    setIsLoading(true);
+    setResults([]);
+    setIndexResults([]);
+    setTotal(0);
+    setTotalPages(1);
+    setPage(1);
+    setCachedResult(false);
+    setScannedAt('');
+    if (isOvernightMode(scannerMode) || scannerMode === 'INDEX') {
+      // Avoid flashing "LIVE SCAN ACTIVE (Bypass…)" before the API responds.
+      setExecutionWindowOpen(false);
+    } else {
+      setExecutionWindowOpen(true);
+    }
+    if (typeof window !== 'undefined') {
+      setBtstBypassActive(localStorage.getItem('cpr_settings_bypass_btst') === 'true');
+    }
   }, [scannerMode]);
 
   useEffect(() => {
@@ -1586,6 +1607,11 @@ export default function ScannerClient() {
 
     const checkAndRefresh = async () => {
       const { totalMinutes } = getISTTimeParts(new Date());
+      // INDEX first paint uses a dedicated non-silent fetchIndexData effect.
+      if (scannerMode === 'INDEX' && !hasFetchedRef.current) {
+        hasFetchedRef.current = true;
+        return;
+      }
       if (shouldFastPoll(scannerMode, totalMinutes) || !hasFetchedRef.current) {
         await refreshActiveData(true);
         hasFetchedRef.current = true;
@@ -1605,7 +1631,8 @@ export default function ScannerClient() {
 
   useEffect(() => {
     if (scannerMode !== 'INDEX') return;
-    fetchIndexData(true);
+    // Non-silent so the INDEX spinner shows on first paint / mode switch.
+    void fetchIndexData(false);
   }, [scannerMode, fetchIndexData]);
 
   useEffect(() => {
@@ -2920,9 +2947,9 @@ export default function ScannerClient() {
                       ? (indexTelState.label === 'LIVE'
                           ? `LIVE SCAN ACTIVE — cash session ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST`
                           : indexTelState.label === 'PRESESSION'
-                            ? `PRE-SESSION — live opens at ${BTST_CLOCK.marketOpen} IST (bypass may force scan)`
-                            : `OUTSIDE CASH SESSION — live window is ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST (bypass/testing)`)
-                      : `LIVE SCAN ACTIVE — ${BTST_CLOCK.discoveryStart} IST Window Open${countdownDisplay ? ' (Bypass/Testing Mode)' : ''}`}
+                            ? `PRE-SESSION — live opens at ${BTST_CLOCK.marketOpen} IST${btstBypassActive ? ' (bypass may force scan)' : ''}`
+                            : `OUTSIDE CASH SESSION — live window is ${BTST_CLOCK.marketOpen}–${BTST_CLOCK.marketClose} IST${btstBypassActive ? ' (bypass/testing)' : ''}`)
+                      : `LIVE SCAN ACTIVE — ${BTST_CLOCK.discoveryStart} IST Window Open${btstBypassActive ? ' (Bypass/Testing Mode)' : ''}`}
                   </p>
                 </div>
               )}
@@ -3099,8 +3126,8 @@ export default function ScannerClient() {
                 )}
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
+              {/* Pagination — CPR only; overnight/INDEX are single-page result sets */}
+              {scannerMode === 'CPR' && totalPages > 1 && (
                 <div className="flex items-center justify-between font-mono text-[11px] text-text-secondary pt-3 border-t border-border-primary">
                   <div>
                     Showing Page <span className="font-bold text-text-primary">{page}</span> of{' '}
