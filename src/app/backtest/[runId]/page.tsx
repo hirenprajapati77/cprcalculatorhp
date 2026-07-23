@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { formatIST } from '@/utils/format';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import IndexBtstSlicePanel from '@/components/backtest/IndexBtstSlicePanel';
 
 export default function RunDetailsPage() {
   const params = useParams();
@@ -52,6 +53,7 @@ export default function RunDetailsPage() {
   const tabs = [
     { id: 'summary', label: 'Summary', icon: FileText },
     { id: 'trades', label: 'Trades', icon: List },
+    { id: 'index-btst', label: 'Index BTST', icon: BarChart2 },
     { id: 'metrics', label: 'Metrics', icon: BarChart2 },
     { id: 'snapshots', label: 'Snapshots', icon: Database },
   ];
@@ -119,6 +121,7 @@ export default function RunDetailsPage() {
                   <div><span className="text-muted-foreground">End Date:</span> <span className="font-medium">{formatIST(runData.endDate, { dateOnly: true })}</span></div>
                   <div><span className="text-muted-foreground">Status:</span> <span className="font-medium">{runData.status}</span></div>
                   <div><span className="text-muted-foreground">Execution:</span> <span className="font-medium">{runData.executionMode}</span></div>
+                  <div><span className="text-muted-foreground">Strategy:</span> <span className="font-medium">{runData.strategyMode ?? 'LEGACY_NARROW_CPR'}</span></div>
                   <div><span className="text-muted-foreground">Risk Model:</span> <span className="font-medium">{runData.riskModel} ({runData.riskValue}%)</span></div>
                 </div>
               ) : (
@@ -200,6 +203,13 @@ export default function RunDetailsPage() {
               ) : (
                 <p className="text-muted-foreground">No trades found.</p>
               )}
+            </div>
+          )}
+
+          {activeTab === 'index-btst' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-cyan-400">Index BTST — VIX & Regime Slices</h3>
+              <IndexBtstSlicePanel runId={runId} />
             </div>
           )}
 

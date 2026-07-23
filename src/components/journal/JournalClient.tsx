@@ -9,6 +9,7 @@ import {
   Download, RefreshCw, ChevronLeft, ChevronRight,
   TrendingUp, TrendingDown, Award, Activity,
 } from 'lucide-react';
+import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
 import { BTST_CLOCK } from '@/lib/market-hours';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -422,7 +423,7 @@ function formatRegime(regime: string | null | undefined) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
-  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS'>('LOG');
+  const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS' | 'COMPARE'>('LOG');
   const [reportingData]               = useState<ReportingResponse | null>(initialReportingData || null);
   const [entries, setEntries]         = useState<JournalEntry[]>([]);
   const [stats, setStats]             = useState<JournalStats | null>(null);
@@ -658,6 +659,14 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 }`}
               >
                 Signals
+              </button>
+              <button
+                onClick={() => setActiveTab('COMPARE')}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  activeTab === 'COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
+                }`}
+              >
+                Index BTST
               </button>
             </div>
             
@@ -1142,6 +1151,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Index BTST Compare Tab ───────────────────────────────────────── */}
+        {activeTab === 'COMPARE' && (
+          <div className="p-4">
+            <IndexBtstComparePanel />
           </div>
         )}
 
