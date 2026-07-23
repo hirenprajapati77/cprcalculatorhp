@@ -242,7 +242,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
     });
   }
 
-  const ext = EntryManagerService.evaluateExtension(stock, finalDir);
+  const ext = EntryManagerService.evaluateExtension(stock, finalDir, ctx.today.date);
   if (!ext.eligible) {
     return notTradable(ext.reason ?? 'Extension gate failed', {
       longScore: longSig?.score ?? null,

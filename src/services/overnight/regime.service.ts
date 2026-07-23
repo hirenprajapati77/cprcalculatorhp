@@ -25,9 +25,9 @@ export class RegimeService {
 
     try {
       // Use ^NSEI for Nifty 50
-      const endDateObj = new Date(date);
-      const startDateObj = new Date(date);
-      startDateObj.setDate(startDateObj.getDate() - 90);
+      const [y, m, d] = date.split('-').map(Number);
+      const endDateObj = new Date(Date.UTC(y, m - 1, d));
+      const startDateObj = new Date(Date.UTC(y, m - 1, d - 90));
 
       const history = await HistoricalProvider.getHistory('^NSEI', startDateObj, endDateObj);
       

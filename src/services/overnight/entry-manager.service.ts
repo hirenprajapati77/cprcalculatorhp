@@ -76,14 +76,14 @@ export class EntryManagerService {
    * Prefer MarketStockData.previousClose; fall back to history with today-bar awareness
    * (do not use n-2 when the last bar is already the prior completed session).
    */
-  static resolvePreviousClose(stock: MarketStockData): number | null {
+  static resolvePreviousClose(stock: MarketStockData, asOfDate?: string): number | null {
     if (stock.previousClose && stock.previousClose > 0) {
       return stock.previousClose;
     }
     const hist = stock.history || [];
     if (hist.length === 0) return null;
 
-    const todayStr = getISTDateString();
+    const todayStr = asOfDate || getISTDateString();
     const last = hist[hist.length - 1];
     if (last.date === todayStr) {
       return hist.length >= 2 ? hist[hist.length - 2].close : null;
@@ -99,14 +99,15 @@ export class EntryManagerService {
    */
   static evaluateExtension(
     stock: MarketStockData,
-    direction: 'LONG' | 'SHORT'
+    direction: 'LONG' | 'SHORT',
+    asOfDate?: string
   ): ExclusionCheckResult {
     const close = stock.ltp || stock.close || 0;
     if (!close || close <= 0 || !stock.high || !stock.low) {
       return { eligible: false, reason: 'Insufficient OHLC for extension check' };
     }
 
-    const prevClose = EntryManagerService.resolvePreviousClose(stock);
+    const prevClose = EntryManagerService.resolvePreviousClose(stock, asOfDate);
 
     if (!prevClose || prevClose <= 0) {
       return { eligible: true, reason: null }; // cannot evaluate — do not hard-block
