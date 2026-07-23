@@ -1053,7 +1053,7 @@ export default function ScannerClient() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Load Watchlist and Column configurations on mount
+  // Load Watchlist, Server Settings, and Column configurations on mount
   useEffect(() => {
     fetch('/api/watchlist')
       .then(res => res.json())
@@ -1061,6 +1061,23 @@ export default function ScannerClient() {
         if (!data.error) setWatchlist(data);
       })
       .catch(err => console.error('Failed to load watchlist:', err));
+
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.settings) {
+          const s = data.settings;
+          if (s.bypassBtst !== undefined) {
+            localStorage.setItem('cpr_settings_bypass_btst', s.bypassBtst ? 'true' : 'false');
+            setBtstBypassActive(!!s.bypassBtst);
+          }
+          if (s.defaultUniverse) localStorage.setItem('cpr_settings_default_universe', s.defaultUniverse);
+          if (s.autoRefresh) localStorage.setItem('cpr_settings_auto_refresh', s.autoRefresh);
+          if (s.minPrice !== undefined) localStorage.setItem('cpr_settings_min_price', s.minPrice.toString());
+          if (s.minVolume !== undefined) localStorage.setItem('cpr_settings_min_volume', s.minVolume.toString());
+        }
+      })
+      .catch(err => console.error('Failed to sync settings from server:', err));
 
     const savedColumns = localStorage.getItem('cpr_scanner_columns');
     if (savedColumns) {
