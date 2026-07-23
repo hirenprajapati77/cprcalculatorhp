@@ -73,6 +73,11 @@ export class OvernightService {
 
   /**
    * Helper to determine signal state from BTST_WINDOWS via getBtstWindowState.
+   *
+   * NOTE: This env-var bypass (BTST_BYPASS_WINDOW=true, dev-only) is a separate mechanism
+   * from the user-facing ?bypass=true query param handled at the API route level.
+   * Do NOT merge the two — the query-param bypass should never affect cron jobs or
+   * other callers of determineState().
    */
   static determineState(time: Date): 'DISCOVERING' | 'ACTIVE' | 'FROZEN' {
     const bypassAllowed =

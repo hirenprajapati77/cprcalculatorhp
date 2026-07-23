@@ -58,7 +58,8 @@ export async function GET(req: NextRequest) {
       const now = new Date();
       const state = OvernightService.determineState(now);
 
-      const todayCacheKey = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
+      // Cache key uses getISTDateString() (YYYY-MM-DD) — consistent with BTST cache key format.
+      const todayCacheKey = getISTDateString();
       const OVERNIGHT_KEY = `overnight_last_scan_${todayCacheKey}`;
 
       interface CachedOvernightData {
@@ -88,6 +89,33 @@ export async function GET(req: NextRequest) {
           windowOpen: false,
           cachedResult: false,
           message: `Overnight scanner activates at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
+          results: [],
+          state,
+        });
+      }
+
+      // Bypass ON — serve cache if available; do NOT trigger a fresh scan
+      if (bypass) {
+        const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
+        if (cached) {
+          const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
+          return NextResponse.json({
+            success: true,
+            windowOpen: false,
+            cachedResult: true,
+            scannedAt: cached.scannedAt,
+            message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
+            results: filtered,
+            insights: cached.insights,
+            state,
+          });
+        }
+        // Bypass + no cache = no scan has run today yet
+        return NextResponse.json({
+          success: true,
+          windowOpen: false,
+          cachedResult: false,
+          message: `Bypass active but no overnight scan data found for today. Scan runs at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
           results: [],
           state,
         });
@@ -172,7 +200,7 @@ export async function GET(req: NextRequest) {
         insights,
       };
 
-      await CacheService.set(OVERNIGHT_KEY, cacheData, 28800); // 8h: expires well before next market open
+      await CacheService.set(OVERNIGHT_KEY, cacheData, 32400); // 9h: covers 15:10 scan through midnight IST
 
       const filtered = applyOvernightQueryFilters(signals, direction, activeOnly);
 

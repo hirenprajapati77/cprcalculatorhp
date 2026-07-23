@@ -66,7 +66,9 @@ export class OptionSuggestionService {
    * Rationale: shallower ITM (depth=1) carries more extrinsic/theta value relative to intrinsic;
    * depth=2 has higher intrinsic fraction, reducing overnight theta drag.
    *
-   * Set to false to restore original itmDepth=1 preference with no further code changes.
+   * Currently set to false (reverts to itmDepth=1 preference) after evaluation showed
+   * depth=1 performed acceptably across tested expiry cycles. Set to true to re-enable
+   * the deeper ITM preference without any further code changes.
    * Does NOT affect suggestOption (stock BTST/STBT path) — that always uses the original scoring.
    */
   public static readonly INDEX_BTST_PREFER_DEEPER_ITM = false;
@@ -113,7 +115,15 @@ export class OptionSuggestionService {
     const lotSizesMap = new Map<string, number>();
     try {
       console.log('[OptionSuggestion] Downloading Fyers symbol master for lot sizes...');
-      const res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv');
+      // 5s timeout prevents hanging the first enrichment call if Fyers CDN is slow at market open.
+      const csvController = new AbortController();
+      const csvTimeout = setTimeout(() => csvController.abort(), 5000);
+      let res: Response;
+      try {
+        res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
+      } finally {
+        clearTimeout(csvTimeout);
+      }
       if (res.ok) {
         const text = await res.text();
         const lines = text.split('\n');
@@ -287,7 +297,11 @@ export class OptionSuggestionService {
           parsedDate = new Date(`${y}-${m}-${d}`);
         } else {
           const d = new Date(exStr);
-          if (!isNaN(d.getTime())) parsedDate = d;
+          if (!isNaN(d.getTime())) {
+            parsedDate = d;
+          } else {
+            console.warn(`[OptionSuggestion] Unknown expiry date format: "${exStr}" — skipping. Update parser if Fyers API format changed.`);
+          }
         }
         if (parsedDate && !isNaN(parsedDate.getTime())) {
           parsedDate.setHours(0, 0, 0, 0);

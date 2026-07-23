@@ -52,7 +52,10 @@ export function overnightSignalToBtstUi(
 
   return {
     symbol: signal.symbol,
-    ltp: entry,
+    // OvernightSignal does not persist a separate ltp column; entry is set at scan
+    // time (approximately equal to LTP). Using entry here is intentional — a future
+    // schema migration adding an ltp column should update this mapping.
+    ltp: signal.entry ?? 0,
     longScore: tag === 'LONG' ? score : 0,
     shortScore: tag === 'SHORT' ? score : 0,
     tag,
@@ -84,7 +87,7 @@ export function buildInsightsFromOvernight(signals: OvernightSignal[]) {
   let totalConflict = 0;
 
   for (const sig of signals) {
-    const maxScore = sig.overnightScore || 0;
+    const score = sig.overnightScore || 0;
     if (sig.classification === 'NEUTRAL_CONFLICT') {
       totalConflict++;
       avoid++;
@@ -95,12 +98,12 @@ export function buildInsightsFromOvernight(signals: OvernightSignal[]) {
       continue;
     }
     if (LONG_READY.includes(sig.classification) || SHORT_READY.includes(sig.classification)) {
-      if (maxScore >= 100 || sig.classification.startsWith('STRONG_')) {
+      if (score >= 100 || sig.classification.startsWith('STRONG_')) {
         strongSignal++;
       } else {
         breakoutReady++;
       }
-    } else if (maxScore < 40) {
+    } else if (score < 40) {
       avoid++;
     }
     if (sig.direction === 'LONG') totalLong++;
