@@ -254,6 +254,23 @@ export class BtstService {
   }
 
   static evaluateOvernight(stock: MarketStockData, asOfDate?: string, strategyVariant: 'baseline' | 'cpr_aware' | 'no_vdu_weighted' | 'clv_continuous' | 'clv_hybrid' = 'baseline'): BtstScoreResult {
+    if (!stock.history || stock.history.length === 0) {
+      return {
+        symbol: stock.symbol,
+        ltp: stock.ltp,
+        longScore: 0,
+        shortScore: 0,
+        tag: 'WEAK',
+        signals: [],
+        entry: stock.ltp,
+        sl: 0,
+        target: 0,
+        rr: '0.00',
+        sector: stock.sector || '',
+        marketCap: stock.marketCap || 0,
+      };
+    }
+
     const todayStr = asOfDate ?? getISTDateString();
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };
@@ -443,6 +460,28 @@ export class BtstService {
     stock: MarketStockData,
     asOfDate?: string
   ) {
+    if (!stock.history || stock.history.length === 0) {
+      return {
+        symbol: stock.symbol,
+        direction: 'NEUTRAL_CONFLICT',
+        hardGates: {
+          hvPassed: false
+        },
+        scoreBreakdown: {
+          clvScore: 0,
+          cprScore: 0,
+          liquidityScore: 0
+        },
+        rawMetrics: {
+          clv: 0,
+          cprWidth: 999.0,
+          liquidityPassed: false
+        },
+        finalScore: 0,
+        classification: 'REJECT'
+      };
+    }
+
     const todayStr = asOfDate ?? getISTDateString();
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { high: stock.high, low: stock.low, close: stock.ltp };

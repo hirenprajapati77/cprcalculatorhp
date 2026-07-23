@@ -240,12 +240,15 @@ export class TradeJournalService {
       }
 
       for (const entry of entries) {
+        const firstToken = entry.optionContract ? entry.optionContract.split(' ')[0] : undefined;
+        const tradeExpiry = (firstToken && firstToken !== String(entry.optionStrike)) ? firstToken : undefined;
+
         const cmp = await TradeJournalService.fetchOptionCmp(
           entry.symbol,
           entry.optionStrike,
           entry.optionType as 'CE' | 'PE',
           entry.id,
-          entry.optionContract ? entry.optionContract.split(' ')[0] : undefined
+          tradeExpiry
         );
 
         if (!cmp) {
