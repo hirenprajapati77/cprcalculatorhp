@@ -1,8 +1,8 @@
 import { env } from '@/config/env';
 /**
  * ADVANCED ENGINE — authoritative for live UI (/api/btst adapter), Telegram
- * (btst-alert), Trade Journal (btst-journal), and /api/overnight. Max score 130.
- * Simple Engine (BtstService) remains for backtests and V2 shadow scoring only.
+ * (btst-alert), Trade Journal (btst-journal), BTST_STBT_DRIVEN backtest, and
+ * /api/overnight. Max score 130. Simple Engine (BtstService) is V2 shadow only.
  */
 import { OvernightSignal, Prisma } from '@prisma/client';
 import { LIQUIDITY } from '@/config/trading-constants';
@@ -14,8 +14,10 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, istMinuteOfDayFromUnixSec, getCompletedHistory } from '@/lib/market-hours';
+import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, getCompletedHistory } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
+import { parseStockIntradayMetricsFromChart } from './stock-intraday.util';
+import type { YahooFinanceChartResponse } from './index-intraday.util';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
 import { resolveOvernightConflict } from './overnight-conflict';
@@ -46,23 +48,6 @@ export interface MockOvernightStock extends MarketStockData {
   shortScoreOverride?: number;
 }
 
-
-interface YahooFinanceChartResponse {
-  chart?: {
-    result?: Array<{
-      timestamp?: number[];
-      indicators?: {
-        quote?: Array<{
-          open: number[];
-          high: number[];
-          low: number[];
-          close: number[];
-          volume: number[];
-        }>;
-      };
-    }>;
-  };
-}
 
 interface OvernightSignalCalc {
   score: number | null;
@@ -101,81 +86,6 @@ export class OvernightService {
   }
 
   /**
-   * Parse Yahoo 5m chart JSON into VWAP and 15:15–15:30 IST closing-window extremes.
-   */
-  private static parseYahooIntradayResponse(
-    json: YahooFinanceChartResponse,
-    currentTime: Date
-  ): OvernightIntradayMetrics {
-    const result = json?.chart?.result?.[0];
-    if (!result || !result.timestamp) {
-      throw new Error('Live fetch returned empty data');
-    }
-
-    const timestamps = result.timestamp;
-    const quotes = result.indicators?.quote?.[0];
-    if (!quotes) throw new Error('Live fetch returned empty data');
-
-    if (
-      !quotes.high || !quotes.low || !quotes.close || !quotes.volume ||
-      quotes.high.length !== timestamps.length ||
-      quotes.low.length !== timestamps.length ||
-      quotes.close.length !== timestamps.length ||
-      quotes.volume.length !== timestamps.length
-    ) {
-      throw new Error('Live fetch returned misaligned quote arrays');
-    }
-
-    const currentTimestampSec = Math.floor(currentTime.getTime() / 1000);
-    let sumPriceVol = 0;
-    let sumVol = 0;
-    let hasIntraday = false;
-    let closingHigh = 0;
-    let closingLow = Infinity;
-    let closingBarCount = 0;
-
-    const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
-    const isLastCandleForming = (currentTimestampSec - lastTimestamp) < 300;
-
-    for (let i = 0; i < timestamps.length; i++) {
-      const ts = timestamps[i];
-      if (ts > currentTimestampSec) continue;
-
-      const high = quotes.high[i];
-      const low = quotes.low[i];
-      const close = quotes.close[i];
-      const volume = quotes.volume[i] || 0;
-
-      if (high == null || low == null || close == null) continue;
-
-      const typicalPrice = (high + low + close) / 3;
-      sumPriceVol += typicalPrice * volume;
-      sumVol += volume;
-      hasIntraday = true;
-
-      const barOpenMin = istMinuteOfDayFromUnixSec(ts);
-      const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
-      const isFormingBar = isLastCandleForming && ts === lastTimestamp;
-      // Include forming bar when it belongs to the 15:15–15:30 window (partial MOC data).
-      if (inClosingWindow && (!isFormingBar || barOpenMin >= BTST_WINDOW_MINUTES.CLOSING_WINDOW_START)) {
-        closingHigh = Math.max(closingHigh, high);
-        closingLow = Math.min(closingLow, low);
-        closingBarCount++;
-      }
-    }
-
-    const vwap = sumVol > 0 ? sumPriceVol / sumVol : null;
-
-    return {
-      vwap,
-      intradayVolume: sumVol > 0 ? sumVol : null,
-      last15mHigh: closingBarCount > 0 && closingHigh > 0 ? closingHigh : null,
-      last15mLow: closingBarCount > 0 && closingLow !== Infinity ? closingLow : null,
-      hasIntraday,
-    };
-  }
-
-  /**
    * Fetches/simulates intraday 5m candle data to compute VWAP and 15:15–15:30 high/low.
    */
   static async getIntradayData(stock: MarketStockData, currentTime: Date): Promise<OvernightIntradayMetrics> {
@@ -192,7 +102,11 @@ export class OvernightService {
           const response = await fetch(url, { signal: controller.signal });
           if (!response.ok) throw new Error(`Live fetch HTTP ${response.status}`);
           const json = await response.json() as YahooFinanceChartResponse;
-          return this.parseYahooIntradayResponse(json, currentTime);
+          const parsed = parseStockIntradayMetricsFromChart(json, currentTime);
+          if (!parsed.hasIntraday) {
+            throw new Error('Live fetch returned empty intraday data');
+          }
+          return parsed;
         } finally {
           clearTimeout(timeout);
         }

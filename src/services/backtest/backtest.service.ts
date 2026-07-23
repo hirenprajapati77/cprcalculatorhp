@@ -7,15 +7,22 @@ import { MetricsService } from './metrics.service';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { ScannerService } from '@/services/scanner.service';
 import { RegimeService } from '../overnight/regime.service';
-import { BtstService } from './btst.service';
+import { EventCalendarService } from '../overnight/event.service';
 import { prisma } from '@/lib/db';
 import { INDEX_INSTRUMENTS } from '../overnight/index-discover.service';
 import { INDEX_SCORE } from '../overnight/index-ranking.service';
+import { ADVANCED_SCORE } from '@/config/trading-constants';
 import {
   evaluateIndexBtstDay,
   INDEX_BACKTEST_AVG_VOLUME,
 } from './index-btst-backtest.helper';
+import {
+  evaluateStockBtstDay,
+  stockBtstDiscoveryAsOfUtc,
+  classifyVduBand,
+} from './stock-btst-backtest.helper';
 import { classifyVixBand } from './index-btst-slice-metrics';
+import { toYahooNseSymbol } from '../overnight/stock-intraday.util';
 import {
   indexBtstDiscoveryAsOfUtc,
   type YahooFinanceChartResponse,
@@ -184,6 +191,8 @@ export class BacktestService {
           let vixTotalEvaluated = 0;
           let indexSetupEvaluated = 0;
           let indexSetupTradable = 0;
+          const macroEventCache = new Map<string, Awaited<ReturnType<typeof EventCalendarService.getMacroEventRisk>>>();
+          const stockEventCache = new Map<string, Awaited<ReturnType<typeof EventCalendarService.getEventRisk>>>();
           const isScannerDriven = run.strategyMode === 'SCANNER_DRIVEN';
           const isBtstDriven = run.strategyMode === 'BTST_STBT_DRIVEN';
 
@@ -364,80 +373,84 @@ export class BacktestService {
                 processedTrades++;
                 blockedUntilIndex = i + 5;
               }
-            } else if (isBtstDriven) { const regime = await RegimeService.getMarketRegime(today.date); const volatility = regime.volatility;
-              // ── BTST_STBT_DRIVEN ────────────────────────────────────────────────────
-              // Entry: today's close (day i). Exit: next day only (EOD forced).
-              // VWAP(20pt) + closeStrength(15pt) are absent from snapshot → score out of 65.
+            } else if (isBtstDriven) {
+              const regime = await RegimeService.getMarketRegime(today.date);
+              const volatility = regime.volatility;
+              // ── BTST_STBT_DRIVEN (production-aligned Advanced 130pt) ─────────────
+              // Mirrors OvernightService.discover + selectTradableOvernightPicks (READY+ TRADEABLE).
 
-              // Need day i+1 to exist for exit simulation
               if (i + 1 >= ohlc.length) continue;
 
-              // Build MarketStockData snapshot — no vwap/candle15m (zeros those components)
-              const historySlice = ohlc.slice(0, i + 1);
               const validHistory = ohlc.slice(0, i);
               const rollingWindow = validHistory.slice(Math.max(0, validHistory.length - 20));
               const avgVol = rollingWindow.length > 0
                 ? rollingWindow.reduce((sum, d) => sum + d.volume, 0) / rollingWindow.length
                 : today.volume;
 
-              const btstStock: MarketStockData = {
+              const directionFilter =
+                run.executionMode === 'LONG_ONLY'
+                  ? 'LONG'
+                  : run.executionMode === 'SHORT_ONLY'
+                    ? 'SHORT'
+                    : 'BOTH';
+
+              const yahooSymbol = toYahooNseSymbol(symbol);
+              const chartJson = (await HistoricalProvider.getIntraday5mChartForDate(
+                yahooSymbol,
+                today.date
+              )) as YahooFinanceChartResponse | null;
+              await new Promise((r) => setTimeout(r, 200));
+
+              let macroEvent = macroEventCache.get(today.date);
+              if (!macroEvent) {
+                macroEvent = await EventCalendarService.getMacroEventRisk(today.date);
+                macroEventCache.set(today.date, macroEvent);
+              }
+              const stockEventKey = `${symbol}_${today.date}`;
+              let stockEvent = stockEventCache.get(stockEventKey);
+              if (!stockEvent) {
+                stockEvent = await EventCalendarService.getEventRisk(symbol, today.date);
+                stockEventCache.set(stockEventKey, stockEvent);
+              }
+
+              const evaluation = evaluateStockBtstDay({
                 symbol,
-                market: 'NSE',
-                sector: 'Unknown',
-                open: today.open,
-                high: today.high,
-                low: today.low,
-                close: today.close,
-                volume: today.volume,
-                avgVolume: avgVol,
-                marketCap: 0,
-                ltp: today.close,
-                history: historySlice,
-                // vwap and candle15m intentionally omitted:
-                // scoreBreakdown.vwap(20pt) and closeStrength(15pt) self-zero
-                // when these fields are absent. Max backtest score = 65/100.
-              };
+                yesterday,
+                today,
+                historyForAtr: validHistory,
+                chartJson,
+                asOfTime: stockBtstDiscoveryAsOfUtc(today.date),
+                regime,
+                directionFilter,
+                stockEvent,
+                macroEvent,
+              });
 
-              const avgVolume = btstStock.avgVolume || 0;
-              const volume = btstStock.volume || 0;
-              const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
-
-              if (avgVolume < 100000 || volume < 100000 || volumeRatio < 1.2) {
-                continue; // skip illiquid stock entirely — aligns backtest with live discover() gate
+              if (
+                !evaluation.tradable ||
+                !evaluation.direction ||
+                evaluation.entry == null ||
+                evaluation.stopLoss == null ||
+                evaluation.target == null
+              ) {
+                continue;
               }
 
-              const variant = run.name.includes('CLV_HYBRID') ? 'clv_hybrid' : run.name.includes('CLV_CONTINUOUS') ? 'clv_continuous' : run.name.includes('NO_VDU_WEIGHTED') ? 'no_vdu_weighted' : 
-                             (run.name.includes('CPR_AWARE') ? 'cpr_aware' : 'baseline');
-              const btstResult = BtstService.evaluateOvernight(btstStock, today.date, variant);
+              tagDistribution[evaluation.direction]++;
 
-              tagDistribution[btstResult.tag]++;
+              const btstDirection = evaluation.direction;
+              const slippage = TradeEngineService.calculateSlippage(avgVol, volatility, false);
+              const btstEntry =
+                btstDirection === 'LONG'
+                  ? evaluation.entry * (1 + slippage)
+                  : evaluation.entry * (1 - slippage);
+              const btstSl = evaluation.stopLoss;
+              const btstTarget = evaluation.target;
 
-              if (Math.random() < 0.005) {
-                console.log(`[DEBUG BTST] ${symbol} ${today.date} -> tag: ${btstResult.tag}, L: ${btstResult.longScore}, S: ${btstResult.shortScore}, SL: ${btstResult.sl}, TGT: ${btstResult.target}, Entry: ${btstStock.close}`);
-              }
-
-              // Skip WEAK/NEUTRAL_CONFLICT — mirrors live Telegram alert filter
-              if (btstResult.tag === 'WEAK' || btstResult.tag === 'NEUTRAL_CONFLICT') continue;
-
-              const btstDirection = btstResult.tag === 'LONG' ? 'LONG' : 'SHORT';
-              if (run.executionMode === 'LONG_ONLY' && btstDirection === 'SHORT') continue;
-              if (run.executionMode === 'SHORT_ONLY' && btstDirection === 'LONG') continue;
-
-              // Entry = today's close with slippage (confirmed BTST mechanic — no trigger search)
-              const btstEntry = btstDirection === 'LONG'
-                ? today.close * (1 + TradeEngineService.calculateSlippage(avgVolume, volatility, false))
-                : today.close * (1 - TradeEngineService.calculateSlippage(avgVolume, volatility, false));
-
-              const btstSl = btstResult.sl;
-              const btstTarget = btstResult.target;
-
-              // Skip degenerate setups
               if (btstSl <= 0) continue;
               if (btstDirection === 'LONG' && btstTarget <= btstEntry) continue;
               if (btstDirection === 'SHORT' && btstTarget >= btstEntry) continue;
 
-              // EOD exit: single-day window → CLOSED_TIME_EXIT at day[i+1].close if
-              // neither SL nor target is hit intraday. No new simulateTrade overload needed.
               const btstTradeOhlc = ohlc.slice(i + 1, i + 2);
               const btstTradeResult = TradeEngineService.simulateTrade(
                 btstDirection,
@@ -452,25 +465,34 @@ export class BacktestService {
                   executionMode: 'conservative',
                   avgVolume: avgVol,
                   volatility,
-                  // Exit simulation uses day i+1 OHLC only; ENTRY must keep signal day.
                   entryDate: today.date,
                 }
               );
 
               const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-              const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+              const btstFees =
+                (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
               const btstNetPnl = btstTradeResult.pnl - btstFees;
-              const btstScore = btstResult.tag === 'LONG' ? btstResult.longScore : btstResult.shortScore;
+              const btstScore = evaluation.score ?? 0;
 
-              // Store scoreBreakdown alongside signals so future analysis can check
-              // whether vwap/closeStrength correlate with outcomes once intraday data arrives.
               const btstSignalsPayload = JSON.stringify({
-                signals: btstResult.signals,
-                scoreBreakdown: btstResult.scoreBreakdown,
-                longScore: btstResult.longScore,
-                shortScore: btstResult.shortScore,
-                tag: btstResult.tag,
-                _backtestNote: 'vwap(20pt)+closeStrength(15pt) excluded — no intraday data; max score=65'
+                signals: [evaluation.classification, evaluation.qualityBucket, btstDirection],
+                scoreBreakdown: evaluation.breakdown,
+                classification: evaluation.classification,
+                longScore: evaluation.longScore,
+                shortScore: evaluation.shortScore,
+                tag: btstDirection,
+                context: {
+                  regimeTrend: regime.trend,
+                  regimeVolatility: regime.volatility,
+                  classification: evaluation.classification,
+                  qualityBucket: evaluation.qualityBucket,
+                  volumeRatio: evaluation.volumeRatio,
+                  vduBand: classifyVduBand(evaluation.volumeRatio),
+                  direction: btstDirection,
+                },
+                _backtestNote:
+                  'Production-aligned BtstRankingService/StbtRankingService (130pt) with historical 5m VWAP/VDU 1.5× at 15:25 IST. P&L is stock spot proxy — not option premium.',
               });
 
               const btstTrade = await prisma.trade.create({
@@ -478,12 +500,12 @@ export class BacktestService {
                   backtestRunId: runId,
                   symbol,
                   type: btstDirection,
-                  signal: `BTST_${btstResult.tag}`,
+                  signal: `BTST_${evaluation.classification}`,
                   status: btstTradeResult.status,
                   strategyMode: 'BTST_STBT_DRIVEN',
                   entryDate: new Date(today.date),
                   entryPrice: btstEntry,
-                  entryReason: `BTST EOD entry (${btstResult.tag}, score ${btstScore}/65)`,
+                  entryReason: `Stock BTST EOD (${evaluation.classification}, score ${btstScore}/${ADVANCED_SCORE.MAX})`,
                   exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
                   exitPrice: btstTradeResult.exitPrice,
                   exitReason: btstTradeResult.exitReason,
@@ -491,33 +513,33 @@ export class BacktestService {
                   target: btstTarget,
                   riskAmount: btstTradeResult.riskAmount,
                   fees: btstFees,
-                  slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
+                  slippage: slippage * 2 * 100,
                   executionDelayMs: 0,
                   rr: btstTradeResult.rr,
                   durationDays: btstTradeResult.durationDays,
                   positionSize: btstTradeResult.positionSize,
                   pnl: btstNetPnl,
-                  pnlPercent: btstNetPnl / run.capital * 100,
+                  pnlPercent: (btstNetPnl / run.capital) * 100,
                   score: btstScore,
                   signalsJson: btstSignalsPayload,
-                  triggerDelayDays: 0, // BTST always enters at same-day close
-                }
+                  triggerDelayDays: 0,
+                },
               });
 
               if (btstTradeResult.journalEvents.length > 0) {
                 const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
                 await prisma.journal.createMany({
-                  data: limitedEvents.map(e => ({
+                  data: limitedEvents.map((e) => ({
                     tradeId: btstTrade.id,
                     timestamp: e.timestamp,
                     event: e.event,
-                    details: e.details
-                  }))
+                    details: e.details,
+                  })),
                 });
               }
 
               processedTrades++;
-              blockedUntilIndex = i + 1; // Hold for 1 day — block next day from new setup
+              blockedUntilIndex = i + 1;
 
             } else if (isIndexBtstDriven) {
               const regime = await RegimeService.getMarketRegime(today.date);
