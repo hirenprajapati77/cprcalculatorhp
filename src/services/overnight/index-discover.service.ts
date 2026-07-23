@@ -17,9 +17,6 @@ import {
   getISTDateString,
   getISTTime,
   BTST_CLOCK,
-  BTST_WINDOW_MINUTES,
-  isInClosingLiquidityWindow,
-  istMinuteOfDayFromUnixSec,
 } from '@/lib/market-hours';
 import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
 import {
@@ -120,23 +117,10 @@ export interface IndiaVixState {
   vixCalm: boolean | null;
 }
 
-interface YahooFinanceChartResponse {
-  chart?: {
-    result?: Array<{
-      meta?: YahooChartMeta;
-      timestamp?: number[];
-      indicators?: {
-        quote?: Array<{
-          open?: (number | null)[];
-          high?: (number | null)[];
-          low?: (number | null)[];
-          close?: (number | null)[];
-          volume?: (number | null)[];
-        }>;
-      };
-    }>;
-  };
-}
+import {
+  parseIndexIntradayMetricsFromChart,
+  type YahooFinanceChartResponse,
+} from './index-intraday.util';
 
 export class IndexDiscoverService {
   private static buildSignalResult(
@@ -264,78 +248,7 @@ export class IndexDiscoverService {
     try {
       const json =
         chartJson !== undefined ? chartJson : await this.fetchYahoo5mChart(yahooSymbol);
-      if (!json) return { vwap: null, hasIntraday: false, last15mHigh: null };
-
-      const result = json?.chart?.result?.[0];
-      const timestamps = result?.timestamp;
-      const quotes = result?.indicators?.quote?.[0];
-      if (!result || !timestamps || !quotes || !quotes.high || !quotes.low || !quotes.close) {
-        return { vwap: null, hasIntraday: false, last15mHigh: null };
-      }
-
-      const currentTimestampSec = Math.floor(currentTime.getTime() / 1000);
-      let sumPriceVol = 0;
-      let sumVol = 0;
-      let hasIntraday = false;
-      let closingHigh = 0;
-      let closingBarCount = 0;
-
-      const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
-      const isLastCandleForming = currentTimestampSec - lastTimestamp < 300;
-
-      for (let i = 0; i < timestamps.length; i++) {
-        const ts = timestamps[i];
-        if (ts > currentTimestampSec) continue;
-        const high = quotes.high[i];
-        const low = quotes.low[i];
-        const close = quotes.close[i];
-        const volume = quotes.volume?.[i] || 0;
-        if (high == null || low == null || close == null) continue;
-
-        const typicalPrice = (high + low + close) / 3;
-        sumPriceVol += typicalPrice * volume;
-        sumVol += volume;
-        hasIntraday = true;
-
-        const barOpenMin = istMinuteOfDayFromUnixSec(ts);
-        const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
-        const isFormingBar = isLastCandleForming && ts === lastTimestamp;
-        // Include forming bar when it belongs to the 15:15–15:30 window (partial MOC data).
-        if (inClosingWindow && (!isFormingBar || barOpenMin >= BTST_WINDOW_MINUTES.CLOSING_WINDOW_START)) {
-          closingHigh = Math.max(closingHigh, high);
-          closingBarCount++;
-        }
-      }
-
-      const last15mHigh =
-        closingBarCount > 0 && closingHigh > 0 ? closingHigh : null;
-
-      // Index futures volume can be legitimately thin/zero on the underlying
-      // spot chart depending on source; fall back to a simple average price
-      // (not volume-weighted) if volume is unavailable but candles exist,
-      // rather than discarding real price data.
-      if (hasIntraday && sumVol === 0) {
-        let sumClose = 0;
-        let count = 0;
-        for (let i = 0; i < timestamps.length; i++) {
-          if (timestamps[i] > currentTimestampSec) continue;
-          const close = quotes.close[i];
-          if (close == null) continue;
-          sumClose += close;
-          count++;
-        }
-        return {
-          vwap: count > 0 ? sumClose / count : null,
-          hasIntraday: count > 0,
-          last15mHigh,
-        };
-      }
-
-      return {
-        vwap: sumVol > 0 ? sumPriceVol / sumVol : null,
-        hasIntraday,
-        last15mHigh,
-      };
+      return parseIndexIntradayMetricsFromChart(json, currentTime);
     } catch (err) {
       console.warn(`[IndexDiscover] Intraday fetch failed for ${yahooSymbol}:`, err instanceof Error ? err.message : err);
       return { vwap: null, hasIntraday: false, last15mHigh: null };
