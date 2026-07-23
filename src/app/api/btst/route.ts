@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       engine?: string;
     }
 
-    if (!executionWindowOpen) {
+    if (!executionWindowOpen && !bypassQuery) {
       const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
       if (cached) {
         const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
@@ -57,6 +57,27 @@ export async function GET(request: Request) {
         engine: 'advanced',
         state: windowState,
       });
+    }
+
+    // Bypass ON or window open — check cache first, then run discover if needed
+    if (bypassQuery) {
+      const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
+      if (cached) {
+        const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
+        return NextResponse.json({
+          success: true,
+          executionWindowOpen: true,
+          cachedResult: true,
+          scannedAt: cached.scannedAt,
+          message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
+          degraded: cachedCoverage?.degraded ?? false,
+          results: cached.results,
+          insights: cached.insights,
+          engine: cached.engine ?? 'advanced',
+          state: windowState,
+          ...(cached.coverage ? { coverage: cached.coverage } : {}),
+        });
+      }
     }
 
     // Window open — single source of truth: same discover path as the
