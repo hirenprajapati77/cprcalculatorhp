@@ -10,7 +10,15 @@ import { RegimeService } from '../overnight/regime.service';
 import { BtstService } from './btst.service';
 import { prisma } from '@/lib/db';
 import { INDEX_INSTRUMENTS } from '../overnight/index-discover.service';
-import { INDIA_VIX_CALM_MAX, INDIA_VIX_ELEVATED_MIN, isIndexBtstRedSession } from '../overnight/index-ranking.service';
+import { INDEX_SCORE } from '../overnight/index-ranking.service';
+import {
+  evaluateIndexBtstDay,
+  INDEX_BACKTEST_AVG_VOLUME,
+} from './index-btst-backtest.helper';
+import {
+  indexBtstDiscoveryAsOfUtc,
+  type YahooFinanceChartResponse,
+} from '../overnight/index-intraday.util';
 
 const connection = {
   host: env.REDIS_HOST || 'localhost',
@@ -120,6 +128,12 @@ export class BacktestService {
 
     const vixMap = new Map<string, number>();
     if (isIndexBtstDriven) {
+      const histMode = HistoricalProvider.getMode();
+      if (histMode === 'mock') {
+        console.warn(
+          '[BacktestService] INDEX_BTST_DRIVEN requires HISTORICAL_MODE=live (or cached) for 5m VWAP/liquidity — mock mode will produce no trades.'
+        );
+      }
       try {
         const vixHistory = await HistoricalProvider.getHistory('^INDIAVIX', run.startDate, run.endDate);
         for (const v of vixHistory) {
@@ -167,6 +181,8 @@ export class BacktestService {
           let blockedUntilIndex = -1; // per-symbol cooldown tracker
           let vixMatchCount = 0;
           let vixTotalEvaluated = 0;
+          let indexSetupEvaluated = 0;
+          let indexSetupTradable = 0;
           const isScannerDriven = run.strategyMode === 'SCANNER_DRIVEN';
           const isBtstDriven = run.strategyMode === 'BTST_STBT_DRIVEN';
 
@@ -506,61 +522,45 @@ export class BacktestService {
               const regime = await RegimeService.getMarketRegime(today.date);
               const volatility = regime.volatility;
 
-              // Need day i+1 to exist for exit simulation
               if (i + 1 >= ohlc.length) continue;
-
-              // Index BTST is LONG-only by design. In BEAR regime, suppress LONG BTST picks.
-              if (regime.trend === 'BEAR') continue;
-
-              const todayCpr = calculateCPR({
-                high: yesterday.high,
-                low: yesterday.low,
-                close: yesterday.close,
-              });
-
-              const tomorrowCpr = calculateCPR({
-                high: today.high,
-                low: today.low,
-                close: today.close,
-              });
-
-              const tomorrowCprNarrow = (tomorrowCpr.classification === 'NARROW');
-
-              // Red session block (<= -0.10% vs previous close)
-              const sessionChangePct = (today.close - yesterday.close) / yesterday.close;
-              if (isIndexBtstRedSession(sessionChangePct)) continue;
 
               vixTotalEvaluated++;
               const vixClose = vixMap.get(today.date);
-              if (vixClose === undefined || vixClose === null) {
-                // Strict score safety (matches production contract): missing VIX -> score invalid, skip
-                console.warn(`[BacktestService] Missing ^INDIAVIX data for ${today.date} — skipping setup (score invalid)`);
-                continue;
-              }
-              vixMatchCount++;
-
-              if (vixClose >= INDIA_VIX_ELEVATED_MIN) {
-                // Elevated VIX (>= 25) -> forced IGNORE / skip
-                continue;
+              if (vixClose !== undefined && vixClose !== null) {
+                vixMatchCount++;
               }
 
-              const vixCalmPts = vixClose <= INDIA_VIX_CALM_MAX ? 25 : 0;
-              const cprNarrowPts = tomorrowCprNarrow ? 30 : 0;
-              const higherValuePts = (tomorrowCpr.bc > todayCpr.bc && tomorrowCpr.tc > todayCpr.tc) ? 20 : 0;
-              const closeStrengthPts = (today.high > today.low && (today.close - today.low) / (today.high - today.low) > 0.70) ? 15 : 0;
+              const chartJson = (await HistoricalProvider.getIntraday5mChartForDate(
+                fetchSymbol,
+                today.date
+              )) as YahooFinanceChartResponse | null;
+              await new Promise((r) => setTimeout(r, 200));
 
-              const totalScore = vixCalmPts + cprNarrowPts + higherValuePts + closeStrengthPts; // Max 90
+              indexSetupEvaluated++;
+              const evaluation = evaluateIndexBtstDay({
+                yesterday,
+                today,
+                historyForAtr: ohlc.slice(0, i),
+                vixClose: vixClose ?? null,
+                suppressLongBear: regime.trend === 'BEAR',
+                chartJson,
+                asOfTime: indexBtstDiscoveryAsOfUtc(today.date),
+              });
 
-              // Score floor for READY+ status out of 90 (equivalent to 85 out of 130 -> Math.round(85 * 90 / 130) = 59)
-              if (totalScore < 59) continue;
+              if (!evaluation.tradable || evaluation.entry == null || evaluation.stopLoss == null || evaluation.target == null) {
+                continue;
+              }
 
+              indexSetupTradable++;
               tagDistribution['LONG']++;
 
-              const slippage = TradeEngineService.calculateSlippage(0, volatility, false);
-              const btstEntry = today.close * (1 + slippage);
-
-              // Target and SL: Exact production IndexDiscoverService.discover() formula (entry + (entry - sl) * 2)
-              const btstSl = Math.min(today.low, tomorrowCpr.bc);
+              const slippage = TradeEngineService.calculateSlippage(
+                INDEX_BACKTEST_AVG_VOLUME,
+                volatility,
+                false
+              );
+              const btstEntry = evaluation.entry * (1 + slippage);
+              const btstSl = evaluation.stopLoss;
               const risk = btstEntry - btstSl;
               if (risk <= 0) continue;
               const btstTarget = btstEntry + risk * 2.0;
@@ -577,7 +577,7 @@ export class BacktestService {
                   riskModel: run.riskModel,
                   riskValue: run.riskValue ?? 1,
                   executionMode: 'conservative',
-                  avgVolume: 0,
+                  avgVolume: INDEX_BACKTEST_AVG_VOLUME,
                   volatility,
                   entryDate: today.date,
                 }
@@ -589,18 +589,13 @@ export class BacktestService {
 
               const btstSignalsPayload = JSON.stringify({
                 signals: ['INDEX_BTST_CALL'],
-                scoreBreakdown: {
-                  vixCalm: vixCalmPts,
-                  cprNarrow: cprNarrowPts,
-                  higherValue: higherValuePts,
-                  vwap: 0,
-                  liquidity: 0,
-                  closeStrength: closeStrengthPts,
-                },
-                longScore: totalScore,
+                scoreBreakdown: evaluation.breakdown,
+                classification: evaluation.classification,
+                longScore: evaluation.score,
                 shortScore: 0,
                 tag: 'LONG',
-                _backtestNote: 'vwap(20pt)+liquidity(20pt) excluded — no intraday data; max score=90'
+                _backtestNote:
+                  'Production-aligned IndexRankingService (130pt) with historical 5m VWAP/liquidity at 15:25 IST. P&L is index spot proxy — not option premium.',
               });
 
               const btstTrade = await prisma.trade.create({
@@ -613,7 +608,7 @@ export class BacktestService {
                   strategyMode: 'INDEX_BTST_DRIVEN',
                   entryDate: new Date(today.date),
                   entryPrice: btstEntry,
-                  entryReason: `Index BTST EOD entry (INDEX_BTST_CALL, score ${totalScore}/90)`,
+                  entryReason: `Index BTST (${evaluation.classification}, score ${evaluation.score}/${INDEX_SCORE.MAX})`,
                   exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
                   exitPrice: btstTradeResult.exitPrice,
                   exitReason: btstTradeResult.exitReason,
@@ -628,21 +623,21 @@ export class BacktestService {
                   positionSize: btstTradeResult.positionSize,
                   pnl: btstNetPnl,
                   pnlPercent: (btstNetPnl / run.capital) * 100,
-                  score: totalScore,
+                  score: evaluation.score ?? 0,
                   signalsJson: btstSignalsPayload,
                   triggerDelayDays: 0,
-                }
+                },
               });
 
               if (btstTradeResult.journalEvents.length > 0) {
                 const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
                 await prisma.journal.createMany({
-                  data: limitedEvents.map(e => ({
+                  data: limitedEvents.map((e) => ({
                     tradeId: btstTrade.id,
                     timestamp: e.timestamp,
                     event: e.event,
-                    details: e.details
-                  }))
+                    details: e.details,
+                  })),
                 });
               }
 
@@ -824,7 +819,13 @@ export class BacktestService {
 
           if (isIndexBtstDriven && vixTotalEvaluated > 0) {
             const matchPct = ((vixMatchCount / vixTotalEvaluated) * 100).toFixed(1);
-            console.log(`[BacktestService] INDEX_BTST_DRIVEN telemetry for ${symbol}: VIX date match rate = ${vixMatchCount}/${vixTotalEvaluated} (${matchPct}%).`);
+            const tradablePct =
+              indexSetupEvaluated > 0
+                ? ((indexSetupTradable / indexSetupEvaluated) * 100).toFixed(1)
+                : '0.0';
+            console.log(
+              `[BacktestService] INDEX_BTST_DRIVEN ${symbol}: VIX match ${vixMatchCount}/${vixTotalEvaluated} (${matchPct}%), tradable ${indexSetupTradable}/${indexSetupEvaluated} (${tradablePct}%)`
+            );
           }
         } catch (e) {
           // Failure Rule: If one symbol fails, record failure and continue
