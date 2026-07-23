@@ -50,9 +50,14 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (July 2026):**
-- Completed Phase 3 Linkage: Shipped interactive Trade Journal UI (with analytics charts, CSV export, and signal breakdowns).
+- **Unified Index Scanner**: Shipped new index scanner (`/api/index-scan`) aggregating intraday and overnight BTST signals for index instruments (`^NSEI`, `^NSEBANK`, `^BSESN`). Features regime-aligned modifiers and elevated-VIX ignore gates.
+- **Bypass Retention Mode**: Supported `?bypass=true` queries on BTST and Overnight endpoints allowing client UIs to view cached execution data up to midnight (12:00 AM IST) without executing redundant live scans.
+- **Security & Performance Hardening**: 
+  - Standardized `timingSafeEqual` constant-time middleware comparisons to prevent token length attacks.
+  - Implemented `yahoo5mChartMemo` lookup caching in index scanner, sharing a single live fetch.
+  - Enforced calendar event freshness checks by default in production and optimized bulk database checks.
+- Shipped interactive Trade Journal UI (with analytics charts, CSV export, and signal breakdowns).
 - Implemented T+1 morning automated option price snapshots via cron (9:16 AM, 9:30 AM, 9:45 AM, 10:00 AM) to build realistic outcome data.
-- Added full telemetry metrics mapping (Regime, Quality, Event Risk) to the frontend.
 - Standardized security deployment for API cron endpoints via strict token validation (`CRON_SECRET`).
 
 ---
