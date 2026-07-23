@@ -15,6 +15,7 @@ import {
   evaluateIndexBtstDay,
   INDEX_BACKTEST_AVG_VOLUME,
 } from './index-btst-backtest.helper';
+import { classifyVixBand } from './index-btst-slice-metrics';
 import {
   indexBtstDiscoveryAsOfUtc,
   type YahooFinanceChartResponse,
@@ -594,6 +595,13 @@ export class BacktestService {
                 longScore: evaluation.score,
                 shortScore: 0,
                 tag: 'LONG',
+                context: {
+                  vixClose: vixClose ?? null,
+                  vixBand: classifyVixBand(vixClose),
+                  regimeTrend: regime.trend,
+                  regimeVolatility: regime.volatility,
+                  classification: evaluation.classification,
+                },
                 _backtestNote:
                   'Production-aligned IndexRankingService (130pt) with historical 5m VWAP/liquidity at 15:25 IST. P&L is index spot proxy — not option premium.',
               });

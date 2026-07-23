@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/db';
 import { RankingService } from '../ranking.service';
+import {
+  computeIndexBtstSliceMetrics,
+  indexSliceStatsToSnapshots,
+} from './index-btst-slice-metrics';
 
 export class MetricsService {
   /**
@@ -16,8 +20,8 @@ export class MetricsService {
 
     if (trades.length === 0) return null;
 
-    const { metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
-    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData);
+    const { metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics } = MetricsService.computeMetricsFromTrades(trades, run ? run.capital : 100000);
+    return MetricsService.persistMetrics(runId, metrics, monthlyPnL, signalSuccess, signalAnalysis, scoreBandAnalysis, fillRateData, indexSliceMetrics);
   }
 
   /**
@@ -230,18 +234,23 @@ export class MetricsService {
 
     const fillRateData = { totalSetups, triggeredSetups, neverTriggeredSetups };
 
+    const indexTrades = trades.filter((t) => t.strategyMode === 'INDEX_BTST_DRIVEN');
+    const indexSliceMetrics =
+      indexTrades.length > 0 ? computeIndexBtstSliceMetrics(indexTrades) : null;
+
     return { 
       metrics: metricsData, 
       monthlyPnL, 
       signalSuccess, 
       signalAnalysis, 
       scoreBandAnalysis, 
-      fillRateData 
+      fillRateData,
+      indexSliceMetrics,
     };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any) {
+  static async persistMetrics(runId: string, metricsData: any, monthlyPnL: any, signalSuccess: any, signalAnalysis?: any, scoreBandAnalysis?: any, fillRateData?: any, indexSliceMetrics?: ReturnType<typeof computeIndexBtstSliceMetrics> | null) {
     // Create Base Metrics
     const metrics = await prisma.backtestMetrics.create({
       data: {
@@ -380,6 +389,18 @@ export class MetricsService {
           metricValue: fillRateData.neverTriggeredSetups
         }
       });
+    }
+
+    if (indexSliceMetrics) {
+      const vixRows = indexSliceStatsToSnapshots(runId, 'INDEX_VIX', indexSliceMetrics.byVixBand);
+      const regimeRows = indexSliceStatsToSnapshots(
+        runId,
+        'INDEX_REGIME',
+        indexSliceMetrics.byRegime
+      );
+      for (const row of [...vixRows, ...regimeRows]) {
+        await prisma.backtestMetricSnapshot.create({ data: row });
+      }
     }
 
     return metrics;
