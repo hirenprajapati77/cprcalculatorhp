@@ -8,6 +8,10 @@ import { getISTDateString } from '@/lib/market-hours';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
+// Mutex to deduplicate concurrent scan executions within the same Node.js process.
+// NOTE: This is process-local. In production, this relies on PM2 running in fork_mode.
+// If clustering or multi-worker deployment is introduced, this must be replaced with
+// a distributed lock (e.g. Redis SET mutex NX EX 120).
 let inFlightScanPromise: Promise<Array<ScannerSignalResult & { score: number }>> | null = null;
 
 export class ScannerController {
@@ -102,7 +106,8 @@ export class ScannerController {
           const sym = stockMeta.symbol;
           const failureCacheKey = `failure_count_${sym}`;
           const failCount = (await CacheService.get<number>(failureCacheKey) || 0) + 1;
-          await CacheService.set(failureCacheKey, failCount, 86400); // Persist failure count for a day
+          // Blacklist temporary fetch issues for 1 hour instead of a full day to allow recovery
+          await CacheService.set(failureCacheKey, failCount, 3600);
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[SKIP] ${sym} - fetch failed: ${errMsg}`);
           if (failCount >= 3) {
@@ -197,7 +202,7 @@ export class ScannerController {
           await prisma.marketSnapshot.upsert({
             where: { symbol: dbSymbol },
             update: {
-              price: r.open,
+              price: r.ltp,
               volume: r.volume,
               avgVolume: r.avgVolume,
               marketCap: r.marketCap,
@@ -205,7 +210,7 @@ export class ScannerController {
             },
             create: {
               symbol: dbSymbol,
-              price: r.open,
+              price: r.ltp,
               volume: r.volume,
               avgVolume: r.avgVolume,
               marketCap: r.marketCap,

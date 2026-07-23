@@ -14,12 +14,11 @@ export class EventCalendarService {
    */
   static async getEventRisk(symbol: string, signalDate: string): Promise<EventRiskResult> {
     try {
-      const todayDate = new Date(signalDate);
-      const threeDaysFromNow = new Date(todayDate);
-      threeDaysFromNow.setDate(todayDate.getDate() + 3);
-
+      const [y, m, d] = signalDate.split('-').map(Number);
+      const todayDate = new Date(y, m - 1, d);
+      const threeDaysFromNow = new Date(y, m - 1, d + 3);
       const todayStr = signalDate;
-      const futureStr = threeDaysFromNow.toISOString().split('T')[0];
+      const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
 
       const events = await prisma.marketEvent.findMany({
         where: {
@@ -61,7 +60,10 @@ export class EventCalendarService {
       });
       
       const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-      const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+      // Default to enforcing calendar freshness check in live production; only disable explicitly.
+      const enforceFreshness = env.HISTORICAL_MODE === 'live'
+        ? env.EVENT_CALENDAR_ENFORCE_FRESHNESS !== 'false'
+        : env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
 
       let isCalendarStale = false;
       if (!isHistoricalMode && enforceFreshness) {
@@ -128,12 +130,12 @@ export class EventCalendarService {
     }
 
     try {
-      const todayDate = new Date(signalDate);
-      const threeDaysFromNow = new Date(todayDate);
-      threeDaysFromNow.setDate(todayDate.getDate() + 3);
+      const [y, m, d] = signalDate.split('-').map(Number);
+      const todayDate = new Date(y, m - 1, d);
+      const threeDaysFromNow = new Date(y, m - 1, d + 3);
 
       const todayStr = signalDate;
-      const futureStr = threeDaysFromNow.toISOString().split('T')[0];
+      const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
 
       const events = await prisma.marketEvent.findMany({
         where: {
@@ -155,22 +157,30 @@ export class EventCalendarService {
         }
       }
       // Add freshness check logic matching getEventRisk (using createdAt instead of lastUpdated to avoid compilation error)
-      const latestGlobalEvent = await prisma.marketEvent.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { createdAt: true }
-      });
-      
-      const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
-      const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
-
+      // Optimization: Only query global event freshness if there is at least one unverified calendar check
+      const hasUnverified = symbols.some(sym => result[sym].reason === 'UNVERIFIED_CALENDAR');
       let isCalendarStale = false;
-      if (!isHistoricalMode && enforceFreshness) {
-         if (!latestGlobalEvent) {
-           isCalendarStale = true;
-         } else {
-           const diffHours = (Date.now() - latestGlobalEvent.createdAt.getTime()) / (1000 * 60 * 60);
-           if (diffHours > 72) isCalendarStale = true;
-         }
+
+      if (hasUnverified) {
+        const latestGlobalEvent = await prisma.marketEvent.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true }
+        });
+        
+        const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
+        // Default to enforcing calendar freshness check in live production; only disable explicitly.
+        const enforceFreshness = env.HISTORICAL_MODE === 'live'
+          ? env.EVENT_CALENDAR_ENFORCE_FRESHNESS !== 'false'
+          : env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
+
+        if (!isHistoricalMode && enforceFreshness) {
+           if (!latestGlobalEvent) {
+             isCalendarStale = true;
+           } else {
+             const diffHours = (Date.now() - latestGlobalEvent.createdAt.getTime()) / (1000 * 60 * 60);
+             if (diffHours > 72) isCalendarStale = true;
+           }
+        }
       }
 
       for (const sym of symbols) {
