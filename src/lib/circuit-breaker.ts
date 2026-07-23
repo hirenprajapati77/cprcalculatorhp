@@ -47,6 +47,14 @@ export class DatabaseCircuitBreaker {
         console.error(`Circuit breaker open: DB connection failed. Cooldown until ${new Date(this.nextAttemptAt).toISOString()}`);
         throw new Error('CIRCUIT_OPEN');
       }
+      // Non-connection error: the DB responded at all (query error, validation
+      // error, etc.), so connectivity is proven. If we were probing, close the
+      // circuit — otherwise it would stay stuck in HALF_OPEN forever, since
+      // nothing else ever moves it out of that state.
+      if (this.state === CircuitState.HALF_OPEN) {
+        this.state = CircuitState.CLOSED;
+        console.log('Circuit breaker closed: DB responded (non-connection error during probe).');
+      }
       // Re-throw normal errors (e.g. data validation)
       throw error;
     }
