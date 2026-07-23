@@ -60,6 +60,31 @@ const FALLBACK_LOT_SIZES: Record<string, number> = {
 };
 
 export class OptionSuggestionService {
+  /**
+   * Constructs the Fyers option symbol expiry token for both BSE (SENSEX) and NSE (NIFTY/BANKNIFTY) index options.
+   * 
+   * Format rules:
+   * - Monthly contracts (last expiry of calendar month): YY + 3-letter month (e.g., 26JUL, 26AUG, 26SEP, 26DEC).
+   * - Weekly contracts (non-last expiry): YY + monthChar + DD (e.g., 26723, 26804, 26811).
+   * 
+   * Note: Weekly O/N/D encoding for Oct/Nov/Dec (month 10 -> 'O', 11 -> 'N', 12 -> 'D') follows Fyers
+   * standard symbology convention, unverified against live data since weeklies >5 weeks out are not
+   * currently issued by the exchange.
+   */
+  private static getFyersSymbolExpiryToken(date: Date, isMonthly: boolean): string {
+    const yy = date.getFullYear().toString().slice(2);
+    const month = date.getMonth() + 1; // 1-12
+    const day = date.getDate().toString().padStart(2, '0');
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+    if (isMonthly) {
+      return `${yy}${months[date.getMonth()]}`;
+    } else {
+      const monthChar = month === 10 ? 'O' : month === 11 ? 'N' : month === 12 ? 'D' : month.toString();
+      return `${yy}${monthChar}${day}`;
+    }
+  }
+
   private static async loadLotSizes(): Promise<Map<string, number>> {
     const cacheKey = 'fyers_lot_sizes_map';
     try {
@@ -259,16 +284,41 @@ export class OptionSuggestionService {
         }
       }
       if (nearestExpiry) {
-        const yy = nearestExpiry.getFullYear().toString().slice(2);
-        const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-        const mmm = months[nearestExpiry.getMonth()];
-        targetExpiryStr = `${yy}${mmm}`;
+        // Derive isMonthly: nearestExpiry is monthly if it equals the max expiry date in its (year, month) group
+        const targetYear = nearestExpiry.getFullYear();
+        const targetMonth = nearestExpiry.getMonth();
+        let maxTimeInMonth = -1;
+
+        for (const exObj of chainRes.expiryData) {
+          const exStr = typeof exObj === 'string' ? exObj : ((exObj as {date?: string, expiryDate?: string, expiry?: string}).date || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiryDate || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiry);
+          if (!exStr) continue;
+          let parsedDate: Date | null = null;
+          if (exStr.match(/^\d{4}-\d{2}-\d{2}$/)) parsedDate = new Date(exStr);
+          else if (exStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+            const [d, m, y] = exStr.split('-');
+            parsedDate = new Date(`${y}-${m}-${d}`);
+          } else {
+            const d = new Date(exStr);
+            if (!isNaN(d.getTime())) parsedDate = d;
+          }
+          if (parsedDate && !isNaN(parsedDate.getTime())) {
+            parsedDate.setHours(0, 0, 0, 0);
+            if (parsedDate.getFullYear() === targetYear && parsedDate.getMonth() === targetMonth) {
+              if (parsedDate.getTime() > maxTimeInMonth) {
+                maxTimeInMonth = parsedDate.getTime();
+              }
+            }
+          }
+        }
+
+        const isMonthly = maxTimeInMonth > 0 && nearestExpiry.getTime() === maxTimeInMonth;
+        targetExpiryStr = this.getFyersSymbolExpiryToken(nearestExpiry, isMonthly);
       }
     }
 
     // 4. Filter valid options for this type (exclude equity row where strikePrice <= 0) and MUST match target expiry
     const validOptions = chainRes.optionsChain
-      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr) || o.symbol.includes('SENSEX')))
+      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
       .sort((a, b) => a.strikePrice - b.strikePrice);
 
     if (validOptions.length === 0) {
