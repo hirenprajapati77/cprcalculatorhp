@@ -395,11 +395,12 @@ function OutcomeDot({ outcome }: { outcome: string | null | undefined }) {
   );
 }
 
-function ScoreBar({ value, max }: { value: number; max: number }) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+function ScoreBar({ value, max, className = 'bg-current' }: { value: number | null | undefined; max: number; className?: string }) {
+  const val = Number(value ?? 0);
+  const pct = Math.max(0, Math.min(100, (val / max) * 100));
   return (
     <div className="w-10 h-1 rounded-full bg-white/10 overflow-hidden shrink-0">
-      <div className="h-full bg-current" style={{ width: `${pct}%` }} />
+      <div className={`h-full ${className}`} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -1441,7 +1442,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-200 font-semibold">
                         <div className="inline-flex items-center gap-2" title="Advanced Engine (0–130)">
-                          <ScoreBar value={entry.score} max={130} />
+                          <ScoreBar value={entry.score} max={130} className="bg-indigo-400" />
                           <span>{entry.score}</span>
                         </div>
                       </td>
@@ -1449,7 +1450,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
                           <div className="inline-block relative group">
                             <div className="inline-flex items-center gap-2">
-                              <ScoreBar value={entry.scoreV2} max={100} />
+                              <ScoreBar value={entry.scoreV2} max={100} className="bg-slate-400" />
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation();
