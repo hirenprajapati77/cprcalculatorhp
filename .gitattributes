@@ -11,9 +11,10 @@
 * text=auto
 
 # Export exclusions for git archive
-.env export-ignore
-.env.local export-ignore
-.env.production export-ignore
+.env* export-ignore
+.env.example -export-ignore
+*.env export-ignore
+server.env export-ignore
 ssh_history.jsonl export-ignore
 history.txt export-ignore
 history_commands.txt export-ignore
@@ -26,7 +27,8 @@ raw*.txt export-ignore
 deploy_bundle* export-ignore
 dev.db export-ignore
 *.db export-ignore
-*.sql export-ignore
+sql/** export-ignore
+prisma/migrations_sqlite_archive/** export-ignore
 scratch/ export-ignore
 ops/ export-ignore
 

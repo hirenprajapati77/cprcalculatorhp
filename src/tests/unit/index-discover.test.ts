@@ -85,6 +85,30 @@ describe('IndexDiscoverService.resolveIndexSessionCandles', () => {
     assert.equal(resolved!.usesLiveSession, true);
   });
 
+  it('uses prior completed session as yesterday when live daily history already includes today', () => {
+    const liveHistory = [
+      ...history,
+      { date: '2026-07-22', open: 20, high: 25, low: 19, close: 24, volume: 0 },
+    ];
+    const resolved = IndexDiscoverService.resolveIndexSessionCandles(
+      liveHistory,
+      {
+        hasLive: true,
+        ltp: 24.5,
+        open: 20,
+        high: 25,
+        low: 19,
+        previousClose: 11,
+      },
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+
+    assert.ok(resolved);
+    assert.equal(resolved!.today.close, 24.5);
+    assert.equal(resolved!.yesterday.date, '2026-07-21');
+    assert.equal(resolved!.usesLiveSession, true);
+  });
+
   it('uses last completed bar as today after EOD when live unavailable', () => {
     const eodHistory = [
       ...history,
@@ -108,6 +132,37 @@ describe('IndexDiscoverService.resolveIndexSessionCandles', () => {
       new Date('2026-07-22T10:00:00+05:30')
     );
     assert.equal(resolved, null);
+  });
+});
+
+describe('IndexDiscoverService.resolvePreviousCompletedCandle', () => {
+  it('returns n-2 when the latest daily candle is today', () => {
+    const history = [
+      { date: '2026-07-20', open: 1, high: 2, low: 0.5, close: 1.5, volume: 0 },
+      { date: '2026-07-21', open: 10, high: 12, low: 9, close: 11, volume: 0 },
+      { date: '2026-07-22', open: 20, high: 25, low: 19, close: 24, volume: 0 },
+    ];
+
+    const candle = IndexDiscoverService.resolvePreviousCompletedCandle(
+      history,
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+
+    assert.equal(candle?.date, '2026-07-21');
+  });
+
+  it('returns the latest candle when history has not rolled into today yet', () => {
+    const history = [
+      { date: '2026-07-20', open: 1, high: 2, low: 0.5, close: 1.5, volume: 0 },
+      { date: '2026-07-21', open: 10, high: 12, low: 9, close: 11, volume: 0 },
+    ];
+
+    const candle = IndexDiscoverService.resolvePreviousCompletedCandle(
+      history,
+      new Date('2026-07-22T10:00:00+05:30')
+    );
+
+    assert.equal(candle?.date, '2026-07-21');
   });
 });
 

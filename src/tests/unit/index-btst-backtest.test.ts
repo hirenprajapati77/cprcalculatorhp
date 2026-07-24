@@ -45,6 +45,34 @@ describe('index-intraday.util', () => {
     assert.ok(m.vwap != null && m.vwap > 0);
     assert.equal(m.last15mHigh, 110);
   });
+
+  it('parseIndexIntradayMetricsFromChart excludes the latest forming closing-window bar', () => {
+    const t1515 = Math.floor(new Date('2026-04-01T09:45:00.000Z').getTime() / 1000);
+    const t1520 = Math.floor(new Date('2026-04-01T09:50:00.000Z').getTime() / 1000);
+    const chart = {
+      chart: {
+        result: [
+          {
+            timestamp: [t1515, t1520],
+            indicators: {
+              quote: [
+                {
+                  high: [105, 120],
+                  low: [101, 100],
+                  close: [104, 119],
+                  volume: [1000, 2000],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const asOf = new Date('2026-04-01T09:52:00.000Z');
+    const m = parseIndexIntradayMetricsFromChart(chart, asOf);
+
+    assert.equal(m.last15mHigh, 105);
+  });
 });
 
 describe('index-btst-backtest.helper', () => {

@@ -4,6 +4,7 @@ import type { TradeJournal } from '@prisma/client';
 import { getISTTime } from '@/lib/market-hours';
 import { computeOptionPnl } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
+import { OptionSuggestionService } from '@/services/option-suggestion.service';
 
 
 export class TradeJournalService {
@@ -161,15 +162,12 @@ export class TradeJournalService {
         throw new Error(`Option not found in chain for strike ${strike} and type ${optionType}`);
       }
 
-      let expiryStr = '';
-      const prefix = `NSE:${cleanSym}`;
-      if (option.symbol.startsWith(prefix)) {
-        const remainder = option.symbol.substring(prefix.length);
-        const suffixStr = `${option.strikePrice}${optionType}`;
-        if (remainder.endsWith(suffixStr)) {
-          expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
-        }
-      }
+      const expiryStr = OptionSuggestionService.extractFyersOptionExpiry(
+        option.symbol,
+        cleanSym,
+        option.strikePrice,
+        optionType
+      );
 
       if (tradeExpiryStr && expiryStr && tradeExpiryStr !== expiryStr) {
         console.error(`[TradeJournal] Expiry mismatch! Trade recorded as ${tradeExpiryStr}, but chain returned ${expiryStr} for ${symbol} ${strike} ${optionType}`);
