@@ -20,6 +20,26 @@ function mockEmptyMarketEventTable() {
 }
 
 test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t) => {
+  await t.test('getEventRisk: unset flag in live mode → severity 0 on empty calendar', async () => {
+    const restorePrisma = mockEmptyMarketEventTable();
+    const originalHistMode = env.HISTORICAL_MODE;
+    const originalEnforce = env.EVENT_CALENDAR_ENFORCE_FRESHNESS;
+    const mutableEnv = env as unknown as Record<string, unknown>;
+
+    env.HISTORICAL_MODE = 'live';
+    delete mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS;
+
+    try {
+      const result = await EventCalendarService.getEventRisk('SBIN', SIGNAL_DATE);
+      assert.strictEqual(result.severity, 0);
+      assert.strictEqual(result.reason, null);
+    } finally {
+      env.HISTORICAL_MODE = originalHistMode;
+      mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
+      restorePrisma();
+    }
+  });
+
   await t.test('getEventRisk: flag false → severity 0 on empty calendar', async () => {
     const restorePrisma = mockEmptyMarketEventTable();
     const originalHistMode = env.HISTORICAL_MODE;
@@ -54,6 +74,26 @@ test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t)
     } finally {
       env.HISTORICAL_MODE = originalHistMode;
       env.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
+      restorePrisma();
+    }
+  });
+
+  await t.test('getBulkEventRisk: unset flag in live mode → severity 0 on empty calendar', async () => {
+    const restorePrisma = mockEmptyMarketEventTable();
+    const originalHistMode = env.HISTORICAL_MODE;
+    const originalEnforce = env.EVENT_CALENDAR_ENFORCE_FRESHNESS;
+    const mutableEnv = env as unknown as Record<string, unknown>;
+
+    env.HISTORICAL_MODE = 'live';
+    delete mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS;
+
+    try {
+      const result = await EventCalendarService.getBulkEventRisk(['SBIN'], SIGNAL_DATE);
+      assert.strictEqual(result.SBIN.severity, 0);
+      assert.strictEqual(result.SBIN.reason, null);
+    } finally {
+      env.HISTORICAL_MODE = originalHistMode;
+      mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
       restorePrisma();
     }
   });
