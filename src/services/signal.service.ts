@@ -369,7 +369,7 @@ export class SignalService {
     //
     // High-conviction combos the ranking service rewards:
     //   EMA_CROSS_BULL + RSI_STRONG/RSI_BULLISH + BREAKOUT  → +15 pts
-    //   EMA_CROSS_BEAR + RSI_BEARISH/RSI_OVERSOLD + BREAKDOWN → +15 pts
+    //   EMA_CROSS_BEAR + RSI_BULLISH/RSI_OVERSOLD + BREAKDOWN → +15 pts
     //   EMA_BULL_ALIGN + RSI_OVERBOUGHT → penalise (avoid late entries)
     const emaCross = detectEmaCross(completedHistory);
     if (emaCross) {

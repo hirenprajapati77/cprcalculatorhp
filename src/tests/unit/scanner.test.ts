@@ -940,3 +940,64 @@ test('ScannerService degenerate single-candle history', async () => {
     console.warn = originalWarn;
   }
 });
+
+test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
+  const baseResult = {
+    symbol: 'RSI_BEAR_TEST',
+    classification: 'NORMAL' as const,
+    volume: 200000,
+    avgVolume: 100000,
+    pivot: 100,
+    bc: 99,
+    tc: 101,
+    r1: 105,
+    s1: 95,
+    entry: 0,
+    sl: 0,
+    target: 0,
+    rr: '1:1',
+  };
+
+  await t.test('EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN awards +15 in Category F', () => {
+    const resWithBearCross = {
+      ...baseResult,
+      signals: ['EMA_CROSS_BEAR', 'RSI_BULLISH', 'BREAKDOWN'],
+    };
+    const resWithoutBearCross = {
+      ...baseResult,
+      signals: ['BREAKDOWN'],
+    };
+    const scoreWith = RankingService.calculateScore(resWithBearCross as any);
+    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN must award +15 points');
+  });
+
+  await t.test('EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN awards +15 in Category F', () => {
+    const resWithBearCross = {
+      ...baseResult,
+      signals: ['EMA_CROSS_BEAR', 'RSI_OVERSOLD', 'BREAKDOWN'],
+    };
+    const resWithoutBearCross = {
+      ...baseResult,
+      signals: ['BREAKDOWN'],
+    };
+    const scoreWith = RankingService.calculateScore(resWithBearCross as any);
+    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN must award +15 points');
+  });
+
+  await t.test('EMA_CROSS_BULL + RSI_STRONG + BREAKOUT awards +15 in Category F', () => {
+    const resWithBullCross = {
+      ...baseResult,
+      signals: ['EMA_CROSS_BULL', 'RSI_STRONG', 'BREAKOUT'],
+    };
+    const resWithoutBullCross = {
+      ...baseResult,
+      signals: ['BREAKOUT'],
+    };
+    const scoreWith = RankingService.calculateScore(resWithBullCross as any);
+    const scoreWithout = RankingService.calculateScore(resWithoutBullCross as any);
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BULL + RSI_STRONG + BREAKOUT must award +15 points');
+  });
+});
+
