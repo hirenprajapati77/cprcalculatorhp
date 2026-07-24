@@ -352,20 +352,58 @@ function StatWidget({
   );
 }
 
-function SignalBadge({ type }: { type: string }) {
+function SignalBadge({ type, qualityBucket }: { type: string; qualityBucket?: string | null | undefined }) {
   return (
     <span
+      title={qualityBucket ?? undefined}
       style={{
         color: SIGNAL_COLORS[type] ?? '#94a3b8',
         background: SIGNAL_BG[type] ?? 'rgba(148,163,184,0.1)',
         border: `1px solid ${SIGNAL_COLORS[type] ?? '#94a3b8'}40`,
       }}
-      className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase whitespace-nowrap"
+      className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase whitespace-nowrap cursor-help"
     >
       {type}
     </span>
   );
 }
+
+function OutcomeDot({ outcome }: { outcome: string | null | undefined }) {
+  if (!outcome) return null;
+  let color = '#94a3b8';
+  let tooltip = outcome.replace(/_/g, ' ');
+  if (outcome === 'MODEL_VALID') {
+    color = '#22c55e';
+    tooltip = 'Model signal was correct and execution was profitable.';
+  } else if (outcome === 'EXECUTION_SLIPPAGE' || outcome === 'MODEL_WEAK') {
+    color = '#eab308';
+    tooltip = outcome === 'EXECUTION_SLIPPAGE'
+      ? 'Signal was TRADEABLE, but option execution lost money (possible slippage).'
+      : 'Signal was WATCHLIST quality and resulted in a loss.';
+  } else if (outcome === 'GAP_FAILURE' || outcome === 'EVENT_RISK_AVOIDABLE' || outcome === 'LOW_QUALITY_SHOULD_SKIP') {
+    color = '#ef4444';
+    if (outcome === 'GAP_FAILURE') tooltip = 'Extreme adverse overnight gap blow-through (>15%).';
+    if (outcome === 'EVENT_RISK_AVOIDABLE') tooltip = 'Loss occurred during a known high-risk event.';
+    if (outcome === 'LOW_QUALITY_SHOULD_SKIP') tooltip = 'Trade was forced on a LOW_QUALITY signal.';
+  }
+  return (
+    <span
+      title={tooltip}
+      className="inline-block w-1.5 h-1.5 rounded-full shrink-0 cursor-help"
+      style={{ background: color }}
+    />
+  );
+}
+
+function ScoreBar({ value, max }: { value: number; max: number }) {
+  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  return (
+    <div className="w-10 h-1 rounded-full bg-white/10 overflow-hidden shrink-0">
+      <div className="h-full bg-current" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
 
 function SnapshotCell({ value }: { value: number | null }) {
   if (value === null) {
@@ -557,7 +595,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   function exportCSV() {
     const headers = [
       'Trade Date','Type','Stock','Option','Entry CMP',
-      '9:16 AM','9:30 AM','9:45 AM','10:00 AM','Exit CMP','P&L%','Advanced Score','Shadow Simple Score',
+      '9:16 AM','9:30 AM','9:45 AM','Exit CMP','P&L%','Advanced Score','Shadow Simple Score',
       'Quality Bucket', 'Execution Outcome', 'Event Risk', 'Regime Snapshot', 'Regime Parsed'
     ];
     const rows = entries.map(e => {
@@ -579,7 +617,6 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         e.cmp916  ?? '',
         e.cmp930  ?? '',
         e.cmp945  ?? '',
-        e.cmp1000 ?? '',
         e.exitCmp ?? '',
         e.pnlPct  !== null ? e.pnlPct.toFixed(2) : '',
         e.score,
@@ -615,7 +652,6 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     { name: '9:16 AM',  value: computeAvgAtTime(entries, 'cmp916')  },
     { name: '9:30 AM',  value: computeAvgAtTime(entries, 'cmp930')  },
     { name: '9:45 AM',  value: computeAvgAtTime(entries, 'cmp945')  },
-    { name: '10:00 AM', value: computeAvgAtTime(entries, 'cmp1000') },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -1332,7 +1368,6 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                     <th className="text-right px-3 py-3 font-semibold">9:16 AM</th>
                     <th className="text-right px-3 py-3 font-semibold">9:30 AM</th>
                     <th className="text-right px-3 py-3 font-semibold">9:45 AM</th>
-                    <th className="text-right px-3 py-3 font-semibold">10:00 AM</th>
                     <th className="text-right px-3 py-3 font-semibold">Exit CMP</th>
                     <th className="text-right px-3 py-3 font-semibold">P&amp;L %</th>
                     <th
@@ -1360,12 +1395,9 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         {fmtDate(entry.tradeDate)}
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex flex-col gap-1 items-start">
-                          <SignalBadge type={entry.signalType} />
-                          {entry.qualityBucketAtSignal && (
-                            <span className="text-[9px] text-slate-500 border border-border-secondary rounded-lg px-1 whitespace-nowrap">{entry.qualityBucketAtSignal}</span>
-                          )}
-                          <OutcomeBadge outcome={entry.executionOutcome} />
+                        <div className="flex items-center gap-1.5">
+                          <SignalBadge type={entry.signalType} qualityBucket={entry.qualityBucketAtSignal} />
+                          <OutcomeDot outcome={entry.executionOutcome} />
                         </div>
                       </td>
                       <td className="px-3 py-3 font-semibold text-white font-mono">
@@ -1386,9 +1418,6 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       <td className="px-3 py-3 text-right">
                         <SnapshotCell value={entry.cmp945} />
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        <SnapshotCell value={entry.cmp1000} />
-                      </td>
                       <td className="px-3 py-3 text-right font-mono">
                         {entry.exitCmp !== null
                           ? <span className="text-slate-300">₹{fmt(entry.exitCmp)}</span>
@@ -1397,29 +1426,41 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       </td>
                       <td className="px-3 py-3 text-right font-mono font-semibold">
                         {entry.pnlPct !== null ? (
-                          <span style={{ color: pnlColor(entry.pnlPct) }}>
-                            {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]"
+                            style={{
+                              color: pnlColor(entry.pnlPct),
+                              background: entry.pnlPct >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                            }}
+                          >
+                            {entry.pnlPct >= 0 ? '▲' : '▼'} {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
                           </span>
                         ) : (
                           <span className="text-slate-600">---</span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-200 font-semibold">
-                        <span title="Advanced Engine (0–130)">{entry.score}</span>
+                        <div className="inline-flex items-center gap-2" title="Advanced Engine (0–130)">
+                          <ScoreBar value={entry.score} max={130} />
+                          <span>{entry.score}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-500 relative">
                         {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
                           <div className="inline-block relative group">
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
-                              }}
-                              className="cursor-help border-b border-dashed border-border-secondary/60 select-none hover:text-slate-300 transition-colors"
-                              title="Simple V2 shadow — research only"
-                            >
-                              {entry.scoreV2}
-                            </span>
+                            <div className="inline-flex items-center gap-2">
+                              <ScoreBar value={entry.scoreV2} max={100} />
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
+                                }}
+                                className="cursor-help border-b border-dashed border-border-secondary/60 select-none hover:text-slate-300 transition-colors"
+                                title="Simple V2 shadow — research only"
+                              >
+                                {entry.scoreV2}
+                              </span>
+                            </div>
 
                             {/* Premium Tooltip Overlay */}
                             <div

@@ -27,8 +27,7 @@ export async function GET(req: NextRequest) {
   if (bypassWindow) {
     if (hour < 9 || (hour === 9 && minute < 23)) slot = '916';
     else if (hour === 9 && minute < 38) slot = '930';
-    else if (hour === 9 && minute < 53) slot = '945';
-    else slot = '1000';
+    else slot = '945';
   } else {
     slot = resolveJournalSnapshotSlot();
   }

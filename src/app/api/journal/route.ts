@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Do not overwrite an exit already set (manual or auto-close). The conditional
-    // updateMany below is the authoritative guard against a race with the 10:00 AM
+    // updateMany below is the authoritative guard against a race with the 9:45 AM
     // auto-close cron; this early check just returns a friendlier 409.
     if (entry.exitCmp !== null) {
       return NextResponse.json(

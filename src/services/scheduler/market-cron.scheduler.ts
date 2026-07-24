@@ -104,6 +104,6 @@ export function startMarketCronScheduler(): void {
 
   console.log(
     '[MarketCronScheduler] Started (60s poll): btst-alert 15:10–15:25, ' +
-    'cpr-journal 15:15–15:29, btst-journal 15:25–15:30, snapshots 09:16/09:30/09:45/10:00 IST'
+    'cpr-journal 15:15–15:29, btst-journal 15:25–15:30, snapshots 09:16/09:30/09:45 IST'
   );
 }

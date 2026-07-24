@@ -206,12 +206,12 @@ export class TradeJournalService {
   }
 
   /**
-   * Called by snapshot cron at 9:16, 9:30, 9:45, 10:00 AM IST (Day D+1).
+   * Called by snapshot cron at 9:16, 9:30, 9:45 AM IST (Day D+1).
    * Uses previousTradingDayMidnightIST() because signals are logged on Day D at 3:15 PM,
    * and snapshots fire the next morning — both must resolve to the same IST date key.
-   * At 10:00 AM auto-closes entries that have no manual exit yet.
+   * At 9:45 AM auto-closes entries that have no manual exit yet.
    */
-  static async captureSnapshot(timeSlot: '916' | '930' | '945' | '1000', forDate?: Date): Promise<void> {
+  static async captureSnapshot(timeSlot: '916' | '930' | '945', forDate?: Date): Promise<void> {
     try {
       // Snapshots run on D+1 — query entries logged on D, the previous TRADING day (not
       // just "yesterday" — see previousTradingDayMidnightIST() for why that distinction matters)
@@ -221,7 +221,6 @@ export class TradeJournalService {
         '916':  'cmp916',
         '930':  'cmp930',
         '945':  'cmp945',
-        '1000': 'cmp1000',
       } as const;
 
       const field = fieldMap[timeSlot];
@@ -276,12 +275,12 @@ export class TradeJournalService {
           continue;
         }
 
-        // 10:00 AM auto-close: set exit ONLY if no exit exists yet in the DB. The
+        // 9:45 AM auto-close: set exit ONLY if no exit exists yet in the DB. The
         // `exitCmp: null` guard in updateMany is critical — between the findMany above
         // and this write a user may have PATCHed a real manual exit; without the guard
         // the auto-close would silently clobber their true exit price and P&L.
         let autoClosed = false;
-        if (timeSlot === '1000') {
+        if (timeSlot === '945') {
           const { pnl, pnlPct } = computeOptionPnl(entry.entryCmp, cmp);
           const closeWrite = await prisma.tradeJournal.updateMany({
             where: { id: entry.id, exitCmp: null },
