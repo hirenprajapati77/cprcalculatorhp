@@ -423,8 +423,25 @@ export class MarketService {
     const sector = (staticMeta?.sector || 'Other').trim();
     const marketCap = staticMeta?.marketCap || 50000;
 
-    // ── LIVE MODE: Real-time Yahoo Finance Chart API ─────────────────────────
+    // ── LIVE MODE: Fyers (Primary when Connected) with Yahoo Finance Fallback ─
     if (dataMode === 'live') {
+      // Primary: Fyers (if access token is valid)
+      const token = await FyersAuthService.getAccessToken();
+      if (token) {
+        const fyersPrimary = await MarketService.tryFyersHistoryFallback(
+          cleanSymbol,
+          market,
+          sector,
+          marketCap,
+          sma200,
+          cacheKey
+        );
+        if (fyersPrimary) {
+          return fyersPrimary;
+        }
+        console.warn(`[LiveFeed] Primary Fyers fetch failed for ${cleanSymbol}, falling back to Yahoo Finance`);
+      }
+
       try {
         const res = await fetch(
           // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
