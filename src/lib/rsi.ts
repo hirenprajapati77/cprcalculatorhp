@@ -71,10 +71,10 @@ export function calculateRSI(
  *  RSI_STRONG      : 50–70 — healthy trend momentum, ideal for continuation
  *  RSI_OVERBOUGHT  : > 70  — stretched, avoid fresh bullish entries
  */
-export function classifyRSI(rsi: number): 'RSI_OVERSOLD' | 'RSI_BULLISH' | 'RSI_NEUTRAL' | 'RSI_STRONG' | 'RSI_OVERBOUGHT' {
+export function classifyRSI(rsi: number): 'RSI_OVERSOLD' | 'RSI_BEARISH' | 'RSI_NEUTRAL' | 'RSI_STRONG' | 'RSI_OVERBOUGHT' {
   if (rsi < 30)  return 'RSI_OVERSOLD';
-  if (rsi < 50)  return 'RSI_BULLISH';
+  if (rsi < 50)  return 'RSI_BEARISH';
   if (rsi === 50) return 'RSI_NEUTRAL';
-  if (rsi < 70)  return 'RSI_STRONG';
+  if (rsi <= 70) return 'RSI_STRONG';
   return 'RSI_OVERBOUGHT';
 }
