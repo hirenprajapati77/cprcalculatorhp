@@ -98,6 +98,9 @@ export async function getIndexBtstCompare(
       })
     : [];
 
+  // Safe to key live rows by symbol + date: TradeJournal enforces
+  // @@unique([symbol, tradeDate, signalType]), so there can be at most one
+  // BTST journal entry per index/day.
   const liveByKey = new Map<string, (typeof liveEntries)[number]>();
   for (const e of liveEntries) {
     liveByKey.set(`${e.symbol}_${journalDateKey(e.tradeDate)}`, e);
