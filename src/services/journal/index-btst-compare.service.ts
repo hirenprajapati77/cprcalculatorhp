@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
+import { computeWinRate } from '@/lib/win-rate';
 import { parseIndexBtstTradeContext } from '../backtest/index-btst-slice-metrics';
 
 export interface IndexBtstCompareRow {
@@ -160,11 +161,14 @@ export async function getIndexBtstCompare(
   }
 
   const liveClosed = liveEntries.filter((e) => e.exitCmp != null);
-  const liveWins = liveClosed.filter((e) => (e.pnlPct ?? 0) > 0).length;
+  const liveWinRateSummary = computeWinRate(liveClosed, (entry) => entry.pnlPct ?? 0);
   const btClosed = backtestTrades.filter(
     (t) => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED'
   );
-  const btWins = btClosed.filter((t) => (t.pnl ?? 0) > 0).length;
+  const backtestWinRateSummary = computeWinRate(
+    btClosed,
+    (trade) => trade.pnl ?? trade.pnlPercent ?? 0
+  );
 
   return {
     backtestRunId: run?.id ?? null,
@@ -182,9 +186,9 @@ export async function getIndexBtstCompare(
       backtestOnly: rows.filter((r) => r.alignment === 'BACKTEST_ONLY').length,
       liveClosed: liveClosed.length,
       liveWinRate:
-        liveClosed.length > 0 ? (liveWins / liveClosed.length) * 100 : null,
+        liveWinRateSummary.decisive > 0 ? liveWinRateSummary.winRate : null,
       backtestWinRate:
-        btClosed.length > 0 ? (btWins / btClosed.length) * 100 : null,
+        backtestWinRateSummary.decisive > 0 ? backtestWinRateSummary.winRate : null,
     },
   };
 }
