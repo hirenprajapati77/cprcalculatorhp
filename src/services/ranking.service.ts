@@ -123,7 +123,7 @@ export class RankingService {
     // Penalises running into overbought/oversold territory.
     let catF = 0;
     const hasBullishRSI  = signals.includes('RSI_STRONG') || signals.includes('RSI_BULLISH') || signals.includes('RSI_OVERSOLD');
-    const hasBearishRSI  = signals.includes('RSI_BULLISH') || signals.includes('RSI_OVERSOLD');
+    const hasBearishRSI  = signals.includes('RSI_BEARISH') || signals.includes('RSI_OVERSOLD');
     const hasVolume      = signals.includes('BREAKOUT') || signals.includes('BREAKDOWN') || signals.includes('VOLUME_SPIKE');
 
     if (signals.includes('EMA_CROSS_BULL') && hasBullishRSI) {
