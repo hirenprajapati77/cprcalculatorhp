@@ -360,7 +360,7 @@ export class SignalService {
     // Minimum 15 candles needed (14 period + 1 seed bar). Falls back to neutral (50) silently.
     const rsi14 = calculateRSI(completedHistory);
     const rsiClass = classifyRSI(rsi14);
-    signals.push(rsiClass); // always push one of: RSI_OVERSOLD/RSI_BULLISH/RSI_NEUTRAL/RSI_STRONG/RSI_OVERBOUGHT
+    signals.push(rsiClass); // always push one of: RSI_OVERSOLD/RSI_BEARISH/RSI_NEUTRAL/RSI_STRONG/RSI_OVERBOUGHT
 
     // ── EMA 9 / EMA 21 Cross (daily) ─────────────────────────────────────────
     // Uses completed daily history. Needs at least 22 bars to produce two valid EMA values.
@@ -368,8 +368,8 @@ export class SignalService {
     // Alignment tags: EMA_BULL_ALIGN / EMA_BEAR_ALIGN (fires every bar while aligned)
     //
     // High-conviction combos the ranking service rewards:
-    //   EMA_CROSS_BULL + RSI_STRONG/RSI_BULLISH + BREAKOUT  → +15 pts
-    //   EMA_CROSS_BEAR + RSI_BULLISH/RSI_OVERSOLD + BREAKDOWN → +15 pts
+    //   EMA_CROSS_BULL + RSI_STRONG/RSI_OVERSOLD + BREAKOUT  → +15 pts
+    //   EMA_CROSS_BEAR + RSI_BEARISH/RSI_OVERSOLD + BREAKDOWN → +15 pts
     //   EMA_BULL_ALIGN + RSI_OVERBOUGHT → penalise (avoid late entries)
     const emaCross = detectEmaCross(completedHistory);
     if (emaCross) {

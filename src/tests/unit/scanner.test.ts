@@ -958,10 +958,10 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     rr: '1:1',
   };
 
-  await t.test('EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN awards +15 in Category F', () => {
+  await t.test('EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN awards +15 in Category F', () => {
     const resWithBearCross = {
       ...baseResult,
-      signals: ['EMA_CROSS_BEAR', 'RSI_BULLISH', 'BREAKDOWN'],
+      signals: ['EMA_CROSS_BEAR', 'RSI_BEARISH', 'BREAKDOWN'],
     };
     const resWithoutBearCross = {
       ...baseResult,
@@ -969,7 +969,7 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     };
     const scoreWith = RankingService.calculateScore(resWithBearCross as any);
     const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
-    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN must award +15 points');
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN must award +15 points');
   });
 
   await t.test('EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN awards +15 in Category F', () => {
@@ -998,6 +998,19 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     const scoreWith = RankingService.calculateScore(resWithBullCross as any);
     const scoreWithout = RankingService.calculateScore(resWithoutBullCross as any);
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BULL + RSI_STRONG + BREAKOUT must award +15 points');
+  });
+
+  await t.test('hasBullishRSI and hasBearishRSI are mutually exclusive except at RSI_OVERSOLD', () => {
+    const neutralUp = RankingService.calculateScore({ ...baseResult, signals: ['BREAKOUT'] } as any);
+    const neutralDown = RankingService.calculateScore({ ...baseResult, signals: ['BREAKDOWN'] } as any);
+
+    // RSI_STRONG is bullish-only: must NOT award Category F points on a bearish cross
+    const strongOnBear = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BEAR', 'RSI_STRONG', 'BREAKDOWN'] } as any);
+    assert.strictEqual(strongOnBear - neutralDown, 0, 'EMA_CROSS_BEAR + RSI_STRONG must NOT award Category F points');
+
+    // RSI_BEARISH is bearish-only: must NOT award Category F points on a bullish cross
+    const bearishOnBull = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BULL', 'RSI_BEARISH', 'BREAKOUT'] } as any);
+    assert.strictEqual(bearishOnBull - neutralUp, 0, 'EMA_CROSS_BULL + RSI_BEARISH must NOT award Category F points');
   });
 });
 
