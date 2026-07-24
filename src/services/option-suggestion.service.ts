@@ -286,7 +286,6 @@ export class OptionSuggestionService {
     let targetExpiryStr = '';
     if (chainRes.expiryData && chainRes.expiryData.length > 0) {
       const today = new Date(getISTDateString());
-      today.setHours(0, 0, 0, 0);
       let nearestExpiry: Date | null = null;
       for (const exObj of chainRes.expiryData) {
         const exStr = typeof exObj === 'string' ? exObj : ((exObj as {date?: string, expiryDate?: string, expiry?: string}).date || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiryDate || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiry);
