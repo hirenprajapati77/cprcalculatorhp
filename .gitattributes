@@ -9,3 +9,23 @@
 
 # Default: auto-detect text files
 * text=auto
+
+# Export exclusions for git archive
+.env* export-ignore
+!.env.example export-ignore
+ssh_history.jsonl export-ignore
+history.txt export-ignore
+history_commands.txt export-ignore
+clean_ssh_history.txt export-ignore
+commands_history.txt export-ignore
+raw*.txt export-ignore
+*.log export-ignore
+*.tar.gz export-ignore
+*.zip export-ignore
+deploy_bundle* export-ignore
+dev.db export-ignore
+*.db export-ignore
+*.sql export-ignore
+scratch/ export-ignore
+ops/ export-ignore
+
