@@ -80,3 +80,8 @@ clean_ssh_history.txt
 migration_diff.sql
 scratch/
 prisma/*.old.prisma
+
+# secrets
+server.env
+scratch/*.env*
+scratch/*token*
