@@ -1,5 +1,6 @@
 import { OptionChainService, OptionChainResult } from './option-chain.service';
 import { CacheService } from './cache.service';
+import { getISTDateString } from '@/lib/market-hours';
 
 export interface OptionSuggestion {
   symbol?: string;
@@ -276,7 +277,7 @@ export class OptionSuggestionService {
     const lotSizes = await this.loadLotSizes();
     let lotSizeKey = cleanSym;
     if (lotSizeKey === 'SENSEX') lotSizeKey = 'BSESENSEX';
-    const lotSize = lotSizes.get(cleanSym) || lotSizes.get(lotSizeKey) || lotSizes.get('BSESENSEX') || lotSizes.get('SENSEX');
+    const lotSize = lotSizes.get(cleanSym) || lotSizes.get(lotSizeKey);
     if (!lotSize) {
       return { error: 'LOT_SIZE_UNAVAILABLE' };
     }
@@ -284,7 +285,7 @@ export class OptionSuggestionService {
     // 3. Find the nearest valid expiry after today (weekly or monthly — closest date wins)
     let targetExpiryStr = '';
     if (chainRes.expiryData && chainRes.expiryData.length > 0) {
-      const today = new Date();
+      const today = new Date(getISTDateString());
       today.setHours(0, 0, 0, 0);
       let nearestExpiry: Date | null = null;
       for (const exObj of chainRes.expiryData) {
