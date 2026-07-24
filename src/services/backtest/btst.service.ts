@@ -5,12 +5,11 @@ import { env } from '@/config/env';
  * score helpers remain for backtests and V2 shadow only (max 100).
  */
 import { MarketStockData } from '../market.service';
-import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
+import { BTST_SCORING } from '@/config/trading-constants';
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
-import { getAtrPct, calculateATR } from '@/lib/atr';
+import { getAtrPct } from '@/lib/atr';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { CPRResult } from '@/types/cpr.types';
-import { GapProbabilityService } from '../overnight/gap-probability.service';
 import { isMarketOpen, isTodayCandleClosed, getISTDateString, isBtstDiscoveryOpen, getCompletedHistory } from '@/lib/market-hours';
 import { discoverViaAdvancedEngine } from '../overnight/advanced-discover-bridge';
 

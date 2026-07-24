@@ -15,7 +15,6 @@ export class EventCalendarService {
   static async getEventRisk(symbol: string, signalDate: string): Promise<EventRiskResult> {
     try {
       const [y, m, d] = signalDate.split('-').map(Number);
-      const todayDate = new Date(y, m - 1, d);
       const threeDaysFromNow = new Date(y, m - 1, d + 3);
       const todayStr = signalDate;
       const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
@@ -129,7 +128,6 @@ export class EventCalendarService {
 
     try {
       const [y, m, d] = signalDate.split('-').map(Number);
-      const todayDate = new Date(y, m - 1, d);
       const threeDaysFromNow = new Date(y, m - 1, d + 3);
 
       const todayStr = signalDate;

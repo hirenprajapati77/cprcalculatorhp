@@ -1,6 +1,5 @@
 import { ScannerSignalResult } from './scanner.service';
-import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
-import { MarketStockData } from './market.service';
+import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 
 export class RankingService {
   /**

@@ -1,4 +1,3 @@
-import { ADVANCED_SCORE } from '@/config/trading-constants';
 import {
   classifyScoreBand,
   classifyVduBand,

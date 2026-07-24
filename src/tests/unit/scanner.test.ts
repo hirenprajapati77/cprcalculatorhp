@@ -1,6 +1,6 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert';
-import { ScannerService } from '../../services/scanner.service';
+import { ScannerService, ScannerSignalResult } from '../../services/scanner.service';
 import { RankingService } from '../../services/ranking.service';
 import { MarketStockData } from '../../services/market.service';
 
@@ -967,8 +967,8 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
       ...baseResult,
       signals: ['BREAKDOWN'],
     };
-    const scoreWith = RankingService.calculateScore(resWithBearCross as any);
-    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
+    const scoreWith = RankingService.calculateScore(resWithBearCross as unknown as ScannerSignalResult);
+    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as unknown as ScannerSignalResult);
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN must award +15 points');
   });
 
@@ -981,8 +981,8 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
       ...baseResult,
       signals: ['BREAKDOWN'],
     };
-    const scoreWith = RankingService.calculateScore(resWithBearCross as any);
-    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
+    const scoreWith = RankingService.calculateScore(resWithBearCross as unknown as ScannerSignalResult);
+    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as unknown as ScannerSignalResult);
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN must award +15 points');
   });
 
@@ -995,21 +995,21 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
       ...baseResult,
       signals: ['BREAKOUT'],
     };
-    const scoreWith = RankingService.calculateScore(resWithBullCross as any);
-    const scoreWithout = RankingService.calculateScore(resWithoutBullCross as any);
+    const scoreWith = RankingService.calculateScore(resWithBullCross as unknown as ScannerSignalResult);
+    const scoreWithout = RankingService.calculateScore(resWithoutBullCross as unknown as ScannerSignalResult);
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BULL + RSI_STRONG + BREAKOUT must award +15 points');
   });
 
   await t.test('hasBullishRSI and hasBearishRSI are mutually exclusive except at RSI_OVERSOLD', () => {
-    const neutralUp = RankingService.calculateScore({ ...baseResult, signals: ['BREAKOUT'] } as any);
-    const neutralDown = RankingService.calculateScore({ ...baseResult, signals: ['BREAKDOWN'] } as any);
+    const neutralUp = RankingService.calculateScore({ ...baseResult, signals: ['BREAKOUT'] } as unknown as ScannerSignalResult);
+    const neutralDown = RankingService.calculateScore({ ...baseResult, signals: ['BREAKDOWN'] } as unknown as ScannerSignalResult);
 
     // RSI_STRONG is bullish-only: must NOT award Category F points on a bearish cross
-    const strongOnBear = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BEAR', 'RSI_STRONG', 'BREAKDOWN'] } as any);
+    const strongOnBear = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BEAR', 'RSI_STRONG', 'BREAKDOWN'] } as unknown as ScannerSignalResult);
     assert.strictEqual(strongOnBear - neutralDown, 0, 'EMA_CROSS_BEAR + RSI_STRONG must NOT award Category F points');
 
     // RSI_BEARISH is bearish-only: must NOT award Category F points on a bullish cross
-    const bearishOnBull = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BULL', 'RSI_BEARISH', 'BREAKOUT'] } as any);
+    const bearishOnBull = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BULL', 'RSI_BEARISH', 'BREAKOUT'] } as unknown as ScannerSignalResult);
     assert.strictEqual(bearishOnBull - neutralUp, 0, 'EMA_CROSS_BULL + RSI_BEARISH must NOT award Category F points');
   });
 });

@@ -1,7 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstService } from '../../services/backtest/btst.service';
-import { MarketService, MarketStockData } from '../../services/market.service';
 import { OvernightService } from '../../services/overnight/overnight.service';
 import { BTST_WINDOWS } from '../../config/trading-constants';
 import { BTST_CLOCK } from '../../lib/market-hours';

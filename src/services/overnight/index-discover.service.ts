@@ -98,14 +98,7 @@ export interface IndexSessionCandles {
   usesLiveSession: boolean;
 }
 
-interface YahooChartMeta {
-  regularMarketPrice?: number;
-  chartPreviousClose?: number;
-  previousClose?: number;
-  regularMarketOpen?: number;
-  regularMarketDayHigh?: number;
-  regularMarketDayLow?: number;
-}
+
 
 export interface IndiaVixState {
   /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG forced IGNORE. */

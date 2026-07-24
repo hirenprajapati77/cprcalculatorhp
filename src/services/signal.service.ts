@@ -1,5 +1,5 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
-import { VOLUME_THRESHOLDS, CPR_THRESHOLDS, ATR, BTST_SCORING, LIQUIDITY } from '@/config/trading-constants';
+import { VOLUME_THRESHOLDS, ATR } from '@/config/trading-constants';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
