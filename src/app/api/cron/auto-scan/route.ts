@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     await CacheService.set('AUTO_SCAN_RESULT', {
       data: results,
       timestamp: new Date().toISOString()
-    }, 60 * 60); // cache for 1 hour
+    }, 5 * 60); // cache for 5 minutes — keeps UI fresh between cron cycles
 
     // Fire-and-forget breakout alert — never blocks scan response
     BreakoutWatcherService.detectNewBreakouts(

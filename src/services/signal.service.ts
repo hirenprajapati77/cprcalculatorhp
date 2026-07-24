@@ -5,6 +5,8 @@ import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
 import { getISTDateString, isTodayCandleClosed, getISTTime, getCompletedHistory } from '@/lib/market-hours';
+import { calculateRSI, classifyRSI } from '@/lib/rsi';
+import { detectEmaCross } from '@/lib/ema';
 
 export interface SignalResult {
   signals: string[];
@@ -352,6 +354,34 @@ export class SignalService {
     else if (priceChangePct < -buildThreshold && volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO)  signals.push('SHORT_BUILD');
     else if (priceChangePct < -unwindThreshold && volumeRatio < 1.0)  signals.push('LONG_UNWIND');
     else if (priceChangePct > unwindThreshold && volumeRatio < 1.0)   signals.push('SHORT_COVER');
+
+    // ── RSI-14 (daily) ────────────────────────────────────────────────────────
+    // Computed on the completed daily history so intraday LTP doesn't skew the value.
+    // Minimum 15 candles needed (14 period + 1 seed bar). Falls back to neutral (50) silently.
+    const rsi14 = calculateRSI(completedHistory);
+    const rsiClass = classifyRSI(rsi14);
+    signals.push(rsiClass); // always push one of: RSI_OVERSOLD/RSI_BULLISH/RSI_NEUTRAL/RSI_STRONG/RSI_OVERBOUGHT
+
+    // ── EMA 9 / EMA 21 Cross (daily) ─────────────────────────────────────────
+    // Uses completed daily history. Needs at least 22 bars to produce two valid EMA values.
+    // Cross tags: EMA_CROSS_BULL / EMA_CROSS_BEAR (fires only on the actual cross bar)
+    // Alignment tags: EMA_BULL_ALIGN / EMA_BEAR_ALIGN (fires every bar while aligned)
+    //
+    // High-conviction combos the ranking service rewards:
+    //   EMA_CROSS_BULL + RSI_STRONG/RSI_BULLISH + BREAKOUT  → +15 pts
+    //   EMA_CROSS_BEAR + RSI_BEARISH/RSI_OVERSOLD + BREAKDOWN → +15 pts
+    //   EMA_BULL_ALIGN + RSI_OVERBOUGHT → penalise (avoid late entries)
+    const emaCross = detectEmaCross(completedHistory);
+    if (emaCross) {
+      if (emaCross.cross === 'BULLISH') {
+        signals.push('EMA_CROSS_BULL');
+      } else if (emaCross.cross === 'BEARISH') {
+        signals.push('EMA_CROSS_BEAR');
+      }
+      // Alignment (running state — not just the cross bar)
+      if (emaCross.isBullishAlignment) signals.push('EMA_BULL_ALIGN');
+      else signals.push('EMA_BEAR_ALIGN');
+    }
 
     return {
       signals: Array.from(new Set(signals)),
