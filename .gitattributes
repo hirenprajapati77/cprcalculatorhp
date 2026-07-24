@@ -11,8 +11,9 @@
 * text=auto
 
 # Export exclusions for git archive
-.env* export-ignore
-!.env.example export-ignore
+.env export-ignore
+.env.local export-ignore
+.env.production export-ignore
 ssh_history.jsonl export-ignore
 history.txt export-ignore
 history_commands.txt export-ignore
