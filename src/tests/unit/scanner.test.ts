@@ -999,5 +999,18 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     const scoreWithout = RankingService.calculateScore(resWithoutBullCross as any);
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BULL + RSI_STRONG + BREAKOUT must award +15 points');
   });
+
+  await t.test('hasBullishRSI and hasBearishRSI are mutually exclusive except at RSI_OVERSOLD', () => {
+    const neutralUp = RankingService.calculateScore({ ...baseResult, signals: ['BREAKOUT'] } as any);
+    const neutralDown = RankingService.calculateScore({ ...baseResult, signals: ['BREAKDOWN'] } as any);
+
+    // RSI_STRONG is bullish-only: must NOT award Category F points on a bearish cross
+    const strongOnBear = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BEAR', 'RSI_STRONG', 'BREAKDOWN'] } as any);
+    assert.strictEqual(strongOnBear - neutralDown, 0, 'EMA_CROSS_BEAR + RSI_STRONG must NOT award Category F points');
+
+    // RSI_BEARISH is bearish-only: must NOT award Category F points on a bullish cross
+    const bearishOnBull = RankingService.calculateScore({ ...baseResult, signals: ['EMA_CROSS_BULL', 'RSI_BEARISH', 'BREAKOUT'] } as any);
+    assert.strictEqual(bearishOnBull - neutralUp, 0, 'EMA_CROSS_BULL + RSI_BEARISH must NOT award Category F points');
+  });
 });
 
