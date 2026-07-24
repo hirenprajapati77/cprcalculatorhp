@@ -25,7 +25,7 @@ export class RankingService {
    *   STALE_SETUP  (> 90 min, much of the move may be done):  -10
    *
    * Category F — EMA 9/21 + RSI Confluence (max +15, min -10):
-   *   EMA_CROSS_BULL/BEAR on same bar + RSI_STRONG/RSI_BULLISH (bull) or RSI_BULLISH/RSI_OVERSOLD (bear)
+   *   EMA_CROSS_BULL/BEAR on same bar + RSI_STRONG/RSI_OVERSOLD (bull) or RSI_BEARISH/RSI_OVERSOLD (bear)
    *     + BREAKOUT/BREAKDOWN volume: +15  ← all 3 conditions met (highest conviction)
    *   EMA_CROSS_BULL/BEAR + good RSI (no volume): +10
    *   EMA_BULL_ALIGN + RSI_STRONG (continuation): +5
@@ -122,7 +122,7 @@ export class RankingService {
     // Rewards the high-conviction triple: fresh cross + good RSI + volume.
     // Penalises running into overbought/oversold territory.
     let catF = 0;
-    const hasBullishRSI  = signals.includes('RSI_STRONG') || signals.includes('RSI_BULLISH') || signals.includes('RSI_OVERSOLD');
+    const hasBullishRSI  = signals.includes('RSI_STRONG') || signals.includes('RSI_OVERSOLD');
     const hasBearishRSI  = signals.includes('RSI_BEARISH') || signals.includes('RSI_OVERSOLD');
     const hasVolume      = signals.includes('BREAKOUT') || signals.includes('BREAKDOWN') || signals.includes('VOLUME_SPIKE');
 
