@@ -6,6 +6,7 @@ import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
 import { isTodayCandleClosed, getISTDateString, getISTTime, getCompletedHistory } from '@/lib/market-hours';
 import { CprCompressionService, CprCompressionStats } from './cpr-compression.service';
+import { BullishStateService } from './bullish-state.service';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -32,7 +33,10 @@ export interface ScannerSignalResult extends MarketStockData {
   degenerateData?: boolean;
   distPivot?: number;
   cprCompression?: CprCompressionStats | null;
-  
+  /** How many minutes ago this stock first entered its current bullish/bearish state today. */
+  crossAgeMinutes?: number;
+  /** Freshness classification of the current setup. */
+  setupFreshness?: 'FRESH' | 'MATURE' | 'STALE';
 }
 
 
@@ -113,6 +117,30 @@ export class ScannerService {
     // 2. Fetch Advanced Signals
     const signalData = SignalService.getSignals(stock, asOfDate);
     const signals = signalData.signals;
+
+    // ── Cross-Age / Setup Freshness Tracking ─────────────────────────────────
+    // Records the FIRST TIME the stock entered this directional state today.
+    // crossAgeMinutes = minutes since the setup first became valid.
+    // This lets us reward early entries (FRESH) and penalise stale ones (STALE).
+    let crossAgeMinutes: number | undefined;
+    let setupFreshness: 'FRESH' | 'MATURE' | 'STALE' | undefined;
+
+    // Only track during a live trading session (skip backtests / asOfDate runs)
+    if (!asOfDate) {
+      const ltpBias = ltp > tc ? 'BULLISH' : ltp < bc ? 'BEARISH' : null;
+      if (ltpBias) {
+        const stateEntry = await BullishStateService.recordState(stock.symbol, ltpBias);
+        crossAgeMinutes = BullishStateService.ageMinutes(stateEntry);
+        setupFreshness = BullishStateService.freshness(crossAgeMinutes);
+        // Push freshness as a signal tag so scoring & UI can consume it
+        if (setupFreshness === 'FRESH')  signals.push('FRESH_SETUP');
+        else if (setupFreshness === 'MATURE') signals.push('MATURE_SETUP');
+        else if (setupFreshness === 'STALE')  signals.push('STALE_SETUP');
+      } else {
+        // Price is inside the CPR band — clear any stored directional state
+        await BullishStateService.clearState(stock.symbol);
+      }
+    }
 
     // 3. Calculate Quant Score & Classification (uses cprToday values)
     const tempResult: Omit<ScannerSignalResult, 'score' | 'confidence'> = {
@@ -261,7 +289,9 @@ export class ScannerService {
       tomorrowCPRProvisional: isTradingSession && !isTodayCandleFinal,
       degenerateData,
       distPivot: Number(distPivot.toFixed(2)),
-      cprCompression
+      cprCompression,
+      ...(crossAgeMinutes !== undefined && { crossAgeMinutes }),
+      ...(setupFreshness !== undefined && { setupFreshness }),
     };
   }
 

@@ -19,6 +19,19 @@ export class RankingService {
    * Category D — Hot Zone & RTP (max 10):
    *   HOT_ZONE: +5, NARROW + KGS_RTP: +5
    *
+   * Category E — Setup Freshness (range: -10 to +10):
+   *   FRESH_SETUP  (<= 45 min since bullish state first seen): +10
+   *   MATURE_SETUP (45-90 min): 0
+   *   STALE_SETUP  (> 90 min, much of the move may be done):  -10
+   *
+   * Category F — EMA 9/21 + RSI Confluence (max +15, min -10):
+   *   EMA_CROSS_BULL/BEAR on same bar + RSI_STRONG/RSI_BULLISH (bull) or RSI_BEARISH (bear)
+   *     + BREAKOUT/BREAKDOWN volume: +15  ← all 3 conditions met (highest conviction)
+   *   EMA_CROSS_BULL/BEAR + good RSI (no volume): +10
+   *   EMA_BULL_ALIGN + RSI_STRONG (continuation): +5
+   *   EMA_BULL_ALIGN + RSI_OVERBOUGHT: -10  ← late entry trap
+   *   EMA_BEAR_ALIGN + RSI_OVERSOLD: -10   ← late short trap
+   *
    * Zero Weight (Evaluated but unscored for testing/logging):
    *   KGS_ASC_REVERSAL: 0
    *   KGS_DESC_REVERSAL: 0
@@ -96,8 +109,37 @@ export class RankingService {
     }
     const catD = Math.min(10, catDSum);
 
+    // Category E: Setup Freshness (range -10 to +10)
+    // FRESH_SETUP  = stock entered bullish/bearish state <= 45 min ago → early entry opportunity
+    // MATURE_SETUP = 45-90 min ago → neutral
+    // STALE_SETUP  = > 90 min ago  → much of the move may already be priced in
+    let catE = 0;
+    if (signals.includes('FRESH_SETUP'))  catE = +10;
+    else if (signals.includes('STALE_SETUP')) catE = -10;
+    // MATURE_SETUP = 0 (no change)
+
+    // Category F: EMA 9/21 + RSI Confluence (max +15, min -10)
+    // Rewards the high-conviction triple: fresh cross + good RSI + volume.
+    // Penalises running into overbought/oversold territory.
+    let catF = 0;
+    const hasBullishRSI  = signals.includes('RSI_STRONG') || signals.includes('RSI_BULLISH') || signals.includes('RSI_OVERSOLD');
+    const hasBearishRSI  = signals.includes('RSI_BEARISH') || signals.includes('RSI_OVERBOUGHT');
+    const hasVolume      = signals.includes('BREAKOUT') || signals.includes('BREAKDOWN') || signals.includes('VOLUME_SPIKE');
+
+    if (signals.includes('EMA_CROSS_BULL') && hasBullishRSI) {
+      catF = hasVolume ? 15 : 10; // fresh cross + RSI confirms + volume = highest conviction
+    } else if (signals.includes('EMA_CROSS_BEAR') && hasBearishRSI) {
+      catF = hasVolume ? 15 : 10;
+    } else if (signals.includes('EMA_BULL_ALIGN') && signals.includes('RSI_STRONG')) {
+      catF = 5; // continuation — aligned and not yet overbought
+    } else if (signals.includes('EMA_BULL_ALIGN') && signals.includes('RSI_OVERBOUGHT')) {
+      catF = -10; // late entry trap
+    } else if (signals.includes('EMA_BEAR_ALIGN') && signals.includes('RSI_OVERSOLD')) {
+      catF = -10; // late short trap
+    }
+
     // Base Score Sum
-    let score = catA + catB + catC + catD;
+    let score = catA + catB + catC + catD + catE + catF;
 
     // Conflict Penalties (subtracted after weighted sum)
     if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) {
