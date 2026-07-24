@@ -52,6 +52,35 @@ describe('stock-intraday.util', () => {
     assert.equal(m.last15mLow, 105);
     assert.ok((m.intradayVolume ?? 0) > 0);
   });
+
+  it('parseStockIntradayMetricsFromChart excludes the latest forming closing-window bar', () => {
+    const t1515 = Math.floor(new Date('2026-04-01T09:45:00.000Z').getTime() / 1000);
+    const t1520 = Math.floor(new Date('2026-04-01T09:50:00.000Z').getTime() / 1000);
+    const chart = {
+      chart: {
+        result: [
+          {
+            timestamp: [t1515, t1520],
+            indicators: {
+              quote: [
+                {
+                  high: [105, 120],
+                  low: [101, 100],
+                  close: [104, 119],
+                  volume: [1000, 2000],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const asOf = new Date('2026-04-01T09:52:00.000Z');
+    const m = parseStockIntradayMetricsFromChart(chart, asOf);
+
+    assert.equal(m.last15mHigh, 105);
+    assert.equal(m.last15mLow, 101);
+  });
 });
 
 describe('stock-btst-backtest.helper', () => {

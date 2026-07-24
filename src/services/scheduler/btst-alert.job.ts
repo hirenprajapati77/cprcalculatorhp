@@ -160,6 +160,10 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     suppressBtst,
   };
 
+  if (alertPayload.length === 0) {
+    return { sent: false, reason: 'no setups', ...baseResult };
+  }
+
   let claimedDate = false;
   try {
     await prisma.btstAlertState.create({

@@ -1,5 +1,4 @@
 import {
-  BTST_WINDOW_MINUTES,
   isInClosingLiquidityWindow,
   istMinuteOfDayFromUnixSec,
 } from '@/lib/market-hours';
@@ -82,10 +81,7 @@ export function parseIndexIntradayMetricsFromChart(
       const barOpenMin = istMinuteOfDayFromUnixSec(ts);
       const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
       const isFormingBar = isLastCandleForming && ts === lastTimestamp;
-      if (
-        inClosingWindow &&
-        (!isFormingBar || barOpenMin >= BTST_WINDOW_MINUTES.CLOSING_WINDOW_START)
-      ) {
+      if (inClosingWindow && !isFormingBar) {
         closingHigh = Math.max(closingHigh, high);
         closingBarCount++;
       }

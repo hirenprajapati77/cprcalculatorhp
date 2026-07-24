@@ -98,6 +98,27 @@ export class OptionSuggestionService {
     }
   }
 
+  static extractFyersOptionExpiry(
+    optionSymbol: string,
+    underlying: string,
+    strikePrice: number,
+    optionType: 'CE' | 'PE'
+  ): string {
+    const cleanUnderlying = underlying.toUpperCase().trim().replace('-EQ', '');
+    const prefixes = [`NSE:${cleanUnderlying}`, `BSE:${cleanUnderlying}`];
+    const suffix = `${strikePrice}${optionType}`;
+
+    for (const prefix of prefixes) {
+      if (!optionSymbol.startsWith(prefix)) continue;
+      const remainder = optionSymbol.substring(prefix.length);
+      if (remainder.endsWith(suffix)) {
+        return remainder.substring(0, remainder.length - suffix.length);
+      }
+    }
+
+    return '';
+  }
+
   private static async loadLotSizes(): Promise<Map<string, number>> {
     const cacheKey = 'fyers_lot_sizes_map';
     try {
@@ -418,15 +439,12 @@ export class OptionSuggestionService {
     const optionSl = parseFloat(Math.max(0.05, selected.option.ltp - stockMoveSl * delta).toFixed(2));
     const cost = parseFloat((selected.option.ltp * lotSize).toFixed(2));
 
-    let expiryStr = '';
-    const prefix = `NSE:${cleanSym}`;
-    if (selected.option.symbol.startsWith(prefix)) {
-      const remainder = selected.option.symbol.substring(prefix.length);
-      const suffixStr = `${selected.option.strikePrice}${type}`;
-      if (remainder.endsWith(suffixStr)) {
-        expiryStr = remainder.substring(0, remainder.length - suffixStr.length);
-      }
-    }
+    const expiryStr = this.extractFyersOptionExpiry(
+      selected.option.symbol,
+      cleanSym,
+      selected.option.strikePrice,
+      type
+    );
     const finalFormattedName = expiryStr 
       ? `${cleanSym} ${expiryStr} ${selected.option.strikePrice} ${type}` 
       : `${cleanSym} ${selected.option.strikePrice} ${type}`;
