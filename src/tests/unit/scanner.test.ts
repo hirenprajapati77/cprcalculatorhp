@@ -958,10 +958,10 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     rr: '1:1',
   };
 
-  await t.test('EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN awards +15 in Category F', () => {
+  await t.test('EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN awards +15 in Category F', () => {
     const resWithBearCross = {
       ...baseResult,
-      signals: ['EMA_CROSS_BEAR', 'RSI_BULLISH', 'BREAKDOWN'],
+      signals: ['EMA_CROSS_BEAR', 'RSI_BEARISH', 'BREAKDOWN'],
     };
     const resWithoutBearCross = {
       ...baseResult,
@@ -969,7 +969,7 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     };
     const scoreWith = RankingService.calculateScore(resWithBearCross as any);
     const scoreWithout = RankingService.calculateScore(resWithoutBearCross as any);
-    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BULLISH + BREAKDOWN must award +15 points');
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN must award +15 points');
   });
 
   await t.test('EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN awards +15 in Category F', () => {
