@@ -427,7 +427,9 @@ export class MarketService {
     if (dataMode === 'live') {
       // Primary: Fyers (if access token is valid)
       const token = await FyersAuthService.getAccessToken();
+      let fyersAttempted = false;
       if (token) {
+        fyersAttempted = true;
         const fyersPrimary = await MarketService.tryFyersHistoryFallback(
           cleanSymbol,
           market,
@@ -671,17 +673,18 @@ export class MarketService {
 
       } catch (err) {
         console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}:`, err);
-        // Option A: Fyers history only while broker session is Connected (manual daily OAuth).
-        // No auto-login — missing/expired token means same null as before.
-        const fyersFallback = await MarketService.tryFyersHistoryFallback(
-          cleanSymbol,
-          market,
-          sector,
-          marketCap,
-          sma200,
-          cacheKey
-        );
-        if (fyersFallback) return fyersFallback;
+        // Skip redundant retry if Fyers was already attempted as primary above
+        if (!fyersAttempted) {
+          const fyersFallback = await MarketService.tryFyersHistoryFallback(
+            cleanSymbol,
+            market,
+            sector,
+            marketCap,
+            sma200,
+            cacheKey
+          );
+          if (fyersFallback) return fyersFallback;
+        }
         return null;
       }
     }

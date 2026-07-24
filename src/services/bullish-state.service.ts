@@ -15,10 +15,10 @@ import { cache } from '@/lib/redis';
  *
  * Works with or without Redis (falls back to in-process memory via cache utility).
  *
- * Design note: We proxy the EMA 9/21 intraday cross using daily-granularity
- * momentum indicators (sma20Slope > 0 + price > TC). This is the best we can
- * do without fetching a 5m/15m intraday candle series per symbol. When intraday
- * data is wired in, replace `isBullishState` with a proper EMA9 > EMA21 check.
+ * Design note: The caller (scanner.service.ts) determines direction via LTP vs today's
+ * CPR bands (ltp > tc = BULLISH, ltp < bc = BEARISH). This service only
+ * tracks how long that state has persisted — it does not itself evaluate
+ * slope or momentum.
  */
 
 export interface BullishStateEntry {
