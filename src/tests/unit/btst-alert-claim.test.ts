@@ -43,7 +43,7 @@ async function withDiscoveryClock<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function makeTradableSignal(): OvernightSignal {
+function makeTradableSignal(overrides: Partial<OvernightSignal> = {}): OvernightSignal {
   return {
     id: 'btst-alert-test-signal',
     symbol: 'TEST',
@@ -66,6 +66,7 @@ function makeTradableSignal(): OvernightSignal {
     scoreBreakdown: null,
     reasons: [],
     regime: null,
+    ...overrides,
   } as unknown as OvernightSignal;
 }
 
@@ -81,6 +82,7 @@ function mockBtstRouteDeps(handlers: {
   delete?: (args: unknown) => Promise<unknown>;
   sendBtstAlert?: (payload: unknown) => Promise<{ sent: boolean; reason?: string }>;
   discover?: () => Promise<OvernightSignal[]>;
+  suggestOptionForBtst?: typeof OptionSuggestionService.suggestOptionForBtst;
 }): BtstRouteMocks {
   const originalCreate = prisma.btstAlertState.create;
   const originalDelete = prisma.btstAlertState.delete;
@@ -120,7 +122,8 @@ function mockBtstRouteDeps(handlers: {
 
   OvernightService.discover = (handlers.discover ?? (async () => [makeTradableSignal()])) as typeof OvernightService.discover;
   MarketService.getStockData = (async () => null) as typeof MarketService.getStockData;
-  OptionSuggestionService.suggestOptionForBtst = (async () => ({ error: 'NO_CHAIN' })) as typeof OptionSuggestionService.suggestOptionForBtst;
+  OptionSuggestionService.suggestOptionForBtst =
+    (handlers.suggestOptionForBtst ?? (async () => ({ error: 'NO_CHAIN' }))) as typeof OptionSuggestionService.suggestOptionForBtst;
 
   // Index BTST leg (added alongside stock discovery): no index signals today,
   // and no real overnightSignal table lookup — keeps this a pure unit test.
@@ -262,6 +265,39 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
       assert.strictEqual(result.count, 0);
       assert.strictEqual(mocks.createCalls.length, 0);
       assert.strictEqual(mocks.sendCalls.length, 0);
+      assert.strictEqual(mocks.deleteCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('option enrichment throw skips only that symbol and still sends remaining alerts', async () => {
+    const mocks = mockBtstRouteDeps({
+      discover: async () => [
+        makeTradableSignal({ id: 'ok-signal', symbol: 'GOOD' }),
+        makeTradableSignal({ id: 'bad-signal', symbol: 'BAD' }),
+      ],
+      suggestOptionForBtst: async (symbol) => {
+        if (symbol === 'BAD') {
+          throw new Error('option chain unavailable');
+        }
+        return { error: 'NO_CHAIN' };
+      },
+      sendBtstAlert: async (payload) => {
+        const symbols = (payload as Array<{ symbol: string }>).map((row) => row.symbol);
+        assert.deepStrictEqual(symbols, ['GOOD']);
+        return { sent: true };
+      },
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true);
+      assert.strictEqual(result.count, 1);
+      assert.strictEqual(result.longs, 1);
+      assert.strictEqual(mocks.createCalls.length, 1);
+      assert.strictEqual(mocks.sendCalls.length, 1);
       assert.strictEqual(mocks.deleteCalls.length, 0);
     } finally {
       mocks.restore();
