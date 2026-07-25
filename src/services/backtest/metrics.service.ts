@@ -8,6 +8,7 @@ import {
   computeStockBtstSliceMetrics,
   stockSliceStatsToSnapshots,
 } from './stock-btst-slice-metrics';
+import { computeWinRate } from '@/lib/win-rate';
 
 export class MetricsService {
   /**
@@ -152,9 +153,15 @@ export class MetricsService {
       }
     }
 
-    const decisiveTrades = winningTrades + losingTrades;
-    const winRate = decisiveTrades > 0 ? (winningTrades / decisiveTrades) * 100 : 0;
-    const lossRate = decisiveTrades > 0 ? (losingTrades / decisiveTrades) * 100 : 0;
+    const metricClosedTrades = trades.filter(
+      (t) => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED'
+    );
+    const winRateSummary = computeWinRate(metricClosedTrades, (trade) => trade.pnl ?? 0);
+    const winRate = winRateSummary.winRate;
+    const lossRate =
+      winRateSummary.decisive > 0
+        ? (winRateSummary.losses / winRateSummary.decisive) * 100
+        : 0;
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? 999 : 0);
     const avgRR = totalTrades > 0 ? totalRR / totalTrades : 0;
     const avgWin  = winningTrades > 0 ? grossProfit / winningTrades : 0;
