@@ -258,6 +258,7 @@ interface ScannedStock {
     liquidity?: number;
     closeStrength?: number;
     clvScore?: number;
+    trendConfluence?: number;
   };
   optionSuggestion?: {
     symbol?: string;
