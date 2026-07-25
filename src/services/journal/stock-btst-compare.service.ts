@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
+import { computeWinRate } from '@/lib/win-rate';
 import { parseStockBtstTradeContext } from '../backtest/stock-btst-slice-metrics';
 
 export interface StockBtstCompareRow {
@@ -109,6 +110,9 @@ export async function getStockBtstCompare(
       })
     : [];
 
+  // Safe to key live rows by symbol + date: TradeJournal enforces
+  // @@unique([symbol, tradeDate, signalType]), so there can be at most one
+  // BTST journal entry per stock/day.
   const liveByKey = new Map<string, (typeof liveEntries)[number]>();
   for (const e of liveEntries) {
     if (!isStockBtstJournalEntry(e.signalSummary)) continue;
@@ -177,11 +181,14 @@ export async function getStockBtstCompare(
   const liveClosed = liveEntries.filter(
     (e) => isStockBtstJournalEntry(e.signalSummary) && e.exitCmp != null
   );
-  const liveWins = liveClosed.filter((e) => (e.pnlPct ?? 0) > 0).length;
+  const liveWinRateSummary = computeWinRate(liveClosed, (entry) => entry.pnlPct ?? 0);
   const btClosed = backtestTrades.filter(
     (t) => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED'
   );
-  const btWins = btClosed.filter((t) => (t.pnl ?? 0) > 0).length;
+  const backtestWinRateSummary = computeWinRate(
+    btClosed,
+    (trade) => trade.pnl ?? trade.pnlPercent ?? 0
+  );
 
   return {
     backtestRunId: run?.id ?? null,
@@ -199,9 +206,9 @@ export async function getStockBtstCompare(
       backtestOnly: rows.filter((r) => r.alignment === 'BACKTEST_ONLY').length,
       liveClosed: liveClosed.length,
       liveWinRate:
-        liveClosed.length > 0 ? (liveWins / liveClosed.length) * 100 : null,
+        liveWinRateSummary.decisive > 0 ? liveWinRateSummary.winRate : null,
       backtestWinRate:
-        btClosed.length > 0 ? (btWins / btClosed.length) * 100 : null,
+        backtestWinRateSummary.decisive > 0 ? backtestWinRateSummary.winRate : null,
     },
   };
 }
