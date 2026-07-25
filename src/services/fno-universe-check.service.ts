@@ -91,8 +91,8 @@ export class FnoUniverseCheckService {
       };
 
       return { ok: true, data: diff };
-    } catch (error: any) {
-      return { ok: false, error: error.message || 'Unknown error occurred during fetch' };
+    } catch (error: unknown) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Unknown error occurred during fetch' };
     }
   }
 }

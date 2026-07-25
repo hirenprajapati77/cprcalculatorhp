@@ -49,8 +49,8 @@ _Review and manually update STOCK_UNIVERSE in market.service.ts._`;
     }
 
     return NextResponse.json(diff);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('FNO Universe Check Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
   }
 }
