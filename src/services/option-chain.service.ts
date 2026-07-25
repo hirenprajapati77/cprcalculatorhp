@@ -142,7 +142,8 @@ export class OptionChainService {
             });
 
             const result: OptionChainResult = {
-              optionsChain: data.data.optionsChain.map((o) => ({
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              optionsChain: data.data.optionsChain.map((o: any) => ({
                 symbol: o.symbol,
                 strikePrice: o.strikePrice !== undefined ? o.strikePrice : (o.strike_price !== undefined ? o.strike_price : 0),
                 optionType: o.optionType !== undefined ? o.optionType : (o.option_type !== undefined ? o.option_type : 'CE'),
@@ -206,7 +207,8 @@ export class OptionChainService {
           });
 
           const result: OptionChainResult = {
-            optionsChain: data.data.optionsChain.map((o) => ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            optionsChain: data.data.optionsChain.map((o: any) => ({
               symbol: o.symbol,
               strikePrice: o.strikePrice !== undefined ? o.strikePrice : (o.strike_price !== undefined ? o.strike_price : 0),
               optionType: o.optionType !== undefined ? o.optionType : (o.option_type !== undefined ? o.option_type : 'CE'),

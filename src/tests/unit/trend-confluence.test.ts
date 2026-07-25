@@ -127,6 +127,7 @@ test('Trend Confluence Shadow Scoring', async (t) => {
 
   await t.test('Regression check on base score output identity', () => {
     // Assert strictly that adding the shadow fields does not alter the exact base score
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resBefore = BtstRankingService.calculateScoreDetails(baseInputs as any);
     const resAfter = BtstRankingService.calculateScoreDetails({
       ...baseInputs, rsi14: 55, emaCross: { cross: 'BULLISH', isBullishAlignment: true }
