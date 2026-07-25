@@ -71,8 +71,8 @@ export class CalculationService {
       }
     }
 
-    // Cache the calculation by shareToken for fast public lookups (7 days)
-    if (record.shareToken) {
+    // Cache only durable records; failed writes return 503 and must not create share links.
+    if (record.persisted !== false && record.shareToken) {
       await cache.set(`calc:share:${record.shareToken}`, JSON.stringify(record), 86400 * 7);
     }
 
