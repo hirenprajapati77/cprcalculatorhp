@@ -423,27 +423,8 @@ export class MarketService {
     const sector = (staticMeta?.sector || 'Other').trim();
     const marketCap = staticMeta?.marketCap || 50000;
 
-    // ── LIVE MODE: Fyers (Primary when Connected) with Yahoo Finance Fallback ─
+    // ── LIVE MODE: Yahoo live quote first, Fyers daily history as outage fallback ─
     if (dataMode === 'live') {
-      // Primary: Fyers (if access token is valid)
-      const token = await FyersAuthService.getAccessToken();
-      let fyersAttempted = false;
-      if (token) {
-        fyersAttempted = true;
-        const fyersPrimary = await MarketService.tryFyersHistoryFallback(
-          cleanSymbol,
-          market,
-          sector,
-          marketCap,
-          sma200,
-          cacheKey
-        );
-        if (fyersPrimary) {
-          return fyersPrimary;
-        }
-        console.warn(`[LiveFeed] Primary Fyers fetch failed for ${cleanSymbol}, falling back to Yahoo Finance`);
-      }
-
       try {
         const res = await fetch(
           // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
@@ -673,18 +654,15 @@ export class MarketService {
 
       } catch (err) {
         console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}:`, err);
-        // Skip redundant retry if Fyers was already attempted as primary above
-        if (!fyersAttempted) {
-          const fyersFallback = await MarketService.tryFyersHistoryFallback(
-            cleanSymbol,
-            market,
-            sector,
-            marketCap,
-            sma200,
-            cacheKey
-          );
-          if (fyersFallback) return fyersFallback;
-        }
+        const fyersFallback = await MarketService.tryFyersHistoryFallback(
+          cleanSymbol,
+          market,
+          sector,
+          marketCap,
+          sma200,
+          cacheKey
+        );
+        if (fyersFallback) return fyersFallback;
         return null;
       }
     }

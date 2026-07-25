@@ -26,6 +26,21 @@ function makeChain(overrides: Partial<{
   ];
 }
 
+test('OptionSuggestionService extracts expiry from NSE and BSE Fyers option symbols', () => {
+  assert.strictEqual(
+    OptionSuggestionService.extractFyersOptionExpiry('NSE:NIFTY2672322500CE', 'NIFTY', 22500, 'CE'),
+    '26723'
+  );
+  assert.strictEqual(
+    OptionSuggestionService.extractFyersOptionExpiry('BSE:SENSEX2672375200CE', 'SENSEX', 75200, 'CE'),
+    '26723'
+  );
+  assert.strictEqual(
+    OptionSuggestionService.extractFyersOptionExpiry('BSE:SENSEX26JUL75200PE', 'SENSEX', 75200, 'PE'),
+    '26JUL'
+  );
+});
+
 // ─── Fix 1 verification: honest error paths, no fabricated data ──────────────
 
 test('Option Suggestion Service — Honest Error Paths (no fabricated data)', async (t) => {
@@ -111,6 +126,34 @@ test('Option Suggestion — OI Score scales relative to max OI among candidates'
 
   FyersAuthService.getAccessToken = originalGetAccessToken;
   OptionChainService.getOptionChain = originalGetOptionChain;
+});
+
+test('Option Suggestion — SENSEX formatted name keeps BSE expiry token', async () => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetOptionChain = OptionChainService.getOptionChain;
+  const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+
+  FyersAuthService.getAccessToken = async () => 'mock_token';
+  OptionChainService.getOptionChain = async () => ({
+    optionsChain: [
+      { symbol: 'BSE:SENSEX2672375200CE', strikePrice: 75200, optionType: 'CE' as const, ltp: 120, open_interest: 100000, volume: 10000, bid: 119, ask: 121 },
+      { symbol: 'BSE:SENSEX2672375300CE', strikePrice: 75300, optionType: 'CE' as const, ltp: 80, open_interest: 90000, volume: 9000, bid: 79, ask: 81 },
+      { symbol: 'BSE:SENSEX2672375200PE', strikePrice: 75200, optionType: 'PE' as const, ltp: 100, open_interest: 80000, volume: 8000, bid: 99, ask: 101 },
+    ],
+    expiryData: [],
+    method: 'direct' as const,
+  });
+  (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SENSEX', 10]]);
+
+  try {
+    const res = await OptionSuggestionService.buildSuggestion('SENSEX', 75500, 'CE', 75500, 75200, 76000);
+    assert.strictEqual(res.error, undefined);
+    assert.strictEqual(res.formattedName, 'SENSEX 26723 75200 CE');
+  } finally {
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    OptionChainService.getOptionChain = originalGetOptionChain;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
+  }
 });
 
 // ─── PCR Context Score ───────────────────────────────────────────────────────

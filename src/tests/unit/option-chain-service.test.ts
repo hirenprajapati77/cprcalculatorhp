@@ -3,6 +3,8 @@ import assert from 'node:assert';
 import { OptionChainService } from '../../services/option-chain.service';
 import { CacheService } from '../../services/cache.service';
 import { FyersAuthService } from '../../services/fyers-auth.service';
+import { env } from '../../config/env';
+import { getISTTime } from '../../lib/market-hours';
 
 test('OptionChainService fetchOptionQuote regex supports &', async (_t) => {
   let fetchedSymbol = '';
@@ -99,6 +101,84 @@ test('OptionChainService rollover logic and cache partitioning', async () => {
     FyersAuthService.getCredentials = originalGetCredentials;
     CacheService.get = originalGet;
     CacheService.set = originalSet;
+    // @ts-expect-error test mock
+    OptionChainService.fetchWithRetry = originalFetchWithRetry;
+  }
+});
+
+test('OptionChainService applies rollover when direct fetch falls back to proxy', async () => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetCredentials = FyersAuthService.getCredentials;
+  const originalGet = CacheService.get;
+  const originalSet = CacheService.set;
+  const originalProxyUrl = env.FYERS_AUTH_PROXY_URL;
+  const originalFetch = global.fetch;
+  // @ts-expect-error test mock
+  const originalFetchWithRetry = OptionChainService.fetchWithRetry;
+
+  FyersAuthService.getAccessToken = async () => 'dummy_token';
+  FyersAuthService.getCredentials = () => ({ appId: 'dummy_id', secretId: '', redirectUrl: '' });
+  CacheService.get = async () => null;
+  CacheService.set = async () => {};
+  env.FYERS_AUTH_PROXY_URL = 'https://proxy.example.test';
+
+  // @ts-expect-error test mock
+  OptionChainService.fetchWithRetry = async () => {
+    throw new Error('direct unavailable');
+  };
+
+  const todayStr = getISTTime().dateString;
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const nextWeekStr = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+  const requestedUrls: string[] = [];
+
+  global.fetch = async (url: string | URL | Request) => {
+    const requestUrl = String(url);
+    requestedUrls.push(requestUrl);
+
+    if (requestUrl.includes('timestamp=')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          s: 'ok',
+          data: {
+            expiryData: [nextWeekStr],
+            optionsChain: [{ symbol: 'PROXY_NEXT_WEEK_OPTION', strikePrice: 20000, optionType: 'CE', ltp: 200 }]
+          }
+        })
+      } as Response;
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        s: 'ok',
+        data: {
+          expiryData: [todayStr, { date: nextWeekStr, expiry: 9876543210 }],
+          optionsChain: [{ symbol: 'PROXY_TODAY_OPTION', strikePrice: 20000, optionType: 'CE', ltp: 100 }]
+        }
+      })
+    } as Response;
+  };
+
+  try {
+    const result = await OptionChainService.getOptionChain('NIFTY', true);
+
+    assert.strictEqual(!('error' in result) && result.method, 'proxy');
+    assert.strictEqual(!('error' in result) && result.optionsChain[0].symbol, 'PROXY_NEXT_WEEK_OPTION');
+    assert.ok(
+      requestedUrls.some((url) => url.includes('timestamp=9876543210')),
+      'proxy fallback should refetch next expiry with timestamp'
+    );
+  } finally {
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    FyersAuthService.getCredentials = originalGetCredentials;
+    CacheService.get = originalGet;
+    CacheService.set = originalSet;
+    env.FYERS_AUTH_PROXY_URL = originalProxyUrl;
+    global.fetch = originalFetch;
     // @ts-expect-error test mock
     OptionChainService.fetchWithRetry = originalFetchWithRetry;
   }

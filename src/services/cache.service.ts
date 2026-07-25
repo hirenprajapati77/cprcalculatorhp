@@ -5,6 +5,16 @@ import { LRUCache } from 'lru-cache';
 export type CacheProviderType = 'redis' | 'memory' | 'auto';
 
 const CACHE_PROVIDER = (env.CACHE_PROVIDER as CacheProviderType) || 'auto';
+const REDIS_FALLBACK_AFTER_RETRIES = 3;
+const REDIS_RECONNECT_MAX_DELAY_MS = 30_000;
+
+export function getRedisReconnectDelay(times: number): number {
+  return Math.min(Math.max(times, 1) * 1000, REDIS_RECONNECT_MAX_DELAY_MS);
+}
+
+export function shouldKeepRedisRetrying(nodeEnv: string, redisUrl?: string): boolean {
+  return nodeEnv === 'production' || Boolean(redisUrl);
+}
 
 // LRU Memory Cache fallback
 const memoryCache = new LRUCache<string, NonNullable<unknown>>({
@@ -17,6 +27,7 @@ const memoryCache = new LRUCache<string, NonNullable<unknown>>({
 class CacheServiceImpl {
   private redisClient: Redis | null = null;
   private provider: 'redis' | 'memory' = 'memory';
+  private redisFallbackLogged = false;
 
   // Metrics tracking
   private hits = 0;
@@ -33,12 +44,22 @@ class CacheServiceImpl {
         this.redisClient = new Redis(env.REDIS_URL || 'redis://localhost:6379', {
           maxRetriesPerRequest: 1,
           retryStrategy: (times) => {
-            if (times > 3) {
-              console.warn('Redis unreachable, falling back to memory cache.');
+            const delay = getRedisReconnectDelay(times);
+            if (times > REDIS_FALLBACK_AFTER_RETRIES) {
+              const keepRetrying = shouldKeepRedisRetrying(env.NODE_ENV, env.REDIS_URL);
+              if (!this.redisFallbackLogged) {
+                const message = keepRetrying
+                  ? `Redis unreachable, using memory cache while retrying every ${delay}ms.`
+                  : 'Redis unreachable, using memory cache.';
+                console.warn(message);
+                this.redisFallbackLogged = true;
+              }
               this.provider = 'memory';
-              return null; // Stop retrying
+              if (!keepRetrying) {
+                return null;
+              }
             }
-            return Math.min(times * 50, 2000);
+            return delay;
           },
         });
 
@@ -51,6 +72,7 @@ class CacheServiceImpl {
 
         this.redisClient.on('ready', () => {
           console.log('Redis connected');
+          this.redisFallbackLogged = false;
           this.provider = 'redis';
         });
       } catch {

@@ -19,6 +19,38 @@ export interface OptionChainResult {
   method: 'direct' | 'proxy';
 }
 
+type FyersOptionChainOption = {
+  symbol: string;
+  strikePrice?: number;
+  strike_price?: number;
+  optionType?: 'CE' | 'PE';
+  option_type?: 'CE' | 'PE';
+  ltp: number;
+  open_interest?: number;
+  oi?: number;
+  volume?: number;
+  vol_traded_today?: number;
+  bid?: number;
+  ask?: number;
+};
+
+type FyersExpiryEntry = string | {
+  date?: string;
+  expiryDate?: string;
+  expiry?: string | number;
+};
+
+type ValidOptionChainResponse = {
+  s?: string;
+  status?: string;
+  code?: number;
+  message?: string;
+  data: {
+    optionsChain: FyersOptionChainOption[];
+    expiryData?: FyersExpiryEntry[];
+  };
+};
+
 export class OptionChainService {
   public static getStrikeIncrement(symbol: string, price: number): number {
     const cleanSym = symbol.toUpperCase().trim();
@@ -94,86 +126,23 @@ export class OptionChainService {
         if (res.ok) {
           let data = await res.json();
 
-          const isOk = data.s === 'ok' || data.status === 'ok' || data.code === 200 || (data.data?.optionsChain && data.data.optionsChain.length > 0);
+          const isOk = OptionChainService.isValidOptionChainResponse(data);
 
-          if (isOk && data.data?.optionsChain && data.data.optionsChain.length > 0) {
-            
-            // --- ROLLOVER LOGIC: IF CURRENT EXPIRY IS TODAY, FETCH NEXT EXPIRY ---
-            if (data.data.expiryData && data.data.expiryData.length > 1) {
-              const currentExpiryObj = data.data.expiryData[0];
-              const currentExpiryStr = typeof currentExpiryObj === 'string' ? currentExpiryObj : (currentExpiryObj.date || currentExpiryObj.expiryDate || currentExpiryObj.expiry);
-              
-              if (currentExpiryStr) {
-                let isExpiredOrToday = false;
-                let parsedExpiryDate: Date | null = null;
-                const { getISTTime } = await import('@/lib/market-hours');
-                const { dateString } = getISTTime();
-                const [ty, tm, td] = dateString.split('-').map(Number);
-                const todayISTMidnight = new Date(Date.UTC(ty, tm - 1, td));
-                
-                if (currentExpiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                  const [ey, em, ed] = currentExpiryStr.split('-').map(Number);
-                  parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
-                } else if (currentExpiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                  const [ed, em, ey] = currentExpiryStr.split('-').map(Number);
-                  parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
-                } else {
-                  const d = new Date(currentExpiryStr);
-                  if (!isNaN(d.getTime())) {
-                    parsedExpiryDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                  }
+          if (isOk) {
+            data = await OptionChainService.resolveRolledOverChain(data, {
+              allowRollover,
+              cleanSym,
+              requestUrl: directUrl,
+              fetchFn: (url) => OptionChainService.fetchWithRetry(url, {
+                headers: {
+                  'Authorization': `${appId}:${token}`,
+                  'Accept': 'application/json'
                 }
-                
-                if (parsedExpiryDate) {
-                  const diffTime = parsedExpiryDate.getTime() - todayISTMidnight.getTime();
-                  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-                  isExpiredOrToday = diffDays <= 0;
-                } else {
-                  // Fallback string matching just in case
-                  const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
-                  const todayStr1 = new Date().toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-');
-                  isExpiredOrToday = currentExpiryStr.toLowerCase() === todayStr1.toLowerCase();
-                }
-                
-                console.log(`[OptionChain] Rollover check for ${cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${todayISTMidnight}, isExpiredOrToday: ${isExpiredOrToday}`);
-                
-                if (allowRollover && isExpiredOrToday) {
-                  const nextExpiryObj = data.data.expiryData[1];
-                  const nextExpiryTimestamp = typeof nextExpiryObj === 'string' ? null : nextExpiryObj?.expiry;
-                  const nextExpiryStr = typeof nextExpiryObj === 'string' ? nextExpiryObj : (nextExpiryObj?.date || nextExpiryObj?.expiryDate || nextExpiryObj?.expiry);
-                  
-                  if (nextExpiryTimestamp) {
-                    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry timestamp: ${nextExpiryTimestamp} (${nextExpiryStr}) for ${cleanSym}`);
-                    const nextUrl = `${directUrl}&timestamp=${nextExpiryTimestamp}`;
-                    const resNext = await OptionChainService.fetchWithRetry(nextUrl, {
-                      headers: {
-                        'Authorization': `${appId}:${token}`,
-                        'Accept': 'application/json'
-                      }
-                    });
-                    
-                    if (resNext.ok) {
-                      const dataNext = await resNext.json();
-                      console.log(`[OptionChain] Next expiry response status: ${dataNext.s}, message: ${dataNext.message}`);
-                      if ((dataNext.s === 'ok' || dataNext.status === 'ok' || dataNext.code === 200) && dataNext.data?.optionsChain) {
-                         data = dataNext; // Use next expiry data
-                         console.log(`[OptionChain] Successfully rolled over ${cleanSym} to ${nextExpiryStr}`);
-                      } else {
-                         console.warn(`[OptionChain] Rollover failed. Fyers error: ${JSON.stringify(dataNext)}`);
-                      }
-                    } else {
-                      console.warn(`[OptionChain] Rollover HTTP failed with status ${resNext.status}`);
-                    }
-                  } else {
-                    console.warn(`[OptionChain] Could not find next expiry string in expiryData:`, data.data.expiryData);
-                  }
-                }
-              }
-            }
-            // ---------------------------------------------------------------------
+              })
+            });
 
             const result: OptionChainResult = {
-              optionsChain: data.data.optionsChain.map((o: { symbol: string; strikePrice?: number; strike_price?: number; optionType?: 'CE' | 'PE'; option_type?: 'CE' | 'PE'; ltp: number; open_interest?: number; oi?: number; volume?: number; vol_traded_today?: number; bid?: number; ask?: number }) => ({
+              optionsChain: data.data.optionsChain.map((o) => ({
                 symbol: o.symbol,
                 strikePrice: o.strikePrice !== undefined ? o.strikePrice : (o.strike_price !== undefined ? o.strike_price : 0),
                 optionType: o.optionType !== undefined ? o.optionType : (o.option_type !== undefined ? o.option_type : 'CE'),
@@ -218,12 +187,26 @@ export class OptionChainService {
       }
 
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
 
-        const isOk = data.s === 'ok' || data.status === 'ok' || data.code === 200 || (data.data?.optionsChain && data.data.optionsChain.length > 0);
-        if (isOk && data.data?.optionsChain && data.data.optionsChain.length > 0) {
+        const isOk = OptionChainService.isValidOptionChainResponse(data);
+        if (isOk) {
+          const proxyBaseUrl = `${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`;
+          data = await OptionChainService.resolveRolledOverChain(data, {
+            allowRollover,
+            cleanSym,
+            requestUrl: proxyBaseUrl,
+            fetchFn: (url) => fetch(url, {
+              headers: {
+                'Authorization': `${appId}:${token}`,
+                'X-Fyers-AppId': appId,
+                'x-target-host': 'api-t1.fyers.in'
+              }
+            })
+          });
+
           const result: OptionChainResult = {
-            optionsChain: data.data.optionsChain.map((o: { symbol: string; strikePrice?: number; strike_price?: number; optionType?: 'CE' | 'PE'; option_type?: 'CE' | 'PE'; ltp: number; open_interest?: number; oi?: number; volume?: number; vol_traded_today?: number; bid?: number; ask?: number }) => ({
+            optionsChain: data.data.optionsChain.map((o) => ({
               symbol: o.symbol,
               strikePrice: o.strikePrice !== undefined ? o.strikePrice : (o.strike_price !== undefined ? o.strike_price : 0),
               optionType: o.optionType !== undefined ? o.optionType : (o.option_type !== undefined ? o.option_type : 'CE'),
@@ -288,5 +271,114 @@ export class OptionChainService {
       }
     }
     return fetch(url, options);
+  }
+
+  private static isValidOptionChainResponse(data: unknown): data is ValidOptionChainResponse {
+    if (!data || typeof data !== 'object') return false;
+    const response = data as { s?: unknown; status?: unknown; code?: unknown; data?: { optionsChain?: unknown } };
+    const statusOk = response.s === 'ok' || response.status === 'ok' || response.code === 200;
+    const hasOptions = Array.isArray(response.data?.optionsChain) && response.data.optionsChain.length > 0;
+    return Boolean(hasOptions && (statusOk || hasOptions));
+  }
+
+  private static async resolveRolledOverChain(
+    data: ValidOptionChainResponse,
+    params: {
+      allowRollover: boolean;
+      cleanSym: string;
+      requestUrl: string;
+      fetchFn: (url: string) => Promise<Response>;
+    }
+  ): Promise<ValidOptionChainResponse> {
+    const expiryData = data.data.expiryData;
+    if (!params.allowRollover || !expiryData || expiryData.length <= 1) {
+      return data;
+    }
+
+    const currentExpiryStr = OptionChainService.getExpiryValue(expiryData[0]);
+    if (!currentExpiryStr) {
+      return data;
+    }
+
+    const { isExpiredOrToday, parsedExpiryDate, todayISTMidnight } =
+      await OptionChainService.isExpiryExpiredOrToday(currentExpiryStr);
+
+    console.log(`[OptionChain] Rollover check for ${params.cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${todayISTMidnight}, isExpiredOrToday: ${isExpiredOrToday}`);
+
+    if (!isExpiredOrToday) {
+      return data;
+    }
+
+    const nextExpiryObj = expiryData[1];
+    const nextExpiryTimestamp = typeof nextExpiryObj === 'string' ? null : nextExpiryObj?.expiry;
+    const nextExpiryStr = OptionChainService.getExpiryValue(nextExpiryObj);
+
+    if (!nextExpiryTimestamp) {
+      console.warn(`[OptionChain] Could not find next expiry string in expiryData:`, expiryData);
+      return data;
+    }
+
+    console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry timestamp: ${nextExpiryTimestamp} (${nextExpiryStr}) for ${params.cleanSym}`);
+    const resNext = await params.fetchFn(`${params.requestUrl}&timestamp=${nextExpiryTimestamp}`);
+
+    if (!resNext.ok) {
+      console.warn(`[OptionChain] Rollover HTTP failed with status ${resNext.status}`);
+      return data;
+    }
+
+    const dataNext = await resNext.json();
+    console.log(`[OptionChain] Next expiry response status: ${dataNext.s}, message: ${dataNext.message}`);
+    if (OptionChainService.isValidOptionChainResponse(dataNext)) {
+      console.log(`[OptionChain] Successfully rolled over ${params.cleanSym} to ${nextExpiryStr}`);
+      return dataNext;
+    }
+
+    console.warn(`[OptionChain] Rollover failed. Fyers error: ${JSON.stringify(dataNext)}`);
+    return data;
+  }
+
+  private static getExpiryValue(expiry: FyersExpiryEntry | undefined): string | null {
+    if (!expiry) return null;
+    const value = typeof expiry === 'string' ? expiry : (expiry.date || expiry.expiryDate || expiry.expiry);
+    return value === undefined || value === null ? null : String(value);
+  }
+
+  private static async isExpiryExpiredOrToday(expiryStr: string): Promise<{
+    isExpiredOrToday: boolean;
+    parsedExpiryDate: Date | null;
+    todayISTMidnight: Date;
+  }> {
+    let parsedExpiryDate: Date | null = null;
+    const { getISTTime } = await import('@/lib/market-hours');
+    const { dateString } = getISTTime();
+    const [ty, tm, td] = dateString.split('-').map(Number);
+    const todayISTMidnight = new Date(Date.UTC(ty, tm - 1, td));
+
+    if (expiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [ey, em, ed] = expiryStr.split('-').map(Number);
+      parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
+    } else if (expiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+      const [ed, em, ey] = expiryStr.split('-').map(Number);
+      parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
+    } else {
+      const d = new Date(expiryStr);
+      if (!isNaN(d.getTime())) {
+        parsedExpiryDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      }
+    }
+
+    if (parsedExpiryDate) {
+      const diffTime = parsedExpiryDate.getTime() - todayISTMidnight.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      return { isExpiredOrToday: diffDays <= 0, parsedExpiryDate, todayISTMidnight };
+    }
+
+    const optionsGB: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' };
+    const todayStr1 = new Date().toLocaleDateString('en-GB', optionsGB).replace(/ /g, '-');
+    return {
+      isExpiredOrToday: expiryStr.toLowerCase() === todayStr1.toLowerCase(),
+      parsedExpiryDate,
+      todayISTMidnight
+    };
   }
 }

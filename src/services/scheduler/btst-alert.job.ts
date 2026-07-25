@@ -39,20 +39,39 @@ export type BtstAlertJobResult = {
 };
 
 async function buildEnrichedIndexLongs(picks: OvernightSignal[]) {
-  return Promise.all(
-    picks.map(async (sig) => {
-      const r = overnightSignalToBtstUi(sig);
-      const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-        r.symbol,
-        r.ltp,
-        'LONG',
-        r.entry,
-        r.sl,
-        r.target
-      );
-      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
-    })
+  return buildEnrichedPicks(picks, 'LONG');
+}
+
+async function enrichBtstPick(sig: OvernightSignal, direction: 'LONG' | 'SHORT') {
+  const r = overnightSignalToBtstUi(sig);
+  const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+    r.symbol,
+    r.ltp,
+    direction,
+    r.entry,
+    r.sl,
+    r.target
   );
+  return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
+}
+
+async function buildEnrichedPicks(picks: OvernightSignal[], direction: 'LONG' | 'SHORT') {
+  const settled = await Promise.allSettled(
+    picks.map((sig) => enrichBtstPick(sig, direction))
+  );
+  const enriched: Awaited<ReturnType<typeof enrichBtstPick>>[] = [];
+
+  settled.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      enriched.push(result.value);
+      return;
+    }
+
+    const symbol = picks[index]?.symbol ?? 'UNKNOWN';
+    console.warn(`[BtstAlert] ${symbol} ${direction} option enrichment failed; skipping symbol:`, result.reason);
+  });
+
+  return enriched;
 }
 
 /** Shared BTST Telegram alert pipeline for cron route and in-process scheduler. */
@@ -117,35 +136,8 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     console.warn('[BtstAlert] Index BTST discovery failed; sending stock-only alert:', indexErr);
   }
 
-  const enrichedLongs = await Promise.all(
-    filteredLongs.map(async (sig) => {
-      const r = overnightSignalToBtstUi(sig);
-      const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-        r.symbol,
-        r.ltp,
-        'LONG',
-        r.entry,
-        r.sl,
-        r.target
-      );
-      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
-    })
-  );
-
-  const enrichedShorts = await Promise.all(
-    filteredShorts.map(async (sig) => {
-      const r = overnightSignalToBtstUi(sig);
-      const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-        r.symbol,
-        r.ltp,
-        'SHORT',
-        r.entry,
-        r.sl,
-        r.target
-      );
-      return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
-    })
-  );
+  const enrichedLongs = await buildEnrichedPicks(filteredLongs, 'LONG');
+  const enrichedShorts = await buildEnrichedPicks(filteredShorts, 'SHORT');
 
   const alertPayload = [...enrichedLongs, ...enrichedShorts, ...enrichedIndexLongs];
 
@@ -159,6 +151,10 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     suppressStbt,
     suppressBtst,
   };
+
+  if (alertPayload.length === 0) {
+    return { sent: false, reason: 'no setups', ...baseResult };
+  }
 
   let claimedDate = false;
   try {

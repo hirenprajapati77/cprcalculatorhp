@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { CacheService } from '../../services/cache.service';
+import { CacheService, getRedisReconnectDelay, shouldKeepRedisRetrying } from '../../services/cache.service';
 
 test('CacheService Falsy values', async (_t) => {
   const metricsBefore = await CacheService.getMetrics();
@@ -20,4 +20,14 @@ test('CacheService Falsy values', async (_t) => {
 
   const metricsAfter = await CacheService.getMetrics();
   assert.ok(metricsAfter.hits >= hitsBefore + 3, 'Hits counter should increment for falsy values');
+});
+
+test('Redis reconnect delay keeps retrying with a capped backoff', () => {
+  assert.strictEqual(getRedisReconnectDelay(1), 1000);
+  assert.strictEqual(getRedisReconnectDelay(3), 3000);
+  assert.strictEqual(getRedisReconnectDelay(30), 30000);
+  assert.strictEqual(getRedisReconnectDelay(31), 30000);
+  assert.strictEqual(shouldKeepRedisRetrying('production'), true);
+  assert.strictEqual(shouldKeepRedisRetrying('development', 'redis://localhost:6379'), true);
+  assert.strictEqual(shouldKeepRedisRetrying('development'), false);
 });

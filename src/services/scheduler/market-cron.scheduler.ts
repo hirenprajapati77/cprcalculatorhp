@@ -20,6 +20,16 @@ import {
 
 let started = false;
 
+export function shouldCompleteClaimedJob(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return true;
+  const r = result as Record<string, unknown>;
+
+  if (r.success === false) return false;
+  if (r.sent === false && r.reason !== 'already sent today') return false;
+
+  return true;
+}
+
 function isCprJournalWindowOpen(date: Date = new Date()): boolean {
   const { hour, minute, isTradingDay } = getISTTime(date);
   if (!isTradingDay) return false;
@@ -38,7 +48,11 @@ async function runClaimedJob<T>(
   if (!tryClaimCronRun(claimKey)) return;
   try {
     const result = await job();
-    completeCronRun(claimKey, true);
+    if (shouldCompleteClaimedJob(result)) {
+      completeCronRun(claimKey, true);
+    } else {
+      releaseCronRun(claimKey);
+    }
     console.log(`[MarketCronScheduler] ${label} completed`, summarizeResult(result));
   } catch (err) {
     releaseCronRun(claimKey);

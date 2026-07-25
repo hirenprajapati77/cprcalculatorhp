@@ -7,6 +7,7 @@ import {
   resetCronRunClaims,
 } from '../../services/scheduler/cron-run-claim';
 import { resolveJournalSnapshotSlot } from '../../services/scheduler/journal-snapshot.job';
+import { shouldCompleteClaimedJob } from '../../services/scheduler/market-cron.scheduler';
 
 describe('cron-run-claim', () => {
   beforeEach(() => {
@@ -35,5 +36,19 @@ describe('resolveJournalSnapshotSlot', () => {
     assert.equal(slot930, '930');
     const outside = resolveJournalSnapshotSlot(new Date('2026-07-22T05:00:00.000Z')); // 10:30 IST
     assert.equal(outside, null);
+  });
+});
+
+describe('shouldCompleteClaimedJob', () => {
+  it('releases retryable soft failures', () => {
+    assert.equal(shouldCompleteClaimedJob({ success: false, message: 'No CPR signals' }), false);
+    assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'no setups' }), false);
+    assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'telegram_api_error' }), false);
+  });
+
+  it('completes successful or non-retryable results', () => {
+    assert.equal(shouldCompleteClaimedJob({ success: true }), true);
+    assert.equal(shouldCompleteClaimedJob({ sent: true }), true);
+    assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'already sent today' }), true);
   });
 });

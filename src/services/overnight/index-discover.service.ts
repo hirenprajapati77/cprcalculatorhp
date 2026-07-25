@@ -116,6 +116,21 @@ import {
 } from './index-intraday.util';
 
 export class IndexDiscoverService {
+  static resolvePreviousCompletedCandle(
+    history: OHLC[],
+    currentTime: Date
+  ): OHLC | null {
+    if (!history || history.length === 0) return null;
+
+    const todayStr = getISTDateString(currentTime);
+    const lastCompleted = history[history.length - 1];
+    if (lastCompleted.date === todayStr) {
+      return history.length >= 2 ? history[history.length - 2] : null;
+    }
+
+    return lastCompleted;
+  }
+
   private static buildSignalResult(
     partial: Omit<
       IndexSignalResult,
@@ -384,6 +399,7 @@ export class IndexDiscoverService {
     const lastCompleted = history[history.length - 1];
     const priorCompleted = history[history.length - 2];
     const todayStr = getISTDateString(currentTime);
+    const previousCompleted = this.resolvePreviousCompletedCandle(history, currentTime);
 
     if (
       live.hasLive &&
@@ -399,7 +415,7 @@ export class IndexDiscoverService {
           low: live.low,
           close: live.ltp,
         },
-        yesterday: lastCompleted,
+        yesterday: previousCompleted ?? lastCompleted,
         usesLiveSession: true,
       };
     }
@@ -679,12 +695,14 @@ export class IndexDiscoverService {
         const chartJson = await this.fetchYahoo5mChart(instrument.yahooSymbol);
         const live = await this.getLiveIndexSession(instrument.yahooSymbol, currentTime, chartJson);
         const lastCandle = history[history.length - 1];
+        const previousSessionCandle = this.resolvePreviousCompletedCandle(history, currentTime);
+        if (!previousSessionCandle) {
+          continue;
+        }
         const previousClose =
           live.hasLive && live.previousClose != null
             ? live.previousClose
-            : history.length >= 2
-              ? history[history.length - 2].close
-              : lastCandle.close;
+            : previousSessionCandle.close;
 
         const ltp = live.hasLive && live.ltp != null ? live.ltp : lastCandle.close;
         const open = live.hasLive && live.open != null ? live.open : lastCandle.open;
@@ -710,7 +728,7 @@ export class IndexDiscoverService {
           history: history as OHLC[],
         };
 
-        const signalResult = SignalService.getSignals(stockData);
+        const signalResult = SignalService.getSignals(stockData, dateStr);
 
         const bullish = signalResult.signals.includes('BULLISH');
         const bearish = signalResult.signals.includes('BEARISH');
@@ -732,8 +750,12 @@ export class IndexDiscoverService {
 
         const direction: 'LONG' | 'SHORT' = bullish ? 'LONG' : 'SHORT';
 
-        const atrPct = getAtrPct(history.slice(0, -1), previousClose);
-        const cprSourceCandle = lastCandle;
+        const atrHistory =
+          lastCandle.date === dateStr && history.length >= 2
+            ? history.slice(0, -1)
+            : history;
+        const atrPct = getAtrPct(atrHistory, previousClose);
+        const cprSourceCandle = previousSessionCandle;
         const realCpr = calculateCPR(
           { high: cprSourceCandle.high, low: cprSourceCandle.low, close: cprSourceCandle.close },
           atrPct

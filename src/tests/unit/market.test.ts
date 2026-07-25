@@ -191,6 +191,81 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
     }
   });
 
+  await t.test('getStockData() keeps Yahoo live quote primary when Fyers is connected', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+    let fyersTokenCalls = 0;
+    FyersAuthService.getAccessToken = async () => {
+      fyersTokenCalls++;
+      return 'fyers_test_token';
+    };
+
+    const t1 = Date.UTC(2026, 6, 20) / 1000;
+    const t2 = Date.UTC(2026, 6, 21) / 1000;
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('interval=1d')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              meta: { regularMarketPrice: 123 },
+              timestamp: [t1, t2],
+              indicators: {
+                quote: [{
+                  open: [100, 110],
+                  high: [105, 125],
+                  low: [95, 108],
+                  close: [102, 120],
+                  volume: [1000, 2000],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      if (url.includes('interval=15m')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              indicators: {
+                quote: [{
+                  open: [121],
+                  high: [124],
+                  low: [120],
+                  close: [123],
+                  volume: [500],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('LTM', 'NSE');
+
+      assert.ok(data);
+      assert.strictEqual(data!.ltp, 123);
+      assert.strictEqual(data!.candle15m?.close, 123);
+      assert.strictEqual(fyersTokenCalls, 0, 'Fyers should not be consulted while Yahoo live data succeeds');
+    } finally {
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+    }
+  });
+
   await t.test('getStockData() skips Fyers fallback when not Connected', async () => {
     const originalMode = env.MARKET_DATA_MODE;
     const originalFetch = global.fetch;
