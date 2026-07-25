@@ -353,7 +353,7 @@ export class MarketService {
    * Supports Auto, NSE_FNO, NIFTY50, NIFTY100, NIFTY200, ALL_NSE, WATCHLIST.
    */
   static getRawUniverse() {
-    return STOCK_UNIVERSE;
+    return [...STOCK_UNIVERSE];
   }
 
   static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' | string) {

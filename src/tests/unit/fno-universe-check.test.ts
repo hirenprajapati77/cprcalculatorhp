@@ -1,111 +1,93 @@
+import test from 'node:test';
+import assert from 'node:assert';
 import { FnoUniverseCheckService } from '../../services/fno-universe-check.service';
 import { MarketService } from '../../services/market.service';
 
-// Mock fetch
-global.fetch = jest.fn();
-
-// Mock MarketService
-jest.mock('../../services/market.service', () => ({
-  MarketService: {
-    getRawUniverse: jest.fn()
-  }
-}));
+const originalFetch = global.fetch;
+const originalGetRawUniverse = MarketService.getRawUniverse;
 
 const mockRawUniverse = [
   { symbol: 'HDFCBANK    ', name: 'HDFC Bank', sector: 'Finance', marketCap: 100, isNifty50: true, isNifty200: true, isFnO: true },
   { symbol: 'RELIANCE    ', name: 'Reliance Industries', sector: 'Energy', marketCap: 200, isNifty50: true, isNifty200: true, isFnO: true },
   { symbol: 'NONFNO      ', name: 'Not FNO', sector: 'IT', marketCap: 50, isNifty50: false, isNifty200: false, isFnO: false }
-];
+] as any[];
 
-describe('FnoUniverseCheckService', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-    (MarketService.getRawUniverse as jest.Mock).mockReturnValue(mockRawUniverse);
-  });
+function setupMocks(csvContent?: string, fetchOk = true, fetchStatus = 200) {
+  MarketService.getRawUniverse = () => [...mockRawUniverse];
+  global.fetch = async () => ({
+    ok: fetchOk,
+    status: fetchStatus,
+    text: async () => csvContent || ''
+  }) as any;
+}
 
-  it('should return no drift when NSE list perfectly matches local isFnO list', async () => {
-    // Mock CSV response
-    const csvContent = `UNDERLYING,SYMBOL
+function restoreMocks() {
+  global.fetch = originalFetch;
+  MarketService.getRawUniverse = originalGetRawUniverse;
+}
+
+test('FnoUniverseCheckService', async (t) => {
+  t.afterEach(restoreMocks);
+
+  await t.test('should return no drift when NSE list perfectly matches local isFnO list', async () => {
+    setupMocks(`UNDERLYING,SYMBOL
 HDFC BANK,HDFCBANK
-RELIANCE INDUSTRIES,RELIANCE`;
+RELIANCE INDUSTRIES,RELIANCE`);
     
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: jest.fn().mockResolvedValue(csvContent)
-    });
-
     const result = await FnoUniverseCheckService.checkDrift();
-    expect(result.ok).toBe(true);
-    expect(result.data?.hasDrift).toBe(false);
-    expect(result.data?.newlyEligible.length).toBe(0);
-    expect(result.data?.newlyIneligible.length).toBe(0);
-    expect(result.data?.symbolsOnlyInNse.length).toBe(0);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.data?.hasDrift, false);
+    assert.strictEqual(result.data?.newlyEligible.length, 0);
+    assert.strictEqual(result.data?.newlyIneligible.length, 0);
+    assert.strictEqual(result.data?.symbolsOnlyInNse.length, 0);
   });
 
-  it('should flag newly-ineligible stock', async () => {
+  await t.test('should flag newly-ineligible stock', async () => {
     // RELIANCE is missing from CSV but isFnO=true locally
-    const csvContent = `UNDERLYING,SYMBOL
-HDFC BANK,HDFCBANK`;
+    setupMocks(`UNDERLYING,SYMBOL
+HDFC BANK,HDFCBANK`);
     
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: jest.fn().mockResolvedValue(csvContent)
-    });
-
     const result = await FnoUniverseCheckService.checkDrift();
-    expect(result.ok).toBe(true);
-    expect(result.data?.hasDrift).toBe(true);
-    expect(result.data?.newlyIneligible).toContain('RELIANCE    ');
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.data?.hasDrift, true);
+    assert.ok(result.data?.newlyIneligible.includes('RELIANCE    '));
   });
 
-  it('should flag brand-new NSE listing', async () => {
+  await t.test('should flag brand-new NSE listing', async () => {
     // NEWCO is not in STOCK_UNIVERSE at all
-    const csvContent = `UNDERLYING,SYMBOL
+    setupMocks(`UNDERLYING,SYMBOL
 HDFC BANK,HDFCBANK
 RELIANCE INDUSTRIES,RELIANCE
-NEW COMPANY,NEWCO`;
+NEW COMPANY,NEWCO`);
     
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: jest.fn().mockResolvedValue(csvContent)
-    });
-
     const result = await FnoUniverseCheckService.checkDrift();
-    expect(result.ok).toBe(true);
-    expect(result.data?.hasDrift).toBe(true);
-    expect(result.data?.symbolsOnlyInNse.some(s => s.trim() === 'NEWCO')).toBe(true);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.data?.hasDrift, true);
+    assert.ok(result.data?.symbolsOnlyInNse.some(s => s.trim() === 'NEWCO'));
   });
 
-  it('should handle fetch failure gracefully', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      status: 503
-    });
+  await t.test('should handle fetch failure gracefully', async () => {
+    setupMocks('', false, 503);
 
     const result = await FnoUniverseCheckService.checkDrift();
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('503');
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error?.includes('503'));
   });
 
-  it('should handle case and padding insensitivity', async () => {
+  await t.test('should handle case and padding insensitivity', async () => {
     // CSV has lowercase and spaces, local is padded uppercase
-    const csvContent = `UNDERLYING,SYMBOL
+    setupMocks(`UNDERLYING,SYMBOL
 HDFC BANK, hdfcbank 
 RELIANCE INDUSTRIES, ReLiAnCe
-NOT FNO, NONFNO`;
-    
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      text: jest.fn().mockResolvedValue(csvContent)
-    });
+NOT FNO, NONFNO`);
 
     const result = await FnoUniverseCheckService.checkDrift();
-    expect(result.ok).toBe(true);
-    expect(result.data?.hasDrift).toBe(true);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.data?.hasDrift, true);
     // NONFNO is locally isFnO=false, so it becomes newlyEligible
-    expect(result.data?.newlyEligible.some(s => s.trim() === 'NONFNO')).toBe(true);
+    assert.ok(result.data?.newlyEligible.some(s => s.trim() === 'NONFNO'));
     // HDFCBANK and RELIANCE should match fine and not cause drift
-    expect(result.data?.symbolsOnlyInNse.length).toBe(0);
-    expect(result.data?.newlyIneligible.length).toBe(0);
+    assert.strictEqual(result.data?.symbolsOnlyInNse.length, 0);
+    assert.strictEqual(result.data?.newlyIneligible.length, 0);
   });
 });
