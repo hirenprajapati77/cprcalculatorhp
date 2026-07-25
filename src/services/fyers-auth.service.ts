@@ -207,9 +207,9 @@ export class FyersAuthService {
         'X-Fyers-AppId': appId
       };
       
-      const proxySecret = env.PROXY_SHARED_SECRET || process.env.PROXY_SHARED_SECRET;
+      const proxySecret = env.PROXY_SHARED_SECRET;
       if (proxySecret) {
-        proxyHeaders['X-Proxy-Auth'] = proxySecret as string;
+        proxyHeaders['X-Proxy-Auth'] = proxySecret;
       }
 
       const res = await fetch(`${authProxyUrl.replace(/\/$/, '')}/api/v3/validate-authcode`, {

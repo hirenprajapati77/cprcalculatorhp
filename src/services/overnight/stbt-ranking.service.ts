@@ -17,6 +17,8 @@ export interface StbtScoringInputs {
   intradayVolume: number | null | undefined;
   last15mLow: number | null | undefined;
   hasConfirmationCandles: boolean;
+  rsi14: number | null | undefined;
+  emaCross: { cross: 'BULLISH' | 'BEARISH' | 'NONE'; isBullishAlignment: boolean } | null | undefined;
 }
 
 export interface StbtScoreDetails {
@@ -46,6 +48,7 @@ export class StbtRankingService {
       vwap: 0,
       liquidity: 0,
       closeStrength: 0,
+      trendConfluence: 0,
     };
     const range = inputs.high - inputs.low;
 
@@ -86,6 +89,19 @@ export class StbtRankingService {
         breakdown.closeStrength = 15;
       }
     }
+
+    let trendConfluence = 0;
+    if (inputs.rsi14 !== null && inputs.rsi14 !== undefined && inputs.emaCross) {
+      const bearishTrend = inputs.emaCross.cross === 'BEARISH' || !inputs.emaCross.isBullishAlignment;
+      const supportiveRsi = inputs.rsi14 < 50 && inputs.rsi14 >= 30; // RSI_BEARISH band; exclude oversold-extreme
+      const oversold = inputs.rsi14 < 30;
+      if (bearishTrend && supportiveRsi) {
+        trendConfluence = inputs.emaCross.cross === 'BEARISH' ? 15 : 5;
+      } else if (bearishTrend && oversold) {
+        trendConfluence = -10; // late-short trap
+      }
+    }
+    breakdown.trendConfluence = trendConfluence;
 
     const score =
       breakdown.vdu +

@@ -23,6 +23,7 @@ const envSchema = z.object({
   FYERS_SECRET_ID: z.string().optional(),
   FYERS_REDIRECT_URL: z.string().optional(),
   FYERS_AUTH_PROXY_URL: optionalUrl,
+  PROXY_SHARED_SECRET: z.string().optional(),
   
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
   /**

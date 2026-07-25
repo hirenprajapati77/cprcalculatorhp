@@ -3335,6 +3335,14 @@ export default function ScannerClient() {
                               <span className="text-text-tertiary">Closing Strength</span>
                               <span className="font-mono text-text-primary">{hasBreakdown ? (breakdown.closeStrength ?? '—') : '—'}</span>
                             </div>
+                            {hasBreakdown && breakdown.trendConfluence !== undefined && (
+                              <div className="flex justify-between border-b border-border-primary/30 pb-1 col-span-2">
+                                <span className="text-text-tertiary">Trend Confluence <span className="text-xs text-text-tertiary/70 ml-1">(Shadow)</span></span>
+                                <span className={`font-mono font-bold ${breakdown.trendConfluence > 0 ? 'text-accent-green' : breakdown.trendConfluence < 0 ? 'text-accent-red' : 'text-text-primary'}`}>
+                                  {breakdown.trendConfluence > 0 ? '+' : ''}{breakdown.trendConfluence}
+                                </span>
+                              </div>
+                            )}
                             {hasBreakdown && breakdown.clvScore !== undefined && (
                               <div className="flex justify-between border-b border-border-primary/30 pb-1 col-span-2">
                                 <span className="text-text-tertiary">CLV Score Component</span>

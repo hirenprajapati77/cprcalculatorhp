@@ -9,6 +9,8 @@ import { LIQUIDITY } from '@/config/trading-constants';
 import { prisma } from '@/lib/db';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { calculateRSI } from '@/lib/rsi';
+import { detectEmaCross } from '@/lib/ema';
 import { MarketService, MarketStockData } from '../market.service';
 import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
@@ -366,6 +368,10 @@ export class OvernightService {
           continue;
         }
 
+        // Compute RSI and EMA Cross ONCE per stock for shadow scoring
+        const rsi14 = calculateRSI(completedHistory);
+        const emaCross = detectEmaCross(completedHistory);
+
         // -- Evaluate LONG --
         let longSig: OvernightSignalCalc | null = null;
         if (direction === 'LONG' || direction === 'BOTH') {
@@ -378,7 +384,8 @@ export class OvernightService {
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                 close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
                 vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mHigh: intraday.last15mHigh,
-                hasConfirmationCandles: intraday.hasIntraday
+                hasConfirmationCandles: intraday.hasIntraday,
+                rsi14, emaCross
               });
           const score = details.score;
           const cls = BtstRankingService.getClassification(score);
@@ -399,7 +406,8 @@ export class OvernightService {
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
                 close: fullStock.ltp, high: fullStock.high, low: fullStock.low,
                 vwap: intraday.vwap, intradayVolume: intraday.intradayVolume, last15mLow: intraday.last15mLow,
-                hasConfirmationCandles: intraday.hasIntraday
+                hasConfirmationCandles: intraday.hasIntraday,
+                rsi14, emaCross
               });
           const score = details.score;
           const cls = StbtRankingService.getClassification(score);

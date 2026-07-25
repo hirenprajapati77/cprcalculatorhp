@@ -16,6 +16,8 @@ export interface BtstScoringInputs {
   intradayVolume: number | null | undefined;
   last15mHigh: number | null | undefined;
   hasConfirmationCandles: boolean;
+  rsi14: number | null | undefined;
+  emaCross: { cross: 'BULLISH' | 'BEARISH' | 'NONE'; isBullishAlignment: boolean } | null | undefined;
 }
 
 /** Per-rule points for Advanced BTST (max 130) — keys match Scanner explainability UI. */
@@ -27,6 +29,8 @@ export interface AdvancedScoreBreakdown {
   /** Rule 5: close vs last-15m extreme (UI label remains "Liquidity"). */
   liquidity: number;
   closeStrength: number;
+  /** Rule 7 (SHADOW — not yet included in score): Trend Confluence */
+  trendConfluence?: number;
 }
 
 export interface BtstScoreDetails {
@@ -57,6 +61,7 @@ export class BtstRankingService {
       vwap: 0,
       liquidity: 0,
       closeStrength: 0,
+      trendConfluence: 0,
     };
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
@@ -95,6 +100,21 @@ export class BtstRankingService {
         breakdown.closeStrength = 15;
       }
     }
+
+    // Rule 7 (SHADOW — not yet included in score): Trend Confluence
+    // EMA_CROSS_BULL or bullish alignment + supportive RSI (>=50, i.e. RSI_STRONG or above)
+    let trendConfluence = 0;
+    if (inputs.rsi14 !== null && inputs.rsi14 !== undefined && inputs.emaCross) {
+      const bullishTrend = inputs.emaCross.cross === 'BULLISH' || inputs.emaCross.isBullishAlignment;
+      const supportiveRsi = inputs.rsi14 >= 50 && inputs.rsi14 <= 70; // RSI_STRONG band; exclude overbought
+      const overbought = inputs.rsi14 > 70;
+      if (bullishTrend && supportiveRsi) {
+        trendConfluence = inputs.emaCross.cross === 'BULLISH' ? 15 : 5; // fresh cross > alignment-only
+      } else if (bullishTrend && overbought) {
+        trendConfluence = -10; // late-entry trap, same logic as scanner ranking.service.ts
+      }
+    }
+    breakdown.trendConfluence = trendConfluence;
 
     const score =
       breakdown.vdu +
