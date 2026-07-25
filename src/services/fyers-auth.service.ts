@@ -201,14 +201,20 @@ export class FyersAuthService {
       console.log(`[FyersAuthService] Attempting token generation via PROXY (${authProxyUrl})...`);
       const proxyController = new AbortController();
       const proxyTimeoutId = setTimeout(() => proxyController.abort(), 10000);
+      const proxyHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Fyers-AppId': appId
+      };
       
+      const proxySecret = env.PROXY_SHARED_SECRET || process.env.PROXY_SHARED_SECRET;
+      if (proxySecret) {
+        proxyHeaders['X-Proxy-Auth'] = proxySecret as string;
+      }
+
       const res = await fetch(`${authProxyUrl.replace(/\/$/, '')}/api/v3/validate-authcode`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Fyers-AppId': appId
-        },
+        headers: proxyHeaders,
         body: JSON.stringify(payload),
         signal: proxyController.signal
       });
