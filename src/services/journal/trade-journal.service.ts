@@ -5,6 +5,7 @@ import { getISTTime } from '@/lib/market-hours';
 import { computeOptionPnl } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
+import { computeWinRate } from '@/lib/win-rate';
 
 
 export class TradeJournalService {
@@ -371,6 +372,7 @@ export class TradeJournalService {
     ]);
 
     const closed  = allEntries.filter((e: TradeJournal) => e.pnl !== null);
+    const overallWinRate = computeWinRate(closed, (e) => e.pnl ?? 0);
     // Strictly positive PnL = winner; breakeven (pnl === 0) is not a win
     const winners = closed.filter((e: TradeJournal) => (e.pnl ?? 0) > 0);
 
@@ -381,12 +383,7 @@ export class TradeJournalService {
     };
 
     const winRateByType = (arr: typeof closed): number =>
-      arr.length > 0
-        ? parseFloat(
-            (arr.filter((e: TradeJournal) => (e.pnl ?? 0) > 0).length / arr.length * 100)
-              .toFixed(1)
-          )
-        : 0;
+      parseFloat(computeWinRate(arr, (e) => e.pnl ?? 0).winRate.toFixed(1));
 
     // Minimum 5 trades required before crowning a bestSignalType
     const MIN_SAMPLE = 5;
@@ -409,9 +406,7 @@ export class TradeJournalService {
         totalClosedTrades: closed.length,
         totalAllTrades: total,
         winners:        winners.length,
-        winRate:        closed.length > 0
-          ? parseFloat((winners.length / closed.length * 100).toFixed(1))
-          : 0,
+        winRate:        parseFloat(overallWinRate.winRate.toFixed(1)),
         avgPnlPct: closed.length > 0
           ? parseFloat(
               (closed.reduce((s: number, e: TradeJournal) => s + (e.pnlPct ?? 0), 0) / closed.length)

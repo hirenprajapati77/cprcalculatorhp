@@ -75,7 +75,7 @@ test('TradeJournalService Phase 3', async (t) => {
     const originalFindMany = prisma.tradeJournal.findMany;
     
     // @ts-expect-error Mocking Prisma for tests
-    prisma.tradeJournal.count = async () => 5;
+    prisma.tradeJournal.count = async () => 6;
     
     // @ts-expect-error Mocking Prisma for tests
     prisma.tradeJournal.findMany = async () => {
@@ -83,9 +83,10 @@ test('TradeJournalService Phase 3', async (t) => {
         { id: '1', signalType: 'CPR', pnl: 100, pnlPct: 10 },
         { id: '2', signalType: 'CPR', pnl: -50, pnlPct: -5 },
         { id: '3', signalType: 'BTST', pnl: 200, pnlPct: 20 },
+        { id: '4', signalType: 'BTST', pnl: 0, pnlPct: 0 },
         // 2 Open Trades (no PnL yet)
-        { id: '4', signalType: 'STBT', pnl: null, pnlPct: null },
-        { id: '5', signalType: 'BTST', pnl: null, pnlPct: null },
+        { id: '5', signalType: 'STBT', pnl: null, pnlPct: null },
+        { id: '6', signalType: 'BTST', pnl: null, pnlPct: null },
       ];
     };
 
@@ -93,10 +94,13 @@ test('TradeJournalService Phase 3', async (t) => {
     const result = await TradeJournalService.getEntries({ page: 1, limit: 10, signalType: 'ALL' });
 
     // 3. Verify math
-    assert.strictEqual(result.stats.totalAllTrades, 5, 'totalAllTrades should count all trades, including open ones');
-    assert.strictEqual(result.stats.totalClosedTrades, 3, 'totalClosedTrades should only count trades with PnL');
-    assert.strictEqual(result.stats.totalTrades, 3, 'totalTrades should equal closed.length for backward compatibility');
+    assert.strictEqual(result.stats.totalAllTrades, 6, 'totalAllTrades should count all trades, including open ones');
+    assert.strictEqual(result.stats.totalClosedTrades, 4, 'totalClosedTrades should only count trades with PnL');
+    assert.strictEqual(result.stats.totalTrades, 4, 'totalTrades should equal closed.length for backward compatibility');
     assert.strictEqual(result.stats.winners, 2, 'winners should only count trades with pnl > 0');
+    assert.strictEqual(result.stats.winRate, 66.7, 'winRate should exclude breakeven trades from denominator');
+    assert.strictEqual(result.stats.byType.CPR.winRate, 50, 'CPR winRate should use wins / decisive trades');
+    assert.strictEqual(result.stats.byType.BTST.winRate, 100, 'BTST winRate should exclude breakeven trades from denominator');
     
     // 4. Restore Prisma
     prisma.tradeJournal.count = originalCount;
