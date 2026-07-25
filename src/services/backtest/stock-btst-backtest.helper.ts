@@ -1,6 +1,8 @@
 import type { OHLC } from './historical.provider';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { calculateRSI } from '@/lib/rsi';
+import { detectEmaCross } from '@/lib/ema';
 import { getCompletedHistory } from '@/lib/market-hours';
 import { ADVANCED_SCORE, LIQUIDITY, VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import { BtstRankingService, type AdvancedScoreBreakdown } from '../overnight/btst-ranking.service';
@@ -168,6 +170,8 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
     vwap: intraday.vwap,
     intradayVolume: intraday.intradayVolume,
     hasConfirmationCandles: intraday.hasIntraday,
+    rsi14: calculateRSI([...ctx.historyForAtr, ctx.today]),
+    emaCross: detectEmaCross([...ctx.historyForAtr, ctx.today]),
   };
 
   let longSig: OvernightSig | null = null;
