@@ -41,6 +41,30 @@ export interface IndexScoreDetails {
   breakdown: IndexScoreBreakdown | null;
 }
 
+export interface IndexShortScoringInputs {
+  tomorrowCprNarrow: boolean;
+  tomorrowBc: number;
+  tomorrowTc: number;
+  todayBc: number;
+  todayTc: number;
+  close: number;
+  high: number;
+  low: number;
+  vwap: number | null | undefined;
+  last15mLow: number | null | undefined;
+  vixElevated: boolean | null | undefined;
+  hasConfirmationCandles: boolean;
+}
+
+export interface IndexShortScoreBreakdown {
+  vixElevated: number;
+  cprNarrow: number;
+  higherValue: number;
+  vwap: number;
+  liquidity: number;
+  closeStrength: number;
+}
+
 /**
  * Index classification values are deliberately distinct string literals from
  * the stock classifications (STRONG_BTST/BTST_READY/WATCH/IGNORE) so an index
@@ -77,6 +101,12 @@ export const INDEX_BTST_RED_SESSION_BLOCK_PCT = -0.001;
 
 export function isIndexBtstRedSession(sessionChangePct: number): boolean {
   return sessionChangePct <= INDEX_BTST_RED_SESSION_BLOCK_PCT;
+}
+
+export const INDEX_STBT_GREEN_SESSION_BLOCK_PCT = 0.001;
+
+export function isIndexStbtGreenSession(sessionChangePct: number): boolean {
+  return sessionChangePct >= INDEX_STBT_GREEN_SESSION_BLOCK_PCT;
 }
 
 export class IndexRankingService {
@@ -158,6 +188,72 @@ export class IndexRankingService {
    * Floors match ADVANCED_SCORE / stock BTST (100 / 85 / 70).
    */
   static getClassification(score: number | null): IndexClassification {
+    if (score === null) return 'IGNORE';
+    if (score >= INDEX_SCORE.STRONG) return 'INDEX_STRONG';
+    if (score >= INDEX_SCORE.READY) return 'INDEX_READY';
+    if (score >= INDEX_SCORE.WATCH) return 'INDEX_WATCH';
+    return 'IGNORE';
+  }
+
+  static calculateShortScoreDetails(inputs: IndexShortScoringInputs): { score: number | null; breakdown: IndexShortScoreBreakdown | null } {
+    if (
+      inputs.vwap === undefined || inputs.vwap === null ||
+      inputs.last15mLow === undefined || inputs.last15mLow === null ||
+      inputs.vixElevated === undefined || inputs.vixElevated === null ||
+      !inputs.hasConfirmationCandles
+    ) {
+      return { score: null, breakdown: null };
+    }
+
+    const breakdown: IndexShortScoreBreakdown = {
+      vixElevated: 0,
+      cprNarrow: 0,
+      higherValue: 0,
+      vwap: 0,
+      liquidity: 0,
+      closeStrength: 0,
+    };
+
+    if (inputs.vixElevated) {
+      breakdown.vixElevated = 25;
+    }
+
+    if (inputs.tomorrowCprNarrow) {
+      breakdown.cprNarrow = 30;
+    }
+
+    if (inputs.tomorrowBc < inputs.todayBc && inputs.tomorrowTc < inputs.todayTc) {
+      breakdown.higherValue = 20;
+    }
+
+    if (inputs.close < inputs.todayBc && inputs.close < inputs.vwap) {
+      breakdown.vwap = 20;
+    }
+
+    if (inputs.close < inputs.last15mLow) {
+      breakdown.liquidity = 20;
+    }
+
+    const range = inputs.high - inputs.low;
+    if (range > 0) {
+      const closingWeakness = (inputs.close - inputs.low) / range;
+      if (closingWeakness < 0.30) {
+        breakdown.closeStrength = 15;
+      }
+    }
+
+    const score =
+      breakdown.vixElevated +
+      breakdown.cprNarrow +
+      breakdown.higherValue +
+      breakdown.vwap +
+      breakdown.liquidity +
+      breakdown.closeStrength;
+
+    return { score, breakdown };
+  }
+
+  static getShortClassification(score: number | null): IndexClassification {
     if (score === null) return 'IGNORE';
     if (score >= INDEX_SCORE.STRONG) return 'INDEX_STRONG';
     if (score >= INDEX_SCORE.READY) return 'INDEX_READY';

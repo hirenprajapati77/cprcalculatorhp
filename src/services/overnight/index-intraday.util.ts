@@ -33,6 +33,7 @@ export interface IndexIntradayMetrics {
   vwap: number | null;
   hasIntraday: boolean;
   last15mHigh: number | null;
+  last15mLow: number | null;
 }
 
 /**
@@ -43,7 +44,7 @@ export function parseIndexIntradayMetricsFromChart(
   chartJson: YahooFinanceChartResponse | null | undefined,
   asOfTime: Date
 ): IndexIntradayMetrics {
-  const empty: IndexIntradayMetrics = { vwap: null, hasIntraday: false, last15mHigh: null };
+  const empty: IndexIntradayMetrics = { vwap: null, hasIntraday: false, last15mHigh: null, last15mLow: null };
   if (!chartJson) return empty;
 
   try {
@@ -59,6 +60,7 @@ export function parseIndexIntradayMetricsFromChart(
     let sumVol = 0;
     let hasIntraday = false;
     let closingHigh = 0;
+    let closingLow = Number.POSITIVE_INFINITY;
     let closingBarCount = 0;
 
     const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
@@ -83,11 +85,13 @@ export function parseIndexIntradayMetricsFromChart(
       const isFormingBar = isLastCandleForming && ts === lastTimestamp;
       if (inClosingWindow && !isFormingBar) {
         closingHigh = Math.max(closingHigh, high);
+        closingLow = Math.min(closingLow, low);
         closingBarCount++;
       }
     }
 
     const last15mHigh = closingBarCount > 0 && closingHigh > 0 ? closingHigh : null;
+    const last15mLow = closingBarCount > 0 && closingLow !== Number.POSITIVE_INFINITY ? closingLow : null;
 
     if (hasIntraday && sumVol === 0) {
       let sumClose = 0;
@@ -103,6 +107,7 @@ export function parseIndexIntradayMetricsFromChart(
         vwap: count > 0 ? sumClose / count : null,
         hasIntraday: count > 0,
         last15mHigh,
+        last15mLow,
       };
     }
 
@@ -110,6 +115,7 @@ export function parseIndexIntradayMetricsFromChart(
       vwap: sumVol > 0 ? sumPriceVol / sumVol : null,
       hasIntraday,
       last15mHigh,
+      last15mLow,
     };
   } catch {
     return empty;

@@ -24,15 +24,16 @@ import {
   IndexClassification,
   IndexScoreBreakdown,
   INDEX_SCORE,
-  INDIA_VIX_CALM_MAX,
   INDIA_VIX_ELEVATED_MIN,
   isIndexBtstRedSession,
+  isIndexStbtGreenSession,
 } from './index-ranking.service';
 import { IndexIntraRankingService, INDEX_INTRA_SCORE } from './index-intra-ranking.service';
 import { IndexRegimeService, IndexRegimeContext } from './index-regime.service';
 import {
   resolveSignalType,
   buildBtstReasons,
+  buildStbtReasons,
   buildIntraReasons,
   computeRiskReward,
   IndexSignalType,
@@ -79,6 +80,7 @@ interface IndexIntradayMetrics {
   vwap: number | null;
   hasIntraday: boolean;
   last15mHigh: number | null;
+  last15mLow: number | null;
 }
 
 /** Live index session from Yahoo chart meta + 5m aggregation (Phase 2 INTRA). */
@@ -252,7 +254,7 @@ export class IndexDiscoverService {
     if (mode !== 'live') {
       // Mock mode: no live VWAP / last15m source. Score-safety will correctly
       // return null scores — expected and matches the stock mock path.
-      return { vwap: null, hasIntraday: false, last15mHigh: null };
+      return { vwap: null, hasIntraday: false, last15mHigh: null, last15mLow: null };
     }
 
     try {
@@ -261,7 +263,7 @@ export class IndexDiscoverService {
       return parseIndexIntradayMetricsFromChart(json, currentTime);
     } catch (err) {
       console.warn(`[IndexDiscover] Intraday fetch failed for ${yahooSymbol}:`, err instanceof Error ? err.message : err);
-      return { vwap: null, hasIntraday: false, last15mHigh: null };
+      return { vwap: null, hasIntraday: false, last15mHigh: null, last15mLow: null };
     }
   }
 
@@ -487,6 +489,7 @@ export class IndexDiscoverService {
     const vixState = await this.getIndiaVixState(currentTime);
     const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
     const longRegime = IndexRegimeService.computeAdjustment('LONG', marketRegime);
+    const shortRegime = IndexRegimeService.computeAdjustment('SHORT', marketRegime);
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
@@ -500,6 +503,16 @@ export class IndexDiscoverService {
               'LONG',
               buildBtstReasons(null, true, longRegime),
               longRegime
+            )
+          );
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'SHORT',
+              buildStbtReasons(null, shortRegime),
+              shortRegime
             )
           );
           continue;
@@ -542,6 +555,18 @@ export class IndexDiscoverService {
               longRegime
             )
           );
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'SHORT',
+              [
+                'Live session OHLC unavailable — STBT scoring deferred until EOD bar or live feed',
+              ],
+              shortRegime
+            )
+          );
           continue;
         }
 
@@ -568,61 +593,107 @@ export class IndexDiscoverService {
               longRegime
             )
           );
-          continue;
+        } else {
+          const details = IndexRankingService.calculateScoreDetails({
+            tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
+            tomorrowBc: tomorrowCpr.bc,
+            tomorrowTc: tomorrowCpr.tc,
+            todayBc: todayCpr.bc,
+            todayTc: todayCpr.tc,
+            close: todayCandle.close,
+            high: todayCandle.high,
+            low: todayCandle.low,
+            vwap: intraday.vwap,
+            last15mHigh: intraday.last15mHigh,
+            vixCalm: vixState.vixCalm,
+            hasConfirmationCandles: intraday.hasIntraday,
+          });
+
+          const cls = IndexRankingService.getClassification(details.score);
+          const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
+          const risk = todayCandle.close - sl;
+          const target = risk > 0 ? todayCandle.close + risk * 2 : null;
+          const reasons = buildBtstReasons(details.breakdown, false, longRegime);
+          if (usesLiveSession) {
+            reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
+          }
+
+          results.push(
+            this.buildSignalResult({
+              symbol: instrument.symbol,
+              signalDate: dateStr,
+              signalTime: timeStr,
+              direction: 'LONG',
+              score: details.score,
+              classification: cls,
+              entry: details.score !== null ? todayCandle.close : null,
+              stopLoss: details.score !== null ? sl : null,
+              target: details.score !== null ? target : null,
+              scoreBreakdown: details.breakdown,
+              reasons,
+              regime: longRegime,
+              maxScore: INDEX_SCORE.MAX,
+            })
+          );
         }
 
-        const atrPct = getAtrPct(history.slice(0, -1), yesterdayCandle.close);
+        if (isIndexStbtGreenSession(sessionChangePct)) {
+          console.log(`[IndexDiscover] ${instrument.symbol} green session block fired (session move ${(sessionChangePct * 100).toFixed(2)}%) for STBT SHORT`);
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'SHORT',
+              [
+                `Green session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — STBT PUT blocked`,
+              ],
+              shortRegime
+            )
+          );
+        } else {
+          const shortDetails = IndexRankingService.calculateShortScoreDetails({
+            tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
+            tomorrowBc: tomorrowCpr.bc,
+            tomorrowTc: tomorrowCpr.tc,
+            todayBc: todayCpr.bc,
+            todayTc: todayCpr.tc,
+            close: todayCandle.close,
+            high: todayCandle.high,
+            low: todayCandle.low,
+            vwap: intraday.vwap,
+            last15mLow: intraday.last15mLow,
+            vixElevated: vixState.elevated,
+            hasConfirmationCandles: intraday.hasIntraday,
+          });
 
-        const todayCpr = calculateCPR(
-          { high: yesterdayCandle.high, low: yesterdayCandle.low, close: yesterdayCandle.close },
-          atrPct
-        );
-        const tomorrowCpr = calculateCPR(
-          { high: todayCandle.high, low: todayCandle.low, close: todayCandle.close },
-          atrPct
-        );
+          const shortCls = IndexRankingService.getShortClassification(shortDetails.score);
+          const shortSl = Math.max(todayCandle.high, tomorrowCpr.tc);
+          const shortRisk = shortSl - todayCandle.close;
+          const shortTarget = shortRisk > 0 ? todayCandle.close - shortRisk * 2 : null;
+          const shortReasons = buildStbtReasons(shortDetails.breakdown, shortRegime);
+          if (usesLiveSession) {
+            shortReasons.unshift('Live session OHLC used for STBT scoring (close = LTP)');
+          }
 
-        const details = IndexRankingService.calculateScoreDetails({
-          tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
-          tomorrowBc: tomorrowCpr.bc,
-          tomorrowTc: tomorrowCpr.tc,
-          todayBc: todayCpr.bc,
-          todayTc: todayCpr.tc,
-          close: todayCandle.close,
-          high: todayCandle.high,
-          low: todayCandle.low,
-          vwap: intraday.vwap,
-          last15mHigh: intraday.last15mHigh,
-          vixCalm: vixState.vixCalm,
-          hasConfirmationCandles: intraday.hasIntraday,
-        });
-
-        const cls = IndexRankingService.getClassification(details.score);
-        const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
-        const risk = todayCandle.close - sl;
-        const target = risk > 0 ? todayCandle.close + risk * 2 : null;
-        const reasons = buildBtstReasons(details.breakdown, false, longRegime);
-        if (usesLiveSession) {
-          reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
+          results.push(
+            this.buildSignalResult({
+              symbol: instrument.symbol,
+              signalDate: dateStr,
+              signalTime: timeStr,
+              direction: 'SHORT',
+              score: shortDetails.score,
+              classification: shortCls,
+              entry: shortDetails.score !== null ? todayCandle.close : null,
+              stopLoss: shortDetails.score !== null ? shortSl : null,
+              target: shortDetails.score !== null ? shortTarget : null,
+              scoreBreakdown: shortDetails.breakdown,
+              reasons: shortReasons,
+              regime: shortRegime,
+              maxScore: INDEX_SCORE.MAX,
+            })
+          );
         }
-
-        results.push(
-          this.buildSignalResult({
-            symbol: instrument.symbol,
-            signalDate: dateStr,
-            signalTime: timeStr,
-            direction: 'LONG',
-            score: details.score,
-            classification: cls,
-            entry: details.score !== null ? todayCandle.close : null,
-            stopLoss: details.score !== null ? sl : null,
-            target: details.score !== null ? target : null,
-            scoreBreakdown: details.breakdown,
-            reasons,
-            regime: longRegime,
-            maxScore: INDEX_SCORE.MAX,
-          })
-        );
       } catch (err) {
         console.error(`[IndexDiscover] Error scanning ${instrument.symbol}:`, err instanceof Error ? err.message : err);
       }

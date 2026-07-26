@@ -1,7 +1,7 @@
 /**
  * Index signal presentation helpers — CALL BUY / PUT BUY mapping, reasons, R:R.
  */
-import { IndexClassification, IndexScoreBreakdown } from './index-ranking.service';
+import { IndexClassification, IndexScoreBreakdown, IndexShortScoreBreakdown } from './index-ranking.service';
 import { IndexRegimeContext } from './index-regime.service';
 
 export type IndexSignalType = 'CALL_BUY' | 'PUT_BUY' | 'NO_TRADE';
@@ -71,6 +71,35 @@ export function buildBtstReasons(
 
   if (reasons.length === 0) {
     reasons.push('No bullish confirmation rules met');
+  }
+
+  if (regime?.reason) {
+    reasons.push(regime.reason);
+  }
+
+  return reasons;
+}
+
+export function buildStbtReasons(
+  breakdown: IndexShortScoreBreakdown | null,
+  regime?: IndexRegimeContext | null
+): string[] {
+  const reasons: string[] = [];
+  
+  if (!breakdown) {
+    reasons.push('Missing live VWAP, 15:15–15:30 low, or India VIX — score invalid');
+    return reasons;
+  }
+
+  if (breakdown.vixElevated > 0) reasons.push('India VIX elevated (≥25)');
+  if (breakdown.cprNarrow > 0) reasons.push('Tomorrow CPR narrow');
+  if (breakdown.higherValue > 0) reasons.push('Lower value CPR (tomorrow below today)');
+  if (breakdown.vwap > 0) reasons.push('Close below BC and VWAP');
+  if (breakdown.liquidity > 0) reasons.push('Close below 15:15–15:30 IST low');
+  if (breakdown.closeStrength > 0) reasons.push('Weak close strength (CLV < 0.30)');
+
+  if (reasons.length === 0) {
+    reasons.push('No bearish confirmation rules met');
   }
 
   if (regime?.reason) {
