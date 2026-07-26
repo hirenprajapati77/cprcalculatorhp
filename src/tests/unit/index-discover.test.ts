@@ -13,16 +13,17 @@ import { INDEX_INTRA_SCORE } from '../../services/overnight/index-intra-ranking.
  * score, not the live scoring path.
  */
 describe('IndexDiscoverService.discover', () => {
-  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY, SENSEX) — no F&O universe loop', async () => {
+  it('scans exactly the fixed instrument list (NIFTY, BANKNIFTY, SENSEX) in both directions (LONG/SHORT) — no F&O universe loop', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     const symbols = results.map((r) => r.symbol).sort();
-    assert.deepEqual(symbols, INDEX_INSTRUMENTS.map((i) => i.symbol).sort());
+    const expectedSymbols = [...INDEX_INSTRUMENTS, ...INDEX_INSTRUMENTS].map((i) => i.symbol).sort();
+    assert.deepEqual(symbols, expectedSymbols);
   });
 
-  it('returns LONG direction and IGNORE classification with null score in mock mode (no live VWAP/VIX)', async () => {
+  it('returns IGNORE classification with null score in mock mode (no live VWAP/VIX) for both directions', async () => {
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     for (const r of results) {
-      assert.equal(r.direction, 'LONG');
+      assert.ok(r.direction === 'LONG' || r.direction === 'SHORT');
       assert.equal(r.score, null);
       assert.equal(r.confidence, null);
       assert.equal(r.classification, 'IGNORE');
