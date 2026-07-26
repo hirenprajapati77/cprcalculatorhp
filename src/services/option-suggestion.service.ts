@@ -426,8 +426,7 @@ export class OptionSuggestionService {
     
     // Ensure we aren't just blindly picking the closest ITM when Fyers returns 0 OI/Volume for everything
     if ((selected.scoreBreakdown.oiScore + selected.scoreBreakdown.volumeScore) === 0) {
-      console.warn(`[OptionSuggestion] Rejected candidate ${selected.option.symbol}: OI and Volume scores are both 0. Missing data?`);
-      return { error: 'NO_VIABLE_STRIKES' };
+      console.warn(`[OptionSuggestion] Warning: Candidate ${selected.option.symbol} has 0 OI and 0 Volume. Fyers API missing data? Proceeding with closest ITM fallback.`);
     }
 
     // 8. Estimate SL / Target using 0.7 delta proxy
