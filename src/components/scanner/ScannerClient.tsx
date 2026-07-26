@@ -1948,7 +1948,6 @@ export default function ScannerClient() {
   const strongBuyCount = results.filter(r => r.score >= thresholds.strong && !r.rejectionReason).length || insightCounts.strongBuy;
   const breakoutReadyCount = results.filter(r => r.score >= thresholds.ready && r.score < thresholds.strong).length || insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
-  // @ts-expect-error btstStatus is optional and sometimes added by the backend
   const avoidCount = results.filter(r => r.score < thresholds.watch || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
 
   // KPI calculations
