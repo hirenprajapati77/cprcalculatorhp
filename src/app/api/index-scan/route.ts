@@ -17,9 +17,8 @@ export async function GET(_request: Request) {
     const executionWindowOpen = cashState === 'LIVE' || cashState === 'PRESESSION';
     const windowState = getBtstWindowState(now);
 
-    const today = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
-    const CACHE_KEY = indexScanCacheKey(today);
     const dateStr = getISTDateString(now);
+    const CACHE_KEY = indexScanCacheKey(dateStr);
     const marketRegime = await IndexRegimeService.getMarketRegime(dateStr);
 
     /** Fresh enough to skip Yahoo re-scan (live UI polls every 60s). */

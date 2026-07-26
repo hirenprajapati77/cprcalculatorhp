@@ -249,6 +249,7 @@ interface ScannedStock {
   exitStrategy?: string | null;
   state?: string;
   rejectionReason?: string | null;
+  btstStatus?: string;
   btstClassification?: string;
   scoreBreakdown?: {
     vdu?: number;
@@ -1241,6 +1242,16 @@ export default function ScannerClient() {
           return r.tag === 'LONG' || r.tag === 'SHORT' || r.tag === 'NEUTRAL_CONFLICT';
         });
 
+        const scanTimeLabel = data.scannedAt
+          ? new Intl.DateTimeFormat('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true,
+            }).format(new Date(data.scannedAt))
+          : '—';
+
         const mapped: ScannedStock[] = filtered.map((sig, idx) => {
           const overnightCls =
             sig.classification ||
@@ -1253,6 +1264,7 @@ export default function ScannerClient() {
             date: new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0],
             market: 'NSE' as const,
             sector: sig.sector || 'NIFTY50',
+            // Overnight DTO uses entry as ltp proxy (no live LTP column persisted).
             price: sig.ltp,
             open: sig.ltp,
             volume: 0,
@@ -1279,25 +1291,19 @@ export default function ScannerClient() {
             sl: sig.sl,
             target: sig.target,
             rr: sig.rr || '1:2.0',
-            createdAt: new Date().toISOString(),
-            signalTime: new Intl.DateTimeFormat('en-IN', {
-              timeZone: 'Asia/Kolkata',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: true
-            }).format(new Date()),
+            createdAt: data.scannedAt || new Date().toISOString(),
+            signalTime: scanTimeLabel,
             expectedGap: sig.expectedGap ?? null,
             expectedMove: sig.expectedMove ?? null,
             exitStrategy: sig.exitStrategy || 'EOD',
             rejectionReason: null,
             volumeRatio: 1,
+            btstStatus: sig.tag,
             ...(overnightCls ? { btstClassification: overnightCls } : {}),
             ...(sig.scoreBreakdown !== undefined && { scoreBreakdown: sig.scoreBreakdown }),
             ...(sig.optionSuggestion !== undefined && { optionSuggestion: sig.optionSuggestion }),
           };
-          // Always set a direction based on dominant score so the UI has a clear stance
-          // for SL/Target generation even if the system tags it as NEUTRAL_CONFLICT
+          // Dominant score still drives SL/Target side; btstStatus preserves NEUTRAL_CONFLICT.
           const direction = sig.longScore >= sig.shortScore ? 'LONG' : 'SHORT';
           return { ...base, direction: direction as 'LONG' | 'SHORT' };
         });

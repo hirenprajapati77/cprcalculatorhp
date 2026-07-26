@@ -5,15 +5,16 @@ import { TelegramService } from '@/services/alert/telegram.service';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const { test, groupChatId, token } = body;
+    const { test } = body;
 
     if (!test) {
       return NextResponse.json({ success: false, message: 'Invalid payload' }, { status: 400 });
     }
 
-    const chatId = groupChatId || env.TELEGRAM_GROUP_CHAT_ID;
-    const resolvedToken = token || env.TELEGRAM_BOT_TOKEN;
-    
+    // Server env only — do not accept client-supplied token/chat overrides.
+    const chatId = env.TELEGRAM_GROUP_CHAT_ID;
+    const resolvedToken = env.TELEGRAM_BOT_TOKEN;
+
     if (!chatId || !resolvedToken) {
       return NextResponse.json({ success: false, message: 'Bot Token or Chat ID not configured' }, { status: 400 });
     }
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
         score: 95,
         sector: 'Banking'
       }
-    ], groupChatId, token);
+    ], chatId, resolvedToken);
 
     if (!result.ok) {
       return NextResponse.json(

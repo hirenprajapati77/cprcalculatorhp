@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { BtstService } from '@/services/backtest/btst.service';
 import { CacheService } from '@/services/cache.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
-import { BTST_CLOCK } from '@/lib/market-hours';
+import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 import { btstScanCacheKey } from '@/lib/btst-cache-key';
 
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const executionWindowOpen = BtstService.isExecutionWindowOpen(bypassQuery);
     const windowState = OvernightService.determineState(new Date());
 
-    const today = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(/\//g, '-');
+    const today = getISTDateString();
     const CACHE_KEY = btstScanCacheKey(today, universe);
 
     interface CachedBtstData {

@@ -117,7 +117,7 @@ function computeAvgAtTime(
   entries: JournalEntry[],
   field: 'cmp916' | 'cmp930' | 'cmp945' | 'cmp1000'
 ): number {
-  const valid = entries.filter(e => e[field] !== null);
+  const valid = entries.filter(e => e[field] !== null && e.entryCmp > 0);
   if (valid.length === 0) return 0;
   const sum = valid.reduce((s, e) => {
     const cmp = e[field] as number;

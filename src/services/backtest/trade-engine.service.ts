@@ -1,3 +1,4 @@
+import { safeRatio } from '@/lib/math';
 import { OHLC } from './historical.provider';
 
 export interface BacktestTradeConfig {
@@ -260,10 +261,10 @@ export class TradeEngineService {
 
     if (type === 'LONG' && exitPrice !== null) {
       pnl = (exitPrice - entryPrice) * positionSize;
-      rr = (exitPrice - entryPrice) / (entryPrice - sl);
+      rr = safeRatio(exitPrice - entryPrice, entryPrice - sl, 0);
     } else if (type === 'SHORT' && exitPrice !== null) {
       pnl = (entryPrice - exitPrice) * positionSize;
-      rr = (entryPrice - exitPrice) / (sl - entryPrice);
+      rr = safeRatio(entryPrice - exitPrice, sl - entryPrice, 0);
     }
 
     return {
@@ -272,7 +273,7 @@ export class TradeEngineService {
       exitDate,
       exitReason,
       pnl,
-      pnlPercent: pnl / config.capital * 100,
+      pnlPercent: safeRatio(pnl, config.capital, 0) * 100,
       positionSize,
       rr,
       durationDays,
