@@ -18,6 +18,7 @@ import {
   getISTTime,
   BTST_CLOCK,
 } from '@/lib/market-hours';
+import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
 import {
   IndexRankingService,
@@ -317,7 +318,13 @@ export class IndexDiscoverService {
       let barCount = 0;
 
       if (timestamps && quotes?.open && quotes.high && quotes.low && quotes.close) {
-        for (let i = 0; i < timestamps.length; i++) {
+        const seriesLen = alignedYahooSeriesLength(timestamps, quotes, [
+          'open',
+          'high',
+          'low',
+          'close',
+        ]);
+        for (let i = 0; i < seriesLen; i++) {
           const ts = timestamps[i];
           if (ts > currentTimestampSec) continue;
           const candleDate = getISTTime(new Date(ts * 1000)).dateString;

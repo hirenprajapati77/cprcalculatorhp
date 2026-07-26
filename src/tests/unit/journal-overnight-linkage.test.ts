@@ -14,8 +14,17 @@ describe('TradeJournal logSignal overnightSignalId linkage (P1-2)', () => {
 
   let originalFetchCmp: typeof TradeJournalService.fetchOptionCmp;
   let createdJournalId: string | null = null;
+  let dbAvailable = true;
 
   before(async () => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {
+      dbAvailable = false;
+      console.warn('[journal-overnight-linkage] Skipping — Postgres unreachable');
+      return;
+    }
+
     originalFetchCmp = TradeJournalService.fetchOptionCmp;
     TradeJournalService.fetchOptionCmp = async () => 42;
 
@@ -61,6 +70,7 @@ describe('TradeJournal logSignal overnightSignalId linkage (P1-2)', () => {
   });
 
   after(async () => {
+    if (!dbAvailable) return;
     TradeJournalService.fetchOptionCmp = originalFetchCmp;
     if (createdJournalId) {
       await prisma.tradeJournal.deleteMany({ where: { id: createdJournalId } });
@@ -69,7 +79,11 @@ describe('TradeJournal logSignal overnightSignalId linkage (P1-2)', () => {
     await prisma.overnightSignal.deleteMany({ where: { id: { in: [selectedId, newerWeakId] } } });
   });
 
-  it('persists overnightSignalId / model prices from the selected id, not the newest row', async () => {
+  it('persists overnightSignalId / model prices from the selected id, not the newest row', async (t) => {
+    if (!dbAvailable) {
+      t.skip('Postgres unreachable');
+      return;
+    }
     const ok = await TradeJournalService.logSignal({
       signalType: 'BTST',
       symbol,

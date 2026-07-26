@@ -30,4 +30,6 @@ test('Redis reconnect delay keeps retrying with a capped backoff', () => {
   assert.strictEqual(shouldKeepRedisRetrying('production'), true);
   assert.strictEqual(shouldKeepRedisRetrying('development', 'redis://localhost:6379'), true);
   assert.strictEqual(shouldKeepRedisRetrying('development'), false);
+  // Unit-test runs must never keep a reconnect timer alive.
+  assert.strictEqual(shouldKeepRedisRetrying('test', 'redis://localhost:6379'), false);
 });

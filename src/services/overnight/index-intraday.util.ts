@@ -2,6 +2,7 @@ import {
   isInClosingLiquidityWindow,
   istMinuteOfDayFromUnixSec,
 } from '@/lib/market-hours';
+import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 
 /** Yahoo v8 finance chart payload (5m intraday). */
 export interface YahooFinanceChartResponse {
@@ -55,6 +56,9 @@ export function parseIndexIntradayMetricsFromChart(
       return empty;
     }
 
+    const seriesLen = alignedYahooSeriesLength(timestamps, quotes, ['high', 'low', 'close']);
+    if (seriesLen === 0) return empty;
+
     const currentTimestampSec = Math.floor(asOfTime.getTime() / 1000);
     let sumPriceVol = 0;
     let sumVol = 0;
@@ -63,10 +67,10 @@ export function parseIndexIntradayMetricsFromChart(
     let closingLow = Number.POSITIVE_INFINITY;
     let closingBarCount = 0;
 
-    const lastTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
+    const lastTimestamp = seriesLen > 0 ? timestamps[seriesLen - 1] : 0;
     const isLastCandleForming = currentTimestampSec - lastTimestamp < 300;
 
-    for (let i = 0; i < timestamps.length; i++) {
+    for (let i = 0; i < seriesLen; i++) {
       const ts = timestamps[i];
       if (ts > currentTimestampSec) continue;
       const high = quotes.high[i];
@@ -96,7 +100,7 @@ export function parseIndexIntradayMetricsFromChart(
     if (hasIntraday && sumVol === 0) {
       let sumClose = 0;
       let count = 0;
-      for (let i = 0; i < timestamps.length; i++) {
+      for (let i = 0; i < seriesLen; i++) {
         if (timestamps[i] > currentTimestampSec) continue;
         const close = quotes.close[i];
         if (close == null) continue;

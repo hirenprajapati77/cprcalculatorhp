@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { CacheService } from '../cache.service';
 import { getISTTime } from '../../lib/market-hours';
+import { alignedYahooSeriesLength } from '../../lib/yahoo-quote';
 
 export interface OHLC {
   date: string; // YYYY-MM-DD
@@ -201,32 +202,45 @@ export class HistoricalProvider {
         const quotes = result.indicators?.quote?.[0];
         if (!quotes) throw new Error('Live fetch returned empty data');
 
+        const seriesLen = alignedYahooSeriesLength(timestamps, quotes, [
+          'open',
+          'high',
+          'low',
+          'close',
+        ]);
+        if (seriesLen === 0) throw new Error('Live fetch returned misaligned quote arrays');
+
         const ohlc: OHLC[] = [];
         const { dateString: todayIST } = getISTTime();
 
-        for (let i = 0; i < timestamps.length; i++) {
-          if (quotes.open[i] !== null) {
-            // Yahoo returns dates anchored to 00:00 UTC or 03:45 UTC.
-            // Using getISTTime ensures we safely map any timestamp into its correct local trading day,
-            // avoiding silent breakage if Yahoo ever changes its anchor time or timezone.
-            const candleDate = getISTTime(new Date(timestamps[i] * 1000)).dateString;
-            
-            // Exclude live/in-progress bars. Confirmed via check_yahoo_partial_bar.ts on 2026-07-13:
-            // Yahoo's v8 chart interval=1d endpoint returns a bar for the current session whose close/volume 
-            // actively update intraday, tracking meta.regularMarketPrice — it is NOT a finalized candle.
-            if (candleDate === todayIST) {
-              continue;
-            }
+        for (let i = 0; i < seriesLen; i++) {
+          const open = quotes.open[i];
+          const high = quotes.high[i];
+          const low = quotes.low[i];
+          const close = quotes.close[i];
+          if (open == null || high == null || low == null || close == null) continue;
+          if (high < low || close > high || close < low) continue;
 
-            ohlc.push({
-              date: candleDate,
-              open: quotes.open[i],
-              high: quotes.high[i],
-              low: quotes.low[i],
-              close: quotes.close[i],
-              volume: quotes.volume[i] || 0
-            });
+          // Yahoo returns dates anchored to 00:00 UTC or 03:45 UTC.
+          // Using getISTTime ensures we safely map any timestamp into its correct local trading day,
+          // avoiding silent breakage if Yahoo ever changes its anchor time or timezone.
+          const candleDate = getISTTime(new Date(timestamps[i] * 1000)).dateString;
+
+          // Exclude live/in-progress bars. Confirmed via check_yahoo_partial_bar.ts on 2026-07-13:
+          // Yahoo's v8 chart interval=1d endpoint returns a bar for the current session whose close/volume
+          // actively update intraday, tracking meta.regularMarketPrice — it is NOT a finalized candle.
+          if (candleDate === todayIST) {
+            continue;
           }
+
+          ohlc.push({
+            date: candleDate,
+            open,
+            high,
+            low,
+            close,
+            volume: quotes.volume?.[i] || 0,
+          });
         }
         return ohlc;
       } catch (err) {

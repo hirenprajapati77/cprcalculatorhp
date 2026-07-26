@@ -13,6 +13,9 @@ export function getRedisReconnectDelay(times: number): number {
 }
 
 export function shouldKeepRedisRetrying(nodeEnv: string, redisUrl?: string): boolean {
+  // Never pin the event loop during unit tests — a down Redis + open reconnect
+  // timer prevents `node --test` from exiting.
+  if (nodeEnv === 'test') return false;
   return nodeEnv === 'production' || Boolean(redisUrl);
 }
 
@@ -39,7 +42,12 @@ class CacheServiceImpl {
   }
 
   private init() {
-    if (CACHE_PROVIDER === 'redis' || CACHE_PROVIDER === 'auto') {
+    // auto without REDIS_URL must not invent localhost — that spams reconnects
+    // locally and keeps the Node event loop alive after tests finish.
+    const shouldUseRedis =
+      CACHE_PROVIDER === 'redis' || (CACHE_PROVIDER === 'auto' && Boolean(env.REDIS_URL));
+
+    if (shouldUseRedis) {
       try {
         this.redisClient = new Redis(env.REDIS_URL || 'redis://localhost:6379', {
           maxRetriesPerRequest: 1,
@@ -56,6 +64,13 @@ class CacheServiceImpl {
               }
               this.provider = 'memory';
               if (!keepRetrying) {
+                // Drop the client so reconnect timers don't block process exit.
+                try {
+                  this.redisClient?.disconnect();
+                } catch {
+                  // ignore
+                }
+                this.redisClient = null;
                 return null;
               }
             }

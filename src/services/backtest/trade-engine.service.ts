@@ -69,6 +69,25 @@ export class TradeEngineService {
     let riskAmount = 0;
     const riskPerShare = Math.abs(entryPrice - sl);
 
+    const untradeable = (reason: string) => ({
+      status: 'SKIPPED_UNTRADEABLE' as const,
+      exitPrice: null,
+      exitDate: null,
+      exitReason: reason,
+      pnl: 0,
+      pnlPercent: 0,
+      positionSize: 0,
+      riskAmount: 0,
+      durationDays: 0,
+      rr: 0,
+      journalEvents: [],
+    });
+
+    // Guard before any division — zero risk or bad entry yields Infinity/NaN otherwise.
+    if (!(entryPrice > 0) || !(riskPerShare > 0)) {
+      return untradeable('Degenerate entry/SL — zero risk or non-positive entry');
+    }
+
     if (config.riskModel === 'Fixed') {
       riskAmount = config.riskValue;
       positionSize = riskAmount / riskPerShare;
@@ -91,20 +110,8 @@ export class TradeEngineService {
     // Guard 2: Integer share count. Do NOT force a 1-share floor after the capital
     // cap — that would re-expand notional above capital for expensive stocks.
     positionSize = Math.floor(positionSize);
-    if (positionSize < 1 || !Number.isFinite(positionSize) || riskPerShare <= 0) {
-      return {
-        status: 'SKIPPED_UNTRADEABLE',
-        exitPrice: null,
-        exitDate: null,
-        exitReason: 'Position size below 1 share after capital cap',
-        pnl: 0,
-        pnlPercent: 0,
-        positionSize: 0,
-        riskAmount: 0,
-        durationDays: 0,
-        rr: 0,
-        journalEvents: [],
-      };
+    if (positionSize < 1 || !Number.isFinite(positionSize)) {
+      return untradeable('Position size below 1 share after capital cap');
     }
     // Guard 3: Recalculate riskAmount after capping so P&L is consistent.
     riskAmount = positionSize * riskPerShare;

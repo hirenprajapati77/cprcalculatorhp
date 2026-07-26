@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
+import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { FyersAuthService } from './fyers-auth.service';
 
 export interface HistoricalCandle {
@@ -459,7 +460,11 @@ export class MarketService {
         const quote = result.indicators?.quote?.[0];
 
         if (quote && quote.high && quote.high.length > 0) {
-          const len = quote.high.length;
+          const timestamps = result.timestamp as number[] | undefined;
+          const len = alignedYahooSeriesLength(timestamps, quote, ['high', 'low', 'close']);
+          if (len === 0) {
+            throw new Error(`Misaligned Yahoo quote arrays for ${ticker}`);
+          }
 
           // Find the latest valid non-null daily candle (walk backwards)
           let idx = len - 1;
@@ -474,16 +479,16 @@ export class MarketService {
             const prevHigh   = quote.high[idx] as number;
             const prevLow    = quote.low[idx] as number;
             const prevClose  = quote.close[idx] as number;
-            const prevOpen   = (quote.open?.[idx] as number) || prevClose;
+            const prevOpen   = (quote.open?.[idx] as number) ?? prevClose;
             const prevVolume = (quote.volume?.[idx] as number) || 100000;
 
             // Average volume over the window, excluding today's partial candle
-            const timestamps = result.timestamp as number[] | undefined;
             const todayStr = getISTDateString();
 
             const safeLength = Math.min(
               quote.volume?.length ?? 0,
-              timestamps?.length ?? 0
+              timestamps?.length ?? 0,
+              len
             );
 
             const volumeEntries = (quote.volume as (number | null)[])
@@ -514,7 +519,7 @@ export class MarketService {
               const h = quote.high[i];
               const l = quote.low[i];
               const c = quote.close[i];
-              const o = quote.open?.[i] || c;
+              const o = quote.open?.[i] ?? c;
               const v = quote.volume?.[i] || 0;
 
               if (

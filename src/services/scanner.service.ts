@@ -1,5 +1,6 @@
 import { calculateCPR } from '@/lib/cpr-engine';
 import { getAtrPct } from '@/lib/atr';
+import { safeRatio } from '@/lib/math';
 import { VOLUME_THRESHOLDS } from '../config/trading-constants';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
@@ -168,7 +169,7 @@ export class ScannerService {
 
     // Advanced CPR Analytics
     const cprCompression = await CprCompressionService.getStats(stock);
-    const distPivot = ((ltp - cprToday.pivot) / cprToday.pivot) * 100;
+    const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
 
     // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
     let entry = 0;

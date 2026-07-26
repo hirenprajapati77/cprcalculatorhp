@@ -95,5 +95,6 @@ export function classifyCprWidth(widthPct: number, atrPct?: number): 'NARROW' | 
  */
 export function calculateAtrCompressionRatio(widthPct: number, atrPct?: number): number | undefined {
   if (!atrPct || atrPct === 0) return undefined;
-  return widthPct / (atrPct * 100);
+  const ratio = safeRatio(widthPct, atrPct * 100, NaN);
+  return Number.isFinite(ratio) ? ratio : undefined;
 }

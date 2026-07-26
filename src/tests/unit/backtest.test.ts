@@ -410,4 +410,12 @@ test('TradeEngine — adverse gap slippage cap and untradeable size', async (t) 
     assert.strictEqual(result.status, 'SKIPPED_UNTRADEABLE');
     assert.strictEqual(result.positionSize, 0);
   });
+
+  await t.test('skips when entry equals SL (zero risk — no Infinity position size)', () => {
+    const ohlc = makeOhlc(makeDates(2), 100, 'flat');
+    const result = TradeEngineService.simulateTrade('LONG', 100, 100, 110, ohlc, baseConfig);
+    assert.strictEqual(result.status, 'SKIPPED_UNTRADEABLE');
+    assert.strictEqual(result.positionSize, 0);
+    assert.match(String(result.exitReason), /zero risk|Degenerate/i);
+  });
 });
