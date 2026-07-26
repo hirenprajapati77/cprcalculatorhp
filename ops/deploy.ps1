@@ -32,6 +32,12 @@ if ($dbUrl -notmatch "postgresql://") {
 }
 Ok "DATABASE_URL = postgresql"
 
+$untrackedMigrations = & git status --porcelain prisma/migrations/ 2>&1
+if ($untrackedMigrations) {
+    Err "You have untracked database migrations! Please add, commit, and push them to Git before deploying. Git output:`n$untrackedMigrations"
+}
+Ok "no untracked database migrations"
+
 # ── 2. SET PRODUCTION URL ────────────────────────────────────
 Log "Setting NEXT_PUBLIC_BASE_URL to production..."
 (Get-Content $ENV_FILE) -replace "NEXT_PUBLIC_BASE_URL=.*", "NEXT_PUBLIC_BASE_URL=`"$PROD_URL`"" | Set-Content $ENV_FILE
