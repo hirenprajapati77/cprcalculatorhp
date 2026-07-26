@@ -47,6 +47,16 @@ export type BtstJournalJobResult = {
     logged: string[];
     skipped: string[];
   };
+  indexShort: {
+    picked: Array<{
+      symbol: string;
+      overnightScore: number | null;
+      qualityBucket: string | null;
+      classification: string;
+    }>;
+    logged: string[];
+    skipped: string[];
+  };
 };
 
 /** Shared BTST/STBT + index BTST journal pipeline for cron route and in-process scheduler. */

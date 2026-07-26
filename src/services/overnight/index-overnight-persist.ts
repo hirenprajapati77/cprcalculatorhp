@@ -258,11 +258,22 @@ export async function logIndexStbtJournalEntries(params: {
   const logged: string[] = [];
   const skipped: string[] = [];
 
-  // Index discover was already called by logIndexBtstJournalEntries; just read persisted rows.
-  const indexSignals = await prisma.overnightSignal.findMany({
+  // Index discover is typically called by logIndexBtstJournalEntries first.
+  // Defensive guard: if no rows exist yet, run discover ourselves.
+  let indexSignals = await prisma.overnightSignal.findMany({
     where: { signalDate, instrumentType: 'INDEX' },
     orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
   });
+
+  if (indexSignals.length === 0) {
+    console.log(`[BtstJournal] No Index signals found for ${signalDate}; running discover for STBT.`);
+    const indexDiscoverResults = await IndexDiscoverService.discover();
+    await persistIndexBtstOvernightSignals(indexDiscoverResults);
+    indexSignals = await prisma.overnightSignal.findMany({
+      where: { signalDate, instrumentType: 'INDEX' },
+      orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
+    });
+  }
 
   const picks = selectTradableIndexStbtPicks(indexSignals, {
     minScore: INDEX_SCORE.READY,

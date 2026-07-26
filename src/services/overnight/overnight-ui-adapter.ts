@@ -8,6 +8,7 @@ import { MarketService } from '@/services/market.service';
 
 const LONG_READY = ['STRONG_BTST', 'BTST_READY'];
 const SHORT_READY = ['STRONG_STBT', 'STBT_READY'];
+const INDEX_READY_CLS = ['INDEX_STRONG', 'INDEX_READY'];
 
 export type OvernightUiResult = BtstScoreResultEnriched & {
   classification: string;
@@ -97,8 +98,8 @@ export function buildInsightsFromOvernight(signals: OvernightSignal[]) {
       avoid++;
       continue;
     }
-    if (LONG_READY.includes(sig.classification) || SHORT_READY.includes(sig.classification)) {
-      if (score >= 100 || sig.classification.startsWith('STRONG_')) {
+    if (LONG_READY.includes(sig.classification) || SHORT_READY.includes(sig.classification) || INDEX_READY_CLS.includes(sig.classification)) {
+      if (score >= 100 || sig.classification.startsWith('STRONG_') || sig.classification === 'INDEX_STRONG') {
         strongSignal++;
       } else {
         breakoutReady++;
@@ -141,7 +142,7 @@ export function compareLatestScanRows(
 
 /**
  * Keep one row per symbol from a list sorted by compareLatestScanRows (latest scan wins).
- * OvernightSignal is unique on [symbol, signalDate, signalTime], so rescans can
+ * OvernightSignal is unique on [symbol, signalDate, signalTime, direction], so rescans can
  * return the same name twice and steal both top-N journal/alert slots.
  */
 export function distinctLatestScanBySymbol<T extends { symbol: string }>(

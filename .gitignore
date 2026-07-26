@@ -71,6 +71,7 @@ remote_deploy.sh
 
 # temporary debug / scratch files
 *.sql
+!prisma/migrations/**/*.sql
 *.txt
 ssh_history.jsonl
 history.txt

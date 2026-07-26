@@ -81,6 +81,7 @@ export class TelegramService {
     const strongSignalCount = results.filter(
       (r) =>
         (r as { classification?: string }).classification?.startsWith('STRONG_') ||
+        (r as { classification?: string }).classification === 'INDEX_STRONG' ||
         Math.max(r.longScore, r.shortScore) >= ADVANCED_SCORE.STRONG
     ).length;
     const breakoutCount = results.filter((r) => {
@@ -89,7 +90,7 @@ export class TelegramService {
       return (
         score >= ADVANCED_SCORE.READY &&
         score < ADVANCED_SCORE.STRONG &&
-        (cls === 'BTST_READY' || cls === 'STBT_READY')
+        (cls === 'BTST_READY' || cls === 'STBT_READY' || cls === 'INDEX_READY')
       );
     }).length;
 
