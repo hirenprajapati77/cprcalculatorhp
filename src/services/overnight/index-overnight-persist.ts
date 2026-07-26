@@ -8,7 +8,7 @@ import {
   distinctLatestScanBySymbol,
 } from './overnight-ui-adapter';
 
-const INDEX_LONG_READY = ['INDEX_STRONG', 'INDEX_READY'] as const;
+const INDEX_STRONG_OR_READY = ['INDEX_STRONG', 'INDEX_READY'] as const;
 
 /** Map index classification to journal-quality bucket (mirrors stock TRADEABLE gating). */
 export function indexClassificationToQualityBucket(
@@ -97,8 +97,8 @@ export function selectTradableIndexBtstPicks(
         (s) =>
           s.direction === 'LONG' &&
           s.instrumentType === 'INDEX' &&
-          INDEX_LONG_READY.includes(
-            s.classification as (typeof INDEX_LONG_READY)[number]
+          INDEX_STRONG_OR_READY.includes(
+            s.classification as (typeof INDEX_STRONG_OR_READY)[number]
           ) &&
           (s.overnightScore ?? 0) >= minScore &&
           s.entry != null &&
@@ -134,8 +134,8 @@ export function selectTradableIndexStbtPicks(
         (s) =>
           s.direction === 'SHORT' &&
           s.instrumentType === 'INDEX' &&
-          INDEX_LONG_READY.includes(
-            s.classification as (typeof INDEX_LONG_READY)[number]
+          INDEX_STRONG_OR_READY.includes(
+            s.classification as (typeof INDEX_STRONG_OR_READY)[number]
           ) &&
           (s.overnightScore ?? 0) >= minScore &&
           s.entry != null &&
@@ -240,6 +240,95 @@ export async function logIndexBtstJournalEntries(params: {
 
     if (didLog) logged.push(`${signal.symbol}:INDEX_BTST`);
     else skipped.push(`${signal.symbol}:INDEX_BTST`);
+  }
+
+  return { logged, skipped, picks };
+}
+
+/**
+ * Refresh index STBT discover, select READY+ SHORT picks, and log PE entries to TradeJournal.
+ * Mirrors logIndexBtstJournalEntries but for the SHORT/PE/STBT direction.
+ */
+export async function logIndexStbtJournalEntries(params: {
+  signalDate: string;
+  suppressShort: boolean;
+  regimeTrend: string;
+}): Promise<IndexBtstJournalResult> {
+  const { signalDate, suppressShort, regimeTrend } = params;
+  const logged: string[] = [];
+  const skipped: string[] = [];
+
+  // Index discover was already called by logIndexBtstJournalEntries; just read persisted rows.
+  const indexSignals = await prisma.overnightSignal.findMany({
+    where: { signalDate, instrumentType: 'INDEX' },
+    orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
+  });
+
+  const picks = selectTradableIndexStbtPicks(indexSignals, {
+    minScore: INDEX_SCORE.READY,
+    take: 2,
+    suppressShort,
+  });
+
+  const { OptionSuggestionService } = await import('@/services/option-suggestion.service');
+  const { TradeJournalService } = await import('@/services/journal/trade-journal.service');
+
+  for (const signal of picks) {
+    const entry = signal.entry ?? 0;
+    const sl = signal.stopLoss ?? entry * 1.02;
+    const target = signal.target ?? entry * 0.96;
+
+    if (!entry || entry <= 0) {
+      console.warn(`[BtstJournal] No entry for index ${signal.symbol}; skipping STBT`);
+      skipped.push(`${signal.symbol}:INDEX_STBT`);
+      continue;
+    }
+
+    const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+      signal.symbol,
+      entry,
+      'SHORT',
+      entry,
+      sl,
+      target
+    );
+
+    if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
+      console.warn(
+        `[BtstJournal] No index PE suggestion for ${signal.symbol}: ` +
+        (suggestion.error ?? 'missing strike or ltp')
+      );
+      skipped.push(`${signal.symbol}:INDEX_STBT`);
+      continue;
+    }
+
+    const optionName =
+      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      `${suggestion.strike} PE`;
+    const signalSummary = [
+      signal.classification,
+      signal.qualityBucket,
+      signal.direction,
+      'INDEX',
+      `REGIME_${regimeTrend}`,
+    ]
+      .filter(Boolean)
+      .join(',');
+
+    const didLog = await TradeJournalService.logSignal({
+      signalType: 'STBT',
+      symbol: signal.symbol,
+      optionContract: optionName,
+      optionStrike: suggestion.strike,
+      optionType: 'PE',
+      score: signal.overnightScore ?? 0,
+      confidence: signal.confidence ?? signal.overnightScore ?? 0,
+      signalSummary,
+      overnightSignalId: signal.id,
+    });
+
+    if (didLog) logged.push(`${signal.symbol}:INDEX_STBT`);
+    else skipped.push(`${signal.symbol}:INDEX_STBT`);
   }
 
   return { logged, skipped, picks };

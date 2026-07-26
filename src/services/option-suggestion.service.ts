@@ -424,9 +424,11 @@ export class OptionSuggestionService {
       return { error: 'NO_VIABLE_STRIKES' };
     }
     
-    // Ensure we aren't just blindly picking the closest ITM when Fyers returns 0 OI/Volume for everything
+    // If both scores are zero it usually means Fyers returned no liquidity data at all (e.g. pre-market,
+    // exchange holiday, or a non-F&O equity slipping through). A zero-liquidity strike is not tradeable.
     if ((selected.scoreBreakdown.oiScore + selected.scoreBreakdown.volumeScore) === 0) {
-      console.warn(`[OptionSuggestion] Warning: Candidate ${selected.option.symbol} has 0 OI and 0 Volume. Fyers API missing data? Proceeding with closest ITM fallback.`);
+      console.warn(`[OptionSuggestion] Rejected candidate ${selected.option.symbol}: OI and Volume scores are both 0. Missing data?`);
+      return { error: 'NO_VIABLE_STRIKES' };
     }
 
     // 8. Estimate SL / Target using 0.7 delta proxy

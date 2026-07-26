@@ -3,7 +3,7 @@ import { MarketService } from '@/services/market.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
-import { logIndexBtstJournalEntries } from '@/services/overnight/index-overnight-persist';
+import { logIndexBtstJournalEntries, logIndexStbtJournalEntries } from '@/services/overnight/index-overnight-persist';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import { selectTradableOvernightPicks } from '@/services/overnight/overnight-ui-adapter';
@@ -273,7 +273,13 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
     regimeTrend: regime.trend,
   });
 
-  const anyLogged = logged.length > 0 || indexJournal.logged.length > 0;
+  const indexStbtJournal = await logIndexStbtJournalEntries({
+    signalDate,
+    suppressShort: suppressStbt,
+    regimeTrend: regime.trend,
+  });
+
+  const anyLogged = logged.length > 0 || indexJournal.logged.length > 0 || indexStbtJournal.logged.length > 0;
 
   return {
     success: anyLogged,
@@ -309,6 +315,16 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       })),
       logged: indexJournal.logged,
       skipped: indexJournal.skipped,
+    },
+    indexShort: {
+      picked: indexStbtJournal.picks.map((s) => ({
+        symbol: s.symbol,
+        overnightScore: s.overnightScore,
+        qualityBucket: s.qualityBucket,
+        classification: s.classification,
+      })),
+      logged: indexStbtJournal.logged,
+      skipped: indexStbtJournal.skipped,
     },
   };
 }

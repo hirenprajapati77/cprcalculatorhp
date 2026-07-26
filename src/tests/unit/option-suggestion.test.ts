@@ -336,3 +336,56 @@ test('Option Suggestion — Expensive high-scoring strike wins (no budget gate)'
   FyersAuthService.getAccessToken = originalGetAccessToken;
   OptionChainService.getOptionChain = originalGetOptionChain;
 });
+
+// ─── Zero-liquidity guard ─────────────────────────────────────────────────────
+
+test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', async (t) => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetOptionChain = OptionChainService.getOptionChain;
+
+  await t.test('CE: all candidates have 0 OI and 0 volume → NO_VIABLE_STRIKES', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({
+      optionsChain: [
+        { symbol: 'NSE:SBIN26JUN790CE', strikePrice: 790, optionType: 'CE' as const, ltp: 18, open_interest: 0, volume: 0, bid: 19.0, ask: 19.5 },
+        { symbol: 'NSE:SBIN26JUN780CE', strikePrice: 780, optionType: 'CE' as const, ltp: 25, open_interest: 0, volume: 0, bid: 18.5, ask: 19.5 },
+        { symbol: 'NSE:SBIN26JUN800CE', strikePrice: 800, optionType: 'CE' as const, ltp: 12, open_interest: 0, volume: 0, bid: 11.8, ask: 12.2 },
+      ],
+      expiryData: [],
+      method: 'direct' as const,
+    });
+    const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
+
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'CE', 800, 790, 820);
+    assert.strictEqual(res.error, 'NO_VIABLE_STRIKES', 'zero OI+vol must return NO_VIABLE_STRIKES, not a fabricated strike');
+    assert.ok(!res.strike, 'should not return a strike when guard fires');
+
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    OptionChainService.getOptionChain = originalGetOptionChain;
+  });
+
+  await t.test('PE: all candidates have 0 OI and 0 volume → NO_VIABLE_STRIKES', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({
+      optionsChain: [
+        { symbol: 'NSE:SBIN26JUN810PE', strikePrice: 810, optionType: 'PE' as const, ltp: 18, open_interest: 0, volume: 0, bid: 18.0, ask: 18.6 },
+        { symbol: 'NSE:SBIN26JUN820PE', strikePrice: 820, optionType: 'PE' as const, ltp: 25, open_interest: 0, volume: 0, bid: 17.0, ask: 18.6 },
+        { symbol: 'NSE:SBIN26JUN800PE', strikePrice: 800, optionType: 'PE' as const, ltp: 12, open_interest: 0, volume: 0, bid: 11.8, ask: 12.2 },
+      ],
+      expiryData: [],
+      method: 'direct' as const,
+    });
+    const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
+
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 803, 'PE', 806, 820, 785);
+    assert.strictEqual(res.error, 'NO_VIABLE_STRIKES', 'zero OI+vol PE must return NO_VIABLE_STRIKES');
+
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    OptionChainService.getOptionChain = originalGetOptionChain;
+  });
+});
+
