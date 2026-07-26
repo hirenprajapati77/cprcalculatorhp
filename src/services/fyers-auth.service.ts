@@ -163,7 +163,10 @@ export class FyersAuthService {
 
         clearTimeout(timeoutId);
 
-        if (res.ok) {
+        if (!res.ok) {
+          const bodyText = await res.text();
+          console.warn(`[FyersAuthService] Direct token exchange HTTP ${res.status}: ${bodyText}`);
+        } else {
           const data = await res.json();
           if (data.s === 'ok') {
             const token = data.access_token || data.data?.access_token;
@@ -184,7 +187,11 @@ export class FyersAuthService {
               }
               console.log('[FyersAuthService] Direct token exchange succeeded.');
               return { success: true, message: 'Login successful (Direct)' };
+            } else {
+              console.warn('[FyersAuthService] Direct token exchange succeeded but no token in response:', JSON.stringify(data));
             }
+          } else {
+            console.warn('[FyersAuthService] Direct token exchange returned non-ok status:', JSON.stringify(data));
           }
         }
       } catch (directErr) {
@@ -241,11 +248,16 @@ export class FyersAuthService {
             }
             console.log('[FyersAuthService] Proxy token exchange succeeded.');
             return { success: true, message: 'Login successful (Proxy)' };
+          } else {
+            console.warn('[FyersAuthService] Proxy token exchange succeeded but no token in response:', JSON.stringify(data));
           }
+        } else {
+          console.warn('[FyersAuthService] Proxy token exchange returned non-ok status:', JSON.stringify(data));
         }
         return { success: false, message: data.message || 'Proxy call returned non-ok status' };
       } else {
         const text = await res.text();
+        console.warn(`[FyersAuthService] Proxy token exchange HTTP ${res.status}: ${text}`);
         return { success: false, message: `Proxy HTTP ${res.status}: ${text.substring(0, 100)}` };
       }
     } catch (err) {
