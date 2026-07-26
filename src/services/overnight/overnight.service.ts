@@ -526,7 +526,7 @@ export class OvernightService {
               symbol: sig.symbol,
               signalDate: sig.signalDate,
               signalTime: sig.signalTime,
-              direction: sig.direction
+              direction: sig.direction!
             }
           },
           update: sig,
