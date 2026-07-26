@@ -34,10 +34,11 @@ export async function persistIndexBtstOvernightSignals(
     const qualityBucket = indexClassificationToQualityBucket(r.classification);
     await prisma.overnightSignal.upsert({
       where: {
-        symbol_signalDate_signalTime: {
+        symbol_signalDate_signalTime_direction: {
           symbol: r.symbol,
           signalDate: r.signalDate,
           signalTime: r.signalTime,
+          direction: r.direction,
         },
       },
       update: {

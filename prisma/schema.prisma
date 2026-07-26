@@ -274,7 +274,7 @@ model OvernightSignal {
 
   journalEntries TradeJournal[]
 
-  @@unique([symbol, signalDate, signalTime])
+  @@unique([symbol, signalDate, signalTime, direction])
   @@index([direction])
   @@index([classification])
   @@index([signalDate])

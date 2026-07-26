@@ -522,10 +522,11 @@ export class OvernightService {
       try {
         const saved = await prisma.overnightSignal.upsert({
           where: {
-            symbol_signalDate_signalTime: {
+            symbol_signalDate_signalTime_direction: {
               symbol: sig.symbol,
               signalDate: sig.signalDate,
-              signalTime: sig.signalTime
+              signalTime: sig.signalTime,
+              direction: sig.direction
             }
           },
           update: sig,

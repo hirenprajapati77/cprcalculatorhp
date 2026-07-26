@@ -107,9 +107,9 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const filteredLongs = await filterExtended(longs, 'LONG');
   const filteredShorts = await filterExtended(shorts, 'SHORT');
 
-  // Index (NIFTY/BANKNIFTY/SENSEX) BTST is LONG-only by design — IndexDiscoverService.discover()
-  // does not produce overnight SHORT signals (see index-discover.service.ts header). No
-  // EntryManagerService extension filter here either: that gate exists for stock
+  // IndexDiscoverService.discover() now returns both LONG and SHORT signals.
+  // We explicitly filter to LONG-only in selectTradableIndexBtstPicks() for the actual BTST alerts.
+  // No EntryManagerService extension filter here either: that gate exists for stock
   // avgVolume/volumeRatio concerns that don't apply to an index (same rationale as
   // logIndexBtstJournalEntries in index-overnight-persist.ts, which this mirrors).
   let enrichedIndexLongs: Awaited<ReturnType<typeof buildEnrichedIndexLongs>> = [];
