@@ -16,6 +16,7 @@ That's it. The script handles everything:
 
 **DO NOT:**
 - Build manually step-by-step (wastes tokens and time)
+- **NEVER run `npm run build` directly on the Oracle server via SSH.** The server has limited memory and the build will freeze, crash, or take 10+ minutes. ALWAYS use `.\ops\deploy.ps1` to build locally and push the artifacts.
 - Use `Compress-Archive` / zip (Windows paths break on Linux)
 - Use `npm ci` on the server (takes 3+ minutes unnecessarily)
 - Use `pm2 restart --update-env` (stale env cache — always delete+start)
