@@ -78,7 +78,7 @@ Ok "Upload complete"
 
 # ── 7. EXTRACT + RESTART ON SERVER ───────────────────────────
 Log "Extracting and restarting PM2 on server..."
-ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "bash /home/ubuntu/deploy_extract.sh"
+ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh && bash /home/ubuntu/deploy_extract.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
 # ── 8. CLEANUP LOCAL TARBALLS ────────────────────────────────
