@@ -21,6 +21,10 @@ echo "=== Placing static assets ==="
 mkdir -p $APP/.next/standalone/.next/static
 tar -xzf /home/ubuntu/deploy_static.tar.gz -C $APP/.next/standalone/.next/static
 
+echo "=== Placing public assets ==="
+mkdir -p $APP/.next/standalone/public
+tar -xzf /home/ubuntu/deploy_public.tar.gz -C $APP/.next/standalone/public
+
 echo "=== Extracting Prisma bundle ==="
 tar -xzf /home/ubuntu/deploy_prisma.tar.gz -C $APP/
 
@@ -65,7 +69,7 @@ set -e
 if [[ "$HEALTH_OUTPUT" == *"DB: healthy"* ]]; then
     echo "[OK] Health check passed! Database is up."
     echo "=== Cleanup ==="
-    rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_prisma.tar.gz
+    rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_public.tar.gz /home/ubuntu/deploy_prisma.tar.gz
     # Remove old backup to save space
     if [ -d "$BACKUP_DIR" ]; then
         echo "Removing old backup $BACKUP_DIR to conserve space"
