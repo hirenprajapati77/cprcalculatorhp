@@ -110,6 +110,43 @@ export function selectTradableIndexBtstPicks(
   ).slice(0, take);
 }
 
+/**
+ * Journal-aligned index STBT picks: INDEX_STRONG/INDEX_READY + READY+ score floor.
+ */
+export function selectTradableIndexStbtPicks(
+  signals: OvernightSignal[],
+  opts: {
+    minScore?: number;
+    take?: number;
+    suppressShort?: boolean;
+  } = {}
+) {
+  const minScore = opts.minScore ?? INDEX_SCORE.READY;
+  const take = opts.take ?? 2;
+
+  if (opts.suppressShort) {
+    return [];
+  }
+
+  return distinctLatestScanBySymbol(
+    signals
+      .filter(
+        (s) =>
+          s.direction === 'SHORT' &&
+          s.instrumentType === 'INDEX' &&
+          INDEX_LONG_READY.includes(
+            s.classification as (typeof INDEX_LONG_READY)[number]
+          ) &&
+          (s.overnightScore ?? 0) >= minScore &&
+          s.entry != null &&
+          s.entry > 0 &&
+          s.stopLoss != null &&
+          s.target != null
+      )
+      .sort(compareLatestScanRows)
+  ).slice(0, take);
+}
+
 export type IndexBtstJournalResult = {
   logged: string[];
   skipped: string[];

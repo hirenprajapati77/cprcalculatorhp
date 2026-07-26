@@ -13,6 +13,7 @@ import { IndexDiscoverService } from '@/services/overnight/index-discover.servic
 import {
   persistIndexBtstOvernightSignals,
   selectTradableIndexBtstPicks,
+  selectTradableIndexStbtPicks,
 } from '@/services/overnight/index-overnight-persist';
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
 import { getISTDateString } from '@/lib/market-hours';
@@ -32,6 +33,7 @@ export type BtstAlertJobResult = {
   longs: number;
   shorts: number;
   indexLongs: number;
+  indexShorts: number;
   engine: 'advanced';
   regime: Awaited<ReturnType<typeof RegimeService.getMarketRegime>>;
   suppressStbt: boolean;
@@ -40,6 +42,10 @@ export type BtstAlertJobResult = {
 
 async function buildEnrichedIndexLongs(picks: OvernightSignal[]) {
   return buildEnrichedPicks(picks, 'LONG');
+}
+
+async function buildEnrichedIndexShorts(picks: OvernightSignal[]) {
+  return buildEnrichedPicks(picks, 'SHORT');
 }
 
 async function enrichBtstPick(sig: OvernightSignal, direction: 'LONG' | 'SHORT') {
@@ -108,13 +114,14 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const filteredShorts = await filterExtended(shorts, 'SHORT');
 
   // IndexDiscoverService.discover() now returns both LONG and SHORT signals.
-  // We explicitly filter to LONG-only in selectTradableIndexBtstPicks() for the actual BTST alerts.
+  // We explicitly fetch and filter both for the actual BTST/STBT alerts.
   // No EntryManagerService extension filter here either: that gate exists for stock
   // avgVolume/volumeRatio concerns that don't apply to an index (same rationale as
   // logIndexBtstJournalEntries in index-overnight-persist.ts, which this mirrors).
   let enrichedIndexLongs: Awaited<ReturnType<typeof buildEnrichedIndexLongs>> = [];
+  let enrichedIndexShorts: Awaited<ReturnType<typeof buildEnrichedIndexShorts>> = [];
   try {
-    console.log(`[BtstAlert] Refreshing Index BTST OvernightSignal for ${signalDate}.`);
+    console.log(`[BtstAlert] Refreshing Index BTST/STBT OvernightSignal for ${signalDate}.`);
     const indexDiscoverResults = await IndexDiscoverService.discover();
     await persistIndexBtstOvernightSignals(indexDiscoverResults);
 
@@ -123,13 +130,20 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
       orderBy: [{ signalTime: 'desc' }, { overnightScore: 'desc' }],
     });
 
-    const indexPicks = selectTradableIndexBtstPicks(indexSignalsRaw, {
+    const indexPicksLong = selectTradableIndexBtstPicks(indexSignalsRaw, {
       minScore: INDEX_SCORE.READY,
       take: 2,
       suppressLong: suppressBtst,
     });
 
-    enrichedIndexLongs = await buildEnrichedIndexLongs(indexPicks);
+    const indexPicksShort = selectTradableIndexStbtPicks(indexSignalsRaw, {
+      minScore: INDEX_SCORE.READY,
+      take: 2,
+      suppressShort: suppressStbt,
+    });
+
+    enrichedIndexLongs = await buildEnrichedIndexLongs(indexPicksLong);
+    enrichedIndexShorts = await buildEnrichedIndexShorts(indexPicksShort);
   } catch (indexErr) {
     // Index BTST is additive — never let a Yahoo/DB hiccup on the index leg
     // block the stock BTST/STBT alert, which already worked before this existed.
@@ -139,13 +153,14 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const enrichedLongs = await buildEnrichedPicks(filteredLongs, 'LONG');
   const enrichedShorts = await buildEnrichedPicks(filteredShorts, 'SHORT');
 
-  const alertPayload = [...enrichedLongs, ...enrichedShorts, ...enrichedIndexLongs];
+  const alertPayload = [...enrichedLongs, ...enrichedShorts, ...enrichedIndexLongs, ...enrichedIndexShorts];
 
   const baseResult = {
     count: alertPayload.length,
     longs: enrichedLongs.length,
     shorts: enrichedShorts.length,
     indexLongs: enrichedIndexLongs.length,
+    indexShorts: enrichedIndexShorts.length,
     engine: 'advanced' as const,
     regime,
     suppressStbt,
