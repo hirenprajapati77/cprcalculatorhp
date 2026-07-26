@@ -23,7 +23,9 @@ import {
   IndexRankingService,
   IndexClassification,
   IndexScoreBreakdown,
+  IndexShortScoreBreakdown,
   INDEX_SCORE,
+  INDIA_VIX_CALM_MAX,
   INDIA_VIX_ELEVATED_MIN,
   isIndexBtstRedSession,
   isIndexStbtGreenSession,
@@ -71,7 +73,7 @@ export interface IndexSignalResult {
   stopLoss: number | null;
   target: number | null;
   riskReward: string | null;
-  scoreBreakdown: IndexScoreBreakdown | null;
+  scoreBreakdown: IndexScoreBreakdown | IndexShortScoreBreakdown | null;
   reasons: string[];
   regime: IndexRegimeContext | null;
 }
@@ -138,7 +140,7 @@ export class IndexDiscoverService {
       IndexSignalResult,
       'signalType' | 'confidence' | 'riskReward' | 'scoreBreakdown' | 'reasons' | 'regime'
     > & {
-      scoreBreakdown?: IndexScoreBreakdown | null;
+      scoreBreakdown?: IndexScoreBreakdown | IndexShortScoreBreakdown | null;
       reasons: string[];
       regime: IndexRegimeContext | null;
       maxScore?: number;
@@ -579,6 +581,17 @@ export class IndexDiscoverService {
             : yesterdayCandle.close;
         const sessionChangePct =
           prevClose > 0 ? (todayCandle.close - prevClose) / prevClose : 0;
+
+        const atrPct = getAtrPct(history.slice(0, -1), yesterdayCandle.close);
+
+        const todayCpr = calculateCPR(
+          { high: yesterdayCandle.high, low: yesterdayCandle.low, close: yesterdayCandle.close },
+          atrPct
+        );
+        const tomorrowCpr = calculateCPR(
+          { high: todayCandle.high, low: todayCandle.low, close: todayCandle.close },
+          atrPct
+        );
 
         if (isIndexBtstRedSession(sessionChangePct)) {
           results.push(
