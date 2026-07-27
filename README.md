@@ -112,6 +112,14 @@ The platform is fully containerized and production-ready for controlled shadow t
    CRON_SECRET="your_secure_cron_secret"
    ```
    Production will refuse to start without `APP_ACCESS_TOKEN`. Schedule `btst-journal` crontab inside **15:25–15:30 IST**.
+
+### 🔒 Gated Access Control
+To protect browser APIs and dashboard pages, the platform utilizes a session-based access gate:
+- **Explicit Unlock Required:** Access to dashboard pages (like `/scanner`, `/settings`, etc.) requires visiting `/unlock` and entering the configured `APP_ACCESS_TOKEN` passcode.
+- **Secure Sessions:** On successful validation, a secure `app_access_token` HttpOnly cookie is set (SameSite=Strict, Path=/, MaxAge=7 days, Secure matching request/base URL protocol).
+- **API Security:** All standard `/api/*` endpoints require the valid HttpOnly cookie or an `Authorization: Bearer <TOKEN>` header.
+- **Exemptions:** Public routes (`/unlock`, `/about`, `/faq`, `/share/*`), Fyers API callback handlers, and cron triggers (which authenticate via `x-cron-secret`) are exempt.
+
 2. **Pre-flight Check:** Run the deployment verification script on your host to catch config or schema mismatches before boot:
    ```bash
    bash scripts/deploy-check.sh
