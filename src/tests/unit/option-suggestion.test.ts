@@ -29,15 +29,15 @@ function makeChain(overrides: Partial<{
 test('OptionSuggestionService extracts expiry from NSE and BSE Fyers option symbols', () => {
   assert.strictEqual(
     OptionSuggestionService.extractFyersOptionExpiry('NSE:NIFTY2672322500CE', 'NIFTY', 22500, 'CE'),
-    '26723'
+    '23 JUL 2026'
   );
   assert.strictEqual(
     OptionSuggestionService.extractFyersOptionExpiry('BSE:SENSEX2672375200CE', 'SENSEX', 75200, 'CE'),
-    '26723'
+    '23 JUL 2026'
   );
   assert.strictEqual(
     OptionSuggestionService.extractFyersOptionExpiry('BSE:SENSEX26JUL75200PE', 'SENSEX', 75200, 'PE'),
-    '26JUL'
+    'JUL 2026'
   );
 });
 
@@ -128,7 +128,7 @@ test('Option Suggestion — OI Score scales relative to max OI among candidates'
   OptionChainService.getOptionChain = originalGetOptionChain;
 });
 
-test('Option Suggestion — SENSEX formatted name keeps BSE expiry token', async () => {
+test('Option Suggestion — SENSEX formatted name expands BSE weekly expiry token', async () => {
   const originalGetAccessToken = FyersAuthService.getAccessToken;
   const originalGetOptionChain = OptionChainService.getOptionChain;
   const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
@@ -148,7 +148,7 @@ test('Option Suggestion — SENSEX formatted name keeps BSE expiry token', async
   try {
     const res = await OptionSuggestionService.buildSuggestion('SENSEX', 75500, 'CE', 75500, 75200, 76000);
     assert.strictEqual(res.error, undefined);
-    assert.strictEqual(res.formattedName, 'SENSEX 26723 75200 CE');
+    assert.strictEqual(res.formattedName, 'SENSEX 23 JUL 2026 75200 CE');
   } finally {
     FyersAuthService.getAccessToken = originalGetAccessToken;
     OptionChainService.getOptionChain = originalGetOptionChain;
