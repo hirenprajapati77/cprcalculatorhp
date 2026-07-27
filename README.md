@@ -50,12 +50,12 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (July 2026):**
+- **CPR Scanner Real Auto-Refresh**: Fixed scanner client timer to trigger real `POST /api/scanner/refresh` calculations and display honest server `scannedAt` timestamps.
+- **Overnight Signal Availability & Bypass**: Enhanced `/api/overnight` with database fallback between **3:10 PM and 12:00 AM Midnight IST** and on-demand calculation when `?bypass=true` is enabled.
+- **Option Contract Expiry Formatting**: Reformatted monthly stock option contract names to `JUL 2026 1960 CE` (full 4-digit year) and weekly index options to `30 JUL 2026 24500 CE`, eliminating month-vs-date ambiguity.
+- **Telegram Breakout Option Suggestions**: Integrated option contract lookup (`🎯 Option: ...`) directly into Telegram breakout alert messages.
 - **Unified Index Scanner**: Shipped new index scanner (`/api/index-scan`) aggregating intraday and overnight BTST signals for index instruments (`^NSEI`, `^NSEBANK`, `^BSESN`). Features regime-aligned modifiers and elevated-VIX ignore gates.
-- **Bypass Retention Mode**: Supported `?bypass=true` queries on BTST and Overnight endpoints allowing client UIs to view cached execution data up to midnight (12:00 AM IST) without executing redundant live scans.
-- **Security & Performance Hardening**: 
-  - Standardized `timingSafeEqual` constant-time middleware comparisons to prevent token length attacks.
-  - Implemented `yahoo5mChartMemo` lookup caching in index scanner, sharing a single live fetch.
-  - Enforced calendar event freshness checks by default in production and optimized bulk database checks.
+- **Security & Rate Limiting**: Added Redis-backed rate limiting (`/api/auth/unlock`), middleware access token validation, and constant-time comparisons.
 - Shipped interactive Trade Journal UI (with analytics charts, CSV export, and signal breakdowns).
 - Implemented T+1 morning automated option price snapshots via cron (9:16 AM, 9:30 AM, 9:45 AM, 10:00 AM) to build realistic outcome data.
 - Standardized security deployment for API cron endpoints via strict token validation (`CRON_SECRET`).
