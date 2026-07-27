@@ -58,11 +58,11 @@ export class BacktestService {
     startDate: string;
     endDate: string;
     capital: number;
-    riskModel?: string;
+    riskModel?: string | undefined;
     executionMode: string;
-    metricsVersion?: number;
-    riskValue?: number;
-    strategyMode?: string;
+    metricsVersion?: number | undefined;
+    riskValue?: number | undefined;
+    strategyMode?: string | undefined;
   }) {
     const mode = env.BACKTEST_EXECUTION_MODE || 'queue';
     
