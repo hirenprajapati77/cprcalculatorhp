@@ -50,6 +50,8 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (July 2026):**
+- **Shadow VPA Confirmation Layer**: Added modular Wyckoff/Volume Price Analysis (VPA) scoring to signal metadata, viewable in the scanner/journal UI without affecting core BTST logic.
+- **Performance & Logic Hardening**: Optimized Trade Journal summary queries to prevent OOM errors, corrected directional score logic for Long/Short setups, and improved Top Option mapping efficiency.
 - **CPR Scanner Real Auto-Refresh**: Fixed scanner client timer to trigger real `POST /api/scanner/refresh` calculations and display honest server `scannedAt` timestamps.
 - **Overnight Signal Availability & Bypass**: Enhanced `/api/overnight` with database fallback between **3:10 PM and 12:00 AM Midnight IST** and on-demand calculation when `?bypass=true` is enabled.
 - **Option Contract Expiry Formatting**: Reformatted monthly stock option contract names to `JUL 2026 1960 CE` (full 4-digit year) and weekly index options to `30 JUL 2026 24500 CE`, eliminating month-vs-date ambiguity.
