@@ -147,15 +147,27 @@ export async function GET(request: NextRequest) {
       return await serveDegradedScannerCache();
     }
 
-    // 1. Auto-initialize today's database records if empty
+    // 1. Auto-initialize today's database records if empty (LIVE SESSION ONLY)
+    let targetDate = today;
     try {
       const todayCount = await prisma.scannerResult.count({
         where: { date: today },
       });
       if (todayCount === 0) {
-        console.log("No scanner records found for today. Performing auto-scan initialization...");
-        await ScannerController.runFullScan('ALL', 'NSE');
-        await ScannerController.runFullScan('ALL', 'BSE');
+        if (isMarketOpen()) {
+          console.log("No scanner records found for today during live session. Performing auto-scan initialization...");
+          await ScannerController.runFullScan('ALL', 'NSE');
+          await ScannerController.runFullScan('ALL', 'BSE');
+        } else {
+          // Outside live session: serve frozen results from the latest available date
+          const latestRecord = await prisma.scannerResult.findFirst({
+            orderBy: { date: 'desc' },
+            select: { date: true },
+          });
+          if (latestRecord) {
+            targetDate = latestRecord.date;
+          }
+        }
       }
     } catch (dbErr) {
       console.warn("DB check failed during initial get, continuing:", dbErr);
@@ -209,7 +221,7 @@ export async function GET(request: NextRequest) {
       width?: { gte?: number; lte?: number };
     } = {
       symbol: { in: searchedSymbols },
-      date: today,
+      date: targetDate,
     };
 
     const andConditions: Record<string, unknown>[] = [];

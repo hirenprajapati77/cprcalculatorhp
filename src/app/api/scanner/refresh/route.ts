@@ -17,7 +17,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid market parameter' }, { status: 400 });
     }
 
-    // Run the scan synchronously for immediate client feedback
+    const bypass = body.bypass === true;
+    const marketOpen = isMarketOpen();
+
+    if (!marketOpen && !bypass) {
+      // Outside live cash session: return frozen database results from the latest completed session
+      const { prisma } = await import('@/lib/db');
+      const latestRecord = await prisma.scannerResult.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      });
+      const targetDate = latestRecord?.date;
+      const existingResults = targetDate ? await prisma.scannerResult.findMany({
+        where: { date: targetDate },
+        orderBy: { score: 'desc' },
+      }) : [];
+
+      return NextResponse.json({
+        success: true,
+        message: 'Market is closed (09:15–15:30 IST). Showing frozen scan results from the last session.',
+        isMarketOpen: false,
+        count: existingResults.length,
+        results: existingResults,
+      }, { status: 200 });
+    }
+
+    // Run the scan synchronously for immediate client feedback (LIVE SESSION OR BYPASS)
     const results = await ScannerController.runFullScan(universe, market);
 
     if (isMarketOpen()) {

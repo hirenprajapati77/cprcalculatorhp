@@ -57,6 +57,28 @@ export const Navbar: React.FC = () => {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [marketStatus, setMarketStatus] = useState<{ cashSessionState: 'LIVE' | 'PRESESSION' | 'CLOSED'; isMarketOpen: boolean }>({
+    cashSessionState: 'CLOSED',
+    isMarketOpen: false,
+  });
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/market-status');
+        if (res.ok) {
+          const data = await res.json();
+          setMarketStatus(data);
+        }
+      } catch {
+        // Fallback silently if offline
+      }
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 8);
@@ -120,9 +142,19 @@ export const Navbar: React.FC = () => {
                   </span>
                   <span className="hidden lg:inline">{link.label}</span>
                   {link.badge === 'LIVE' && (
-                    <span className="flex items-center gap-0.5 px-1 py-0 rounded text-[7px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 uppercase tracking-wider">
+                    <span className={`flex items-center gap-0.5 px-1 py-0 rounded text-[7px] font-bold uppercase tracking-wider ${
+                      marketStatus.cashSessionState === 'LIVE'
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                        : marketStatus.cashSessionState === 'PRESESSION'
+                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                        : 'bg-slate-500/15 text-slate-400 border border-slate-500/25'
+                    }`}>
                       <Zap size={7} />
-                      LIVE
+                      {marketStatus.cashSessionState === 'LIVE'
+                        ? 'LIVE'
+                        : marketStatus.cashSessionState === 'PRESESSION'
+                        ? 'PRE-OPEN'
+                        : 'CLOSED'}
                     </span>
                   )}
                   {active && (
@@ -136,9 +168,27 @@ export const Navbar: React.FC = () => {
           {/* ── Right Cluster ─────────────────────────────────────── */}
           <div className="ml-auto flex items-center gap-2 shrink-0">
             {/* Market Status Chip */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/8 border border-emerald-500/20 text-[10px] font-semibold text-emerald-400 font-mono">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>NSE · LIVE</span>
+            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono border ${
+              marketStatus.cashSessionState === 'LIVE'
+                ? 'bg-emerald-500/8 border-emerald-500/20 text-emerald-400'
+                : marketStatus.cashSessionState === 'PRESESSION'
+                ? 'bg-amber-500/8 border-amber-500/20 text-amber-400'
+                : 'bg-slate-500/10 border-slate-700/50 text-slate-400'
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                marketStatus.cashSessionState === 'LIVE'
+                  ? 'bg-emerald-400 animate-pulse'
+                  : marketStatus.cashSessionState === 'PRESESSION'
+                  ? 'bg-amber-400 animate-pulse'
+                  : 'bg-slate-400'
+              }`} />
+              <span>
+                NSE · {marketStatus.cashSessionState === 'LIVE'
+                  ? 'LIVE'
+                  : marketStatus.cashSessionState === 'PRESESSION'
+                  ? 'PRE-SESSION'
+                  : 'CLOSED'}
+              </span>
             </div>
 
             {/* Settings shortcut (desktop) */}
