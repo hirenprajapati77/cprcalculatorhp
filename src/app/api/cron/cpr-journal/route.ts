@@ -16,15 +16,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
   }
 
-  // TEMPORARILY DISABLED TIME CHECK FOR MANUAL TRIGGER
-  /*
   const timeValue = hour * 100 + minute;
   if (timeValue < CPR_JOURNAL_WINDOW.START_HHMM || timeValue > CPR_JOURNAL_WINDOW.END_HHMM) {
     return NextResponse.json({
       message: `CPR journal cron outside window at IST ${hour}:${String(minute).padStart(2, '0')}`,
     });
   }
-  */
 
   try {
     const result = await runCprJournalJob();
