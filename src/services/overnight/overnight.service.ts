@@ -23,6 +23,8 @@ import type { YahooFinanceChartResponse } from './index-intraday.util';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
 import { resolveOvernightConflict } from './overnight-conflict';
+import { isVpaLiveGatesEnabled } from '@/config/vpa.config';
+import type { VpaConfirmationResult } from '@/services/vpa';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
@@ -57,6 +59,7 @@ interface OvernightSignalCalc {
   sl: number;
   target: number;
   scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
+  vpaBreakdown?: VpaConfirmationResult | null;
 }
 
 export interface OvernightIntradayMetrics {
@@ -229,7 +232,10 @@ export class OvernightService {
     direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', 
     dateOverride?: Date,
     mockStocks?: MockOvernightStock[]
-  ): Promise<(OvernightSignal & { scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null })[]> {
+  ): Promise<(OvernightSignal & {
+    scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
+    vpaBreakdown?: VpaConfirmationResult | null;
+  })[]> {
 
     const currentTime = dateOverride || new Date();
     
@@ -247,6 +253,7 @@ export class OvernightService {
       string,
       import('./btst-ranking.service').AdvancedScoreBreakdown
     >();
+    const vpaBreakdownBySymbol = new Map<string, VpaConfirmationResult>();
 
     // Pre-fetch async dependencies for the entire universe to prevent N+1 query bottlenecks
     const symbols = universeStocks.map(s => s.symbol);
@@ -379,6 +386,7 @@ export class OvernightService {
             ? { score: mockStock.longScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : BtstRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                open: fullStock.open,
                 tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
                 tomorrowBc: tomorrowCpr.bc, tomorrowTc: tomorrowCpr.tc,
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
@@ -391,7 +399,7 @@ export class OvernightService {
           const cls = BtstRankingService.getClassification(score);
           const sl = Math.min(fullStock.low, tomorrowCpr.bc);
           const target = fullStock.ltp + Math.max((fullStock.ltp - sl) * 2.5, fullStock.ltp * 0.05);
-          longSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
+          longSig = { score, cls, sl, target, scoreBreakdown: details.breakdown, vpaBreakdown: details.vpa ?? null };
         }
 
         // -- Evaluate SHORT (always scored for conflict/quality; persisted only outside BULL) --
@@ -401,6 +409,7 @@ export class OvernightService {
             ? { score: mockStock.shortScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : StbtRankingService.calculateScoreDetails({
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
+                open: fullStock.open,
                 tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
                 tomorrowTc: tomorrowCpr.tc, tomorrowBc: tomorrowCpr.bc,
                 todayBc: todayCpr.bc, todayTc: todayCpr.tc,
@@ -413,7 +422,7 @@ export class OvernightService {
           const cls = StbtRankingService.getClassification(score);
           const sl = Math.max(fullStock.high, tomorrowCpr.tc);
           const target = fullStock.ltp - Math.max((sl - fullStock.ltp) * 2.5, fullStock.ltp * 0.05);
-          shortSig = { score, cls, sl, target, scoreBreakdown: details.breakdown };
+          shortSig = { score, cls, sl, target, scoreBreakdown: details.breakdown, vpaBreakdown: details.vpa ?? null };
         }
 
         // -- Conflict Resolution (null scores are ineligible — never coerced to 0) --
@@ -428,6 +437,14 @@ export class OvernightService {
         }
 
         if (finalDir && finalSig) {
+          // Optional VPA hard gate — off by default (VPA_LIVE_GATES=false).
+          if (isVpaLiveGatesEnabled() && finalSig.vpaBreakdown?.rejectRecommended) {
+            console.warn(
+              `[OvernightScan] ${fullStock.symbol} ${finalDir} VPA gate: ${finalSig.vpaBreakdown.rejectReason}`
+            );
+            continue;
+          }
+
           // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
           if (finalDir === 'SHORT' && regime.trend === 'BULL') {
             continue;
@@ -503,6 +520,9 @@ export class OvernightService {
           if (finalSig.scoreBreakdown) {
             scoreBreakdownBySymbol.set(stock.symbol, finalSig.scoreBreakdown);
           }
+          if (finalSig.vpaBreakdown?.enabled) {
+            vpaBreakdownBySymbol.set(stock.symbol, finalSig.vpaBreakdown);
+          }
         }
       } catch (err) {
         console.error(`Error processing Overnight scan for ${stock.symbol}:`, err);
@@ -517,6 +537,7 @@ export class OvernightService {
 
     const savedSignals: (OvernightSignal & {
       scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
+      vpaBreakdown?: VpaConfirmationResult | null;
     })[] = [];
     for (const sig of signalsToSave) {
       try {
@@ -533,9 +554,12 @@ export class OvernightService {
           create: sig
         });
         const breakdown = scoreBreakdownBySymbol.get(sig.symbol);
-        savedSignals.push(
-          breakdown ? { ...saved, scoreBreakdown: breakdown } : saved
-        );
+        const vpa = vpaBreakdownBySymbol.get(sig.symbol);
+        savedSignals.push({
+          ...saved,
+          ...(breakdown ? { scoreBreakdown: breakdown } : {}),
+          ...(vpa ? { vpaBreakdown: vpa } : {}),
+        });
       } catch (err) {
         console.error(`Error saving overnight signal for ${sig.symbol}:`, err);
       }

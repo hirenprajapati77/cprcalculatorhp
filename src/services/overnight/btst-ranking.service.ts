@@ -1,8 +1,13 @@
 import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
+import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
+import { isVpaEnabled } from '@/config/vpa.config';
+import type { VpaConfirmationResult } from '@/services/vpa';
 
 export interface BtstScoringInputs {
   volume: number;
   avgVolume: number;
+  /** Session open — optional; defaults to close when omitted (shadow-safe). */
+  open?: number;
   /** True when tomorrow CPR is NARROW per classifyCprWidth (single source of truth). */
   tomorrowCprNarrow: boolean;
   tomorrowBc: number;
@@ -36,6 +41,8 @@ export interface AdvancedScoreBreakdown {
 export interface BtstScoreDetails {
   score: number | null;
   breakdown: AdvancedScoreBreakdown | null;
+  /** Shadow VPA confirmation — does not affect score unless VPA live flags are on. */
+  vpa?: VpaConfirmationResult | null;
 }
 
 export class BtstRankingService {
@@ -124,7 +131,26 @@ export class BtstRankingService {
       breakdown.liquidity +
       breakdown.closeStrength;
 
-    return { score, breakdown };
+    let vpa: VpaConfirmationResult | null = null;
+    if (isVpaEnabled()) {
+      const vpaInputs = buildVpaInputs(
+        'LONG',
+        {
+          open: inputs.open ?? inputs.close,
+          high: inputs.high,
+          low: inputs.low,
+          close: inputs.close,
+          volume: inputs.volume,
+          avgVolume: inputs.avgVolume,
+        },
+        { bc: inputs.todayBc, tc: inputs.todayTc }
+      );
+      if (vpaInputs) {
+        vpa = VpaConfirmationService.analyze(vpaInputs);
+      }
+    }
+
+    return { score, breakdown, vpa };
   }
 
   /**

@@ -71,6 +71,21 @@ const envSchema = z.object({
   RETENTION_LIMIT: z.coerce.number().optional(),
   SAVE_IGNORE_SIGNALS: z.string().optional(),
   CPR_WEIGHT: z.coerce.number().optional(),
+
+  /** VPA confirmation layer — shadow by default; does not change live scores unless flags below. */
+  VPA_ENABLED: z.string().default('true'),
+  VPA_SHADOW_MODE: z.string().default('true'),
+  VPA_LIVE_CONFIDENCE: z.string().default('false'),
+  VPA_LIVE_GATES: z.string().default('false'),
+  VPA_COMPONENT_RVOL: z.string().default('true'),
+  VPA_COMPONENT_CLV: z.string().default('true'),
+  VPA_COMPONENT_EFFORT: z.string().default('true'),
+  VPA_COMPONENT_BREAKOUT: z.string().default('true'),
+  VPA_COMPONENT_CLIMAX: z.string().default('true'),
+  VPA_COMPONENT_NO_DEMAND_SUPPLY: z.string().default('true'),
+  VPA_RVOL_STRONG: z.coerce.number().optional(),
+  VPA_RVOL_GOOD: z.coerce.number().optional(),
+  VPA_RVOL_WEAK: z.coerce.number().optional(),
   
   APP_VERSION: z.string().optional(),
   BUILD_TIMESTAMP: z.string().optional(),

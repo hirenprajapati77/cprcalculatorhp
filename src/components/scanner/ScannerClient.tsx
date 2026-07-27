@@ -35,6 +35,7 @@ import { IndexSignalRow } from './IndexSignalRow';
 import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMarketOpen } from '@/lib/market-hours';
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
+import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
@@ -286,6 +287,7 @@ interface ScannedStock {
     target?: number;
     error?: string;
   } | null;
+  vpaBreakdown?: VpaBreakdownView;
 }
 
 interface WatchlistItemState {
@@ -437,6 +439,7 @@ const StockRow = React.memo(({
             >
               {row.symbol}
             </span>
+            <VpaStatusChip vpa={row.vpaBreakdown} />
           </div>
           {densityMode === 'detailed' && (
             <span className="block text-[9px] text-text-tertiary mt-0.5">
@@ -964,6 +967,8 @@ export default function ScannerClient() {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [isNotesSaving, setIsNotesSaving] = useState<boolean>(false);
   const [showSavedIndicator, setShowSavedIndicator] = useState<boolean>(false);
+  const [drawerVpa, setDrawerVpa] = useState<VpaBreakdownView | null>(null);
+  const [drawerVpaLoading, setDrawerVpaLoading] = useState<boolean>(false);
 
   // Heatmap Mobile/Click Tooltip State
   const [activeHeatmapTooltip, setActiveHeatmapTooltip] = useState<{ sector: string; signal: string } | null>(null);
@@ -1233,6 +1238,7 @@ export default function ScannerClient() {
           exitStrategy: string;
           scoreBreakdown?: ScannedStock['scoreBreakdown'];
           optionSuggestion?: ScannedStock['optionSuggestion'];
+          vpaBreakdown?: VpaBreakdownView;
           classification?: string;
         }> = data.results || [];
 
@@ -1302,6 +1308,7 @@ export default function ScannerClient() {
             ...(overnightCls ? { btstClassification: overnightCls } : {}),
             ...(sig.scoreBreakdown !== undefined && { scoreBreakdown: sig.scoreBreakdown }),
             ...(sig.optionSuggestion !== undefined && { optionSuggestion: sig.optionSuggestion }),
+            ...(sig.vpaBreakdown ? { vpaBreakdown: sig.vpaBreakdown } : {}),
           };
           // Dominant score still drives SL/Target side; btstStatus preserves NEUTRAL_CONFLICT.
           const direction = sig.longScore >= sig.shortScore ? 'LONG' : 'SHORT';
@@ -1751,6 +1758,35 @@ export default function ScannerClient() {
       setTimeout(() => setShowSavedIndicator(false), 2000);
     }
   };
+
+  // Lazy-load VPA when drawer opens (CPR cache misses; BTST usually has vpaBreakdown inline)
+  useEffect(() => {
+    if (!drawerStock || !drawerOpen) {
+      setDrawerVpa(null);
+      setDrawerVpaLoading(false);
+      return;
+    }
+
+    if (drawerStock.vpaBreakdown?.enabled) {
+      setDrawerVpa(drawerStock.vpaBreakdown);
+      setDrawerVpaLoading(false);
+      return;
+    }
+
+    const dir =
+      drawerStock.direction ||
+      (drawerStock.signals?.includes('BEARISH') || drawerStock.ltp < drawerStock.bc
+        ? 'SHORT'
+        : 'LONG');
+    setDrawerVpaLoading(true);
+    fetch(
+      `/api/vpa?symbol=${encodeURIComponent(drawerStock.symbol)}&direction=${dir}`
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setDrawerVpa(data?.vpa ?? null))
+      .catch(() => setDrawerVpa(null))
+      .finally(() => setDrawerVpaLoading(false));
+  }, [drawerStock, drawerOpen]);
 
   // Lazy load history, compare and notes on tab open
   useEffect(() => {
@@ -3406,6 +3442,16 @@ export default function ScannerClient() {
                           )}
                         </div>
                       )}
+
+                      <VpaBreakdownPanel
+                        vpa={
+                          drawerStock.vpaBreakdown?.enabled
+                            ? drawerStock.vpaBreakdown
+                            : drawerVpa
+                        }
+                        loading={drawerVpaLoading && !drawerStock.vpaBreakdown?.enabled}
+                        className="mt-4"
+                      />
                     </div>
                   );
                 })()}

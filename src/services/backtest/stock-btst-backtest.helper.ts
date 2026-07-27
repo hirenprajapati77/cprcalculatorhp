@@ -21,6 +21,8 @@ import {
   type YahooFinanceChartResponse,
 } from '../overnight/index-intraday.util';
 
+import type { VpaConfirmationResult } from '@/services/vpa';
+
 const LONG_READY = ['STRONG_BTST', 'BTST_READY'] as const;
 const SHORT_READY = ['STRONG_STBT', 'STBT_READY'] as const;
 
@@ -37,6 +39,7 @@ type OvernightSig = {
   sl: number;
   target: number;
   scoreBreakdown: AdvancedScoreBreakdown | null;
+  vpaBreakdown?: VpaConfirmationResult | null;
 };
 
 export interface StockBtstDayContext {
@@ -69,6 +72,8 @@ export interface StockBtstDayEvaluation {
   entry: number | null;
   stopLoss: number | null;
   target: number | null;
+  /** Shadow VPA — for backtest A/B comparison; does not affect tradable gate. */
+  vpaBreakdown?: VpaConfirmationResult | null;
 }
 
 function notTradable(
@@ -159,6 +164,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
   const scoreInputsBase = {
     volume: ctx.today.volume,
     avgVolume,
+    open: ctx.today.open,
     tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
     tomorrowBc: tomorrowCpr.bc,
     tomorrowTc: tomorrowCpr.tc,
@@ -191,6 +197,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
         ctx.today.close +
         Math.max((ctx.today.close - Math.min(ctx.today.low, tomorrowCpr.bc)) * 2.5, ctx.today.close * 0.05),
       scoreBreakdown: details.breakdown,
+      vpaBreakdown: details.vpa ?? null,
     };
   }
 
@@ -208,6 +215,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
         ctx.today.close -
         Math.max((Math.max(ctx.today.high, tomorrowCpr.tc) - ctx.today.close) * 2.5, ctx.today.close * 0.05),
       scoreBreakdown: details.breakdown,
+      vpaBreakdown: details.vpa ?? null,
     };
   }
 
@@ -346,6 +354,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
     entry: ctx.today.close,
     stopLoss: sl,
     target,
+    vpaBreakdown: finalSig.vpaBreakdown ?? null,
   };
 }
 

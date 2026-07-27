@@ -8,6 +8,9 @@ import { RankingService } from './ranking.service';
 import { isTodayCandleClosed, getISTDateString, getISTTime, getCompletedHistory } from '@/lib/market-hours';
 import { CprCompressionService, CprCompressionStats } from './cpr-compression.service';
 import { BullishStateService } from './bullish-state.service';
+import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
+import { isVpaEnabled, isVpaLiveConfidenceEnabled } from '@/config/vpa.config';
+import type { VpaDirection } from '@/services/vpa';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -38,6 +41,8 @@ export interface ScannerSignalResult extends MarketStockData {
   crossAgeMinutes?: number;
   /** Freshness classification of the current setup. */
   setupFreshness?: 'FRESH' | 'MATURE' | 'STALE';
+  /** Shadow VPA confirmation — does not affect score unless VPA_LIVE_CONFIDENCE=true. */
+  vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult;
 }
 
 
@@ -277,7 +282,31 @@ export class ScannerService {
     }
 
     // 5. Confidence Score Calculation
-    const confidence = this.calculateConfidence(tempResult);
+    let confidence = this.calculateConfidence(tempResult);
+
+    let vpaBreakdown: import('@/services/vpa').VpaConfirmationResult | undefined;
+    if (isVpaEnabled()) {
+      const vpaDirection: VpaDirection =
+        ltp < bc || signals.includes('BEARISH') ? 'SHORT' : 'LONG';
+      const vpaInputs = buildVpaInputs(
+        vpaDirection,
+        {
+          open: stock.open,
+          high: todayCandle.high,
+          low: todayCandle.low,
+          close: ltp,
+          volume: stock.volume,
+          avgVolume: stock.avgVolume,
+        },
+        { bc: cprToday.bc, tc: cprToday.tc }
+      );
+      if (vpaInputs) {
+        vpaBreakdown = VpaConfirmationService.analyze(vpaInputs);
+        if (isVpaLiveConfidenceEnabled()) {
+          confidence = VpaConfirmationService.applyConfidenceDelta(confidence, vpaBreakdown);
+        }
+      }
+    }
 
     return {
       ...tempResult,
@@ -293,6 +322,7 @@ export class ScannerService {
       cprCompression,
       ...(crossAgeMinutes !== undefined && { crossAgeMinutes }),
       ...(setupFreshness !== undefined && { setupFreshness }),
+      ...(vpaBreakdown ? { vpaBreakdown } : {}),
     };
   }
 

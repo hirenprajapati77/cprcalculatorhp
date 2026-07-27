@@ -1,9 +1,13 @@
 import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import type { AdvancedScoreBreakdown } from './btst-ranking.service';
+import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
+import { isVpaEnabled } from '@/config/vpa.config';
+import type { VpaConfirmationResult } from '@/services/vpa';
 
 export interface StbtScoringInputs {
   volume: number;
   avgVolume: number;
+  open?: number;
   /** True when tomorrow CPR is NARROW per classifyCprWidth (single source of truth). */
   tomorrowCprNarrow: boolean;
   tomorrowTc: number;
@@ -24,6 +28,7 @@ export interface StbtScoringInputs {
 export interface StbtScoreDetails {
   score: number | null;
   breakdown: AdvancedScoreBreakdown | null;
+  vpa?: VpaConfirmationResult | null;
 }
 
 export class StbtRankingService {
@@ -111,7 +116,26 @@ export class StbtRankingService {
       breakdown.liquidity +
       breakdown.closeStrength;
 
-    return { score, breakdown };
+    let vpa: VpaConfirmationResult | null = null;
+    if (isVpaEnabled()) {
+      const vpaInputs = buildVpaInputs(
+        'SHORT',
+        {
+          open: inputs.open ?? inputs.close,
+          high: inputs.high,
+          low: inputs.low,
+          close: inputs.close,
+          volume: inputs.volume,
+          avgVolume: inputs.avgVolume,
+        },
+        { bc: inputs.todayBc, tc: inputs.todayTc }
+      );
+      if (vpaInputs) {
+        vpa = VpaConfirmationService.analyze(vpaInputs);
+      }
+    }
+
+    return { score, breakdown, vpa };
   }
 
   /**

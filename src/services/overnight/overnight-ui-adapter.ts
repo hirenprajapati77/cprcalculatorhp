@@ -40,6 +40,7 @@ function computeRr(entry: number, sl: number, target: number): string {
 export function overnightSignalToBtstUi(
   signal: OvernightSignal & {
     scoreBreakdown?: BtstScoreResultEnriched['scoreBreakdown'];
+    vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult | null;
   }
 ): OvernightUiResult {
   const score = signal.overnightScore ?? 0;
@@ -76,6 +77,7 @@ export function overnightSignalToBtstUi(
     overnightScore: score,
     engine: 'advanced',
     ...(signal.scoreBreakdown ? { scoreBreakdown: signal.scoreBreakdown } : {}),
+    ...(signal.vpaBreakdown ? { vpaBreakdown: signal.vpaBreakdown } : {}),
   };
 }
 

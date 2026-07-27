@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
 import StockBtstComparePanel from '@/components/journal/StockBtstComparePanel';
+import { VpaBreakdownPanel, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
 import { BTST_CLOCK } from '@/lib/market-hours';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -132,6 +133,7 @@ interface V2Breakdown {
   hardGates?: Record<string, boolean>;
   scoreBreakdown?: { clvScore?: number; cprScore?: number; liquidityScore?: number; [k: string]: number | undefined };
   rawMetrics?: { clv?: number; cprWidth?: number; liquidityPassed?: boolean | number; [k: string]: number | boolean | undefined };
+  vpa?: VpaBreakdownView;
 }
 
 function V2DirectionPill({ direction }: { direction?: string | undefined }) {
@@ -264,6 +266,10 @@ function renderV2Breakdown(
           <V2FinalScore score={finalScore} />
         </div>
       </div>
+
+      {breakdown.vpa?.enabled && (
+        <VpaBreakdownPanel vpa={breakdown.vpa} compact className="mt-1" />
+      )}
 
       {/* Expand toggle */}
       <button

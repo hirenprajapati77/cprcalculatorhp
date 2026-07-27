@@ -7,10 +7,32 @@ import { logIndexBtstJournalEntries, logIndexStbtJournalEntries } from '@/servic
 import { RegimeService } from '@/services/overnight/regime.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import { selectTradableOvernightPicks } from '@/services/overnight/overnight-ui-adapter';
+import { VpaConfirmationService } from '@/services/vpa';
+import { calculateCPR } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
+import { getCompletedHistory } from '@/lib/market-hours';
 import { prisma } from '@/lib/db';
 import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 const MIN_OVERNIGHT_SCORE = 85;
+
+function computeVpaShadowForJournal(
+  stockData: NonNullable<Awaited<ReturnType<typeof MarketService.getStockData>>>,
+  direction: 'LONG' | 'SHORT'
+) {
+  const completed = getCompletedHistory(stockData.history || []);
+  if (completed.length < 2) return null;
+  const atrPct = getAtrPct(completed, stockData.close);
+  const yesterday = completed[completed.length - 2];
+  const todayCpr = calculateCPR(
+    { high: yesterday.high, low: yesterday.low, close: yesterday.close },
+    atrPct
+  );
+  return VpaConfirmationService.analyzeFromStock(stockData, direction, {
+    bc: todayCpr.bc,
+    tc: todayCpr.tc,
+  });
+}
 
 export type BtstJournalJobResult = {
   success: boolean;
@@ -153,6 +175,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
             rawMetrics: v2Result.rawMetrics,
             classification: v2Result.classification,
             direction: v2Result.direction,
+            vpa: computeVpaShadowForJournal(stockData, 'LONG'),
           },
         };
       }
@@ -242,6 +265,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
             rawMetrics: v2Result.rawMetrics,
             classification: v2Result.classification,
             direction: v2Result.direction,
+            vpa: computeVpaShadowForJournal(stockData, 'SHORT'),
           },
         };
       }

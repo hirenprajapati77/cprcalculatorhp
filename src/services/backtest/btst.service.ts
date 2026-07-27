@@ -43,6 +43,8 @@ export interface BtstScoreResultEnriched extends BtstScoreResult {
   expectedMove: number;
   gapConfidence: number;
   exitStrategy: string;
+  /** Shadow VPA confirmation — optional, does not change ranking score. */
+  vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult;
 }
 
 export class BtstService {
