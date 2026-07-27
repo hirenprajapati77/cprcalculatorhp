@@ -96,7 +96,11 @@ export async function GET(request: Request) {
 
     // F&O Option Suggestion Enrichment Layer for BTST (LONG) & STBT (SHORT)
     const eligibleBtst = resultsList
-      .filter((r) => (r.tag === 'LONG' || r.tag === 'SHORT') && Math.max(r.longScore, r.shortScore) >= ADVANCED_SCORE.READY)
+      .filter(
+        (r) =>
+          (r.tag === 'LONG' && r.longScore >= ADVANCED_SCORE.READY) ||
+          (r.tag === 'SHORT' && r.shortScore >= ADVANCED_SCORE.READY)
+      )
       .slice(0, 10);
 
     if (eligibleBtst.length > 0) {

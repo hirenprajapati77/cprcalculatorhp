@@ -68,7 +68,9 @@ export class VpaConfirmationService {
     const rejectReason = rejectForClimax
       ? 'Buying climax detected — volume not confirming sustainable breakout'
       : rejectForNoDemand
-        ? 'No demand — up candle on low volume / narrow spread'
+        ? inputs.direction === 'LONG'
+          ? 'No demand — up candle on low volume / narrow spread'
+          : 'No supply — down candle on low volume / narrow spread'
         : null;
 
     const hardRejectActive = isVpaLiveGatesEnabled() && rejectRecommended;

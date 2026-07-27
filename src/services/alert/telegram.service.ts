@@ -75,17 +75,16 @@ export class TelegramService {
   }
 
   static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<{ sent: boolean; reason?: string }> {
-    const longs = results.filter(r => r.tag === 'LONG' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
-    const shorts = results.filter(r => r.tag === 'SHORT' && Math.max(r.longScore, r.shortScore) >= MIN_BTST_ALERT_SCORE);
+    const longs = results.filter(r => r.tag === 'LONG' && r.longScore >= MIN_BTST_ALERT_SCORE);
+    const shorts = results.filter(r => r.tag === 'SHORT' && r.shortScore >= MIN_BTST_ALERT_SCORE);
 
-    const strongSignalCount = results.filter(
-      (r) =>
-        (r as { classification?: string }).classification?.startsWith('STRONG_') ||
-        (r as { classification?: string }).classification === 'INDEX_STRONG' ||
-        Math.max(r.longScore, r.shortScore) >= ADVANCED_SCORE.STRONG
-    ).length;
+    const strongSignalCount = results.filter((r) => {
+      const cls = (r as { classification?: string }).classification ?? '';
+      const score = r.tag === 'LONG' ? r.longScore : r.tag === 'SHORT' ? r.shortScore : 0;
+      return cls.startsWith('STRONG_') || cls === 'INDEX_STRONG' || score >= ADVANCED_SCORE.STRONG;
+    }).length;
     const breakoutCount = results.filter((r) => {
-      const score = Math.max(r.longScore, r.shortScore);
+      const score = r.tag === 'LONG' ? r.longScore : r.tag === 'SHORT' ? r.shortScore : 0;
       const cls = (r as { classification?: string }).classification ?? '';
       return (
         score >= ADVANCED_SCORE.READY &&

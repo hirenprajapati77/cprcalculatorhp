@@ -367,8 +367,11 @@ export class TradeJournalService {
         take: limit,
       }),
       prisma.tradeJournal.count({ where }),
-      // Summary stats computed over all matching entries (not just current page)
-      prisma.tradeJournal.findMany({ where }),
+      // Summary stats computed over all matching entries (slim payload to prevent OOM)
+      prisma.tradeJournal.findMany({
+        where,
+        select: { signalType: true, pnl: true },
+      }),
     ]);
 
     const closed  = allEntries.filter((e: TradeJournal) => e.pnl !== null);

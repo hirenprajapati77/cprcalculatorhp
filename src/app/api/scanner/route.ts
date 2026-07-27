@@ -319,7 +319,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (isMarketOpen()) {
-      type OptionEnrichmentRow = {
+      const topForOptions = (formattedResults as Array<{
         symbol: string;
         ltp: number;
         signalSummary?: string | null;
@@ -327,23 +327,9 @@ export async function GET(request: NextRequest) {
         sl?: number | null;
         target?: number | null;
         score: number;
-      };
-      const topForOptions = await DatabaseCircuitBreaker.execute<OptionEnrichmentRow[]>(() =>
-        prisma.scannerResult.findMany({
-          where: { ...where, score: { gte: 75 } },
-          orderBy: { score: 'desc' },
-          take: 10,
-          select: { 
-            symbol: true, 
-            ltp: true, 
-            signalSummary: true, 
-            entry: true, 
-            sl: true, 
-            target: true,
-            score: true
-          }
-        })
-      );
+      }>)
+        .filter((r) => r.score >= 75)
+        .slice(0, 10);
       const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
       for (const r of formattedResults) {
         if (suggestionMap.has(r.symbol)) {

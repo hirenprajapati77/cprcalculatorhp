@@ -1,6 +1,6 @@
 import { VPA_BREAKOUT, VPA_COMPONENT_FLAGS, VPA_RVOL } from '@/config/vpa.config';
 import { computeClv, computeRvol } from './vpa.math';
-import type { VpaDirection, VpaMarketInputs } from './vpa.types';
+import type { VpaMarketInputs } from './vpa.types';
 
 export function scoreVpaBreakoutConfirm(
   inputs: VpaMarketInputs
