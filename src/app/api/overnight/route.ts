@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { CacheService } from '@/services/cache.service';
 import { buildInsightsFromOvernight } from '@/services/overnight/overnight-ui-adapter';
-import { getISTDateString, BTST_CLOCK } from '@/lib/market-hours';
+import { getISTDateString, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
 import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
 
 /** Matches historical Prisma `activeOnly` filter (READY+ / WATCH classifications). */
