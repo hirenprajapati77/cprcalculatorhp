@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.overnightSignal.findMany({ orderBy: [{ signalDate: 'desc' }, { overnightScore: 'desc' }], take: 20 }).then(res => { console.log(JSON.stringify(res.map(s => ({ d: s.signalDate, sym: s.symbol, sc: s.overnightScore })))); process.exit(0); });

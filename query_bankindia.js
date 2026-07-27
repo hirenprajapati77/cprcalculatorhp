@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.overnightSignal.findMany({ where: { symbol: 'BANKINDIA', signalDate: '2026-07-27' } }).then(res => { console.log(JSON.stringify(res, null, 2)); process.exit(0); });

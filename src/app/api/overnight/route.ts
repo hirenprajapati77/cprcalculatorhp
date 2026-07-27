@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Bypass ON — serve cache if available; do NOT trigger a fresh scan
+      // Bypass ON — serve cache if available; if no cache, we MUST fall through and run a fresh scan!
       if (bypass) {
         const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
         if (cached) {
@@ -110,15 +110,7 @@ export async function GET(req: NextRequest) {
             state,
           });
         }
-        // Bypass + no cache = no scan has run today yet
-        return NextResponse.json({
-          success: true,
-          windowOpen: false,
-          cachedResult: false,
-          message: `Bypass active but no overnight scan data found for today. Scan runs at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
-          results: [],
-          state,
-        });
+        // If no cache, we fall through to let OvernightService.discover() run a fresh scan!
       }
 
       // Discovery open — run Advanced scan and cache
