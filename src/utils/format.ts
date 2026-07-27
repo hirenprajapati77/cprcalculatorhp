@@ -76,3 +76,22 @@ export function formatIST(
 export function formatDate(d: Date | string): string {
   return formatIST(d, { includeTime: true });
 }
+
+/**
+ * Honest "Last Refresh" label from a server-provided scannedAt value.
+ * Never invents "now" — missing/invalid values return '' so the UI can show '—'.
+ * Accepts ISO timestamps and BTST/INDEX human labels like "15:12 IST, 27 Jul".
+ */
+export function lastRefreshLabel(scannedAt: string | null | undefined): string {
+  if (!scannedAt || typeof scannedAt !== 'string') return '';
+  const trimmed = scannedAt.trim();
+  if (!trimmed) return '';
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatIST(parsed, { timeOnly: true });
+  }
+
+  const match = trimmed.match(/(\d{1,2}:\d{2}(?::\d{2})?)/);
+  return match ? match[1] : trimmed;
+}

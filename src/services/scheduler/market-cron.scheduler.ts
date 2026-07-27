@@ -95,6 +95,9 @@ export function startMarketCronScheduler(): void {
     const dateKey = getISTDateString();
 
     if (isMarketOpen()) {
+      // Time-bucketed claim key: retainClaim=true blocks re-entry within the same
+      // N-minute bucket; the next bucket key allows the next fire. Do NOT use
+      // retainClaim=false here — that would re-run on every 60s poll tick.
       const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
       const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
       const cprScanKey = `cpr-scan:${dateKey}:${timeBucket}`;

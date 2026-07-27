@@ -30,9 +30,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
-import { fmt, formatIST } from '@/utils/format';
+import { fmt, formatIST, lastRefreshLabel } from '@/utils/format';
 import { IndexSignalRow } from './IndexSignalRow';
-import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen } from '@/lib/market-hours';
+import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMarketOpen } from '@/lib/market-hours';
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 
@@ -1356,7 +1356,7 @@ export default function ScannerClient() {
         setTotal(mapped.length);
         setTotalPages(1);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
+        setLastRefreshed(lastRefreshLabel(data.scannedAt));
         return;
       }
 
@@ -1433,7 +1433,7 @@ export default function ScannerClient() {
         setTotalPages(showWatchlistOnly ? Math.ceil(items.length / limit) : data.totalPages);
         if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
+        setLastRefreshed(lastRefreshLabel(data.scannedAt));
       }
     } catch (err) {
       if (requestId === activeRequestRef.current) {
@@ -1478,7 +1478,7 @@ export default function ScannerClient() {
       setScannedAt(data.scannedAt || '');
       setIsDegraded(!!data.degraded);
       setLatency(Date.now() - startFetchTime);
-      setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
+      setLastRefreshed(lastRefreshLabel(data.scannedAt));
 
       setIndexResults(data.results || []);
       setIndexMarketRegime(data.marketRegime ?? null);
@@ -1555,10 +1555,31 @@ export default function ScannerClient() {
   const refreshActiveData = useCallback(async (silent = true) => {
     if (scannerMode === 'INDEX') {
       await fetchIndexData(silent);
-    } else {
+      return;
+    }
+    if (isOvernightMode(scannerMode)) {
+      await fetchScannerData(silent);
+      return;
+    }
+
+    // CPR: auto-refresh must recompute (same path as "Scan Market").
+    // A plain GET only re-reads DB and never produces new signals.
+    try {
+      const res = await fetch('/api/scanner/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ universe, market }),
+      });
+      if (!res.ok) {
+        await fetchScannerData(silent);
+        return;
+      }
+      await fetchScannerData(silent);
+      void fetchTopOpportunities();
+    } catch {
       await fetchScannerData(silent);
     }
-  }, [scannerMode, fetchIndexData, fetchScannerData]);
+  }, [scannerMode, universe, market, fetchIndexData, fetchScannerData, fetchTopOpportunities]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') {
@@ -1570,6 +1591,16 @@ export default function ScannerClient() {
     setCountdown(ms / 1000);
 
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+
+    // CPR + Interval on: run a real scan when the timer is armed (page load /
+    // interval change), so users are not stuck waiting a full cycle for the
+    // first recompute. Server inFlight guard dedupes concurrent runs.
+    if (scannerMode === 'CPR' && isMarketOpen()) {
+      void refreshActiveData(true).then(() => {
+        setCountdown(ms / 1000);
+      });
+    }
+
     autoRefreshRef.current = setInterval(() => {
       void refreshActiveData(true);
       setCountdown(ms / 1000);
@@ -1578,7 +1609,7 @@ export default function ScannerClient() {
     return () => {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     };
-  }, [refreshInterval, refreshActiveData]);
+  }, [refreshInterval, refreshActiveData, scannerMode]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') return;
@@ -2123,14 +2154,18 @@ export default function ScannerClient() {
               <div className="flex items-center gap-1.5 border-r border-border-primary/50 pr-3">
                 <Clock size={12} className="text-text-tertiary" />
                 <div className="space-y-0.5 leading-none">
-                  <span className="block text-[8px] text-text-tertiary uppercase">Last Refresh</span>
+                  <span className="block text-[8px] text-text-tertiary uppercase">
+                    {scannerMode === 'CPR' ? 'Last Scan' : 'Last Refresh'}
+                  </span>
                   <span className="font-bold text-text-primary">{lastRefreshed || '—'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
                 <RefreshCw size={12} className="text-text-tertiary" />
                 <div className="space-y-0.5 leading-none">
-                  <span className="block text-[8px] text-text-tertiary uppercase">Next Refresh</span>
+                  <span className="block text-[8px] text-text-tertiary uppercase">
+                    {scannerMode === 'CPR' ? 'Next Scan' : 'Next Refresh'}
+                  </span>
                   <span className="font-bold text-text-primary">{formatCountdown()}</span>
                 </div>
               </div>
