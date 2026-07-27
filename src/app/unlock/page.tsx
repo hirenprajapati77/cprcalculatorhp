@@ -27,9 +27,8 @@ export default function UnlockPage() {
 
       if (res.ok) {
         showToast('System unlocked successfully!', 'success');
-        // Force full router refresh to reset middleware state and redirect
-        router.push('/scanner');
-        router.refresh();
+        // Force browser-level redirect to bypass Next.js Client Router cache
+        window.location.href = '/scanner';
       } else {
         const data = await res.json().catch(() => ({}));
         showToast(data.error || 'Invalid access token', 'error');
