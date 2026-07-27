@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.scannerResult.findMany({ where: { date: '2026-07-27', score: { gte: 75 } } }).then(res => { console.log(JSON.stringify(res.map(r => r.symbol))); process.exit(0); });

@@ -19,6 +19,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     where: {
       date: todayStr,
       score: { gte: 75 },
+      NOT: { symbol: { endsWith: ':BSE' } },
     },
     orderBy: { score: 'desc' },
     take: 2,
