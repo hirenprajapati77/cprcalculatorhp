@@ -1,8 +1,9 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { POST as unlock } from '../../app/api/auth/unlock/route';
 import { POST as logout } from '../../app/api/auth/logout/route';
+import { cache } from '../../lib/redis';
 
 function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock') {
   return new NextRequest(url, {
@@ -13,6 +14,9 @@ function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock')
 }
 
 describe('POST /api/auth/unlock', () => {
+  beforeEach(async () => {
+    await cache.clear();
+  });
   it('sets HttpOnly cookie when token matches APP_ACCESS_TOKEN', async () => {
     const res = await unlock(unlockReq({ token: 'test-token-123' }));
     assert.strictEqual(res.status, 200);
@@ -42,6 +46,20 @@ describe('POST /api/auth/unlock', () => {
     assert.strictEqual(res.status, 200);
     const setCookie = res.headers.get('set-cookie') || '';
     assert.match(setCookie, /Secure/i);
+  });
+
+  it('rate limits after 5 attempts', async () => {
+    // 5 allowed attempts
+    for (let i = 0; i < 5; i++) {
+      const res = await unlock(unlockReq({ token: 'wrong-token' }));
+      assert.strictEqual(res.status, 401);
+    }
+    // 6th attempt should return 429
+    const res = await unlock(unlockReq({ token: 'wrong-token' }));
+    assert.strictEqual(res.status, 429);
+    assert.strictEqual(res.headers.get('retry-after'), '900');
+    const data = await res.json();
+    assert.strictEqual(data.error, 'Too many requests. Please try again later.');
   });
 });
 
