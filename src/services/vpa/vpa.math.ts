@@ -56,20 +56,25 @@ export function buildVpaInputs(
   cpr: { bc: number; tc: number }
 ): VpaMarketInputs | null {
   const close = stock.ltp ?? stock.close ?? 0;
+  
+  // LTP can momentarily exceed the recorded candle high/low. Bounding prevents invalid CLV.
+  const effectiveHigh = Math.max(stock.high, stock.open, close);
+  const effectiveLow = Math.min(stock.low, stock.open, close);
+
   if (
     !Number.isFinite(close) ||
     close <= 0 ||
-    !Number.isFinite(stock.high) ||
-    !Number.isFinite(stock.low) ||
-    stock.high < stock.low
+    !Number.isFinite(effectiveHigh) ||
+    !Number.isFinite(effectiveLow) ||
+    effectiveHigh < effectiveLow
   ) {
     return null;
   }
   return {
     direction,
     open: stock.open,
-    high: stock.high,
-    low: stock.low,
+    high: effectiveHigh,
+    low: effectiveLow,
     close,
     volume: stock.volume,
     avgVolume: stock.avgVolume,
