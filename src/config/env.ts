@@ -52,6 +52,7 @@ const envSchema = z.object({
   
   ENABLE_QUEUE: z.string().default('false'),
   SCAN_QUEUE_THRESHOLD: z.coerce.number().default(50),
+  CPR_SCAN_INTERVAL_MINUTES: z.coerce.number().default(5),
   
   HISTORICAL_MODE: z.string().optional(),
   BACKTEST_EXECUTION_MODE: z.string().optional(),

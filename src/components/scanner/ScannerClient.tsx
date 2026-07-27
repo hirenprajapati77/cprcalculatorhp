@@ -1356,7 +1356,7 @@ export default function ScannerClient() {
         setTotal(mapped.length);
         setTotalPages(1);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+        setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
         return;
       }
 
@@ -1393,7 +1393,7 @@ export default function ScannerClient() {
 
         setExecutionWindowOpen(true);
         setCachedResult(false);
-        setScannedAt('');
+        setScannedAt(data.scannedAt || '');
         setIsDegraded(!!data.degraded);
         if (data.insights) {
           setInsightCounts(data.insights);
@@ -1433,7 +1433,7 @@ export default function ScannerClient() {
         setTotalPages(showWatchlistOnly ? Math.ceil(items.length / limit) : data.totalPages);
         if (data.universeCount) setUniverseCount(data.universeCount);
         setLatency(Date.now() - startFetchTime);
-        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+        setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
       }
     } catch (err) {
       if (requestId === activeRequestRef.current) {
@@ -1478,7 +1478,7 @@ export default function ScannerClient() {
       setScannedAt(data.scannedAt || '');
       setIsDegraded(!!data.degraded);
       setLatency(Date.now() - startFetchTime);
-      setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
+      setLastRefreshed(formatIST(data.scannedAt ? new Date(data.scannedAt) : new Date(), { timeOnly: true }));
 
       setIndexResults(data.results || []);
       setIndexMarketRegime(data.marketRegime ?? null);
@@ -1517,7 +1517,6 @@ export default function ScannerClient() {
 
       if (isOvernightMode(scannerMode)) {
         await fetchScannerData(true);
-        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
         setLatency(Date.now() - startFetchTime);
         showToast('BTST/STBT discovery scan complete.', 'success');
         if (refreshInterval !== 'Off') {
@@ -1535,10 +1534,9 @@ export default function ScannerClient() {
       if (!res.ok) throw new Error('Recalculation failed');
       const data = await res.json();
       if (data.success) {
-        setLastRefreshed(formatIST(new Date(), { timeOnly: true }));
         setLatency(Date.now() - startFetchTime);
         showToast(`Scan complete! Calculated ${data.count} opportunity targets.`, 'success');
-        fetchScannerData(true); // silent background load
+        await fetchScannerData(true); // silent background load
         fetchTopOpportunities();
         fetchHistoryRuns();
         

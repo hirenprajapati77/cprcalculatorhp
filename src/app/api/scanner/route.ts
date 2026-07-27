@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
           results: formattedResults,
           insights: { strongBuy: 0, breakoutReady: 0, avoid: 0 },
           fromCache: true,
+          scannedAt: cachedData.timestamp,
           cachedAt: cachedData.timestamp
         }, { status: 200 });
       }
@@ -341,6 +342,32 @@ export async function GET(request: NextRequest) {
 
     const universeCount = MarketService.getUniverseCount(universe);
 
+    let scannedAt: string | null = null;
+    try {
+      const lastRun = await DatabaseCircuitBreaker.execute(() =>
+        prisma.scanHistory.findFirst({
+          orderBy: { createdAt: 'desc' },
+          select: { createdAt: true },
+        })
+      );
+      if (lastRun?.createdAt) {
+        scannedAt = lastRun.createdAt.toISOString();
+      } else {
+        const lastResult = await DatabaseCircuitBreaker.execute(() =>
+          prisma.scannerResult.findFirst({
+            where: { date: today },
+            orderBy: { createdAt: 'desc' },
+            select: { createdAt: true },
+          })
+        );
+        if (lastResult?.createdAt) {
+          scannedAt = lastResult.createdAt.toISOString();
+        }
+      }
+    } catch (scannedAtErr) {
+      console.warn('[ScannerAPI] Could not fetch last scan timestamp:', scannedAtErr);
+    }
+
     return NextResponse.json({
       success: true,
       page,
@@ -351,6 +378,7 @@ export async function GET(request: NextRequest) {
       totalScanned: universeStocks.length,
       totalReturned: formattedResults.length,
       filteredOut: universeStocks.length - formattedResults.length,
+      scannedAt,
       results: formattedResults,
       insights: {
         strongBuy: strongBuyCount,

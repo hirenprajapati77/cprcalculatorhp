@@ -3,11 +3,14 @@ import {
   getISTTime,
   isBtstDiscoveryOpen,
   isBtstJournalWindowOpen,
+  isMarketOpen,
 } from '@/lib/market-hours';
+import { env } from '@/config/env';
 import { CPR_JOURNAL_WINDOW } from '@/config/trading-constants';
 import { runBtstAlertJob } from '@/services/scheduler/btst-alert.job';
 import { runBtstJournalJob } from '@/services/scheduler/btst-journal.job';
 import { runCprJournalJob } from '@/services/scheduler/cpr-journal.job';
+import { runCprScanJob } from '@/services/scheduler/cpr-scan.job';
 import {
   resolveJournalSnapshotSlot,
   runJournalSnapshotJob,
@@ -43,13 +46,14 @@ function isCprJournalWindowOpen(date: Date = new Date()): boolean {
 async function runClaimedJob<T>(
   claimKey: string,
   job: () => Promise<T>,
-  label: string
+  label: string,
+  retainClaim = true
 ): Promise<void> {
   if (!tryClaimCronRun(claimKey)) return;
   try {
     const result = await job();
     if (shouldCompleteClaimedJob(result)) {
-      completeCronRun(claimKey, true);
+      completeCronRun(claimKey, retainClaim);
     } else {
       releaseCronRun(claimKey);
     }
@@ -66,6 +70,8 @@ function summarizeResult(result: unknown): string {
   const parts: string[] = [];
   if (typeof r.sent === 'boolean') parts.push(`sent=${r.sent}`);
   if (typeof r.success === 'boolean') parts.push(`success=${r.success}`);
+  if (typeof r.count === 'number') parts.push(`count=${r.count}`);
+  if (typeof r.universe === 'string') parts.push(`universe=${r.universe}`);
   if (Array.isArray(r.logged)) parts.push(`logged=${r.logged.length}`);
   if (Array.isArray(r.skipped)) parts.push(`skipped=${r.skipped.length}`);
   if (typeof r.reason === 'string') parts.push(`reason=${r.reason}`);
@@ -83,10 +89,17 @@ export function startMarketCronScheduler(): void {
   started = true;
 
   const tick = async () => {
-    const { isTradingDay } = getISTTime();
-    if (!isTradingDay) return;
+    const istTime = getISTTime();
+    if (!istTime.isTradingDay) return;
 
     const dateKey = getISTDateString();
+
+    if (isMarketOpen()) {
+      const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
+      const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
+      const cprScanKey = `cpr-scan:${dateKey}:${timeBucket}`;
+      await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
+    }
 
     if (isBtstDiscoveryOpen()) {
       await runClaimedJob(`btst-alert:${dateKey}`, runBtstAlertJob, 'btst-alert');
@@ -117,7 +130,7 @@ export function startMarketCronScheduler(): void {
   void tick();
 
   console.log(
-    '[MarketCronScheduler] Started (60s poll): btst-alert 15:10–15:25, ' +
-    'cpr-journal 15:15–15:29, btst-journal 15:25–15:30, snapshots 09:16/09:30/09:45 IST'
+    `[MarketCronScheduler] Started (60s poll): cpr-scan (every ${env.CPR_SCAN_INTERVAL_MINUTES || 5}m), ` +
+    'btst-alert 15:10–15:25, cpr-journal 15:15–15:29, btst-journal 15:25–15:30, snapshots 09:16/09:30/09:45 IST'
   );
 }
