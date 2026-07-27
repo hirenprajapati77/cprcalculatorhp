@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { ShieldAlert, Key } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,7 +10,6 @@ export default function UnlockPage() {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
-  const router = useRouter();
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
