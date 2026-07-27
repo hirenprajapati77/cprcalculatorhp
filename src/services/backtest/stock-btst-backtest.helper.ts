@@ -354,7 +354,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
     entry: ctx.today.close,
     stopLoss: sl,
     target,
-    vpaBreakdown: finalSig.vpaBreakdown ?? null,
+    vpaBreakdown: (finalSig as any).vpaBreakdown ?? null,
   };
 }
 

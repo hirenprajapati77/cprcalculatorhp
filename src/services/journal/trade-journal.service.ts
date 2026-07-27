@@ -370,8 +370,8 @@ export class TradeJournalService {
       // Summary stats computed over all matching entries (slim payload to prevent OOM)
       prisma.tradeJournal.findMany({
         where,
-        select: { signalType: true, pnl: true },
-      }),
+        select: { signalType: true, pnl: true, pnlPct: true },
+      }) as unknown as Promise<TradeJournal[]>,
     ]);
 
     const closed  = allEntries.filter((e: TradeJournal) => e.pnl !== null);

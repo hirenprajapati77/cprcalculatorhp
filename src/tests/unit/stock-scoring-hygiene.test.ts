@@ -61,9 +61,11 @@ describe('VDU Option B — score at SPIKE_RATIO (2.0×), gate remains 1.5×', ()
     low: 98,
     vwap: 100,
     intradayVolume: 50000,
-    last15mHigh: 101,
+    last15mHigh: 101.5,
     hasConfirmationCandles: true,
     avgVolume: 800_000,
+    rsi14: 60,
+    emaCross: { cross: 'BULLISH' as const, isBullishAlignment: true },
   };
 
   it('does not award VDU at eligibility floor (1.5×)', () => {
@@ -97,6 +99,8 @@ describe('VDU Option B — score at SPIKE_RATIO (2.0×), gate remains 1.5×', ()
       last15mLow: 99.5,
       hasConfirmationCandles: true,
       avgVolume: 800_000,
+      rsi14: 40,
+      emaCross: { cross: 'BEARISH' as const, isBullishAlignment: false },
     };
     const atGate = StbtRankingService.calculateScoreDetails({
       ...baseStbt,

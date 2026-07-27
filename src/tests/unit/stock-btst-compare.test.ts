@@ -14,7 +14,7 @@ describe('getStockBtstCompare', () => {
       name: 'Stock BTST Regression',
       startDate: new Date('2026-07-21T00:00:00.000Z'),
       endDate: new Date('2026-07-21T00:00:00.000Z'),
-    })) as typeof prisma.backtestRun.findUnique;
+    })) as unknown as typeof prisma.backtestRun.findUnique;
 
     prisma.tradeJournal.findMany = (async () => [
       {
@@ -117,7 +117,7 @@ describe('getStockBtstCompare', () => {
       name: 'Stock BTST Flat',
       startDate: new Date('2026-07-21T00:00:00.000Z'),
       endDate: new Date('2026-07-21T00:00:00.000Z'),
-    })) as typeof prisma.backtestRun.findUnique;
+    })) as unknown as typeof prisma.backtestRun.findUnique;
 
     prisma.tradeJournal.findMany = (async () => [
       {

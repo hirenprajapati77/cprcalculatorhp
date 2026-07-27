@@ -36,7 +36,9 @@ describe('Overnight Engine Tests', () => {
       vwap: 100.5,
       intradayVolume: 50000,
       last15mHigh: 102.5,
-      hasConfirmationCandles: true
+      hasConfirmationCandles: true,
+      rsi14: 60,
+      emaCross: { cross: 'BULLISH' as const, isBullishAlignment: true },
     };
 
     const score = BtstRankingService.calculateScore(mockStock);
@@ -59,7 +61,9 @@ describe('Overnight Engine Tests', () => {
       vwap: 99.5,
       intradayVolume: 50000,
       last15mLow: 97.5,
-      hasConfirmationCandles: true
+      hasConfirmationCandles: true,
+      rsi14: 40,
+      emaCross: { cross: 'BEARISH' as const, isBullishAlignment: false },
     };
 
     const score = StbtRankingService.calculateScore(mockStock);
@@ -82,7 +86,9 @@ describe('Overnight Engine Tests', () => {
       vwap: 99.5,       // close (98) < vwap (99.5)
       intradayVolume: 50000,
       last15mLow: 99,   // close < last15mLow (20 pts)
-      hasConfirmationCandles: true
+      hasConfirmationCandles: true,
+      rsi14: 40,
+      emaCross: { cross: 'BEARISH' as const, isBullishAlignment: false },
     };
 
     const score = StbtRankingService.calculateScore(mockStock);
@@ -105,8 +111,10 @@ describe('Overnight Engine Tests', () => {
       vwap: 101, 
       intradayVolume: 50000,
       last15mLow: 89, // close is not < 89 (Rule 5: 0)
-      hasConfirmationCandles: true
-    };
+      hasConfirmationCandles: true,
+      rsi14: 40,
+      emaCross: { cross: 'BEARISH' as const, isBullishAlignment: false },
+    } as const;
 
     // Case 1: closingWeakness exactly 0.30
     // close = 93 -> (93 - 90) / 10 = 0.30

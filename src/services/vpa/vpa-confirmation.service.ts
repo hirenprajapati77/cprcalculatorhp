@@ -9,7 +9,7 @@ import { scoreVpaClv } from './clv.service';
 import { scoreVpaEffortResult } from './effort-result.service';
 import { shouldRejectNoDemand, scoreVpaNoDemandSupply } from './no-demand-supply.service';
 import { scoreVpaRvol } from './rvol.service';
-import { clampAdjustment, sumBreakdown } from './vpa.math';
+import { clampAdjustment, sumBreakdown, buildVpaInputs } from './vpa.math';
 import {
   EMPTY_VPA_BREAKDOWN,
   type VpaConfirmationResult,

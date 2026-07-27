@@ -9,7 +9,7 @@ const originalConsoleError = console.error;
 const originalGetCredentials = FyersAuthService.getCredentials;
 
 function setupMocks() {
-  global.fetch = async () => ({}) as unknown as typeof fetch;
+  global.fetch = (async () => ({} as Response)) as unknown as typeof fetch;
   console.warn = () => {};
   console.log = () => {};
   console.error = () => {};

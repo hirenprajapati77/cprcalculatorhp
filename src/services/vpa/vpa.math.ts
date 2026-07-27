@@ -5,7 +5,7 @@ import type { VpaMarketInputs } from './vpa.types';
 export function computeClv(close: number, high: number, low: number): number | null {
   const range = high - low;
   if (range <= 0) return null;
-  return safeRatio((close - low) - (high - close), range, null);
+  return safeRatio((close - low) - (high - close), range, undefined) ?? null;
 }
 
 export function computeRvol(volume: number, avgVolume: number): number | null {
@@ -15,7 +15,7 @@ export function computeRvol(volume: number, avgVolume: number): number | null {
 
 export function computeRangePct(high: number, low: number, close: number): number | null {
   if (close <= 0) return null;
-  return safeRatio(high - low, close, null);
+  return safeRatio(high - low, close, undefined) ?? null;
 }
 
 export function computeWickRatios(
@@ -29,8 +29,8 @@ export function computeWickRatios(
   const bodyTop = Math.max(open, close);
   const bodyBottom = Math.min(open, close);
   return {
-    upper: safeRatio(high - bodyTop, range, null),
-    lower: safeRatio(bodyBottom - low, range, null),
+    upper: safeRatio(high - bodyTop, range, undefined) ?? null,
+    lower: safeRatio(bodyBottom - low, range, undefined) ?? null,
   };
 }
 

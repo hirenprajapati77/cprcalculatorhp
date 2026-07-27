@@ -64,12 +64,12 @@ describe('maskSecretTail', () => {
 describe('publicApiError', () => {
   it('hides internal messages outside development', () => {
     const prev = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    (process.env as any).NODE_ENV = 'production';
     try {
       assert.equal(publicApiError(new Error('secret db detail')), 'Internal server error');
       assert.equal(publicApiError(new Error('x'), 'Failed'), 'Failed');
     } finally {
-      process.env.NODE_ENV = prev;
+      (process.env as any).NODE_ENV = prev;
     }
   });
 });

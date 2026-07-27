@@ -10,7 +10,7 @@ function envFlag(name: string, defaultTrue = true): boolean {
   const raw =
     fromProcess !== undefined && fromProcess !== null && String(fromProcess).trim() !== ''
       ? fromProcess
-      : (env as Record<string, string | undefined>)[name];
+      : (env as Record<string, any>)[name];
   if (raw === undefined || raw === null || String(raw).trim() === '') {
     return defaultTrue;
   }
