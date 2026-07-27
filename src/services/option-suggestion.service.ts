@@ -112,7 +112,28 @@ export class OptionSuggestionService {
       if (!optionSymbol.startsWith(prefix)) continue;
       const remainder = optionSymbol.substring(prefix.length);
       if (remainder.endsWith(suffix)) {
-        return remainder.substring(0, remainder.length - suffix.length);
+        const rawExpiry = remainder.substring(0, remainder.length - suffix.length);
+
+        // Monthly contract (e.g. "26JUL" -> "JUL 2026")
+        const monthlyMatch = rawExpiry.match(/^(\d{2})([A-Z]{3})$/);
+        if (monthlyMatch) {
+          const [, yy, mmm] = monthlyMatch;
+          return `${mmm} 20${yy}`;
+        }
+
+        // Weekly contract (e.g. "26730" -> "30 JUL 2026")
+        const weeklyMatch = rawExpiry.match(/^(\d{2})([1-9ONDE])(\d{2})$/);
+        if (weeklyMatch) {
+          const [, yy, mToken, dd] = weeklyMatch;
+          const monthMap: Record<string, string> = {
+            '1': 'JAN', '2': 'FEB', '3': 'MAR', '4': 'APR', '5': 'MAY', '6': 'JUN',
+            '7': 'JUL', '8': 'AUG', '9': 'SEP', 'O': 'OCT', 'N': 'NOV', 'D': 'DEC'
+          };
+          const mmm = monthMap[mToken] || mToken;
+          return `${dd} ${mmm} 20${yy}`;
+        }
+
+        return rawExpiry;
       }
     }
 
