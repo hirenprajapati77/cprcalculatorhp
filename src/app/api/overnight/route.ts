@@ -84,6 +84,34 @@ export async function GET(req: NextRequest) {
             state,
           });
         }
+        // If cache is missing but we are after 15:10 IST today, check DB for today's frozen scan signals
+        const istTime = getISTTime(now);
+        if (istTime.totalMinutes >= 15 * 60 + 10) {
+          const dbSignals = await prisma.overnightSignal.findMany({
+            where: {
+              signalDate: todayStr,
+              ...STOCK_OVERNIGHT_INSTRUMENT_WHERE,
+              ...(direction && direction !== 'BOTH' ? { direction } : {}),
+              ...(activeOnly ? { classification: { in: [...ACTIVE_CLASSIFICATIONS] } } : {}),
+            },
+            orderBy: [{ overnightScore: 'desc' }],
+          });
+
+          if (dbSignals.length > 0) {
+            const insights = buildInsightsFromOvernight(dbSignals);
+            return NextResponse.json({
+              success: true,
+              windowOpen: false,
+              cachedResult: false,
+              scannedAt: 'End of Session',
+              message: `Displaying today's overnight scan signals. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
+              results: dbSignals,
+              insights,
+              state,
+            });
+          }
+        }
+
         return NextResponse.json({
           success: true,
           windowOpen: false,
