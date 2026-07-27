@@ -64,11 +64,13 @@ describe('maskSecretTail', () => {
 describe('publicApiError', () => {
   it('hides internal messages outside development', () => {
     const prev = process.env.NODE_ENV;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (process.env as any).NODE_ENV = 'production';
     try {
       assert.equal(publicApiError(new Error('secret db detail')), 'Internal server error');
       assert.equal(publicApiError(new Error('x'), 'Failed'), 'Failed');
     } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (process.env as any).NODE_ENV = prev;
     }
   });
