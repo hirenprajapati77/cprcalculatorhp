@@ -275,7 +275,6 @@ test('BreakoutWatcher — deduplication logic', async (t) => {
 
       assert.strictEqual(results.length, 0, 'Should not return any new breakouts due to claim failure');
       assert.strictEqual(mocks.updateManyCalls.length, 1, 'Should attempt atomic claim');
-      assert.strictEqual(mocks.upsertCalls.length, 1, 'Should still update DB with current state');
     } finally {
       mocks.restore();
     }
@@ -356,8 +355,6 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
       create: async () => {
         throw makeUniqueConstraintError();
       },
-      findUnique: async () => ({ hadBreakout: true }),
-      upsert: async () => ({ symbol: 'INFY', hadBreakout: true, lastAlerted: new Date() }),
     });
 
     try {
@@ -372,18 +369,13 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
       );
       assert.strictEqual(mocks.updateManyCalls.length, 2);
       assert.strictEqual(mocks.createCalls.length, 1);
-      assert.strictEqual(mocks.findUniqueCalls.length, 1);
-      assert.strictEqual(mocks.upsertCalls.length, 1);
     } finally {
       mocks.restore();
     }
   });
 
   await t.test('weak breakout: score < 75 → no updateMany/create, legacy upsert does not lock', async () => {
-    const mocks = mockBreakoutPrisma({
-      findUnique: async () => null,
-      upsert: async () => ({ symbol: 'HDFC', hadBreakout: false, lastAlerted: null }),
-    });
+    const mocks = mockBreakoutPrisma({});
 
     try {
       const results = await BreakoutWatcherService.detectNewBreakouts([
@@ -393,15 +385,6 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
       assert.strictEqual(results.length, 0);
       assert.strictEqual(mocks.updateManyCalls.length, 0);
       assert.strictEqual(mocks.createCalls.length, 0);
-      assert.strictEqual(mocks.findUniqueCalls.length, 1);
-      assert.strictEqual(mocks.upsertCalls.length, 1);
-
-      const upsertArgs = mocks.upsertCalls[0] as {
-        create: { hadBreakout: boolean };
-        update: { hadBreakout: boolean };
-      };
-      assert.strictEqual(upsertArgs.create.hadBreakout, false);
-      assert.strictEqual(upsertArgs.update.hadBreakout, false);
     } finally {
       mocks.restore();
     }

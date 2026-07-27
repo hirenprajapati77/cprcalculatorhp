@@ -27,6 +27,8 @@ export async function GET(req: NextRequest) {
   try {
     const results = await ScannerController.runFullScan(universe as "NIFTY50" | "NIFTY100" | "NIFTY200" | "NSE_FNO" | "NIFTY_FNO" | "ALL_NSE" | "ALL" | "Auto" | "WATCHLIST", 'NSE');
 
+    console.log(`[AutoScan] Completed at ${new Date().toISOString()}, ${results.length} symbols scanned`);
+
     await CacheService.set('AUTO_SCAN_RESULT', {
       data: results,
       timestamp: new Date().toISOString()

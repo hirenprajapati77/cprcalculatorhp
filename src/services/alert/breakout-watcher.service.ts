@@ -35,6 +35,11 @@ export class BreakoutWatcherService {
 
     for (const result of scanResults) {
       const hasBreakoutNow = result.signals.includes('BREAKOUT');
+      
+      if (hasBreakoutNow && result.score < MIN_BREAKOUT_ALERT_SCORE) {
+        console.log(`[BreakoutWatcher] Near-miss: ${result.symbol} has BREAKOUT signal at score ${result.score} (threshold ${MIN_BREAKOUT_ALERT_SCORE})`);
+      }
+
       const qualifiesForAlert =
         hasBreakoutNow && result.score >= MIN_BREAKOUT_ALERT_SCORE;
 
