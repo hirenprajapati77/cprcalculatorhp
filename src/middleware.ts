@@ -26,34 +26,35 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // 2. For page routes (non-API, non-static), automatically set the access token
-  //    cookie so that browser-initiated API calls are authenticated.
-  if (!url.pathname.startsWith('/api/') && expectedToken) {
+  // 2. Gate Page Routes — Redirect unauthenticated requests to /unlock
+  const isPublicPage =
+    url.pathname === '/unlock' ||
+    url.pathname === '/about' ||
+    url.pathname === '/faq' ||
+    url.pathname.startsWith('/share/');
+
+  if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
     const existing = request.cookies.get('app_access_token')?.value;
-    // Only set if missing or stale to avoid rewriting on every request
     if (!existing || !timingSafeEqual(existing, expectedToken)) {
-      const res = NextResponse.next();
-      res.cookies.set('app_access_token', expectedToken, {
-        httpOnly: true,
-        sameSite: 'strict',
-        path: '/',
-        secure: url.protocol === 'https:',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-      });
-      return res;
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = '/unlock';
+      // Clear query params to prevent bypass/confusion
+      redirectUrl.search = '';
+      return NextResponse.redirect(redirectUrl);
     }
-    return NextResponse.next();
   }
 
   // 3. Gate /api routes
   if (url.pathname.startsWith('/api/')) {
-    // Exempt public routes + cron-secret refresh (auth enforced in-route)
+    // Exempt public routes + cron-secret refresh + auth endpoints
     if (
       url.pathname.startsWith('/api/health') ||
       isCronSecretExemptApiPath(url.pathname) ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
       url.pathname.startsWith('/api/broker/fyers/login') ||
-      url.pathname.startsWith('/api/share/')
+      url.pathname.startsWith('/api/share/') ||
+      url.pathname === '/api/auth/unlock' ||
+      url.pathname === '/api/auth/logout'
     ) {
       return NextResponse.next();
     }
