@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { JournalReportService } from '@/services/reporting/journal-report.service';
+import { publicApiError } from '@/lib/api-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export async function GET() {
       }
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Reporting GET]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }

@@ -1,17 +1,28 @@
 import { env } from '@/config/env';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
 import { QueueService } from '@/services/queue.service';
 import { prisma } from '@/lib/db';
-import redis from '@/lib/redis';
-import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
+import { getISTDateString } from '@/lib/market-hours';
+import { RegimeService } from '@/services/overnight/regime.service';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+function isAuthorized(req: NextRequest): boolean {
+  const expected = env.APP_ACCESS_TOKEN?.trim();
+  if (!expected) return env.NODE_ENV !== 'production';
+  const authHeader = req.headers.get('authorization');
+  const cookie = req.cookies.get('app_access_token')?.value;
+  if (authHeader === `Bearer ${expected}`) return true;
+  if (cookie === expected) return true;
+  return false;
+}
+
+export async function GET(req: NextRequest) {
+  const detailed = isAuthorized(req);
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
-  
+
   const backtestMode = env.BACKTEST_EXECUTION_MODE || 'queue';
   const isProd = env.NODE_ENV === 'production';
   const historicalMode = env.HISTORICAL_MODE || 'mock';
@@ -20,35 +31,30 @@ export async function GET() {
   const appVersion = env.APP_VERSION || process.env.npm_package_version || 'v1.0.0-rc.1';
 
   let dbStatus = 'healthy';
-  let dbError = null;
-  let latestSignalDate = null;
-  let latestEventDate = null;
+  let latestSignalDate: string | null = null;
+  let latestEventDate: string | null = null;
   let signalsHealth = 'unknown';
   let eventsHealth = 'unknown';
 
-  // Database Connection & Data Freshness Health Check
   try {
     await prisma.$queryRaw`SELECT 1`;
-    
-    // Check Latest Signal
+
+    // Any overnight row (stock or index); freshness from createdAt — signalDate is a calendar key.
     const latestSignal = await prisma.overnightSignal.findFirst({
-      where: { ...STOCK_OVERNIGHT_INSTRUMENT_WHERE },
-      orderBy: { signalDate: 'desc' },
-      select: { signalDate: true }
+      orderBy: { createdAt: 'desc' },
+      select: { signalDate: true, createdAt: true },
     });
     if (latestSignal) {
-      const latestSignalDateObj = new Date(latestSignal.signalDate);
-      latestSignalDate = latestSignalDateObj.toISOString();
-      const diffHours = (Date.now() - latestSignalDateObj.getTime()) / (1000 * 60 * 60);
+      latestSignalDate = latestSignal.createdAt.toISOString();
+      const diffHours = (Date.now() - latestSignal.createdAt.getTime()) / (1000 * 60 * 60);
       signalsHealth = diffHours < 72 ? 'healthy' : 'stale';
     } else {
       signalsHealth = 'no_data';
     }
 
-    // Check Latest Event
     const latestEvent = await prisma.marketEvent.findFirst({
       orderBy: { createdAt: 'desc' },
-      select: { createdAt: true }
+      select: { createdAt: true },
     });
     if (latestEvent) {
       latestEventDate = latestEvent.createdAt.toISOString();
@@ -59,42 +65,29 @@ export async function GET() {
     }
   } catch (err) {
     dbStatus = 'unhealthy';
-    dbError = err instanceof Error ? err.message : String(err);
     console.error('[Health Check Error] Database is unreachable:', err);
   }
 
-  // Check Regime Snapshot Freshness
-  let latestRegimeDate = null;
+  // RegimeService is the live source of truth (in-memory / Yahoo) — not a dead Redis key.
+  let latestRegimeDate: string | null = null;
   let regimeHealth = 'unknown';
-  let regimeError = null;
   try {
-    if (redis) {
-      const regimeData = await redis.get('cpr:market_regime:NIFTY_50');
-      if (regimeData) {
-        const parsed = JSON.parse(regimeData);
-        if (parsed.timestamp) {
-          latestRegimeDate = parsed.timestamp;
-          const diffHours = (Date.now() - new Date(parsed.timestamp).getTime()) / (1000 * 60 * 60);
-          regimeHealth = diffHours < 48 ? 'healthy' : 'stale';
-        } else {
-          regimeHealth = 'unknown_format';
-        }
-      } else {
-        regimeHealth = 'no_data';
-      }
-    } else {
-      regimeHealth = 'redis_not_connected';
-    }
+    const today = getISTDateString();
+    const regime = await RegimeService.getMarketRegime(today);
+    latestRegimeDate = new Date().toISOString();
+    regimeHealth = regime ? 'healthy' : 'no_data';
   } catch (err) {
     regimeHealth = 'error';
-    regimeError = err instanceof Error ? err.message : String(err);
+    console.error('[Health Check Error] Regime check failed:', err);
   }
-  
+
   const isHealthy = dbStatus === 'healthy';
 
-  return NextResponse.json({
+  const publicBody = {
     status: isHealthy ? 'healthy' : 'degraded',
-    ...(hasMisconfig ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` } : {}),
+    ...(hasMisconfig
+      ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` }
+      : {}),
     version: appVersion,
     build: env.BUILD_TIMESTAMP || new Date().toISOString(),
     environment: env.NODE_ENV || 'development',
@@ -104,31 +97,42 @@ export async function GET() {
       redis: CacheService.isRedisConnected ? 'connected' : 'disconnected',
       signals: signalsHealth,
       events: eventsHealth,
-      regime: regimeHealth
+      regime: regimeHealth,
     },
-    timestamps: {
-      latestSignal: latestSignalDate,
-      latestEvent: latestEventDate,
-      latestRegime: latestRegimeDate
+    uptime: process.uptime(),
+  };
+
+  if (!detailed) {
+    return NextResponse.json(publicBody, { status: isHealthy ? 200 : 503 });
+  }
+
+  return NextResponse.json(
+    {
+      ...publicBody,
+      timestamps: {
+        latestSignal: latestSignalDate,
+        latestEvent: latestEventDate,
+        latestRegime: latestRegimeDate,
+      },
+      errors: {
+        database: dbStatus === 'unhealthy' ? 'Database unreachable' : null,
+        regime: regimeHealth === 'error' ? 'Regime check failed' : null,
+      },
+      cache: await CacheService.getMetrics(),
+      queue: {
+        depth: queueList.reduce((sum, q) => sum + q.waiting, 0),
+        active: queueList.reduce((sum, q) => sum + q.active, 0),
+        failed: queueList.reduce((sum, q) => sum + q.failed, 0),
+      },
+      backtest: {
+        mode: backtestMode,
+        status: backtestMode === 'disabled' ? 'unavailable' : 'active',
+      },
+      historicalProvider: {
+        mode: historicalMode,
+        status: 'active',
+      },
     },
-    errors: {
-      database: dbError,
-      regime: regimeError
-    },
-    cache: await CacheService.getMetrics(),
-    queue: {
-      depth: queueList.reduce((sum, q) => sum + q.waiting, 0),
-      active: queueList.reduce((sum, q) => sum + q.active, 0),
-      failed: queueList.reduce((sum, q) => sum + q.failed, 0)
-    },
-    backtest: {
-      mode: backtestMode,
-      status: backtestMode === 'disabled' ? 'unavailable' : 'active'
-    },
-    historicalProvider: {
-      mode: historicalMode,
-      status: 'active'
-    },
-    uptime: process.uptime()
-  }, { status: isHealthy ? 200 : 503 });
+    { status: isHealthy ? 200 : 503 }
+  );
 }

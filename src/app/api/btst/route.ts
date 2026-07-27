@@ -5,6 +5,8 @@ import { OvernightService } from '@/services/overnight/overnight.service';
 import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 import { btstScanCacheKey } from '@/lib/btst-cache-key';
+import { shouldFreshDiscoverBtst } from '@/lib/btst-discover-gate';
+import { publicApiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
@@ -59,42 +61,35 @@ export async function GET(request: Request) {
       });
     }
 
-    // Bypass ON — serve cache if available; do NOT trigger a fresh live scan
-    // (bypass is for reading existing results outside the window, not for initiating scans).
-    if (bypassQuery) {
-      const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
-      if (cached) {
-        const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
-        return NextResponse.json({
-          success: true,
-          executionWindowOpen: true,
-          cachedResult: true,
-          scannedAt: cached.scannedAt,
-          message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
-          degraded: cachedCoverage?.degraded ?? false,
-          results: cached.results,
-          insights: cached.insights,
-          engine: cached.engine ?? 'advanced',
-          state: windowState,
-          ...(cached.coverage ? { coverage: cached.coverage } : {}),
-        });
-      }
-      // No cache + bypass = scan hasn't run today yet
+    // Bypass ON — serve cache if available; if no cache, fall through to a fresh discover
+    // (matches /api/overnight bypass behavior used for research outside the window).
+    const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
+    if (
+      bypassQuery &&
+      cached &&
+      !shouldFreshDiscoverBtst({
+        executionWindowOpen,
+        bypassQuery,
+        hasCache: true,
+      })
+    ) {
+      const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
       return NextResponse.json({
         success: true,
-        executionWindowOpen: false,
-        cachedResult: false,
-        message: `Bypass active but no scan data found for today. BTST/STBT scan runs at ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST.`,
-        results: [],
-        insights: { strongSignal: 0, breakoutReady: 0, avoid: 0, totalLong: 0, totalShort: 0, totalConflict: 0 },
-        engine: 'advanced',
+        executionWindowOpen: true,
+        cachedResult: true,
+        scannedAt: cached.scannedAt,
+        message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
+        degraded: cachedCoverage?.degraded ?? false,
+        results: cached.results,
+        insights: cached.insights,
+        engine: cached.engine ?? 'advanced',
         state: windowState,
+        ...(cached.coverage ? { coverage: cached.coverage } : {}),
       });
     }
 
-    // Window open — single source of truth: same discover path as the
-    // btst-alert / btst-journal crons (BtstService.discover -> Advanced
-    // engine bridge). Do not re-implement discover/filter/map here.
+    // Window open OR bypass with empty cache — same discover path as crons.
     const discovery = await BtstService.discover(universe);
     const resultsList = discovery.results;
     const insights = discovery.insights;
@@ -178,6 +173,9 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error('BTST API Error:', error);
-    return NextResponse.json({ success: false, error: 'Failed to evaluate BTST setups' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: publicApiError(error, 'Failed to evaluate BTST setups') },
+      { status: 500 }
+    );
   }
 }

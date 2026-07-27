@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Sliders, Play, Database, Cpu, Send } from 'lucide-react';
+import { Settings, Save, Sliders, Play, Database, Cpu, Send, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+
+function looksMaskedSecret(value: string): boolean {
+  return /^\*+\d{0,4}$/.test(value) || (value.startsWith('***') && value.includes('*'));
+}
 
 export default function SettingsPage() {
   const [marketMode, setMarketMode] = useState<string>('live');
@@ -13,6 +17,7 @@ export default function SettingsPage() {
   const [minPrice, setMinPrice] = useState<number>(20);
   const [minVolume, setMinVolume] = useState<number>(50000);
   const [saving, setSaving] = useState<boolean>(false);
+  const [loggingOut, setLoggingOut] = useState<boolean>(false);
   const [telegramToken, setTelegramToken] = useState<string>('');
   const [telegramChatId, setTelegramChatId] = useState<string>('');
   const [telegramGroupChatId, setTelegramGroupChatId] = useState<string>('');
@@ -133,6 +138,18 @@ export default function SettingsPage() {
       showToast('Network error sending test breakout alert', 'error');
     } finally {
       setBreakoutTesting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!res.ok) throw new Error('Logout failed');
+      window.location.href = '/unlock';
+    } catch {
+      showToast('Failed to log out', 'error');
+      setLoggingOut(false);
     }
   };
 
@@ -268,16 +285,22 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            {/* Bypass BTST/STBT Time Lock */}
-            <div className="space-y-2 flex items-center pt-5">
-              <label className="flex items-center gap-2 cursor-pointer text-slate-400 font-semibold select-none">
+            {/* Bypass BTST/STBT Time Lock — research unlock only; does not affect journal/Telegram/regime crons */}
+            <div className="space-y-2 pt-2 md:col-span-2">
+              <label className="flex items-start gap-2 cursor-pointer text-slate-400 font-semibold select-none">
                 <input
                   type="checkbox"
                   checked={bypassBtst}
                   onChange={(e) => setBypassBtst(e.target.checked)}
-                  className="w-4 h-4 rounded border-border-secondary bg-bg-secondary focus:ring-accent-blue accent-accent-blue cursor-pointer"
+                  className="w-4 h-4 mt-0.5 rounded border-border-secondary bg-bg-secondary focus:ring-accent-blue accent-accent-blue cursor-pointer"
                 />
-                <span>Bypass BTST Time Lock (Run Scan Anywhere/Anytime)</span>
+                <span>
+                  Bypass BTST Time Lock (research unlock)
+                  <span className="block text-[9px] font-normal text-slate-500 mt-1 leading-relaxed">
+                    Lets Scanner load BTST/STBT outside 15:10–15:25 IST (cache if present, otherwise a fresh discover).
+                    Does not change journal auto-close, Telegram alerts, or regime-gated cron jobs.
+                  </span>
+                </span>
               </label>
             </div>
           </div>
@@ -367,6 +390,9 @@ export default function SettingsPage() {
                 type="password"
                 value={telegramToken}
                 onChange={(e) => setTelegramToken(e.target.value)}
+                onFocus={() => {
+                  if (looksMaskedSecret(telegramToken)) setTelegramToken('');
+                }}
                 className="w-full bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
                 placeholder="123456789:ABCDefgh..."
               />
@@ -382,6 +408,9 @@ export default function SettingsPage() {
                   type="text"
                   value={telegramChatId}
                   onChange={(e) => setTelegramChatId(e.target.value)}
+                  onFocus={() => {
+                    if (looksMaskedSecret(telegramChatId)) setTelegramChatId('');
+                  }}
                   className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
                   placeholder="-10012345678"
                 />
@@ -407,6 +436,9 @@ export default function SettingsPage() {
                   id="telegram-group-chat-id"
                   value={telegramGroupChatId}
                   onChange={(e) => setTelegramGroupChatId(e.target.value)}
+                  onFocus={() => {
+                    if (looksMaskedSecret(telegramGroupChatId)) setTelegramGroupChatId('');
+                  }}
                   className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
                   placeholder="-100xxxxxxxxxx"
                 />
@@ -432,7 +464,16 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <div className="flex justify-end p-2">
+        <div className="flex justify-between items-center gap-3 p-2">
+          <Button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="bg-bg-tertiary hover:bg-rose-950/40 text-rose-300 border border-rose-800/40 px-4 py-2.5 rounded-xl h-10 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs"
+          >
+            <LogOut size={14} />
+            {loggingOut ? 'Logging out…' : 'Log out'}
+          </Button>
           <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl h-10 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs">
             <Save size={14} />
             Save Configuration

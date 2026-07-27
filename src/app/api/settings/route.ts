@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { z } from 'zod';
 import { encrypt, decrypt } from '@/lib/crypto';
+import { publicApiError } from '@/lib/api-error';
+import { maskSecretTail } from '@/lib/mask-secret';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,36 @@ const SettingsSchema = z.object({
   telegramGroupChatId: z.string().optional(),
 });
 
+function maskSettingsForClient<T extends {
+  telegramToken?: string | null;
+  telegramChatId?: string | null;
+  telegramGroupChatId?: string | null;
+}>(settings: T): T {
+  const out = { ...settings };
+  if (out.telegramToken) {
+    try {
+      const plainToken = decrypt(out.telegramToken);
+      out.telegramToken =
+        plainToken.length > 4
+          ? '*'.repeat(plainToken.length - 4) + plainToken.slice(-4)
+          : '****';
+    } catch {
+      out.telegramToken = '****';
+    }
+  }
+  if (out.telegramChatId) {
+    out.telegramChatId = maskSecretTail(out.telegramChatId);
+  }
+  if (out.telegramGroupChatId) {
+    out.telegramGroupChatId = maskSecretTail(out.telegramGroupChatId);
+  }
+  return out;
+}
+
+function isMaskedChatId(value: string | undefined): boolean {
+  return Boolean(value && /^\*+\d{0,4}$/.test(value));
+}
+
 // GET — load current settings (creates defaults row if missing)
 export async function GET() {
   try {
@@ -26,24 +58,10 @@ export async function GET() {
       update: {},
     });
 
-    // Mask the telegram token if present
-    if (settings.telegramToken) {
-      try {
-        const plainToken = decrypt(settings.telegramToken);
-        if (plainToken.length > 4) {
-          settings.telegramToken = '*'.repeat(plainToken.length - 4) + plainToken.slice(-4);
-        } else {
-          settings.telegramToken = '****';
-        }
-      } catch (_e) {
-        settings.telegramToken = '****'; // Fallback if decryption fails
-      }
-    }
-
-    return NextResponse.json({ success: true, settings });
+    return NextResponse.json({ success: true, settings: maskSettingsForClient(settings) });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Settings GET]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }
 
@@ -77,6 +95,14 @@ export async function POST(request: NextRequest) {
         ? encrypt(telegramToken)
         : undefined;
 
+    // Masked chat IDs from a prior GET must not overwrite the real values.
+    const effectiveChatId =
+      telegramChatId !== undefined && !isMaskedChatId(telegramChatId) ? telegramChatId : undefined;
+    const effectiveGroupChatId =
+      telegramGroupChatId !== undefined && !isMaskedChatId(telegramGroupChatId)
+        ? telegramGroupChatId
+        : undefined;
+
     const settings = await prisma.appSettings.upsert({
       where: { id: 'global' },
       create: {
@@ -88,8 +114,8 @@ export async function POST(request: NextRequest) {
         minVolume:            minVolume            ?? 50000,
         bypassBtst:           bypassBtst           ?? false,
         telegramToken:        encryptedToken       ?? '',
-        telegramChatId:       telegramChatId       ?? '',
-        telegramGroupChatId:  telegramGroupChatId  ?? '',
+        telegramChatId:       effectiveChatId      ?? '',
+        telegramGroupChatId:  effectiveGroupChatId ?? '',
       },
       update: {
         ...(marketMode           !== undefined && { marketMode }),
@@ -103,28 +129,14 @@ export async function POST(request: NextRequest) {
           : encryptedToken !== undefined
             ? { telegramToken: encryptedToken }
             : {}),
-        ...(telegramChatId       !== undefined && { telegramChatId }),
-        ...(telegramGroupChatId  !== undefined && { telegramGroupChatId }),
+        ...(effectiveChatId       !== undefined && { telegramChatId: effectiveChatId }),
+        ...(effectiveGroupChatId  !== undefined && { telegramGroupChatId: effectiveGroupChatId }),
       },
     });
 
-    // Mask for response
-    if (settings.telegramToken) {
-      try {
-        const plainToken = decrypt(settings.telegramToken);
-        if (plainToken.length > 4) {
-          settings.telegramToken = '*'.repeat(plainToken.length - 4) + plainToken.slice(-4);
-        } else {
-          settings.telegramToken = '****';
-        }
-      } catch (_e) {
-        settings.telegramToken = '****';
-      }
-    }
-
-    return NextResponse.json({ success: true, settings });
+    return NextResponse.json({ success: true, settings: maskSettingsForClient(settings) });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Settings POST]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }

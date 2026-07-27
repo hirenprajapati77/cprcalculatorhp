@@ -5,6 +5,7 @@ import { CacheService } from '@/services/cache.service';
 import { buildInsightsFromOvernight } from '@/services/overnight/overnight-ui-adapter';
 import { getISTDateString, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
 import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
+import { publicApiError } from '@/lib/api-error';
 
 /** Matches historical Prisma `activeOnly` filter (READY+ / WATCH classifications). */
 const ACTIVE_CLASSIFICATIONS = [
@@ -264,7 +265,7 @@ export async function GET(req: NextRequest) {
       results: signals,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Overnight GET]', error);
+    return NextResponse.json({ error: publicApiError(error) }, { status: 500 });
   }
 }

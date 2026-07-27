@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { computeOptionPnl } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
+import { publicApiError } from '@/lib/api-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,8 +33,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, ...result });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Journal GET]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }
 
@@ -97,8 +98,8 @@ export async function PATCH(request: NextRequest) {
     const updated = await prisma.tradeJournal.findUnique({ where: { id } });
     return NextResponse.json({ success: true, entry: updated });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Journal PATCH]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }
 
@@ -138,7 +139,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, deletedId: id });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Journal DELETE]', err);
+    return NextResponse.json({ error: publicApiError(err) }, { status: 500 });
   }
 }

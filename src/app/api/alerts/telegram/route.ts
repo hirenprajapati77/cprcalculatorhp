@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramService } from '@/services/alert/telegram.service';
+import { publicApiError } from '@/lib/api-error';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: false, message: 'Invalid payload' }, { status: 400 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[Telegram POST]', error);
+    return NextResponse.json({ error: publicApiError(error) }, { status: 500 });
   }
 }

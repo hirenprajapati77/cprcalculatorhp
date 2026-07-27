@@ -2,6 +2,7 @@ import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { isValidCronSecret } from '@/lib/crypto';
+import { publicApiError } from '@/lib/api-error';
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     const signals = await OvernightService.discover('BOTH', dateOverride);
     return NextResponse.json({ success: true, count: signals.length, signals });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[BTST refresh]', error);
+    return NextResponse.json({ error: publicApiError(error) }, { status: 500 });
   }
 }
