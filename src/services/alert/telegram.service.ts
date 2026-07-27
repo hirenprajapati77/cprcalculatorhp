@@ -197,12 +197,40 @@ export class TelegramService {
       return { ok: false, reason: 'missing_config' };
     }
 
-    const lines = stocks.map(s =>
-      `🚀 <b>${s.symbol}</b> (${s.sector})\n` +
-      `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
-      `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}\n` +
-      `   RR: ${s.rr}`
-    ).join('\n\n');
+    const { OptionSuggestionService } = await import('../option-suggestion.service');
+
+    const enrichedLines = await Promise.all(
+      stocks.map(async (s) => {
+        let optionText = '';
+        try {
+          const suggestion =
+            (s as { optionSuggestion?: OptionSuggestion }).optionSuggestion ||
+            (await OptionSuggestionService.suggestOption(
+              s.symbol,
+              s.ltp,
+              'BULLISH',
+              s.entry,
+              s.sl,
+              s.target
+            ));
+          if (suggestion && !suggestion.error && suggestion.formattedName) {
+            const priceText = suggestion.ltp ? ` @ ₹${suggestion.ltp.toFixed(2)}` : '';
+            optionText = `\n   🎯 Option: <b>${suggestion.formattedName}${priceText}</b>`;
+          }
+        } catch {
+          // Fallback gracefully if option lookup fails
+        }
+
+        return (
+          `🚀 <b>${s.symbol}</b> (${s.sector})\n` +
+          `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
+          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}\n` +
+          `   RR: ${s.rr}${optionText}`
+        );
+      })
+    );
+
+    const lines = enrichedLines.join('\n\n');
 
     const timeStr = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
