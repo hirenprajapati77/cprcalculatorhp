@@ -213,8 +213,9 @@ export async function logIndexBtstJournalEntries(params: {
       continue;
     }
 
+    const cleanSym = signal.symbol.split(':')[0].trim();
     const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
       `${suggestion.strike} CE`;
     const signalSummary = [
       signal.classification,
@@ -313,8 +314,9 @@ export async function logIndexStbtJournalEntries(params: {
       continue;
     }
 
+    const cleanSymShort = signal.symbol.split(':')[0].trim();
     const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      suggestion.formattedName?.replace(new RegExp(`^${cleanSymShort}\\s+`), '') ||
       `${suggestion.strike} PE`;
     const signalSummary = [
       signal.classification,

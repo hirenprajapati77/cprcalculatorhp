@@ -56,8 +56,9 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       continue;
     }
 
+    const cleanSym = signal.symbol.split(':')[0].trim();
     const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
       `${suggestion.strike} CE`;
 
     const didLog = await TradeJournalService.logSignal({

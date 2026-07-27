@@ -160,8 +160,9 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
     }
 
+    const cleanSym = signal.symbol.split(':')[0].trim();
     const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
       `${suggestion.strike} CE`;
     const signalSummary = [
       signal.classification,
@@ -248,8 +249,9 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
     }
 
+    const cleanSymShort = signal.symbol.split(':')[0].trim();
     const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${signal.symbol}\\s+`), '') ||
+      suggestion.formattedName?.replace(new RegExp(`^${cleanSymShort}\\s+`), '') ||
       `${suggestion.strike} PE`;
     const signalSummary = [
       signal.classification,
