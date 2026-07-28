@@ -58,8 +58,6 @@ function CompareContent({ initialSymbols = [] }: CompareClientProps) {
     }
   }, [selectedSymbols, stocksData]);
 
-
-
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();

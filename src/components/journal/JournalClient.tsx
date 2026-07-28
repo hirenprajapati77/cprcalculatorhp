@@ -469,8 +469,8 @@ function formatRegime(regime: string | null | undefined) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 // Cache to prevent loading spinner on navigation
-let _cachedEntries: any[] | null = null;
-let _cachedStats: any | null = null;
+let _cachedEntries: JournalEntry[] | null = null;
+let _cachedStats: JournalStats | null = null;
 let _cachedTotal: number = 0;
 
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
@@ -499,6 +499,17 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   const [signalType, setSignalType]   = useState<'ALL' | 'CPR' | 'BTST' | 'STBT'>('ALL');
   const [qualityFilter, setQualityFilter] = useState<'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'>('ALL');
   const [outcomeFilter, setOutcomeFilter] = useState<string>('ALL');
+
+  // Invalidate cache and show spinner when any filter changes (not on mount)
+  const isFirstMount = React.useRef(true);
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    _cachedEntries = null;
+    setLoading(true);
+  }, [signalType, fromDate, toDate, qualityFilter, outcomeFilter]);
 
   // Inline exit input state per row
   const [exitRow, setExitRow]         = useState<string | null>(null);

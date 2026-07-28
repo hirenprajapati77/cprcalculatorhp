@@ -31,7 +31,6 @@ export default function WatchlistPage() {
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const { showToast } = useToast();
 
-  // Fetch watchlist items and enrich with live scan results
   // Sync state to memory cache
   useEffect(() => {
     if (watchlist.length > 0) {

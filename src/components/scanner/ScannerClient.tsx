@@ -40,10 +40,10 @@ import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/compo
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
 // Cache to prevent loading spinner when navigating back from other menus
-let _cachedResults: any[] | null = null;
+let _cachedResults: ScannedStock[] | null = null;
 let _cachedTotal: number = 0;
 let _cachedScannedAt: string = '';
-let _cachedInsights: any = null;
+let _cachedInsights: { strongBuy: number; breakoutReady: number; avoid: number } | null = null;
 const REFRESH_INTERVAL_MS: Record<string, number> = {
   '5m': 300_000,
   '15m': 900_000,
@@ -1215,7 +1215,11 @@ export default function ScannerClient() {
     // INDEX mode has its own fetch effect + API — never fall through to CPR/BTST.
     if (scannerMode === 'INDEX') return;
 
-    if (!silent && !_cachedResults) setIsLoading(true);
+    // Show spinner on every non-silent fetch.
+    // The useState initializer handles the mount case: if cache exists it starts
+    // with isLoading=false, so no flicker. On explicit "Scan Market" we always
+    // want the full loading indicator.
+    if (!silent) setIsLoading(true);
     const requestId = ++activeRequestRef.current;
     const startFetchTime = Date.now();
     try {
