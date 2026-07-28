@@ -39,6 +39,11 @@ import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/compo
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
+// Cache to prevent loading spinner when navigating back from other menus
+let _cachedResults: any[] | null = null;
+let _cachedTotal: number = 0;
+let _cachedScannedAt: string = '';
+let _cachedInsights: any = null;
 const REFRESH_INTERVAL_MS: Record<string, number> = {
   '5m': 300_000,
   '15m': 900_000,
@@ -778,7 +783,7 @@ export default function ScannerClient() {
   // Window enforcement & cache states
   const [executionWindowOpen, setExecutionWindowOpen] = useState<boolean>(true);
   const [cachedResult, setCachedResult] = useState<boolean>(false);
-  const [scannedAt, setScannedAt] = useState<string>('');
+  const [scannedAt, setScannedAt] = useState<string>(() => _cachedScannedAt || '');
   const [isDegraded, setIsDegraded] = useState<boolean>(false);
 
   const isWeekend = useMemo(() => {
@@ -799,6 +804,17 @@ export default function ScannerClient() {
   // Filters & Pagination State
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY_FNO');
 
+  // Sync state to memory cache
+  useEffect(() => {
+    if (results.length > 0) {
+      _cachedResults = results;
+      _cachedTotal = total;
+      _cachedScannedAt = scannedAt;
+      _cachedInsights = insightCounts;
+    }
+  }, [results, total, scannedAt, insightCounts]);
+
+  // Initial mount data load
   useEffect(() => {
     // 1. Default Universe
     const savedUniv = localStorage.getItem('cpr_settings_default_universe') || 'NSE_FNO';
@@ -899,7 +915,7 @@ export default function ScannerClient() {
   const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
 
   // Main Scanned Data
-  const [results, setResults] = useState<ScannedStock[]>([]);
+  const [results, setResults] = useState<ScannedStock[]>(() => _cachedResults || []);
   const [indexResults, setIndexResults] = useState<Array<{
     symbol: string;
     direction: 'LONG' | 'SHORT';
@@ -924,19 +940,19 @@ export default function ScannerClient() {
     score?: number;
   } | null>(null);
   const [topStocks, setTopStocks] = useState<ScannedStock[]>([]);
-  const [total, setTotal] = useState<number>(0);
+  const [total, setTotal] = useState<number>(() => _cachedTotal || 0);
   const [universeCount, setUniverseCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !_cachedResults);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
   // Custom Filters
 
-  const [insightCounts, setInsightCounts] = useState({
+  const [insightCounts, setInsightCounts] = useState<{ strongBuy: number; breakoutReady: number; avoid: number }>(() => _cachedInsights || {
     strongBuy: 0,
     breakoutReady: 0,
-    avoid: 0
+    avoid: 0,
   });
 
   // persistent scan runs log
@@ -1199,7 +1215,7 @@ export default function ScannerClient() {
     // INDEX mode has its own fetch effect + API — never fall through to CPR/BTST.
     if (scannerMode === 'INDEX') return;
 
-    if (!silent) setIsLoading(true);
+    if (!silent && !_cachedResults) setIsLoading(true);
     const requestId = ++activeRequestRef.current;
     const startFetchTime = Date.now();
     try {

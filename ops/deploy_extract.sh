@@ -22,8 +22,8 @@ mkdir -p $APP/.next/standalone/.next/static
 tar -xzf /home/ubuntu/deploy_static.tar.gz -C $APP/.next/standalone/.next/static
 
 echo "=== Placing public assets ==="
-mkdir -p $APP/.next/standalone/public
-tar -xzf /home/ubuntu/deploy_public.tar.gz -C $APP/.next/standalone/public
+mkdir -p $APP/.next/standalone
+tar -xzf /home/ubuntu/deploy_public.tar.gz -C $APP/.next/standalone
 
 echo "=== Extracting Prisma bundle ==="
 tar -xzf /home/ubuntu/deploy_prisma.tar.gz -C $APP/

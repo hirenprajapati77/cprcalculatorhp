@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $SSH_KEY   = "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key"
 $SERVER    = "ubuntu@129.159.230.41"
-$PROD_URL  = "http://129.159.230.41"
+$PROD_URL  = "https://129-159-230-41.nip.io"
 $LOCAL_URL = "http://localhost:3000"
 $ENV_FILE  = ".env"
 
