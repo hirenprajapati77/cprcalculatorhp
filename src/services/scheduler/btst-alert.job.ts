@@ -100,6 +100,7 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     for (const sig of signals) {
       const stockData = await MarketService.getStockData(sig.symbol);
       if (!stockData) {
+        console.warn(`[BtstAlert] ${sig.symbol} market data unavailable; bypassing extension filter`);
         out.push(sig);
         continue;
       }

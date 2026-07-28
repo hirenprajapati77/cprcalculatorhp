@@ -153,14 +153,18 @@ class CacheServiceImpl {
   async clearNamespace(prefix: string): Promise<void> {
     this.evictions++;
     if (this.isRedisConnected) {
-      let cursor = '0';
-      do {
-        const [nextCursor, keys] = await this.redisClient!.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
-        cursor = nextCursor;
-        if (keys.length > 0) {
-          await this.redisClient!.del(...keys);
-        }
-      } while (cursor !== '0');
+      try {
+        let cursor = '0';
+        do {
+          const [nextCursor, keys] = await this.redisClient!.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
+          cursor = nextCursor;
+          if (keys.length > 0) {
+            await this.redisClient!.del(...keys);
+          }
+        } while (cursor !== '0');
+      } catch (err) {
+        console.error(`[Cache] Failed to clear Redis namespace for ${prefix}:`, err);
+      }
     }
     for (const key of memoryCache.keys()) {
       if (key.startsWith(prefix)) {

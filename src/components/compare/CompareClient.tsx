@@ -37,9 +37,16 @@ interface CompareClientProps {
   initialSymbols?: string[];
 }
 
+import { registerCacheClearHandler } from '@/lib/navigation-cache';
+
 // Cache to prevent data loss on navigation
 let _cachedSelectedSymbols: string[] | null = null;
 let _cachedStocksData: StockCompareData[] | null = null;
+
+registerCacheClearHandler(() => {
+  _cachedSelectedSymbols = null;
+  _cachedStocksData = null;
+});
 
 function CompareContent({ initialSymbols = [] }: CompareClientProps) {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>(() => _cachedSelectedSymbols || initialSymbols);

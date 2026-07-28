@@ -11,8 +11,14 @@ interface HeatmapItem {
   signals: Record<string, number>;
 }
 
+import { registerCacheClearHandler } from '@/lib/navigation-cache';
+
 // Cache to prevent loading spinner on navigation
 let _cachedHeatmap: HeatmapItem[] | null = null;
+
+registerCacheClearHandler(() => {
+  _cachedHeatmap = null;
+});
 
 export default function HeatmapPage() {
   const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>(() => _cachedHeatmap || []);

@@ -67,7 +67,7 @@ export default function PwaRegistration() {
           refreshing = true;
           window.location.reload();
         }
-      });
+      }, { once: true });
     }
   };
 

@@ -468,10 +468,18 @@ function formatRegime(regime: string | null | undefined) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+import { registerCacheClearHandler } from '@/lib/navigation-cache';
+
 // Cache to prevent loading spinner on navigation
 let _cachedEntries: JournalEntry[] | null = null;
 let _cachedStats: JournalStats | null = null;
 let _cachedTotal: number = 0;
+
+registerCacheClearHandler(() => {
+  _cachedEntries = null;
+  _cachedStats = null;
+  _cachedTotal = 0;
+});
 
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
   const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS' | 'COMPARE' | 'STOCK_COMPARE'>('LOG');

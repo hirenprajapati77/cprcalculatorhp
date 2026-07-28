@@ -20,7 +20,7 @@ const trimCache = async (cacheName, maxItems) => {
   const keys = await cache.keys();
   if (keys.length > maxItems) {
     await cache.delete(keys[0]);
-    trimCache(cacheName, maxItems); // Recursive trim
+    await trimCache(cacheName, maxItems); // Recursive trim
   }
 };
 

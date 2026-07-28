@@ -37,6 +37,8 @@ import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
 
+import { registerCacheClearHandler } from '@/lib/navigation-cache';
+
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
 // Cache to prevent loading spinner when navigating back from other menus
@@ -44,6 +46,13 @@ let _cachedResults: ScannedStock[] | null = null;
 let _cachedTotal: number = 0;
 let _cachedScannedAt: string = '';
 let _cachedInsights: { strongBuy: number; breakoutReady: number; avoid: number } | null = null;
+
+registerCacheClearHandler(() => {
+  _cachedResults = null;
+  _cachedTotal = 0;
+  _cachedScannedAt = '';
+  _cachedInsights = null;
+});
 const REFRESH_INTERVAL_MS: Record<string, number> = {
   '5m': 300_000,
   '15m': 900_000,

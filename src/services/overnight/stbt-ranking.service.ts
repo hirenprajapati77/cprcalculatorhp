@@ -95,6 +95,7 @@ export class StbtRankingService {
       }
     }
 
+    // Rule 7 (SHADOW — not yet included in score total): Trend Confluence
     let trendConfluence = 0;
     if (inputs.rsi14 !== null && inputs.rsi14 !== undefined && inputs.emaCross) {
       const bearishTrend = inputs.emaCross.cross === 'BEARISH' || !inputs.emaCross.isBullishAlignment;

@@ -13,6 +13,8 @@ function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock')
   });
 }
 
+import { hashToken } from '../../lib/auth-token';
+
 describe('POST /api/auth/unlock', () => {
   beforeEach(async () => {
     await cache.clear();
@@ -21,7 +23,7 @@ describe('POST /api/auth/unlock', () => {
     const res = await unlock(unlockReq({ token: 'test-token-123' }));
     assert.strictEqual(res.status, 200);
     const setCookie = res.headers.get('set-cookie') || '';
-    assert.match(setCookie, /app_access_token=test-token-123/);
+    assert.match(setCookie, new RegExp(`app_access_token=${hashToken('test-token-123')}`));
     assert.match(setCookie, /HttpOnly/i);
     assert.match(setCookie, /SameSite=strict/i);
     assert.ok(!/Secure/i.test(setCookie), 'Secure must be off on http://localhost');

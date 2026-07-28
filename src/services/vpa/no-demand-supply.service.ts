@@ -24,7 +24,7 @@ export function scoreVpaNoDemandSupply(inputs: VpaMarketInputs): {
   let noDemand = 0;
   let noSupply = 0;
 
-  if (lowVol && narrow && isBullishCandle(open, close)) {
+  if (lowVol && narrow && (isBullishCandle(open, close) || close === open)) {
     noDemand = VPA_NO_DEMAND_SUPPLY.NO_DEMAND_PENALTY;
     flags.push('VPA_NO_DEMAND');
   }

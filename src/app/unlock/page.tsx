@@ -5,6 +5,7 @@ import { ShieldAlert, Key } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { clearNavigationCaches } from '@/lib/navigation-cache';
 
 export default function UnlockPage() {
   const [token, setToken] = useState('');
@@ -24,6 +25,7 @@ export default function UnlockPage() {
       });
 
       if (res.ok) {
+        clearNavigationCaches();
         showToast('System unlocked successfully!', 'success');
         // Force browser-level redirect to bypass Next.js Client Router cache
         window.location.href = '/scanner';

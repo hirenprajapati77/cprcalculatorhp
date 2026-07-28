@@ -1,17 +1,7 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { cache } from '@/lib/redis';
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  const aPadded = a.padEnd(maxLen, '\0');
-  const bPadded = b.padEnd(maxLen, '\0');
-  let result = 0;
-  for (let i = 0; i < maxLen; i++) {
-    result |= aPadded.charCodeAt(i) ^ bPadded.charCodeAt(i);
-  }
-  return result === 0 && a.length === b.length;
-}
+import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 
 function cookieSecure(req: NextRequest): boolean {
   return (
@@ -21,13 +11,11 @@ function cookieSecure(req: NextRequest): boolean {
 }
 
 async function checkUnlockRateLimit(request: NextRequest): Promise<boolean> {
-  let ip = '127.0.0.1';
+  let ip = request.headers.get('x-real-ip') || '127.0.0.1';
   if (env.TRUST_PROXY === 'true') {
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
       ip = forwardedFor.split(',')[0].trim();
-    } else {
-      ip = request.headers.get('x-real-ip') || '127.0.0.1';
     }
   }
 
@@ -70,8 +58,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    const cookieValue = hashToken(expectedToken);
     const res = NextResponse.json({ success: true });
-    res.cookies.set('app_access_token', expectedToken, {
+    res.cookies.set('app_access_token', cookieValue, {
       httpOnly: true,
       sameSite: 'strict',
       path: '/',

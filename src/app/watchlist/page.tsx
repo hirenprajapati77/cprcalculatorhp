@@ -21,8 +21,14 @@ interface WatchlistItem {
   signals?: string[];
 }
 
+import { registerCacheClearHandler } from '@/lib/navigation-cache';
+
 // Cache to prevent loading spinner on navigation
 let _cachedWatchlist: WatchlistItem[] | null = null;
+
+registerCacheClearHandler(() => {
+  _cachedWatchlist = null;
+});
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => _cachedWatchlist || []);

@@ -108,8 +108,7 @@ export class BtstRankingService {
       }
     }
 
-    // Rule 7 (SHADOW — not yet included in score): Trend Confluence
-    // EMA_CROSS_BULL or bullish alignment + supportive RSI (>=50, i.e. RSI_STRONG or above)
+    // Rule 7 (SHADOW — not yet included in score total): Trend Confluence
     let trendConfluence = 0;
     if (inputs.rsi14 !== null && inputs.rsi14 !== undefined && inputs.emaCross) {
       const bullishTrend = inputs.emaCross.cross === 'BULLISH' || inputs.emaCross.isBullishAlignment;

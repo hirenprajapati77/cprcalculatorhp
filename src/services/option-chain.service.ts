@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { FyersAuthService } from './fyers-auth.service';
 import { CacheService } from './cache.service';
+import { isMarketOpen } from '@/lib/market-hours';
 
 export interface OptionChainResult {
   optionsChain: Array<{
@@ -157,7 +158,8 @@ export class OptionChainService {
               method: 'direct'
             };
             console.log(`[OptionChain] Direct fetch succeeded for ${cleanSym}.`);
-            await CacheService.set(cacheKey, result, 600);
+            const ttl = isMarketOpen() ? 60 : 600;
+            await CacheService.set(cacheKey, result, ttl);
             return result;
           }
         }
@@ -222,7 +224,8 @@ export class OptionChainService {
             method: 'proxy'
           };
           console.log(`[OptionChain] Proxy fetch succeeded for ${cleanSym}.`);
-          await CacheService.set(cacheKey, result, 600);
+          const ttl = isMarketOpen() ? 60 : 600;
+          await CacheService.set(cacheKey, result, ttl);
           return result;
         }
       }
@@ -280,7 +283,7 @@ export class OptionChainService {
     const response = data as { s?: unknown; status?: unknown; code?: unknown; data?: { optionsChain?: unknown } };
     const statusOk = response.s === 'ok' || response.status === 'ok' || response.code === 200;
     const hasOptions = Array.isArray(response.data?.optionsChain) && response.data.optionsChain.length > 0;
-    return Boolean(hasOptions && (statusOk || hasOptions));
+    return Boolean(statusOk && hasOptions);
   }
 
   private static async resolveRolledOverChain(

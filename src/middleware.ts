@@ -1,22 +1,13 @@
 import { env } from '@/config/env';
 import { isCronSecretExemptApiPath } from '@/lib/api-auth-exemptions';
+import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  const aPadded = a.padEnd(maxLen, '\0');
-  const bPadded = b.padEnd(maxLen, '\0');
-  let result = 0;
-  for (let i = 0; i < maxLen; i++) {
-    result |= aPadded.charCodeAt(i) ^ bPadded.charCodeAt(i);
-  }
-  return result === 0 && a.length === b.length;
-}
 
 export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const expectedToken = env.APP_ACCESS_TOKEN?.trim();
+  const expectedHash = expectedToken ? hashToken(expectedToken) : '';
 
   // 1. Gate /settings/debug
   if (url.pathname.startsWith('/settings/debug')) {
@@ -35,7 +26,8 @@ export function middleware(request: NextRequest) {
 
   if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
     const existing = request.cookies.get('app_access_token')?.value;
-    if (!existing || !timingSafeEqual(existing, expectedToken)) {
+    const isValid = existing && (timingSafeEqual(existing, expectedHash) || timingSafeEqual(existing, expectedToken));
+    if (!isValid) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = '/unlock';
       // Clear query params to prevent bypass/confusion
@@ -72,7 +64,7 @@ export function middleware(request: NextRequest) {
       let isAuth = false;
       if (authHeader && timingSafeEqual(authHeader, `Bearer ${expectedToken}`)) {
         isAuth = true;
-      } else if (authCookie && timingSafeEqual(authCookie, expectedToken)) {
+      } else if (authCookie && (timingSafeEqual(authCookie, expectedHash) || timingSafeEqual(authCookie, expectedToken))) {
         isAuth = true;
       }
 
