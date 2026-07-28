@@ -33,6 +33,13 @@ export interface VpaConfirmationResult {
   /** Hard reject recommendation — only enforced when VPA_LIVE_GATES=true. */
   rejectRecommended: boolean;
   rejectReason: string | null;
+  /**
+   * True when VPA is actually influencing confidence and/or gates
+   * right now (VPA_SHADOW_MODE=false AND at least one VPA_LIVE_* flag
+   * is on). False means shadow-only, regardless of individual flag
+   * values.
+   */
+  live: boolean;
 }
 
 export interface VpaMarketInputs {

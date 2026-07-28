@@ -340,8 +340,80 @@ describe('VpaConfirmationService.applyConfidenceDelta', () => {
         },
         rejectRecommended: false,
         rejectReason: null,
+        live: false,
       }),
       72
     );
+  });
+});
+
+describe('VpaConfirmationResult.live flag', () => {
+  const keys = ['VPA_ENABLED', 'VPA_SHADOW_MODE', 'VPA_LIVE_CONFIDENCE', 'VPA_LIVE_GATES'] as const;
+  const prev: Record<string, string | undefined> = {};
+
+  const sampleInputs = {
+    direction: 'LONG' as const,
+    open: 100,
+    high: 110,
+    low: 99,
+    close: 109,
+    volume: 250_000,
+    avgVolume: 100_000,
+    todayBc: 98,
+    todayTc: 105,
+  };
+
+  beforeEach(() => {
+    for (const k of keys) prev[k] = process.env[k];
+    process.env.VPA_ENABLED = 'true';
+  });
+
+  afterEach(() => {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  });
+
+  it('returns live: false under default shadow mode even if live flags are on', () => {
+    process.env.VPA_SHADOW_MODE = 'true';
+    process.env.VPA_LIVE_CONFIDENCE = 'true';
+    process.env.VPA_LIVE_GATES = 'true';
+    const result = VpaConfirmationService.analyze(sampleInputs);
+    assert.equal(result.live, false);
+  });
+
+  it('returns live: true when shadow is off AND confidence live is on', () => {
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'true';
+    process.env.VPA_LIVE_GATES = 'false';
+    const result = VpaConfirmationService.analyze(sampleInputs);
+    assert.equal(result.live, true);
+  });
+
+  it('returns live: true when shadow is off AND gates live is on', () => {
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'false';
+    process.env.VPA_LIVE_GATES = 'true';
+    const result = VpaConfirmationService.analyze(sampleInputs);
+    assert.equal(result.live, true);
+  });
+
+  it('returns live: false when shadow is off but both live flags remain false', () => {
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'false';
+    process.env.VPA_LIVE_GATES = 'false';
+    const result = VpaConfirmationService.analyze(sampleInputs);
+    assert.equal(result.live, false);
+  });
+
+  it('returns live: false when VPA is disabled', () => {
+    process.env.VPA_ENABLED = 'false';
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'true';
+    process.env.VPA_LIVE_GATES = 'true';
+    const result = VpaConfirmationService.analyze(sampleInputs);
+    assert.equal(result.enabled, false);
+    assert.equal(result.live, false);
   });
 });

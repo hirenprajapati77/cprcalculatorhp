@@ -1,5 +1,6 @@
 import {
   isVpaEnabled,
+  isVpaLiveConfidenceEnabled,
   isVpaLiveGatesEnabled,
   VPA_LIMITS,
 } from '@/config/vpa.config';
@@ -74,6 +75,7 @@ export class VpaConfirmationService {
         : null;
 
     const hardRejectActive = isVpaLiveGatesEnabled() && rejectRecommended;
+    const live = isVpaLiveConfidenceEnabled() || isVpaLiveGatesEnabled();
 
     return {
       enabled: true,
@@ -92,6 +94,7 @@ export class VpaConfirmationService {
       },
       rejectRecommended,
       rejectReason,
+      live,
     };
   }
 
@@ -139,6 +142,7 @@ export class VpaConfirmationService {
       },
       rejectRecommended: false,
       rejectReason: null,
+      live: false,
     };
   }
 }

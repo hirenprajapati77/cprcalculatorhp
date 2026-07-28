@@ -16,6 +16,7 @@ export type VpaBreakdownView = Pick<
   | 'metrics'
   | 'rejectRecommended'
   | 'rejectReason'
+  | 'live'
 >;
 
 function fmtAdj(n: number): string {
@@ -43,23 +44,40 @@ const COMPONENT_LABELS: { key: keyof VpaBreakdownView['breakdown']; label: strin
 
 export function VpaStatusChip({ vpa }: { vpa: VpaBreakdownView | null | undefined }) {
   if (!vpa?.enabled) return null;
+
+  const liveBadge = vpa.live ? (
+    <span className="ml-0.5 text-[8px] font-extrabold tracking-wider text-rose-300">LIVE</span>
+  ) : null;
+
   if (vpa.rejectRecommended) {
     return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-red/15 text-accent-red border border-accent-red/30">
-        VPA ✗
+      <span
+        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-red/15 text-accent-red border ${
+          vpa.live ? 'border-rose-400/60 ring-1 ring-rose-400/30' : 'border-accent-red/30'
+        }`}
+      >
+        VPA ✗{liveBadge}
       </span>
     );
   }
   if (vpa.confirmed && vpa.adjustment >= 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-green/15 text-accent-green border border-accent-green/30">
-        VPA ✓
+      <span
+        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-green/15 text-accent-green border ${
+          vpa.live ? 'border-rose-400/60 ring-1 ring-rose-400/30' : 'border-accent-green/30'
+        }`}
+      >
+        VPA ✓{liveBadge}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-amber/10 text-accent-amber border border-accent-amber/25">
-      VPA ~
+    <span
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-accent-amber/10 text-accent-amber border ${
+        vpa.live ? 'border-rose-400/60 ring-1 ring-rose-400/30' : 'border-accent-amber/25'
+      }`}
+    >
+      VPA ~{liveBadge}
     </span>
   );
 }
@@ -96,12 +114,24 @@ export function VpaBreakdownPanel({
   const { metrics, breakdown, flags, adjustment, maxAdjustment } = vpa;
 
   return (
-    <div className={`border border-cyan-500/25 bg-cyan-950/10 rounded p-3 space-y-2.5 ${className}`}>
+    <div
+      className={`rounded p-3 space-y-2.5 ${
+        vpa.live
+          ? 'border border-rose-400/40 bg-rose-950/15'
+          : 'border border-cyan-500/25 bg-cyan-950/10'
+      } ${className}`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-bold text-cyan-300 flex items-center gap-1 uppercase text-[10px] tracking-wide">
+        <span
+          className={`font-bold flex items-center gap-1 uppercase text-[10px] tracking-wide ${
+            vpa.live ? 'text-rose-300' : 'text-cyan-300'
+          }`}
+        >
           <Activity size={12} />
           VPA Confirmation
-          <span className="text-text-tertiary font-normal normal-case">(shadow)</span>
+          <span className="text-text-tertiary font-normal normal-case">
+            {vpa.live ? '(live)' : '(shadow)'}
+          </span>
         </span>
         <div className="text-right">
           <span className={`text-sm font-bold font-mono ${adjColor(adjustment)}`}>
@@ -112,7 +142,9 @@ export function VpaBreakdownPanel({
       </div>
 
       <p className="text-[9px] text-text-tertiary leading-relaxed">
-        Volume confirms price action only — does not change the Advanced score unless live VPA flags are enabled on the server.
+        {vpa.live
+          ? 'Volume confirmation is live — this adjustment is currently factored into confidence and/or entry gates.'
+          : 'Volume confirms price action only — does not change the Advanced score in shadow mode.'}
       </p>
 
       <div className="flex items-center gap-2 flex-wrap">
