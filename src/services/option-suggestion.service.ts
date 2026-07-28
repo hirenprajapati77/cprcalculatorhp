@@ -387,10 +387,25 @@ export class OptionSuggestionService {
       }
     }
 
-    // 4. Filter valid options for this type (exclude equity row where strikePrice <= 0) and MUST match target expiry
-    const validOptions = chainRes.optionsChain
-      .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
+    // 4. Filter valid options for this type
+    // Exclude equity row, require target expiry, LTP > 0.50 (exclude penny/dead contracts),
+    // and strike price within 15% of stock spot price (exclude illiquid deep ITM/OTM strikes).
+    let validOptions = chainRes.optionsChain
+      .filter(o =>
+        o.optionType === type &&
+        o.strikePrice > 0 &&
+        o.ltp > 0.50 &&
+        Math.abs(o.strikePrice - ltp) / ltp <= 0.15 &&
+        (!targetExpiryStr || o.symbol.includes(targetExpiryStr))
+      )
       .sort((a, b) => a.strikePrice - b.strikePrice);
+
+    // Fallback if 15% distance filter returned nothing
+    if (validOptions.length === 0) {
+      validOptions = chainRes.optionsChain
+        .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
+        .sort((a, b) => a.strikePrice - b.strikePrice);
+    }
 
     if (validOptions.length === 0) {
       return { error: 'EMPTY_CHAIN' };
