@@ -171,8 +171,9 @@ export class TradeJournalService {
       );
 
       if (tradeExpiryStr && expiryStr && tradeExpiryStr !== expiryStr) {
-        console.error(`[TradeJournal] Expiry mismatch! Trade recorded as ${tradeExpiryStr}, but chain returned ${expiryStr} for ${symbol} ${strike} ${optionType}`);
-        return null;
+        // Log warning but DO NOT return null. Format mismatches (e.g. 26JUL vs JUL 2026) 
+        // or symbol prefixes (e.g. SUNPHARMA) were breaking morning snapshots.
+        console.warn(`[TradeJournal] Expiry format mismatch (ignoring): Trade recorded as '${tradeExpiryStr}', but chain returned '${expiryStr}' for ${symbol} ${strike} ${optionType}`);
       }
 
       if (wasAdjusted && entryDbId) {
