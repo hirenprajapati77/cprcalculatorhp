@@ -21,16 +21,26 @@ interface WatchlistItem {
   signals?: string[];
 }
 
+// Cache to prevent loading spinner on navigation
+let _cachedWatchlist: WatchlistItem[] | null = null;
+
 export default function WatchlistPage() {
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => _cachedWatchlist || []);
+  const [loading, setLoading] = useState<boolean>(() => !_cachedWatchlist);
   const [searchSymbol, setSearchSymbol] = useState<string>('');
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const { showToast } = useToast();
 
   // Fetch watchlist items and enrich with live scan results
+  // Sync state to memory cache
+  useEffect(() => {
+    if (watchlist.length > 0) {
+      _cachedWatchlist = watchlist;
+    }
+  }, [watchlist]);
+
   const fetchWatchlist = useCallback(async () => {
-    setLoading(true);
+    if (!_cachedWatchlist) setLoading(true);
     try {
       // 1. Fetch symbols from database
       const resList = await fetch('/api/watchlist');

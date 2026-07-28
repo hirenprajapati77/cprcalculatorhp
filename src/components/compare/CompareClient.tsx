@@ -33,19 +33,36 @@ interface StockCompareData {
   };
 }
 
-function CompareContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { showToast } = useToast();
+interface CompareClientProps {
+  initialSymbols?: string[];
+}
 
-  // Selected Stock List
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
-  const [stocksData, setStocksData] = useState<StockCompareData[]>([]);
+// Cache to prevent data loss on navigation
+let _cachedSelectedSymbols: string[] | null = null;
+let _cachedStocksData: StockCompareData[] | null = null;
+
+function CompareContent({ initialSymbols = [] }: CompareClientProps) {
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>(() => _cachedSelectedSymbols || initialSymbols);
+  const [stocksData, setStocksData] = useState<StockCompareData[]>(() => _cachedStocksData || []);
   const [searchSymbol, setSearchSymbol] = useState<string>('');
   const [isFetchingStock, setIsFetchingStock] = useState<boolean>(false);
 
   // Manual Calculator History (Fallback Mode)
   const [manualHistory, setManualHistory] = useState<CalculationRecord[]>([]);
+
+  // Sync state to memory cache
+  useEffect(() => {
+    if (selectedSymbols.length > 0 || stocksData.length > 0) {
+      _cachedSelectedSymbols = selectedSymbols;
+      _cachedStocksData = stocksData;
+    }
+  }, [selectedSymbols, stocksData]);
+
+
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { showToast } = useToast();
 
   // Parse symbols from query params on mount
   useEffect(() => {

@@ -11,15 +11,25 @@ interface HeatmapItem {
   signals: Record<string, number>;
 }
 
+// Cache to prevent loading spinner on navigation
+let _cachedHeatmap: HeatmapItem[] | null = null;
+
 export default function HeatmapPage() {
-  const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>(() => _cachedHeatmap || []);
+  const [loading, setLoading] = useState<boolean>(() => !_cachedHeatmap);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const { showToast } = useToast();
 
+  // Sync state to memory cache
+  useEffect(() => {
+    if (heatmapData.length > 0) {
+      _cachedHeatmap = heatmapData;
+    }
+  }, [heatmapData]);
+
   const fetchHeatmap = useCallback(async (isRefreshCall = false) => {
     if (isRefreshCall) setIsRefreshing(true);
-    else setLoading(true);
+    else if (!_cachedHeatmap) setLoading(true);
 
     try {
       const res = await fetch('/api/scanner/heatmap');

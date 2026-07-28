@@ -468,16 +468,30 @@ function formatRegime(regime: string | null | undefined) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// Cache to prevent loading spinner on navigation
+let _cachedEntries: any[] | null = null;
+let _cachedStats: any | null = null;
+let _cachedTotal: number = 0;
+
 export default function JournalClient({ initialReportingData }: { initialReportingData?: ReportingResponse }) {
   const [activeTab, setActiveTab]     = useState<'LOG' | 'ANALYTICS' | 'SIGNALS' | 'COMPARE' | 'STOCK_COMPARE'>('LOG');
   const [reportingData]               = useState<ReportingResponse | null>(initialReportingData || null);
-  const [entries, setEntries]         = useState<JournalEntry[]>([]);
-  const [stats, setStats]             = useState<JournalStats | null>(null);
-  const [total, setTotal]             = useState(0);
+  const [entries, setEntries]         = useState<JournalEntry[]>(() => _cachedEntries || []);
+  const [stats, setStats]             = useState<JournalStats | null>(() => _cachedStats || null);
+  const [total, setTotal]             = useState(() => _cachedTotal || 0);
   const [page, setPage]               = useState(1);
   const [totalPages, setTotalPages]   = useState(1);
-  const [loading, setLoading]         = useState(false);
+  const [loading, setLoading]         = useState(() => !_cachedEntries);
   const [error, setError]             = useState<string | null>(null);
+
+  // Sync state to memory cache
+  useEffect(() => {
+    if (entries.length > 0) {
+      _cachedEntries = entries;
+      _cachedStats = stats;
+      _cachedTotal = total;
+    }
+  }, [entries, stats, total]);
 
   // Filters
   const [fromDate, setFromDate]       = useState('');
@@ -539,7 +553,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async (p: number) => {
-    setLoading(true);
+    if (!_cachedEntries) setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({

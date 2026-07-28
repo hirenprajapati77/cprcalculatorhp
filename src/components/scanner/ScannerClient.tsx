@@ -804,16 +804,6 @@ export default function ScannerClient() {
   // Filters & Pagination State
   const [universe, setUniverse] = useState<'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL'>('NIFTY_FNO');
 
-  // Sync state to memory cache
-  useEffect(() => {
-    if (results.length > 0) {
-      _cachedResults = results;
-      _cachedTotal = total;
-      _cachedScannedAt = scannedAt;
-      _cachedInsights = insightCounts;
-    }
-  }, [results, total, scannedAt, insightCounts]);
-
   // Initial mount data load
   useEffect(() => {
     // 1. Default Universe
@@ -1075,6 +1065,16 @@ export default function ScannerClient() {
     }, 300);
     return () => clearTimeout(handler);
   }, [searchQuery]);
+
+  // Sync state to memory cache
+  useEffect(() => {
+    if (results.length > 0) {
+      _cachedResults = results;
+      _cachedTotal = total;
+      _cachedScannedAt = scannedAt;
+      _cachedInsights = insightCounts;
+    }
+  }, [results, total, scannedAt, insightCounts]);
 
   // Load Watchlist, Server Settings, and Column configurations on mount
   useEffect(() => {
