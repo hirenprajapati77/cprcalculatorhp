@@ -39,6 +39,9 @@ export const metadata: Metadata = {
   authors: [{ name: 'CPR PRO Team' }],
   robots: 'index, follow',
   manifest: '/manifest.webmanifest',
+  icons: {
+    apple: '/icons/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
