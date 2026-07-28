@@ -21,6 +21,7 @@ export class TradeJournalService {
     optionContract: string; // e.g. '1920 CE'
     optionStrike: number;
     optionType: 'CE' | 'PE';
+    entryCmp: number; // Directly passed from OptionSuggestionService
     score: number;
     confidence: number;
     signalSummary: string;
@@ -39,11 +40,7 @@ export class TradeJournalService {
           })
         : null;
 
-      const entryCmp = await TradeJournalService.fetchOptionCmp(
-        params.symbol,
-        params.optionStrike,
-        params.optionType
-      );
+      const entryCmp = params.entryCmp;
 
       if (!entryCmp || entryCmp <= 0) {
         console.warn(
@@ -129,7 +126,7 @@ export class TradeJournalService {
     try {
       const { OptionChainService } = await import('@/services/option-chain.service');
       const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
-      const chainRes = await OptionChainService.getOptionChain(cleanSym, false);
+      const chainRes = await OptionChainService.getOptionChain(cleanSym, false, tradeExpiryStr);
       if ('error' in chainRes) {
         throw new Error(`Failed to fetch option chain: ${chainRes.error}`);
       }

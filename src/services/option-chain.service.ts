@@ -70,9 +70,11 @@ export class OptionChainService {
   }
 
 
-  public static async getOptionChain(symbol: string, allowRollover: boolean = true): Promise<OptionChainResult | { error: string }> {
+  public static async getOptionChain(symbol: string, allowRollover: boolean = true, targetExpiryStr?: string): Promise<OptionChainResult | { error: string }> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
-    const cacheKey = allowRollover ? `option_chain_${cleanSym}_rollover` : `option_chain_${cleanSym}_current`;
+    const cacheKey = targetExpiryStr 
+      ? `option_chain_${cleanSym}_${targetExpiryStr}`
+      : (allowRollover ? `option_chain_${cleanSym}_rollover` : `option_chain_${cleanSym}_current`);
 
     try {
       const cached = await CacheService.get<OptionChainResult>(cacheKey);
@@ -132,6 +134,7 @@ export class OptionChainService {
           if (isOk) {
             data = await OptionChainService.resolveRolledOverChain(data, {
               allowRollover,
+              targetExpiryStr,
               cleanSym,
               requestUrl: directUrl,
               fetchFn: (url) => OptionChainService.fetchWithRetry(url, {
@@ -197,6 +200,7 @@ export class OptionChainService {
           const proxyBaseUrl = `${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`;
           data = await OptionChainService.resolveRolledOverChain(data, {
             allowRollover,
+            targetExpiryStr,
             cleanSym,
             requestUrl: proxyBaseUrl,
             fetchFn: (url) => fetch(url, {
@@ -290,13 +294,44 @@ export class OptionChainService {
     data: ValidOptionChainResponse,
     params: {
       allowRollover: boolean;
+      targetExpiryStr?: string | undefined;
       cleanSym: string;
       requestUrl: string;
       fetchFn: (url: string) => Promise<Response>;
     }
   ): Promise<ValidOptionChainResponse> {
     const expiryData = data.data.expiryData;
-    if (!params.allowRollover || !expiryData || expiryData.length <= 1) {
+    if (!expiryData || expiryData.length === 0) {
+      return data;
+    }
+
+    if (params.targetExpiryStr) {
+      const targetMatch = expiryData.find(e => {
+        const val = OptionChainService.getExpiryValue(e);
+        if (!val) return false;
+        // The contract string has formats like "27AUG", "AUG 2026".
+        // The fyers expiry string is like "27-Aug-2026".
+        // A simple case-insensitive includes check usually works for the month string.
+        const upperVal = val.toUpperCase();
+        return upperVal.includes(params.targetExpiryStr!.toUpperCase().replace(/\s*\d{4}$/, ''));
+      });
+
+      if (targetMatch) {
+        const targetTimestamp = typeof targetMatch === 'string' ? null : (targetMatch as { expiry?: string }).expiry;
+        if (targetTimestamp) {
+          console.log(`[OptionChain] Fetching explicit target expiry: ${params.targetExpiryStr} -> ${targetTimestamp} for ${params.cleanSym}`);
+          const resTarget = await params.fetchFn(`${params.requestUrl}&timestamp=${targetTimestamp}`);
+          if (resTarget.ok) {
+            const dataTarget = await resTarget.json();
+            if (OptionChainService.isValidOptionChainResponse(dataTarget)) {
+              return dataTarget;
+            }
+          }
+        }
+      }
+    }
+
+    if (!params.allowRollover || expiryData.length <= 1) {
       return data;
     }
 

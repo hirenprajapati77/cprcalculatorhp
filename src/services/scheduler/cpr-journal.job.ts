@@ -67,6 +67,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       optionContract: optionName,
       optionStrike: suggestion.strike,
       optionType: 'CE',
+      entryCmp: suggestion.ltp,
       score: signal.score,
       confidence: signal.confidence,
       signalSummary: signal.signalSummary,
