@@ -72,7 +72,11 @@ const envSchema = z.object({
   SAVE_IGNORE_SIGNALS: z.string().optional(),
   CPR_WEIGHT: z.coerce.number().optional(),
 
-  /** VPA confirmation layer — shadow by default; does not change live scores unless flags below. */
+  /**
+   * VPA confirmation layer.
+   * Shadow by default: VPA_SHADOW_MODE=true is a master kill-switch — live influence
+   * requires VPA_SHADOW_MODE=false AND the specific VPA_LIVE_* flag.
+   */
   VPA_ENABLED: z.string().default('true'),
   VPA_SHADOW_MODE: z.string().default('true'),
   VPA_LIVE_CONFIDENCE: z.string().default('false'),

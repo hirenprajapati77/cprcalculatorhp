@@ -1,6 +1,10 @@
 /**
  * VPA (Volume Price Analysis) configuration — confirmation layer only.
  * Defaults: enabled + shadow mode so existing scores/classifications are unchanged.
+ *
+ * Live influence requires an AND of flags:
+ *   VPA_SHADOW_MODE=false  AND  (VPA_LIVE_CONFIDENCE=true | VPA_LIVE_GATES=true)
+ * Leaving VPA_SHADOW_MODE=true (default) is a master kill-switch: live flags are ignored.
  */
 import { env } from '@/config/env';
 import { ADVANCED_SCORE, VOLUME_THRESHOLDS } from '@/config/trading-constants';
@@ -22,18 +26,31 @@ export function isVpaEnabled(): boolean {
   return envFlag('VPA_ENABLED', true);
 }
 
-/** When true (default), VPA never mutates live score, classification, or journal gates. */
+/**
+ * Master kill-switch for live VPA influence (default true = shadow-only).
+ * When true, VPA still computes and attaches breakdowns, but
+ * `isVpaLiveConfidenceEnabled()` / `isVpaLiveGatesEnabled()` always return false
+ * regardless of VPA_LIVE_* env values. Set to false only after backtest proof.
+ */
 export function isVpaShadowMode(): boolean {
   return envFlag('VPA_SHADOW_MODE', true);
 }
 
-/** When true, scanner confidence may incorporate capped VPA adjustment. */
+/**
+ * Scanner confidence may incorporate capped VPA adjustment.
+ * Effective only when VPA_SHADOW_MODE=false AND VPA_LIVE_CONFIDENCE=true.
+ */
 export function isVpaLiveConfidenceEnabled(): boolean {
+  if (isVpaShadowMode()) return false;
   return envFlag('VPA_LIVE_CONFIDENCE', false);
 }
 
-/** When true, EntryManager may hard-reject on severe VPA flags (climax / no demand). */
+/**
+ * Overnight/EntryManager may hard-reject on severe VPA flags (climax / no demand).
+ * Effective only when VPA_SHADOW_MODE=false AND VPA_LIVE_GATES=true.
+ */
 export function isVpaLiveGatesEnabled(): boolean {
+  if (isVpaShadowMode()) return false;
   return envFlag('VPA_LIVE_GATES', false);
 }
 

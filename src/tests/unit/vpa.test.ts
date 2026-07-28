@@ -256,6 +256,61 @@ describe('BtstRankingService VPA shadow integration', () => {
   });
 });
 
+describe('VPA shadow master kill-switch', () => {
+  const keys = ['VPA_SHADOW_MODE', 'VPA_LIVE_CONFIDENCE', 'VPA_LIVE_GATES'] as const;
+  const prev: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of keys) prev[k] = process.env[k];
+  });
+
+  afterEach(() => {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  });
+
+  it('blocks live confidence/gates while shadow mode is on (default fail-safe)', async () => {
+    process.env.VPA_SHADOW_MODE = 'true';
+    process.env.VPA_LIVE_CONFIDENCE = 'true';
+    process.env.VPA_LIVE_GATES = 'true';
+    const {
+      isVpaShadowMode,
+      isVpaLiveConfidenceEnabled,
+      isVpaLiveGatesEnabled,
+    } = await import('../../config/vpa.config');
+    assert.equal(isVpaShadowMode(), true);
+    assert.equal(isVpaLiveConfidenceEnabled(), false);
+    assert.equal(isVpaLiveGatesEnabled(), false);
+  });
+
+  it('allows live confidence/gates only when shadow is off AND live flags are on', async () => {
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'true';
+    process.env.VPA_LIVE_GATES = 'true';
+    const {
+      isVpaShadowMode,
+      isVpaLiveConfidenceEnabled,
+      isVpaLiveGatesEnabled,
+    } = await import('../../config/vpa.config');
+    assert.equal(isVpaShadowMode(), false);
+    assert.equal(isVpaLiveConfidenceEnabled(), true);
+    assert.equal(isVpaLiveGatesEnabled(), true);
+  });
+
+  it('keeps live paths off when shadow is off but live flags remain false', async () => {
+    process.env.VPA_SHADOW_MODE = 'false';
+    process.env.VPA_LIVE_CONFIDENCE = 'false';
+    process.env.VPA_LIVE_GATES = 'false';
+    const { isVpaLiveConfidenceEnabled, isVpaLiveGatesEnabled } = await import(
+      '../../config/vpa.config'
+    );
+    assert.equal(isVpaLiveConfidenceEnabled(), false);
+    assert.equal(isVpaLiveGatesEnabled(), false);
+  });
+});
+
 describe('VpaConfirmationService.applyConfidenceDelta', () => {
   it('leaves confidence unchanged when adjustment is zero', () => {
     assert.equal(
