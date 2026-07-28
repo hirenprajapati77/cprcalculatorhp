@@ -83,8 +83,8 @@ export class OvernightRiskService {
           const prevNifty = alignedNiftyCloses[i - 1];
           const currNifty = alignedNiftyCloses[i];
 
-          stockReturns.push(((currStock - prevStock) / prevStock) * 100);
-          niftyReturns.push(((currNifty - prevNifty) / prevNifty) * 100);
+          stockReturns.push(safeRatio(currStock - prevStock, prevStock, 0) * 100);
+          niftyReturns.push(safeRatio(currNifty - prevNifty, prevNifty, 0) * 100);
         }
 
         if (stockReturns.length >= CORRELATION_WINDOW) {

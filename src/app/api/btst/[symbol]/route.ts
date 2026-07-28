@@ -30,9 +30,8 @@ export async function GET(
       'indexCorrelationEstimate'
     > | null = null;
     if (stock) {
-      // indexCorrelationEstimate is a placeholder (always null until real NIFTY-covariance
-      // data is wired in) and is explicitly not meant to reach clients — see the comment on
-      // OvernightRiskMetrics in overnight-risk.service.ts.
+      // indexCorrelationEstimate is computed server-side but stripped from the final
+      // client payload (shadow mode) until explicitly approved for production display.
       const { indexCorrelationEstimate: _unused, ...publicRisk } =
         await OvernightRiskService.calculateOvernightRisk(stock);
       risk = publicRisk;
