@@ -11,7 +11,7 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
     // We generate 70 days of mock trading closes.
     // Stock returns are 1.5x NIFTY returns.
     const niftyHistory: OHLC[] = [];
-    const stockHistory: any[] = [];
+    const stockHistory: OHLC[] = [];
     
     let niftyClose = 100;
     let stockClose = 100;
@@ -79,7 +79,7 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
 
   test('zero-variance Nifty window returns null for beta_proxy without throwing', async () => {
     const niftyHistory: OHLC[] = [];
-    const stockHistory: any[] = [];
+    const stockHistory: OHLC[] = [];
     
     const baseDate = new Date('2026-07-01');
     for (let i = 0; i < 70; i++) {
@@ -128,7 +128,7 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
 
   test('handles misaligned date gaps correctly by dropping them', async () => {
     const niftyHistory: OHLC[] = [];
-    const stockHistory: any[] = [];
+    const stockHistory: OHLC[] = [];
     
     let niftyClose = 100;
     let stockClose = 100;
@@ -199,7 +199,7 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
 
   test('skips zero-price bases instead of poisoning beta with fake 0% returns', async () => {
     const niftyHistory: OHLC[] = [];
-    const stockHistory: any[] = [];
+    const stockHistory: OHLC[] = [];
 
     let niftyClose = 100;
     let stockClose = 100;
