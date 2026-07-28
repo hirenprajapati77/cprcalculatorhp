@@ -400,10 +400,17 @@ export class OptionSuggestionService {
       )
       .sort((a, b) => a.strikePrice - b.strikePrice);
 
-    // Fallback if 15% distance filter returned nothing
+    // Fallback if 15% distance filter returned nothing (e.g. illiquid stock option)
+    // Relax distance to 20% and ltp > 0.10, but DO NOT remove it completely!
     if (validOptions.length === 0) {
       validOptions = chainRes.optionsChain
-        .filter(o => o.optionType === type && o.strikePrice > 0 && (!targetExpiryStr || o.symbol.includes(targetExpiryStr)))
+        .filter(o => 
+          o.optionType === type && 
+          o.strikePrice > 0 && 
+          o.ltp > 0.10 &&
+          Math.abs(o.strikePrice - ltp) / ltp <= 0.20 &&
+          (!targetExpiryStr || o.symbol.includes(targetExpiryStr))
+        )
         .sort((a, b) => a.strikePrice - b.strikePrice);
     }
 
