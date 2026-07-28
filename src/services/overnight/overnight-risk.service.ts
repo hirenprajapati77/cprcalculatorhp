@@ -137,7 +137,7 @@ export class OvernightRiskService {
 
     // Determine aggregate Risk Level
     // Combined metric based on gapRisk, volatility, sectorRisk, and squeeze risk
-    // DO NOT feed indexCorrelationEstimate into riskFactor or riskLevel yet (Phase 2 constraint)
+    // indexCorrelationEstimate scoring is deferred (Phase 2B optional)
     const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2) + (shortSqueezeProb * 0.01);
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
     if (riskFactor < 1.0) {

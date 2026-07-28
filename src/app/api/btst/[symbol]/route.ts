@@ -25,16 +25,12 @@ export async function GET(
     const activeSignal = history.length > 0 ? history[0] : null;
 
     const stock = await MarketService.getStockData(symbol);
-    let risk: Omit<
-      Awaited<ReturnType<typeof OvernightRiskService.calculateOvernightRisk>>,
-      'indexCorrelationEstimate'
+    let risk: Awaited<
+      ReturnType<typeof OvernightRiskService.calculateOvernightRisk>
     > | null = null;
     if (stock) {
-      // indexCorrelationEstimate is computed server-side but stripped from the final
-      // client payload (shadow mode) until explicitly approved for production display.
-      const { indexCorrelationEstimate: _unused, ...publicRisk } =
-        await OvernightRiskService.calculateOvernightRisk(stock);
-      risk = publicRisk;
+      // indexCorrelationEstimate is a 60-day NIFTY beta_proxy, not Pearson correlation.
+      risk = await OvernightRiskService.calculateOvernightRisk(stock);
     }
 
     return NextResponse.json({
