@@ -4,10 +4,10 @@ import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   const expectedToken = env.APP_ACCESS_TOKEN?.trim();
-  const expectedHash = expectedToken ? hashToken(expectedToken) : '';
+  const expectedHash = expectedToken ? await hashToken(expectedToken) : '';
 
   // 1. Gate /settings/debug
   if (url.pathname.startsWith('/settings/debug')) {

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const cookieValue = hashToken(expectedToken);
+    const cookieValue = await hashToken(expectedToken);
     const res = NextResponse.json({ success: true });
     res.cookies.set('app_access_token', cookieValue, {
       httpOnly: true,

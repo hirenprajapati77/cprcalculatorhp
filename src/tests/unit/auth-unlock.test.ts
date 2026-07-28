@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+if (!globalThis.crypto) (globalThis as any).crypto = crypto;
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
@@ -23,7 +25,8 @@ describe('POST /api/auth/unlock', () => {
     const res = await unlock(unlockReq({ token: 'test-token-123' }));
     assert.strictEqual(res.status, 200);
     const setCookie = res.headers.get('set-cookie') || '';
-    assert.match(setCookie, new RegExp(`app_access_token=${hashToken('test-token-123')}`));
+    const hash = await hashToken('test-token-123');
+    assert.match(setCookie, new RegExp(`app_access_token=${hash}`));
     assert.match(setCookie, /HttpOnly/i);
     assert.match(setCookie, /SameSite=strict/i);
     assert.ok(!/Secure/i.test(setCookie), 'Secure must be off on http://localhost');
