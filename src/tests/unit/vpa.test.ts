@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { VpaConfirmationService } from '../../services/vpa/vpa-confirmation.service';
+import { scoreVpaBreakoutConfirm } from '../../services/vpa/breakout-confirm.service';
 import { computeClv, computeRvol } from '../../services/vpa/vpa.math';
 import { BtstRankingService } from '../../services/overnight/btst-ranking.service';
 import { VPA_LIMITS } from '../../config/vpa.config';
@@ -40,6 +41,83 @@ describe('VPA math helpers', () => {
   });
 });
 
+describe('scoreVpaBreakoutConfirm', () => {
+  it('returns null when there is no breakout attempt (inside CPR)', () => {
+    const result = scoreVpaBreakoutConfirm({
+      direction: 'LONG',
+      open: 100,
+      high: 101,
+      low: 99,
+      close: 100.3,
+      volume: 80_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 110,
+    });
+    assert.deepEqual(result, { points: 0, flag: null });
+  });
+
+  it('confirms a volume+CLV-backed breakout above CPR', () => {
+    const result = scoreVpaBreakoutConfirm({
+      direction: 'LONG',
+      open: 100,
+      high: 112,
+      low: 99,
+      close: 111,
+      volume: 200_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 105,
+    });
+    assert.deepEqual(result, { points: 3, flag: 'VPA_BREAKOUT_CONFIRMED' });
+  });
+
+  it('penalizes a weak breakout attempt above CPR', () => {
+    const result = scoreVpaBreakoutConfirm({
+      direction: 'LONG',
+      open: 100,
+      high: 108,
+      low: 99,
+      close: 106,
+      volume: 80_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 105,
+    });
+    assert.deepEqual(result, { points: -2, flag: 'VPA_WEAK_BREAKOUT' });
+  });
+
+  it('confirms a volume+CLV-backed breakdown below CPR', () => {
+    const result = scoreVpaBreakoutConfirm({
+      direction: 'SHORT',
+      open: 100,
+      high: 101,
+      low: 88,
+      close: 89,
+      volume: 200_000,
+      avgVolume: 100_000,
+      todayBc: 95,
+      todayTc: 102,
+    });
+    assert.deepEqual(result, { points: 3, flag: 'VPA_BREAKDOWN_CONFIRMED' });
+  });
+
+  it('returns null when SHORT has no breakdown attempt', () => {
+    const result = scoreVpaBreakoutConfirm({
+      direction: 'SHORT',
+      open: 100,
+      high: 101,
+      low: 99,
+      close: 100.2,
+      volume: 80_000,
+      avgVolume: 100_000,
+      todayBc: 95,
+      todayTc: 102,
+    });
+    assert.deepEqual(result, { points: 0, flag: null });
+  });
+});
+
 describe('VpaConfirmationService.analyze', () => {
   const prevVpaEnabled = process.env.VPA_ENABLED;
 
@@ -70,7 +148,7 @@ describe('VpaConfirmationService.analyze', () => {
     assert.ok(Math.abs(result.adjustment) <= VPA_LIMITS.MAX_ADJUSTMENT);
   });
 
-  it('penalizes weak RVOL on LONG', () => {
+  it('penalizes weak RVOL on LONG without weak-breakout mislabel', () => {
     const result = VpaConfirmationService.analyze({
       direction: 'LONG',
       open: 100,
@@ -84,6 +162,9 @@ describe('VpaConfirmationService.analyze', () => {
     });
     assert.ok(result.flags.includes('VPA_RVOL_WEAK'));
     assert.ok(result.breakdown.rvol < 0);
+    // Quiet day inside CPR must NOT be mislabeled as a weak breakout.
+    assert.ok(!result.flags.includes('VPA_WEAK_BREAKOUT'));
+    assert.equal(result.breakdown.breakoutConfirm, 0);
   });
 
   it('detects buying climax and recommends reject', () => {

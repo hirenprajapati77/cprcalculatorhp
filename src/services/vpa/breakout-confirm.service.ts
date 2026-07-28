@@ -13,11 +13,13 @@ export function scoreVpaBreakoutConfirm(
   if (rvol === null || clv === null) return { points: 0, flag: null };
 
   if (direction === 'LONG') {
-    const aboveCpr = close > todayTc;
-    const breakout = close > todayTc && close > todayBc;
+    // Weak penalty only applies when price actually attempted a breakout of CPR.
+    const breakoutAttempt = close > todayTc && close > todayBc;
+    if (!breakoutAttempt) return { points: 0, flag: null };
+
     const volumeOk = rvol >= VPA_RVOL.GOOD;
     const closeNearHigh = clv >= VPA_BREAKOUT.CLV_MIN_BULL;
-    if (aboveCpr && breakout && volumeOk && closeNearHigh) {
+    if (volumeOk && closeNearHigh) {
       return { points: VPA_BREAKOUT.CONFIRMED_ADJ, flag: 'VPA_BREAKOUT_CONFIRMED' };
     }
     if (!volumeOk || !closeNearHigh) {
@@ -26,11 +28,13 @@ export function scoreVpaBreakoutConfirm(
     return { points: 0, flag: null };
   }
 
-  const belowCpr = close < todayBc;
-  const breakdown = close < todayBc && close < todayTc;
+  // SHORT — mirrored: only score when price actually broke below CPR.
+  const breakdownAttempt = close < todayBc && close < todayTc;
+  if (!breakdownAttempt) return { points: 0, flag: null };
+
   const volumeOk = rvol >= VPA_RVOL.GOOD;
   const closeNearLow = clv <= VPA_BREAKOUT.CLV_MAX_BEAR;
-  if (belowCpr && breakdown && volumeOk && closeNearLow) {
+  if (volumeOk && closeNearLow) {
     return { points: VPA_BREAKOUT.CONFIRMED_ADJ, flag: 'VPA_BREAKDOWN_CONFIRMED' };
   }
   if (!volumeOk || !closeNearLow) {
