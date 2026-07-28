@@ -60,13 +60,21 @@ pm2 save
 echo "=== PM2 status ==="
 pm2 list
 
-echo "=== Health check (waiting 5s for startup) ==="
-sleep 5
+echo "=== Health check (waiting up to 30s for startup) ==="
 set +e
-HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+HEALTH_PASS=0
+for i in {1..10}; do
+    sleep 3
+    HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+    if [[ "$HEALTH_OUTPUT" == *"DB: healthy"* ]]; then
+        HEALTH_PASS=1
+        break
+    fi
+    echo "Waiting for server to become healthy... (Attempt $i/10)"
+done
 set -e
 
-if [[ "$HEALTH_OUTPUT" == *"DB: healthy"* ]]; then
+if [ "$HEALTH_PASS" -eq 1 ]; then
     echo "[OK] Health check passed! Database is up."
     echo "=== Cleanup ==="
     rm -f /home/ubuntu/deploy_standalone.tar.gz /home/ubuntu/deploy_static.tar.gz /home/ubuntu/deploy_public.tar.gz /home/ubuntu/deploy_prisma.tar.gz
