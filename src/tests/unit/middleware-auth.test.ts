@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (!globalThis.crypto) (globalThis as any).crypto = crypto;
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { middleware } from '../../middleware';
