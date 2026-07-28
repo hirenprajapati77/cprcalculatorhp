@@ -1,5 +1,5 @@
-import { HistoricalProvider } from '../backtest/historical.provider';
 import { calculateATR } from '@/lib/atr';
+import { safeRatio } from '@/lib/math';
 import { NiftyHistoryService } from './nifty-history.service';
 
 // Requires 6 candles to compute a 5-day return.
@@ -25,9 +25,9 @@ export class RegimeService {
     }
 
     try {
-      // Use ^NSEI for Nifty 50
+      // Use ^NSEI for Nifty 50. End = exclusive next UTC day so Yahoo includes `date`'s bar.
       const [y, m, d] = date.split('-').map(Number);
-      const endDateObj = new Date(Date.UTC(y, m - 1, d));
+      const endDateObj = new Date(Date.UTC(y, m - 1, d + 1));
       const startDateObj = new Date(Date.UTC(y, m - 1, d - 90));
 
       const history = await NiftyHistoryService.getNiftyHistory(startDateObj, endDateObj);
@@ -42,8 +42,11 @@ export class RegimeService {
       // Calculate 20 EMA
       const closePrices = history.map(h => h.close);
       const niftyReturn5d = closePrices.length > RS_LOOKBACK
-        ? ((closePrices[closePrices.length - 1] - closePrices[closePrices.length - 1 - RS_LOOKBACK]) /
-           closePrices[closePrices.length - 1 - RS_LOOKBACK]) * 100
+        ? safeRatio(
+            closePrices[closePrices.length - 1] - closePrices[closePrices.length - 1 - RS_LOOKBACK],
+            closePrices[closePrices.length - 1 - RS_LOOKBACK],
+            0
+          ) * 100
         : 0;
       const ema20 = this.calculateEMA(closePrices, 20);
       const currentEma20 = ema20[ema20.length - 1];
@@ -64,7 +67,7 @@ export class RegimeService {
       // Volatility calculation (ATR % over 14 days)
       // Passing slice(-15) yields 14 TR calculations, matching the old 14-day behavior
       const atr = calculateATR(history.slice(-15), latest.close);
-      const atrPct = latest.close > 0 ? (atr / latest.close) * 100 : 0;
+      const atrPct = safeRatio(atr, latest.close, 0) * 100;
       // Nifty typically ranges 0.5% to 1.5% daily. > 1.2% is high volatility.
       const volatility: 'HIGH' | 'LOW' = atrPct > 1.2 ? 'HIGH' : 'LOW';
 

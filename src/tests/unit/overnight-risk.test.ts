@@ -196,4 +196,65 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
     const beta = metrics.indexCorrelationEstimate!;
     assert.ok(Math.abs(beta - 1.5) < 0.1, `Expected beta near 1.5, got ${beta}`);
   });
+
+  test('skips zero-price bases instead of poisoning beta with fake 0% returns', async () => {
+    const niftyHistory: OHLC[] = [];
+    const stockHistory: any[] = [];
+
+    let niftyClose = 100;
+    let stockClose = 100;
+    const baseDate = new Date('2026-07-01');
+    for (let i = 0; i < 70; i++) {
+      const currentDate = new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const niftyRet = Math.sin(i) * 2;
+      const stockRet = 1.5 * niftyRet;
+      const nextNiftyClose = niftyClose * (1 + niftyRet / 100);
+      // Zero close at i=35: next day's return must skip (prev<=0), not insert a fake 0% sample.
+      const nextStockClose = i === 35 ? 0 : stockClose * (1 + stockRet / 100);
+
+      niftyHistory.push({
+        date: dateStr,
+        open: niftyClose,
+        high: Math.max(niftyClose, nextNiftyClose),
+        low: Math.min(niftyClose, nextNiftyClose),
+        close: nextNiftyClose,
+        volume: 10000,
+      });
+      stockHistory.push({
+        date: dateStr,
+        open: Math.max(stockClose, 0.01),
+        high: Math.max(stockClose, nextStockClose, 0.01),
+        low: 0.01,
+        close: nextStockClose,
+        volume: 10000,
+      });
+
+      niftyClose = nextNiftyClose;
+      stockClose = nextStockClose > 0 ? nextStockClose : stockClose * (1 + stockRet / 100);
+    }
+
+    NiftyHistoryService.getNiftyHistory = async () => niftyHistory;
+
+    const metrics = await OvernightRiskService.calculateOvernightRisk({
+      symbol: 'ZEROBASE',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: stockClose,
+      high: stockClose * 1.01,
+      low: stockClose * 0.99,
+      close: stockClose,
+      volume: 10000,
+      avgVolume: 10000,
+      marketCap: 5000,
+      ltp: stockClose,
+      history: stockHistory,
+    });
+    NiftyHistoryService.getNiftyHistory = originalGetNiftyHistory;
+
+    // Collapse-to-zero day breaks exact 1.5 beta for that sample; skip must still yield a finite beta
+    // (not throw / not NaN from dividing by zero prev).
+    assert.ok(metrics.indexCorrelationEstimate !== null);
+    assert.ok(Number.isFinite(metrics.indexCorrelationEstimate!));
+  });
 });

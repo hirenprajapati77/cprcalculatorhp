@@ -1,3 +1,4 @@
+import { getISTDateString } from '@/lib/market-hours';
 import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
 
 export class NiftyHistoryService {
@@ -6,10 +7,13 @@ export class NiftyHistoryService {
   /**
    * Fetches NIFTY 50 (^NSEI) history for the given date range.
    * Utilizes a memory cache to avoid redundant hits to Redis/network in the same process.
+   *
+   * Cache keys use IST calendar dates (not UTC toISOString) so overnight IST sessions
+   * do not shift the day key.
    */
   static async getNiftyHistory(startDate: Date, endDate: Date): Promise<OHLC[]> {
-    const startStr = startDate.toISOString().split('T')[0];
-    const endStr = endDate.toISOString().split('T')[0];
+    const startStr = getISTDateString(startDate);
+    const endStr = getISTDateString(endDate);
     const cacheKey = `${startStr}:${endStr}`;
 
     if (this.memoryCache.has(cacheKey)) {

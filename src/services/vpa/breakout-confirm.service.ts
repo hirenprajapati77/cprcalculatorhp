@@ -22,10 +22,7 @@ export function scoreVpaBreakoutConfirm(
     if (volumeOk && closeNearHigh) {
       return { points: VPA_BREAKOUT.CONFIRMED_ADJ, flag: 'VPA_BREAKOUT_CONFIRMED' };
     }
-    if (!volumeOk || !closeNearHigh) {
-      return { points: VPA_BREAKOUT.WEAK_PENALTY, flag: 'VPA_WEAK_BREAKOUT' };
-    }
-    return { points: 0, flag: null };
+    return { points: VPA_BREAKOUT.WEAK_PENALTY, flag: 'VPA_WEAK_BREAKOUT' };
   }
 
   // SHORT — mirrored: only score when price actually broke below CPR.
@@ -37,8 +34,5 @@ export function scoreVpaBreakoutConfirm(
   if (volumeOk && closeNearLow) {
     return { points: VPA_BREAKOUT.CONFIRMED_ADJ, flag: 'VPA_BREAKDOWN_CONFIRMED' };
   }
-  if (!volumeOk || !closeNearLow) {
-    return { points: VPA_BREAKOUT.WEAK_PENALTY, flag: 'VPA_WEAK_BREAKDOWN' };
-  }
-  return { points: 0, flag: null };
+  return { points: VPA_BREAKOUT.WEAK_PENALTY, flag: 'VPA_WEAK_BREAKDOWN' };
 }

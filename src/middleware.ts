@@ -4,8 +4,26 @@ import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+/** PWA + public static assets must stay ungated — SW registration cannot follow an auth redirect. */
+function isPublicStaticAsset(pathname: string): boolean {
+  if (
+    pathname === '/sw.js' ||
+    pathname === '/manifest.webmanifest' ||
+    pathname === '/offline' ||
+    pathname.startsWith('/icons/')
+  ) {
+    return true;
+  }
+  return /\.(?:png|svg|jpg|jpeg|webp|ico|woff2?)$/i.test(pathname);
+}
+
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
+
+  if (isPublicStaticAsset(url.pathname)) {
+    return NextResponse.next();
+  }
+
   const expectedToken = env.APP_ACCESS_TOKEN?.trim();
   const expectedHash = expectedToken ? await hashToken(expectedToken) : '';
 
@@ -22,6 +40,7 @@ export async function middleware(request: NextRequest) {
     url.pathname === '/unlock' ||
     url.pathname === '/about' ||
     url.pathname === '/faq' ||
+    url.pathname === '/offline' ||
     url.pathname.startsWith('/share/');
 
   if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
@@ -78,6 +97,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes except Next.js internals and static files
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico).*)'],
+  // Run on all routes except Next.js internals, PWA assets, and common static files
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico|sw\\.js|manifest\\.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)',
+  ],
 };

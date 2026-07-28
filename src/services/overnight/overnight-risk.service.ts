@@ -57,8 +57,12 @@ export class OvernightRiskService {
     let indexCorrelationEstimate: number | null = null;
     if (len >= 2) {
       try {
-        const startDate = new Date(history[0].date);
-        const endDate = new Date(history[history.length - 1].date);
+        // Parse YYYY-MM-DD as UTC calendar days. End is exclusive next-day midnight so Yahoo
+        // period2 includes the final stock history session (midnight-of-end would truncate it).
+        const [sy, sm, sd] = history[0].date.split('-').map(Number);
+        const [ey, em, ed] = history[history.length - 1].date.split('-').map(Number);
+        const startDate = new Date(Date.UTC(sy, sm - 1, sd));
+        const endDate = new Date(Date.UTC(ey, em - 1, ed + 1));
         const niftyHistory = await NiftyHistoryService.getNiftyHistory(startDate, endDate);
 
         const niftyMap = new Map<string, number>();
@@ -83,6 +87,9 @@ export class OvernightRiskService {
           const prevNifty = alignedNiftyCloses[i - 1];
           const currNifty = alignedNiftyCloses[i];
 
+          // Skip invalid bases — safeRatio(..., 0) would insert fake 0% returns and poison beta.
+          if (prevStock <= 0 || prevNifty <= 0) continue;
+
           stockReturns.push(safeRatio(currStock - prevStock, prevStock, 0) * 100);
           niftyReturns.push(safeRatio(currNifty - prevNifty, prevNifty, 0) * 100);
         }
@@ -91,8 +98,16 @@ export class OvernightRiskService {
           const windowStockReturns = stockReturns.slice(-CORRELATION_WINDOW);
           const windowNiftyReturns = niftyReturns.slice(-CORRELATION_WINDOW);
 
-          const meanStock = windowStockReturns.reduce((sum, v) => sum + v, 0) / CORRELATION_WINDOW;
-          const meanNifty = windowNiftyReturns.reduce((sum, v) => sum + v, 0) / CORRELATION_WINDOW;
+          const meanStock = safeRatio(
+            windowStockReturns.reduce((sum, v) => sum + v, 0),
+            CORRELATION_WINDOW,
+            0
+          );
+          const meanNifty = safeRatio(
+            windowNiftyReturns.reduce((sum, v) => sum + v, 0),
+            CORRELATION_WINDOW,
+            0
+          );
 
           let cov = 0;
           let varNifty = 0;
@@ -104,7 +119,7 @@ export class OvernightRiskService {
           }
 
           if (varNifty > 0) {
-            indexCorrelationEstimate = parseFloat((cov / varNifty).toFixed(4));
+            indexCorrelationEstimate = parseFloat(safeRatio(cov, varNifty, 0).toFixed(4));
           }
         }
       } catch (err) {

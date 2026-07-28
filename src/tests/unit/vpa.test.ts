@@ -312,38 +312,45 @@ describe('VPA shadow master kill-switch', () => {
 });
 
 describe('VpaConfirmationService.applyConfidenceDelta', () => {
+  const sampleVpa = {
+    enabled: true,
+    direction: 'LONG' as const,
+    confirmed: true,
+    adjustment: 10,
+    maxAdjustment: 19,
+    breakdown: {
+      rvol: 0,
+      clv: 0,
+      effortResult: 0,
+      breakoutConfirm: 0,
+      buyingClimax: 0,
+      sellingClimax: 0,
+      noDemand: 0,
+      noSupply: 0,
+    },
+    flags: [] as string[],
+    metrics: {
+      rvol: null,
+      clv: null,
+      rangePct: null,
+      upperWickRatio: null,
+      lowerWickRatio: null,
+    },
+    rejectRecommended: false,
+    rejectReason: null,
+    live: false,
+  };
+
   it('leaves confidence unchanged when adjustment is zero', () => {
     assert.equal(
-      VpaConfirmationService.applyConfidenceDelta(72, {
-        enabled: true,
-        direction: 'LONG',
-        confirmed: true,
-        adjustment: 0,
-        maxAdjustment: 19,
-        breakdown: {
-          rvol: 0,
-          clv: 0,
-          effortResult: 0,
-          breakoutConfirm: 0,
-          buyingClimax: 0,
-          sellingClimax: 0,
-          noDemand: 0,
-          noSupply: 0,
-        },
-        flags: [],
-        metrics: {
-          rvol: null,
-          clv: null,
-          rangePct: null,
-          upperWickRatio: null,
-          lowerWickRatio: null,
-        },
-        rejectRecommended: false,
-        rejectReason: null,
-        live: false,
-      }),
+      VpaConfirmationService.applyConfidenceDelta(72, { ...sampleVpa, adjustment: 0 }),
       72
     );
+  });
+
+  it('does not apply non-zero delta while shadow mode blocks live confidence', () => {
+    // Default VPA_SHADOW_MODE=true → isVpaLiveConfidenceEnabled() is false
+    assert.equal(VpaConfirmationService.applyConfidenceDelta(72, sampleVpa), 72);
   });
 });
 

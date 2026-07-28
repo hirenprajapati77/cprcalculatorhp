@@ -1,6 +1,7 @@
 import { OptionChainService, OptionChainResult } from './option-chain.service';
 import { CacheService } from './cache.service';
 import { getISTDateString } from '@/lib/market-hours';
+import { safeRatio } from '@/lib/math';
 
 export interface OptionSuggestion {
   symbol?: string;
@@ -269,7 +270,7 @@ export class OptionSuggestionService {
     if (ask <= 0) {
       spreadScore = 0; // missing data — penalise fully
     } else {
-      const spreadPct = ((ask - bid) / ask) * 100;
+      const spreadPct = safeRatio(ask - bid, ask, Number.POSITIVE_INFINITY) * 100;
       spreadScore = spreadPct <= 1 ? 20
         : spreadPct <= 2 ? 15
         : spreadPct < 4.01 ? 10
@@ -304,6 +305,10 @@ export class OptionSuggestionService {
     preferDeeperItm: boolean = false
   ): Promise<OptionSuggestion> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
+
+    if (!Number.isFinite(ltp) || ltp <= 0) {
+      return { error: 'INVALID_SPOT' };
+    }
 
     // 1. Fetch Option Chain
     const chainRes = await OptionChainService.getOptionChain(cleanSym);
@@ -395,7 +400,7 @@ export class OptionSuggestionService {
         o.optionType === type &&
         o.strikePrice > 0 &&
         o.ltp > 0.50 &&
-        Math.abs(o.strikePrice - ltp) / ltp <= 0.15 &&
+        safeRatio(Math.abs(o.strikePrice - ltp), ltp, Number.POSITIVE_INFINITY) <= 0.15 &&
         (!targetExpiryStr || o.symbol.includes(targetExpiryStr))
       )
       .sort((a, b) => a.strikePrice - b.strikePrice);
@@ -408,7 +413,7 @@ export class OptionSuggestionService {
           o.optionType === type && 
           o.strikePrice > 0 && 
           o.ltp > 0.10 &&
-          Math.abs(o.strikePrice - ltp) / ltp <= 0.20 &&
+          safeRatio(Math.abs(o.strikePrice - ltp), ltp, Number.POSITIVE_INFINITY) <= 0.20 &&
           (!targetExpiryStr || o.symbol.includes(targetExpiryStr))
         )
         .sort((a, b) => a.strikePrice - b.strikePrice);

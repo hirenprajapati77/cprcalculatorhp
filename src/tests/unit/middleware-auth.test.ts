@@ -28,6 +28,26 @@ describe('Middleware Authentication & Gating', () => {
     }
   });
 
+  it('allows anonymous access to PWA static assets', async () => {
+    const publicAssets = [
+      '/sw.js',
+      '/manifest.webmanifest',
+      '/offline',
+      '/icons/apple-touch-icon.png',
+      '/icons/icon-192x192.svg',
+    ];
+    for (const path of publicAssets) {
+      const req = new NextRequest(`http://localhost:3000${path}`);
+      const res = await middleware(req);
+      assert.ok(res);
+      assert.strictEqual(
+        res.headers.get('x-middleware-next'),
+        '1',
+        `${path} must not redirect to /unlock`
+      );
+    }
+  });
+
   it('does not Set-Cookie app_access_token on anonymous page visits', async () => {
     const req = new NextRequest('http://localhost:3000/scanner');
     const res = await middleware(req);

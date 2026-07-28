@@ -100,6 +100,8 @@ export class VpaConfirmationService {
 
   /** Apply capped confidence delta — only when VPA_LIVE_CONFIDENCE is enabled. */
   static applyConfidenceDelta(baseConfidence: number, vpa: VpaConfirmationResult | null | undefined): number {
+    // Defense in depth: callers should also gate, but never apply live deltas in shadow mode.
+    if (!isVpaLiveConfidenceEnabled()) return baseConfidence;
     if (!vpa?.enabled || vpa.adjustment === 0) return baseConfidence;
     // Half-weight for confidence bar (0–100 scale)
     const delta = Math.round(vpa.adjustment * 0.5);
