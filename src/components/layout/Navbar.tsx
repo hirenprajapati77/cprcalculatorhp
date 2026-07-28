@@ -61,6 +61,19 @@ export const Navbar: React.FC = () => {
     cashSessionState: 'CLOSED',
     isMarketOpen: false,
   });
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -169,25 +182,27 @@ export const Navbar: React.FC = () => {
           <div className="ml-auto flex items-center gap-2 shrink-0">
             {/* Market Status Chip */}
             <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono border ${
-              marketStatus.cashSessionState === 'LIVE'
+              !isOnline
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                : marketStatus.cashSessionState === 'LIVE'
                 ? 'bg-emerald-500/8 border-emerald-500/20 text-emerald-400'
                 : marketStatus.cashSessionState === 'PRESESSION'
                 ? 'bg-amber-500/8 border-amber-500/20 text-amber-400'
                 : 'bg-slate-500/10 border-slate-700/50 text-slate-400'
             }`}>
               <span className={`h-1.5 w-1.5 rounded-full ${
-                marketStatus.cashSessionState === 'LIVE'
+                !isOnline
+                  ? 'bg-amber-400'
+                  : marketStatus.cashSessionState === 'LIVE'
                   ? 'bg-emerald-400 animate-pulse'
                   : marketStatus.cashSessionState === 'PRESESSION'
                   ? 'bg-amber-400 animate-pulse'
                   : 'bg-slate-400'
               }`} />
               <span>
-                NSE · {marketStatus.cashSessionState === 'LIVE'
-                  ? 'LIVE'
-                  : marketStatus.cashSessionState === 'PRESESSION'
-                  ? 'PRE-SESSION'
-                  : 'CLOSED'}
+                {!isOnline 
+                  ? '🟡 OFFLINE (CACHED)'
+                  : `NSE · ${marketStatus.cashSessionState === 'LIVE' ? 'LIVE' : marketStatus.cashSessionState === 'PRESESSION' ? 'PRE-SESSION' : 'CLOSED'}`}
               </span>
             </div>
 

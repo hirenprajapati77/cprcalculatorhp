@@ -38,9 +38,19 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'CPR PRO Team' }],
   robots: 'index, follow',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'CPR PRO',
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 import Providers from '@/components/Providers';
+import PwaRegistration from '@/components/pwa/PwaRegistration';
 
 export default function RootLayout({
   children,
@@ -55,6 +65,7 @@ export default function RootLayout({
       >
         <Providers>
           <ToastProvider>
+            <PwaRegistration />
             {env.EXECUTION_MODE === 'SHADOW' && (
               <div className="w-full bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-center gap-2 text-amber-500 text-xs font-medium tracking-wide z-50 relative">
                 <span className="flex h-2 w-2 relative">
