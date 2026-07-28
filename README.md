@@ -7,6 +7,7 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 ## ⚡ Features
 
 - **Overnight Validation Engine:** Advanced Engine (`OvernightService`, score 0–130) drives live UI, Telegram alerts, and Trade Journal picks from one `OvernightSignal` source of truth. Simple Engine remains for backtests and research Shadow scoring only.
+- **Volume Price Analysis (VPA) Confirmation Layer**: Implements algorithmic footprint tracking (Close Location Value & Relative Volume) to computationally filter weak breakouts. Features a robust `VPA_SHADOW_MODE` master kill-switch to execute mathematically without interfering with base production scores until proven.
 - **End-to-End Journaling UI (Phase 3):** Full-stack trade journal with interactive data tables, inline editing for manual exits, CSV export, and signal analytics dashboards tracking Win Rate, Avg PnL, and Exec Variance.
 - **Intraday Snapshots (T+1):** Automated cron jobs capture exact option prices at 9:16, 9:30, 9:45, and 10:00 AM on the next trading day, locking in true execution data for journal fidelity.
 - **Advanced CPR Analytics:** Rolling 20-day CPR compression checks, dynamic Pivot-Distance grading, and relationship matching (Higher/Lower/Inside/Overlapping).
