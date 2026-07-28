@@ -92,6 +92,7 @@ describe('TradeJournal logSignal overnightSignalId linkage (P1-2)', () => {
       optionType: 'CE',
       score: 110,
       confidence: 80,
+      entryCmp: 42.5,
       signalSummary: 'STRONG_BTST,TRADEABLE,LONG',
       overnightSignalId: selectedId,
     });
