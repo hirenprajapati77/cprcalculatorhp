@@ -149,10 +149,10 @@ describe('Overnight Engine Tests', () => {
     assert.ok(res.gapConfidence <= 50, `Expected gapConfidence <= 50, got ${res.gapConfidence}`);
   });
 
-  test('indexCorrelationEstimate is null — not derived from symbol string', () => {
+  test('indexCorrelationEstimate is null — not derived from symbol string', async () => {
     const base = { symbol: 'RELIANCE', market: 'NSE' as const, sector: 'Energy', open: 100, high: 105, low: 95, close: 100, volume: 1000000, avgVolume: 900000, marketCap: 1680000, ltp: 101 };
-    const r1 = OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'RELIANCE' });
-    const r2 = OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'INFY' });
+    const r1 = await OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'RELIANCE' });
+    const r2 = await OvernightRiskService.calculateOvernightRisk({ ...base, symbol: 'INFY' });
     // Both must be null — not different hash-based numbers
     assert.strictEqual(r1.indexCorrelationEstimate, null, 'RELIANCE should return null');
     assert.strictEqual(r2.indexCorrelationEstimate, null, 'INFY should return null');
@@ -401,7 +401,7 @@ describe('Overnight Engine Tests', () => {
     }
   });
 
-  test('calculateOvernightRisk handles zero close price and near-zero close price safely', () => {
+  test('calculateOvernightRisk handles zero close price and near-zero close price safely', async () => {
     const stockZeroClose = {
       symbol: 'ZEROCLOSE',
       market: 'NSE' as const,
@@ -424,8 +424,8 @@ describe('Overnight Engine Tests', () => {
       ]
     };
 
-    const metricsZero = OvernightRiskService.calculateOvernightRisk(stockZeroClose);
-    const metricsNearZero = OvernightRiskService.calculateOvernightRisk(stockNearZeroClose);
+    const metricsZero = await OvernightRiskService.calculateOvernightRisk(stockZeroClose);
+    const metricsNearZero = await OvernightRiskService.calculateOvernightRisk(stockNearZeroClose);
 
     // Assert returns are calculated safely (e.g. falling back or zero instead of NaN/Infinity)
     assert.ok(!isNaN(metricsZero.volatility) && isFinite(metricsZero.volatility));

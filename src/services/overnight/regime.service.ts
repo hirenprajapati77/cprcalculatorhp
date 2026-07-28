@@ -1,5 +1,6 @@
 import { HistoricalProvider } from '../backtest/historical.provider';
 import { calculateATR } from '@/lib/atr';
+import { NiftyHistoryService } from './nifty-history.service';
 
 // Requires 6 candles to compute a 5-day return.
 export const RS_LOOKBACK = 5;
@@ -29,7 +30,7 @@ export class RegimeService {
       const endDateObj = new Date(Date.UTC(y, m - 1, d));
       const startDateObj = new Date(Date.UTC(y, m - 1, d - 90));
 
-      const history = await HistoricalProvider.getHistory('^NSEI', startDateObj, endDateObj);
+      const history = await NiftyHistoryService.getNiftyHistory(startDateObj, endDateObj);
       
       if (!history || history.length < 21) {
         // Fallback if data is missing

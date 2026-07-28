@@ -1,13 +1,14 @@
 import { MarketStockData } from '../market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
+import { NiftyHistoryService } from './nifty-history.service';
+
+export const CORRELATION_WINDOW = 60;
 
 export interface OvernightRiskMetrics {
   gapRisk: number;         // Average gap percentage (absolute value)
   atr: number;             // Average True Range (value)
   sectorRisk: number;      // Risk score/multiplier based on sector (0.5 to 2.0)
-  // TODO: Real index correlation requires rolling covariance of stock daily returns vs NIFTY.
-  // NIFTY history is not yet fetched — this field is a placeholder and must NOT be shown to users.
   indexCorrelationEstimate: number | null;
   volatility: number;      // Volatility (standard deviation of daily changes)
   shortSqueezeProb: number; // Probability of short squeeze (0 to 100)
@@ -18,7 +19,7 @@ export class OvernightRiskService {
   /**
    * Calculates overnight risk metrics using daily historical data.
    */
-  static calculateOvernightRisk(stock: MarketStockData): OvernightRiskMetrics {
+  static async calculateOvernightRisk(stock: MarketStockData): Promise<OvernightRiskMetrics> {
     const history = stock.history || [];
     const len = history.length;
 
@@ -40,9 +41,6 @@ export class OvernightRiskService {
     // 3. Sector Risk Factor (deterministic based on sector name)
     const sector = stock.sector.trim().toLowerCase();
     let sectorRisk = 1.0;
-    // Exact-match whitelist (not substring .includes()) — a naive substring check on 'it'
-    // previously matched "Capital Goods" (cap-IT-al) and would also match "Utilities" if that
-    // sector is ever added, silently mis-tagging them as high-risk IT/Energy/Metal names.
     const HIGH_RISK_SECTORS = new Set(['it', 'technology', 'energy', 'metals', 'metal']);
     const RATE_SENSITIVE_SECTORS = new Set(['financial services', 'finance', 'banking', 'bank']);
     const DEFENSIVE_SECTORS = new Set(['healthcare', 'pharma', 'pharmaceuticals', 'fmcg', 'consumer goods', 'consumer']);
@@ -56,10 +54,63 @@ export class OvernightRiskService {
     }
 
     // 4. Index Correlation (Beta proxy)
-    // TODO: Replace with real rolling covariance vs NIFTY when NIFTY history is available.
-    // Previously this hashed the symbol string (charCode sum) which is NOT a real correlation.
-    // Set to null until real data is wired in — do NOT display this field to users.
-    const indexCorrelationEstimate: number | null = null;
+    let indexCorrelationEstimate: number | null = null;
+    if (len >= 2) {
+      try {
+        const startDate = new Date(history[0].date);
+        const endDate = new Date(history[history.length - 1].date);
+        const niftyHistory = await NiftyHistoryService.getNiftyHistory(startDate, endDate);
+
+        const niftyMap = new Map<string, number>();
+        for (const n of niftyHistory) {
+          niftyMap.set(n.date, n.close);
+        }
+
+        const alignedStockCloses: number[] = [];
+        const alignedNiftyCloses: number[] = [];
+        for (const s of history) {
+          if (niftyMap.has(s.date)) {
+            alignedStockCloses.push(s.close);
+            alignedNiftyCloses.push(niftyMap.get(s.date)!);
+          }
+        }
+
+        const stockReturns: number[] = [];
+        const niftyReturns: number[] = [];
+        for (let i = 1; i < alignedStockCloses.length; i++) {
+          const prevStock = alignedStockCloses[i - 1];
+          const currStock = alignedStockCloses[i];
+          const prevNifty = alignedNiftyCloses[i - 1];
+          const currNifty = alignedNiftyCloses[i];
+
+          stockReturns.push(((currStock - prevStock) / prevStock) * 100);
+          niftyReturns.push(((currNifty - prevNifty) / prevNifty) * 100);
+        }
+
+        if (stockReturns.length >= CORRELATION_WINDOW) {
+          const windowStockReturns = stockReturns.slice(-CORRELATION_WINDOW);
+          const windowNiftyReturns = niftyReturns.slice(-CORRELATION_WINDOW);
+
+          const meanStock = windowStockReturns.reduce((sum, v) => sum + v, 0) / CORRELATION_WINDOW;
+          const meanNifty = windowNiftyReturns.reduce((sum, v) => sum + v, 0) / CORRELATION_WINDOW;
+
+          let cov = 0;
+          let varNifty = 0;
+          for (let i = 0; i < CORRELATION_WINDOW; i++) {
+            const diffStock = windowStockReturns[i] - meanStock;
+            const diffNifty = windowNiftyReturns[i] - meanNifty;
+            cov += diffStock * diffNifty;
+            varNifty += diffNifty * diffNifty;
+          }
+
+          if (varNifty > 0) {
+            indexCorrelationEstimate = parseFloat((cov / varNifty).toFixed(4));
+          }
+        }
+      } catch (err) {
+        console.warn(`[OvernightRiskService] Failed to calculate index correlation for ${stock.symbol}:`, err);
+      }
+    }
 
     // 5. Volatility (Standard deviation of daily return percentage changes)
     let volatility = 1.5; // default 1.5%
@@ -76,7 +127,6 @@ export class OvernightRiskService {
     }
 
     // 6. Short Squeeze Probability
-    // Proxy: High volatility + strong recent upward momentum increases squeeze probability
     let shortSqueezeProb = 10;
     if (len >= 3) {
       const recentReturn = safeRatio(stock.close - history[len - 3].close, history[len - 3].close, 0) * 100;
@@ -87,6 +137,7 @@ export class OvernightRiskService {
 
     // Determine aggregate Risk Level
     // Combined metric based on gapRisk, volatility, sectorRisk, and squeeze risk
+    // DO NOT feed indexCorrelationEstimate into riskFactor or riskLevel yet (Phase 2 constraint)
     const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2) + (shortSqueezeProb * 0.01);
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
     if (riskFactor < 1.0) {
@@ -106,4 +157,3 @@ export class OvernightRiskService {
     };
   }
 }
-

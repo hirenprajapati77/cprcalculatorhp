@@ -24,20 +24,21 @@ export function alignedYahooSeriesLength(
 ): number {
   if (!timestamps?.length || !quotes) return 0;
 
-  let len = timestamps.length;
+  const expectedLen = timestamps.length;
   for (const key of required) {
     const series = quotes[key];
-    if (!series?.length) return 0;
-    len = Math.min(len, series.length);
+    if (!series || series.length !== expectedLen) {
+      return 0;
+    }
   }
 
-  // Optional series: if present, truncate to their length too so we never
-  // index past the end (which would fabricate volume=0 / open=undefined).
   for (const key of ['open', 'high', 'low', 'close', 'volume'] as const) {
     if (required.includes(key)) continue;
     const series = quotes[key];
-    if (series) len = Math.min(len, series.length);
+    if (series && series.length !== expectedLen) {
+      return 0;
+    }
   }
 
-  return len > 0 ? len : 0;
+  return expectedLen;
 }

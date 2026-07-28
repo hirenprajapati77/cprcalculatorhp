@@ -26,7 +26,7 @@ export async function GET(
 
     const stock = await MarketService.getStockData(symbol);
     let risk: Omit<
-      ReturnType<typeof OvernightRiskService.calculateOvernightRisk>,
+      Awaited<ReturnType<typeof OvernightRiskService.calculateOvernightRisk>>,
       'indexCorrelationEstimate'
     > | null = null;
     if (stock) {
@@ -34,7 +34,7 @@ export async function GET(
       // data is wired in) and is explicitly not meant to reach clients — see the comment on
       // OvernightRiskMetrics in overnight-risk.service.ts.
       const { indexCorrelationEstimate: _unused, ...publicRisk } =
-        OvernightRiskService.calculateOvernightRisk(stock);
+        await OvernightRiskService.calculateOvernightRisk(stock);
       risk = publicRisk;
     }
 
