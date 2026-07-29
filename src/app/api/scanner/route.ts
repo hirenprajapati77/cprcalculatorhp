@@ -322,7 +322,7 @@ export async function GET(request: NextRequest) {
         sl: r.sl,
         target: r.target,
         rr: r.rr,
-        eventRiskScore: risk ? risk.score : 0,
+        eventRiskScore: risk ? risk.severity : 0,
         eventRiskReason: risk ? risk.reason : null,
       };
     });
