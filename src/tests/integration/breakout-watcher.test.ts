@@ -71,7 +71,7 @@ const makeScanResult = (
   rr: '1:2.0',
   score,
   sector: 'Banking',
-  eventRiskScore
+  eventRiskScore: eventRiskScore ?? 0
 });
 
 function makeUniqueConstraintError(): Prisma.PrismaClientKnownRequestError {

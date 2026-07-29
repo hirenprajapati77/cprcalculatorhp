@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         rr: r.rr ?? '1:1.5',
         score: r.score ?? 0,
         sector: r.sector ?? 'Other',
-        eventRiskScore: r.eventRiskScore,
+        eventRiskScore: r.eventRiskScore ?? 0,
       }))
     ).then(newBreakouts => {
       if (newBreakouts.length > 0) {
