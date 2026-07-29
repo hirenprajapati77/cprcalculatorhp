@@ -446,7 +446,7 @@ const StockRow = React.memo(({
 
       {visibleColumns.includes('symbol') && (
         <td className={cellPadding}>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <span 
               onClick={() => onOpenDrawer(row)}
               className="font-bold text-text-primary group-hover:text-accent-blue transition-colors cursor-pointer hover:underline"
@@ -454,6 +454,14 @@ const StockRow = React.memo(({
               {row.symbol}
             </span>
             <VpaStatusChip vpa={row.vpaBreakdown} />
+            {(row.eventRiskScore ?? 0) >= 70 && (
+              <span 
+                className={`text-[8px] font-bold px-1 rounded flex items-center gap-0.5 ${(row.eventRiskScore ?? 0) >= 80 ? 'bg-accent-red/20 text-accent-red' : 'bg-accent-amber/20 text-accent-amber'}`}
+                title={row.eventRiskReason || 'Upcoming Event'}
+              >
+                ⚠️ EVENT
+              </span>
+            )}
           </div>
           {densityMode === 'detailed' && (
             <span className="block text-[9px] text-text-tertiary mt-0.5">
