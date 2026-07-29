@@ -32,9 +32,7 @@ export async function GET(
       // indexCorrelationEstimate is a 60-day NIFTY beta_proxy, not Pearson correlation.
       risk = await OvernightRiskService.calculateOvernightRisk(stock);
     }
-
-    const { indexCorrelationEstimate, ...riskForResponse } = risk ?? {};
-
+    const { indexCorrelationEstimate: _indexCorrelationEstimate, ...riskForResponse } = risk ?? {};
     return NextResponse.json({
       symbol,
       signal: activeSignal,

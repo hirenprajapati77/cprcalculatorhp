@@ -413,7 +413,7 @@ export class OptionChainService {
     parsedExpiryDate: Date | null;
     todayISTMidnight: Date;
   }> {
-    let parsedExpiryDate: Date | null = OptionChainService.parseExpiryDate(expiryStr);
+    const parsedExpiryDate: Date | null = OptionChainService.parseExpiryDate(expiryStr);
     const { getISTTime } = await import('@/lib/market-hours');
     const { dateString } = getISTTime();
     const [ty, tm, td] = dateString.split('-').map(Number);
