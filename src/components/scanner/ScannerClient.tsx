@@ -258,6 +258,8 @@ interface ScannedStock {
   sl: number;
   target: number;
   rr: string;
+  eventRiskScore?: number;
+  eventRiskReason?: string | null;
   signalTime?: string;
   expectedGap?: number | null;
   expectedMove?: number | null;
