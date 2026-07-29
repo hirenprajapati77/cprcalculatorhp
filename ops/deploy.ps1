@@ -80,6 +80,11 @@ Ok "NEXT_PUBLIC_BASE_URL restored to $LOCAL_URL"
 Log "Uploading to server (~15-20s)..."
 scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh "${SERVER}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { Err "SCP upload failed" }
+
+Log "Syncing local .env.server to server..."
+scp -i $SSH_KEY -o StrictHostKeyChecking=no .env.server "${SERVER}:/home/ubuntu/cpr-calculator-platform/.env"
+if ($LASTEXITCODE -ne 0) { Err "SCP env upload failed" }
+
 Ok "Upload complete"
 
 # ── 7. EXTRACT + RESTART ON SERVER ───────────────────────────
