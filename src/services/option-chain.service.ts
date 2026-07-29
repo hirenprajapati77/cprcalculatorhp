@@ -306,14 +306,23 @@ export class OptionChainService {
     }
 
     if (params.targetExpiryStr) {
+      const parsedTarget = OptionChainService.parseExpiryDate(params.targetExpiryStr);
+      
       const targetMatch = expiryData.find(e => {
         const val = OptionChainService.getExpiryValue(e);
         if (!val) return false;
-        // The contract string has formats like "27AUG", "AUG 2026".
-        // The fyers expiry string is like "27-Aug-2026".
-        // A simple case-insensitive includes check usually works for the month string.
-        const upperVal = val.toUpperCase();
-        return upperVal.includes(params.targetExpiryStr!.toUpperCase().replace(/\s*\d{4}$/, ''));
+        const parsedVal = OptionChainService.parseExpiryDate(val);
+        if (!parsedTarget || !parsedVal) return false;
+
+        // "JUL 2026" (monthly) -> match year and month
+        const hasDayComponent = /^\d{1,2}\s/.test(params.targetExpiryStr!);
+        
+        if (hasDayComponent) {
+          return parsedVal.getTime() === parsedTarget.getTime();
+        } else {
+          return parsedVal.getFullYear() === parsedTarget.getFullYear() && 
+                 parsedVal.getMonth() === parsedTarget.getMonth();
+        }
       });
 
       if (targetMatch) {
@@ -383,29 +392,32 @@ export class OptionChainService {
     return value === undefined || value === null ? null : String(value);
   }
 
+  private static parseExpiryDate(expiryStr: string): Date | null {
+    if (expiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [ey, em, ed] = expiryStr.split('-').map(Number);
+      return new Date(Date.UTC(ey, em - 1, ed));
+    } else if (expiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+      const [ed, em, ey] = expiryStr.split('-').map(Number);
+      return new Date(Date.UTC(ey, em - 1, ed));
+    } else {
+      const d = new Date(expiryStr);
+      if (!isNaN(d.getTime())) {
+        return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      }
+    }
+    return null;
+  }
+
   private static async isExpiryExpiredOrToday(expiryStr: string): Promise<{
     isExpiredOrToday: boolean;
     parsedExpiryDate: Date | null;
     todayISTMidnight: Date;
   }> {
-    let parsedExpiryDate: Date | null = null;
+    let parsedExpiryDate: Date | null = OptionChainService.parseExpiryDate(expiryStr);
     const { getISTTime } = await import('@/lib/market-hours');
     const { dateString } = getISTTime();
     const [ty, tm, td] = dateString.split('-').map(Number);
     const todayISTMidnight = new Date(Date.UTC(ty, tm - 1, td));
-
-    if (expiryStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const [ey, em, ed] = expiryStr.split('-').map(Number);
-      parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
-    } else if (expiryStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
-      const [ed, em, ey] = expiryStr.split('-').map(Number);
-      parsedExpiryDate = new Date(Date.UTC(ey, em - 1, ed));
-    } else {
-      const d = new Date(expiryStr);
-      if (!isNaN(d.getTime())) {
-        parsedExpiryDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-      }
-    }
 
     if (parsedExpiryDate) {
       const diffTime = parsedExpiryDate.getTime() - todayISTMidnight.getTime();

@@ -184,3 +184,73 @@ test('OptionChainService applies rollover when direct fetch falls back to proxy'
   }
 });
 
+
+test('OptionChainService resolveRolledOverChain parses targetExpiryStr (monthly vs weekly)', async () => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetCredentials = FyersAuthService.getCredentials;
+  const originalGet = CacheService.get;
+  const originalSet = CacheService.set;
+  // @ts-expect-error test mock
+  const originalFetchWithRetry = OptionChainService.fetchWithRetry;
+
+  FyersAuthService.getAccessToken = async () => 'test_token';
+  FyersAuthService.getCredentials = () => ({ appId: 'app', secretId: 'secret', redirectUrl: 'url' });
+  CacheService.get = async () => null;
+  CacheService.set = async () => {};
+
+  let requestedUrl = '';
+  // @ts-expect-error test mock
+  OptionChainService.fetchWithRetry = async (url) => {
+    requestedUrl = url;
+    if (url.includes('timestamp=')) {
+      return {
+        ok: true,
+        json: async () => ({
+          s: 'ok',
+          data: {
+            expiryData: [],
+            optionsChain: [{ symbol: 'MATCHED_OPTION', strikePrice: 100, optionType: 'CE', ltp: 10 }]
+          }
+        })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        s: 'ok',
+        data: {
+          expiryData: [
+            { expiry: '11111', date: '2026-07-30' },
+            { expiry: '22222', date: '2026-08-27' }
+          ],
+          optionsChain: [{ symbol: 'BASE_OPTION', strikePrice: 100, optionType: 'CE', ltp: 10 }]
+        }
+      })
+    };
+  };
+
+  try {
+    const resMonthly = await OptionChainService.getOptionChain('NIFTY', true, 'AUG 2026');
+    assert.ok(!('error' in resMonthly), 'Monthly fetch should succeed');
+    assert.strictEqual(!('error' in resMonthly) && resMonthly.optionsChain[0].symbol, 'MATCHED_OPTION');
+    assert.ok(requestedUrl.includes('timestamp=22222'), 'Monthly target should fetch timestamp 22222');
+
+    const resWeekly = await OptionChainService.getOptionChain('NIFTY', true, '30 JUL 2026');
+    assert.ok(!('error' in resWeekly), 'Weekly fetch should succeed');
+    assert.ok(requestedUrl.includes('timestamp=11111'), 'Weekly target should fetch timestamp 11111');
+    
+    requestedUrl = '';
+    const resMismatch = await OptionChainService.getOptionChain('NIFTY', true, '29 JUL 2026');
+    assert.ok(!('error' in resMismatch), 'Mismatch fetch should succeed (returns base chain)');
+    assert.strictEqual(!('error' in resMismatch) && resMismatch.optionsChain[0].symbol, 'BASE_OPTION', 'Mismatch should return base options');
+    assert.ok(!requestedUrl.includes('timestamp='), 'Mismatch should not fetch any target timestamp');
+    
+  } finally {
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    FyersAuthService.getCredentials = originalGetCredentials;
+    CacheService.get = originalGet;
+    CacheService.set = originalSet;
+    // @ts-expect-error test mock
+    OptionChainService.fetchWithRetry = originalFetchWithRetry;
+  }
+});
