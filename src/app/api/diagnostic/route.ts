@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const symbol = 'BANKNIFTY';
     
@@ -15,23 +15,19 @@ export async function GET(req: NextRequest) {
       where: { 
         symbol: symbol, 
         tradeDate: { gte: start, lte: end },
-        type: 'STBT' 
+        signalType: 'STBT' 
       }
     });
 
     const signal = await prisma.overnightSignal.findMany({
       where: {
         symbol: symbol,
-        signalDate: { gte: start, lte: end },
+        signalDate: '2026-07-28',
         direction: 'STBT'
       }
     });
 
-    const snapshot = await prisma.marketSnapshot.findFirst({
-      where: { symbol: symbol }
-    });
-
-    return NextResponse.json({ success: true, journal, signal, snapshot });
+    return NextResponse.json({ success: true, journal, signal });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
