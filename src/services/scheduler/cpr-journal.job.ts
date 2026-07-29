@@ -38,8 +38,15 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
   const skipped: string[] = [];
 
   for (const signal of topSignals) {
+    // Sanitize once up front so the symbol used to fetch the option
+    // suggestion (and thus the prefix baked into formattedName) matches the
+    // symbol used to strip that prefix back off below. The DB query already
+    // excludes ':BSE' symbols as defense in depth, but this must not rely
+    // on that filter to stay correct.
+    const cleanSym = signal.symbol.split(':')[0].trim();
+
     const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-      signal.symbol,
+      cleanSym,
       signal.ltp,
       'LONG',
       signal.entry,
@@ -56,7 +63,6 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       continue;
     }
 
-    const cleanSym = signal.symbol.split(':')[0].trim();
     const optionName =
       suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
       `${suggestion.strike} CE`;
