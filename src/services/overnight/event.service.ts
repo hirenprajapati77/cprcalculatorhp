@@ -9,6 +9,13 @@ export interface EventRiskResult {
   confidence: 'HIGH' | 'LOW' | 'UNKNOWN';
 }
 
+/** Base impact score, then -10 per calendar day so HIGH day-3 falls below option gate (80). */
+export function eventImpactSeverity(impact: string, daysAway: number): number {
+  const base = impact === 'HIGH' ? 100 : impact === 'MEDIUM' ? 70 : 30;
+  const decayDays = Math.max(0, daysAway);
+  return Math.max(0, base - 10 * decayDays);
+}
+
 export class EventCalendarService {
   /**
    * Evaluates near-term corporate event risk (e.g. Earnings) for a specific stock.
@@ -36,10 +43,10 @@ export class EventCalendarService {
         let reason = null;
 
         for (const event of events) {
-          const severity = event.impact === 'HIGH' ? 100 : (event.impact === 'MEDIUM' ? 70 : 30);
+          const daysAway = this.daysBetween(todayStr, event.date);
+          const severity = eventImpactSeverity(event.impact, daysAway);
           if (severity > highestSeverity) {
             highestSeverity = severity;
-            const daysAway = this.daysBetween(todayStr, event.date);
             const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
             reason = `${event.eventType}_${timeFrame}`;
           }
@@ -110,10 +117,12 @@ export class EventCalendarService {
   }
 
   private static daysBetween(startStr: string, endStr: string): number {
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const [ys, ms, ds] = startStr.split('-').map(Number);
+    const [ye, me, de] = endStr.split('-').map(Number);
+    if (![ys, ms, ds, ye, me, de].every((n) => Number.isFinite(n))) return 0;
+    const startUtc = Date.UTC(ys, ms - 1, ds);
+    const endUtc = Date.UTC(ye, me - 1, de);
+    return Math.max(0, Math.round((endUtc - startUtc) / (1000 * 60 * 60 * 24)));
   }
 
   /**
@@ -142,12 +151,12 @@ export class EventCalendarService {
       }));
 
       for (const event of events) {
-        const severity = event.impact === 'HIGH' ? 100 : (event.impact === 'MEDIUM' ? 70 : 30);
+        const daysAway = this.daysBetween(todayStr, event.date);
+        const severity = eventImpactSeverity(event.impact, daysAway);
         const currentRisk = result[event.symbol];
         
         if (currentRisk.reason === 'UNVERIFIED_CALENDAR' || severity > currentRisk.severity) {
           currentRisk.severity = severity;
-          const daysAway = this.daysBetween(todayStr, event.date);
           const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
           currentRisk.reason = `${event.eventType}_${timeFrame}`;
           currentRisk.confidence = 'HIGH';

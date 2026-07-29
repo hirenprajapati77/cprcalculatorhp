@@ -82,6 +82,24 @@ migration_diff.sql
 scratch/
 prisma/*.old.prisma
 
+# one-off local mutation / probe scripts (never ship)
+/check-*.js
+/count-db.js
+/dry-run.ts
+/fix-pnlpct.js
+/run-populator.ts
+/test-nse.js
+/test-yf.js
+/test-yf.mjs
+/test-yf-inst.mjs
+/update-cron.js
+/update-trades.js
+/ops/trigger.ts
+/scripts/read-db.ts
+/scripts/read-scanner.mjs
+/scripts/update-db.mjs
+/scripts/update-db.ts
+
 # secrets
 server.env
 scratch/*.env*

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { MarketService } from '@/services/market.service';
 import { TelegramService } from '@/services/alert/telegram.service';
+import { getISTDateString } from '@/lib/market-hours';
 import YahooFinance from 'yahoo-finance2';
 
 const MONTH_MAP: Record<string, string> = {
@@ -17,6 +18,20 @@ function parseNseDate(dateStr: string): string {
   const month = MONTH_MAP[monthStr];
   if (!month) return '';
   return `${year}-${month}-${day}`;
+}
+
+/** Prefer getSetCookie(); never split Set-Cookie on commas (Expires contains commas). */
+function extractCookieHeader(headers: Headers): string {
+  const headersAny = headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headersAny.getSetCookie === 'function') {
+    const list = headersAny.getSetCookie();
+    if (list.length > 0) {
+      return list.map((c) => c.split(';')[0].trim()).filter(Boolean).join('; ');
+    }
+  }
+  const raw = headers.get('set-cookie');
+  if (!raw) return '';
+  return raw.split(';')[0].trim();
 }
 
 export class EarningsPopulatorService {
@@ -42,19 +57,7 @@ export class EarningsPopulatorService {
       };
 
       const homeRes = await fetch('https://www.nseindia.com/', { headers });
-      const headersAny = homeRes.headers as Headers & { getSetCookie?: () => string[] };
-      const rawCookies = typeof headersAny.getSetCookie === 'function'
-        ? headersAny.getSetCookie()
-        : [];
-      const fallbackSetCookie = homeRes.headers.get('set-cookie');
-      const cookieStr = rawCookies.length > 0
-        ? rawCookies.map(c => c.split(';')[0]).join('; ')
-        : (fallbackSetCookie ?? '')
-            .split(',')
-            .map(part => part.trim())
-            .filter(Boolean)
-            .map(c => c.split(';')[0])
-            .join('; ');
+      const cookieStr = extractCookieHeader(homeRes.headers);
 
       const apiHeaders = {
         ...headers,
@@ -72,7 +75,7 @@ export class EarningsPopulatorService {
       if (Array.isArray(events)) {
         const totalNseEvents = events.length;
         console.log(`[EarningsPopulator] NSE Event Calendar API returned ${totalNseEvents} total events.`);
-        
+
         // Threshold check to detect blocks or empty responses
         if (totalNseEvents < 20) {
           throw new Error(`NSE returned suspiciously few events (${totalNseEvents}) — likely blocked or empty.`);
@@ -81,7 +84,7 @@ export class EarningsPopulatorService {
         for (const event of events) {
           const symbol = (event.symbol || '').trim();
           const purpose = (event.purpose || '').toLowerCase();
-          
+
           // We look for Financial Results board meetings
           if (fnoSymbols.has(symbol) && purpose.includes('results')) {
             const dbDate = parseNseDate(event.date);
@@ -137,16 +140,17 @@ export class EarningsPopulatorService {
         try {
           const yfSymbol = `${symbol}.NS`;
           const quote = await yahoo.quoteSummary(yfSymbol, { modules: ['calendarEvents'] });
-          
+
           const earnings = quote.calendarEvents?.earnings;
           const earningsDates = earnings?.earningsDate;
-          
+
           if (Array.isArray(earningsDates) && earningsDates.length > 0) {
             const rawDate = earningsDates[0];
             if (rawDate) {
               const dateObj = new Date(rawDate);
               if (!isNaN(dateObj.getTime())) {
-                const dbDate = dateObj.toISOString().split('T')[0];
+                // IST calendar day — never UTC toISOString (can shift the trading date).
+                const dbDate = getISTDateString(dateObj);
                 const isEstimate = earnings?.isEarningsDateEstimate ?? false;
                 const eventStatus = isEstimate ? 'ESTIMATED' : 'CONFIRMED';
 
@@ -185,7 +189,7 @@ export class EarningsPopulatorService {
           console.warn(`[EarningsPopulator] Yahoo fallback failed for ${symbol}:`, errMsg);
         }
       }));
-      
+
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 

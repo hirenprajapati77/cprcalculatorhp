@@ -38,6 +38,28 @@ if ($untrackedMigrations) {
 }
 Ok "no untracked database migrations"
 
+if (-not (Test-Path ".env.server")) {
+    Err ".env.server missing. Create it from production secrets before deploy (never wipe server .env with a partial file)."
+}
+$requiredServerEnv = @(
+    "DATABASE_URL",
+    "REDIS_URL",
+    "APP_ACCESS_TOKEN",
+    "CRON_SECRET",
+    "NEXT_PUBLIC_BASE_URL",
+    "TOKEN_ENCRYPTION_KEY",
+    "FYERS_APP_ID",
+    "FYERS_SECRET_ID"
+)
+$serverEnvLines = Get-Content ".env.server"
+foreach ($key in $requiredServerEnv) {
+    $hit = $serverEnvLines | Where-Object { $_ -match "^$key=" -and $_ -notmatch "^$key=\s*$" -and $_ -notmatch "^$key=`"`"" }
+    if (-not $hit) {
+        Err ".env.server is missing required key: $key"
+    }
+}
+Ok ".env.server has required keys (will MERGE into server .env, not overwrite)"
+
 # ── 2. SET PRODUCTION URL ────────────────────────────────────
 Log "Setting NEXT_PUBLIC_BASE_URL to production..."
 (Get-Content $ENV_FILE) -replace "NEXT_PUBLIC_BASE_URL=.*", "NEXT_PUBLIC_BASE_URL=`"$PROD_URL`"" | Set-Content $ENV_FILE
@@ -78,12 +100,15 @@ Ok "NEXT_PUBLIC_BASE_URL restored to $LOCAL_URL"
 
 # ── 6. UPLOAD ────────────────────────────────────────────────
 Log "Uploading to server (~15-20s)..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh "${SERVER}:/home/ubuntu/"
+scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh ops/merge_env.sh "${SERVER}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { Err "SCP upload failed" }
 
-Log "Syncing local .env.server to server..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no .env.server "${SERVER}:/home/ubuntu/cpr-calculator-platform/.env"
+Log "Merging .env.server into production .env (keeps server-only keys)..."
+scp -i $SSH_KEY -o StrictHostKeyChecking=no .env.server "${SERVER}:/home/ubuntu/cpr.env.server"
 if ($LASTEXITCODE -ne 0) { Err "SCP env upload failed" }
+
+ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/merge_env.sh && bash /home/ubuntu/merge_env.sh"
+if ($LASTEXITCODE -ne 0) { Err "Server .env merge failed" }
 
 Ok "Upload complete"
 
