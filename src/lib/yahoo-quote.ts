@@ -14,8 +14,8 @@ export interface YahooQuoteArrays {
 
 /**
  * Returns the largest indexable length shared by timestamps and every
- * provided (non-undefined) quote series. Returns 0 if a required series
- * is missing or empty.
+ * provided (non-undefined) quote series, truncating to the shortest series
+ * when they disagree. Returns 0 if a required series is missing or empty.
  */
 export function alignedYahooSeriesLength(
   timestamps: number[] | undefined,
@@ -24,21 +24,23 @@ export function alignedYahooSeriesLength(
 ): number {
   if (!timestamps?.length || !quotes) return 0;
 
-  const expectedLen = timestamps.length;
+  let minLen = timestamps.length;
+
   for (const key of required) {
     const series = quotes[key];
-    if (!series || series.length !== expectedLen) {
+    if (!series || series.length === 0) {
       return 0;
     }
+    minLen = Math.min(minLen, series.length);
   }
 
   for (const key of ['open', 'high', 'low', 'close', 'volume'] as const) {
     if (required.includes(key)) continue;
     const series = quotes[key];
-    if (series && series.length !== expectedLen) {
-      return 0;
+    if (series) {
+      minLen = Math.min(minLen, series.length);
     }
   }
 
-  return expectedLen;
+  return minLen;
 }

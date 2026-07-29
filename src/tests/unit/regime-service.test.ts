@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { RegimeService } from '../../services/overnight/regime.service';
 import { HistoricalProvider } from '../../services/backtest/historical.provider';
+import { NiftyHistoryService } from '../../services/overnight/nifty-history.service';
 
 test('RegimeService - EMA Edge Case Fix', async (t) => {
   const originalGetHistory = HistoricalProvider.getHistory;
@@ -10,6 +11,9 @@ test('RegimeService - EMA Edge Case Fix', async (t) => {
     HistoricalProvider.getHistory = originalGetHistory;
     // @ts-expect-error accessing private property for test reset
     RegimeService.cachedRegime = null;
+    // All subtests use the same date, which maps to the same NiftyHistoryService
+    // cache key — clear it or later subtests silently reuse an earlier fixture.
+    NiftyHistoryService.clearCache();
   });
 
   await t.test('length=19 returns DEFAULT regime (CHOPPY/LOW/50)', async () => {
