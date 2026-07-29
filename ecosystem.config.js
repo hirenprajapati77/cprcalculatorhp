@@ -5,8 +5,8 @@ module.exports = {
       script: '.next/standalone/server.js',
       cwd: '/home/ubuntu/cpr-calculator-platform',
       env: {
-        NEXT_PUBLIC_BASE_URL: 'http://129.159.230.41',
-        APP_BASE_URL: 'http://129.159.230.41',
+        NEXT_PUBLIC_BASE_URL: 'https://129-159-230-41.nip.io',
+        APP_BASE_URL: 'https://129-159-230-41.nip.io',
         NODE_ENV: 'production',
         RATE_LIMIT_MAX: '100',
         RATE_LIMIT_WINDOW_MS: '60000',
