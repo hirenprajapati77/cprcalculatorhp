@@ -201,7 +201,8 @@ export async function logIndexBtstJournalEntries(params: {
       'LONG',
       entry,
       sl,
-      target
+      target,
+      signalDate
     );
 
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
@@ -303,7 +304,8 @@ export async function logIndexStbtJournalEntries(params: {
       'SHORT',
       entry,
       sl,
-      target
+      target,
+      signalDate
     );
 
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {

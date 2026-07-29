@@ -2,6 +2,7 @@ import { OptionChainService, OptionChainResult } from './option-chain.service';
 import { CacheService } from './cache.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { safeRatio } from '@/lib/math';
+import { EventCalendarService } from './overnight/event.service';
 
 export interface OptionSuggestion {
   symbol?: string;
@@ -302,12 +303,26 @@ export class OptionSuggestionService {
     stockEntry: number,
     stockSl: number,
     stockTarget: number,
-    preferDeeperItm: boolean = false
+    preferDeeperItm: boolean = false,
+    signalDate?: string
   ): Promise<OptionSuggestion> {
     const cleanSym = symbol.toUpperCase().trim().replace('-EQ', '');
 
     if (!Number.isFinite(ltp) || ltp <= 0) {
       return { error: 'INVALID_SPOT' };
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      const today = signalDate || getISTDateString();
+      try {
+        const eventRisk = await EventCalendarService.getEventRisk(cleanSym, today);
+        if (eventRisk.severity >= 80) {
+          console.warn(`[OptionSuggestion] Suppressing option suggestion for ${cleanSym} due to high event risk: ${eventRisk.reason || 'severity ' + eventRisk.severity}`);
+          return { error: 'EVENT_RISK_GATE' };
+        }
+      } catch (err) {
+        console.error(`[OptionSuggestion] Error checking event risk for ${cleanSym}:`, err);
+      }
     }
 
     // 1. Fetch Option Chain
@@ -528,10 +543,11 @@ export class OptionSuggestionService {
     bias: 'BULLISH' | 'BEARISH',
     stockEntry: number,
     stockSl: number,
-    stockTarget: number
+    stockTarget: number,
+    signalDate?: string
   ): Promise<OptionSuggestion> {
     const type = bias === 'BEARISH' ? 'PE' : 'CE';
-    return this.buildSuggestion(symbol, ltp, type, stockEntry, stockSl, stockTarget, false);
+    return this.buildSuggestion(symbol, ltp, type, stockEntry, stockSl, stockTarget, false, signalDate);
   }
 
   /**
@@ -545,12 +561,14 @@ export class OptionSuggestionService {
     tag: 'LONG' | 'SHORT',
     stockEntry: number,
     stockSl: number,
-    stockTarget: number
+    stockTarget: number,
+    signalDate?: string
   ): Promise<OptionSuggestion> {
     const type = tag === 'SHORT' ? 'PE' : 'CE';
     return this.buildSuggestion(
       symbol, ltp, type, stockEntry, stockSl, stockTarget,
-      OptionSuggestionService.INDEX_BTST_PREFER_DEEPER_ITM
+      OptionSuggestionService.INDEX_BTST_PREFER_DEEPER_ITM,
+      signalDate
     );
   }
 }

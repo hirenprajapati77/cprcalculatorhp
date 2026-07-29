@@ -2,7 +2,7 @@ import { env } from '@/config/env';
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
-import { BTST_CLOCK } from '@/lib/market-hours';
+import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 
 import { decrypt } from '../../lib/crypto';
@@ -210,7 +210,8 @@ export class TelegramService {
               'BULLISH',
               s.entry,
               s.sl,
-              s.target
+              s.target,
+              getISTDateString()
             ));
           if (suggestion && !suggestion.error && suggestion.formattedName) {
             const priceText = suggestion.ltp ? ` @ ₹${suggestion.ltp.toFixed(2)}` : '';

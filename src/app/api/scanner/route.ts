@@ -21,7 +21,7 @@ async function enrichWithOptionSuggestions(
         r.signalSummary?.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
       try {
         const suggestion = await OptionSuggestionService.suggestOption(
-          r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0
+          r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0, getISTDateString()
         );
         return { symbol: r.symbol, suggestion };
       } catch (e) {

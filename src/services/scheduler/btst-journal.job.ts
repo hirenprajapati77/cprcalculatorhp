@@ -151,7 +151,8 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       'BULLISH',
       entry,
       sl,
-      target
+      target,
+      signal.signalDate
     );
 
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
@@ -242,7 +243,8 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       'BEARISH',
       entry,
       sl,
-      target
+      target,
+      signal.signalDate
     );
 
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {

@@ -117,7 +117,8 @@ export async function GET(request: Request) {
               r.tag as 'LONG' | 'SHORT',
               stockEntry,
               stockSl,
-              stockTarget
+              stockTarget,
+              today
             );
             return { symbol: r.symbol, suggestion };
           } catch (e) {

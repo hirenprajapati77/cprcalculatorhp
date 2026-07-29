@@ -23,6 +23,7 @@ interface ScanResult {
   rr: string;
   score: number;
   sector: string;
+  eventRiskScore?: number;
 }
 
 /**
@@ -58,7 +59,8 @@ function detectNewBreakoutsPure(
 const makeScanResult = (
   symbol: string,
   hasBreakout: boolean,
-  score = 85
+  score = 85,
+  eventRiskScore?: number
 ): ScanResult => ({
   symbol,
   signals: hasBreakout ? ['NARROW', 'BREAKOUT'] : ['NARROW'],
@@ -68,7 +70,8 @@ const makeScanResult = (
   target: 522,
   rr: '1:2.0',
   score,
-  sector: 'Banking'
+  sector: 'Banking',
+  eventRiskScore
 });
 
 function makeUniqueConstraintError(): Prisma.PrismaClientKnownRequestError {
@@ -383,6 +386,22 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
       ]);
 
       assert.strictEqual(results.length, 0);
+      assert.strictEqual(mocks.updateManyCalls.length, 0);
+      assert.strictEqual(mocks.createCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('high event risk: eventRiskScore >= 80 → no updateMany/create, suppressed from alerts', async () => {
+    const mocks = mockBreakoutPrisma({});
+
+    try {
+      const results = await BreakoutWatcherService.detectNewBreakouts([
+        makeScanResult('COLPAL', true, 85, 90),
+      ]);
+
+      assert.strictEqual(results.length, 0, 'Should suppress alert due to high event risk');
       assert.strictEqual(mocks.updateManyCalls.length, 0);
       assert.strictEqual(mocks.createCalls.length, 0);
     } finally {

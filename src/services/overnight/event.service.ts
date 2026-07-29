@@ -1,5 +1,6 @@
 import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
+import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 
 export interface EventRiskResult {
   severity: number;           // 0 to 100 (100 = critical event tomorrow)
@@ -19,7 +20,7 @@ export class EventCalendarService {
       const todayStr = signalDate;
       const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
 
-      const events = await prisma.marketEvent.findMany({
+      const events = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findMany({
         where: {
           symbol: symbol,
           date: {
@@ -27,7 +28,7 @@ export class EventCalendarService {
             lte: futureStr
           }
         }
-      });
+      }));
 
       if (events.length > 0) {
         // Find the most severe event
@@ -53,10 +54,10 @@ export class EventCalendarService {
       }
 
       // Check Calendar Freshness relative to signalDate
-      const latestGlobalEvent = await prisma.marketEvent.findFirst({
+      const latestGlobalEvent = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findFirst({
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true }
-      });
+      }));
       
       const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
       // marketEvent has no populator yet, so freshness enforcement must be opt-in.
@@ -82,12 +83,12 @@ export class EventCalendarService {
         };
       }
 
-      // If calendar is fresh, we safely assume 0 risk for this symbol
+      // If calendar is fresh but has absolutely no entries, we are in an unverified state
       return {
         severity: 0,
         reason: null,
         source: 'LOCAL_DB',
-        confidence: 'HIGH'
+        confidence: latestGlobalEvent ? 'HIGH' : 'UNKNOWN'
       };
 
     } catch (err) {
@@ -133,12 +134,12 @@ export class EventCalendarService {
       const todayStr = signalDate;
       const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
 
-      const events = await prisma.marketEvent.findMany({
+      const events = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findMany({
         where: {
           symbol: { in: symbols },
           date: { gte: todayStr, lte: futureStr }
         }
-      });
+      }));
 
       for (const event of events) {
         const severity = event.impact === 'HIGH' ? 100 : (event.impact === 'MEDIUM' ? 70 : 30);
@@ -156,12 +157,13 @@ export class EventCalendarService {
       // Optimization: Only query global event freshness if there is at least one unverified calendar check
       const hasUnverified = symbols.some(sym => result[sym].reason === 'UNVERIFIED_CALENDAR');
       let isCalendarStale = false;
+      let latestGlobalEvent = null;
 
       if (hasUnverified) {
-        const latestGlobalEvent = await prisma.marketEvent.findFirst({
+        latestGlobalEvent = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findFirst({
           orderBy: { createdAt: 'desc' },
           select: { createdAt: true }
-        });
+        }));
         
         const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
         // marketEvent has no populator yet, so freshness enforcement must be opt-in.
@@ -180,7 +182,12 @@ export class EventCalendarService {
       for (const sym of symbols) {
         if (result[sym].reason === 'UNVERIFIED_CALENDAR') {
           if (!isCalendarStale) {
-            result[sym] = { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' };
+            result[sym] = { 
+              severity: 0, 
+              reason: null, 
+              source: 'LOCAL_DB', 
+              confidence: latestGlobalEvent ? 'HIGH' : 'UNKNOWN' 
+            };
           } else {
             result[sym].reason = 'STALE_CALENDAR_FALLBACK';
             result[sym].confidence = 'LOW';

@@ -51,7 +51,8 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       'LONG',
       signal.entry,
       signal.sl,
-      signal.target
+      signal.target,
+      todayStr
     );
 
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {

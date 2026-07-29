@@ -33,6 +33,8 @@ export async function GET(
       risk = await OvernightRiskService.calculateOvernightRisk(stock);
     }
 
+    const { indexCorrelationEstimate, ...riskForResponse } = risk ?? {};
+
     return NextResponse.json({
       symbol,
       signal: activeSignal,
@@ -44,7 +46,7 @@ export async function GET(
         confidence: activeSignal.confidence,
         exitStrategy: activeSignal.exitStrategy,
       } : null,
-      risk,
+      risk: stock ? riskForResponse : null,
       history
     });
   } catch (error: unknown) {

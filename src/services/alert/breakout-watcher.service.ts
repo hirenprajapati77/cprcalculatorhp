@@ -13,6 +13,7 @@ export interface BreakoutScanResult {
   rr: string;
   score: number;
   sector: string;
+  eventRiskScore?: number;
 }
 
 function isUniqueConstraintError(err: unknown): boolean {
@@ -40,8 +41,12 @@ export class BreakoutWatcherService {
         console.log(`[BreakoutWatcher] Near-miss: ${result.symbol} has BREAKOUT signal at score ${result.score} (threshold ${MIN_BREAKOUT_ALERT_SCORE})`);
       }
 
+      if (hasBreakoutNow && (result.eventRiskScore ?? 0) >= 80) {
+        console.log(`[BreakoutWatcher] Suppressing alert for ${result.symbol} due to high event risk: ${result.eventRiskScore}`);
+      }
+
       const qualifiesForAlert =
-        hasBreakoutNow && result.score >= MIN_BREAKOUT_ALERT_SCORE;
+        hasBreakoutNow && result.score >= MIN_BREAKOUT_ALERT_SCORE && (result.eventRiskScore ?? 0) < 80;
 
       let stateReadFailed = false;
       let isNewAlert = false;

@@ -5,6 +5,7 @@ import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
 import { getISTDateString } from '@/lib/market-hours';
+import { EventCalendarService } from './overnight/event.service';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
@@ -82,7 +83,12 @@ export class ScannerController {
       }
     }
 
+    const today = getISTDateString();
     const rawResults: ScannerSignalResult[] = [];
+
+    // Bulk fetch event risks for all symbols to avoid N+1 queries
+    const symbols = stocks.map(s => s.symbol.trim());
+    const eventRisks = await EventCalendarService.getBulkEventRisk(symbols, today);
 
     // Parallel fetch with batching to avoid API rate limits (batches of 10)
     const batchSize = 10;
@@ -100,7 +106,8 @@ export class ScannerController {
           if (data) {
             // Reset failure count on success
             await CacheService.delete(`failure_count_${stockMeta.symbol}`);
-            return await ScannerService.scanStock(data);
+            const risk = eventRisks[stockMeta.symbol.trim()] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'UNKNOWN' };
+            return await ScannerService.scanStock(data, undefined, risk);
           }
         } catch (err) {
           const sym = stockMeta.symbol;
@@ -128,7 +135,6 @@ export class ScannerController {
 
     // Score gate: filter out completely useless results (score < 10)
     const filtered = ranked.filter(r => r.score >= 10);
-    const today = getISTDateString();
     console.log(`[SCAN] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
 
     // Background database persist (upserts)
@@ -206,7 +212,7 @@ export class ScannerController {
             await prisma.marketSnapshot.upsert({
               where: { symbol: dbSymbol },
               update: {
-                price: r.ltp,
+                price: r.previousClose || r.open || r.ltp,
                 volume: r.volume,
                 avgVolume: r.avgVolume,
                 marketCap: r.marketCap,
@@ -214,7 +220,7 @@ export class ScannerController {
               },
               create: {
                 symbol: dbSymbol,
-                price: r.ltp,
+                price: r.previousClose || r.open || r.ltp,
                 volume: r.volume,
                 avgVolume: r.avgVolume,
                 marketCap: r.marketCap,

@@ -128,7 +128,8 @@ export async function GET(_request: Request) {
               r.direction,
               stockEntry,
               stockSl,
-              stockTarget
+              stockTarget,
+              dateStr
             );
             // scanType disambiguates NIFTY appearing once as INTRA and once as BTST
             return { symbol: r.symbol, scanType: r.scanType, suggestion };

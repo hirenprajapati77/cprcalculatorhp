@@ -11,6 +11,7 @@ import { BullishStateService } from './bullish-state.service';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled, isVpaLiveConfidenceEnabled } from '@/config/vpa.config';
 import type { VpaDirection } from '@/services/vpa';
+import type { EventRiskResult } from './overnight/event.service';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -43,6 +44,8 @@ export interface ScannerSignalResult extends MarketStockData {
   setupFreshness?: 'FRESH' | 'MATURE' | 'STALE';
   /** Shadow VPA confirmation — does not affect score unless VPA_LIVE_CONFIDENCE=true. */
   vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult;
+  eventRiskScore?: number;
+  eventRiskReason?: string | null;
 }
 
 
@@ -51,7 +54,7 @@ export class ScannerService {
    * Evaluates all CPR levels, price-action signals, entry targets, and SL parameters.
    * Now async to fetch cached CPR compression history.
    */
-  static async scanStock(stock: MarketStockData, asOfDate?: string): Promise<ScannerSignalResult> {
+  static async scanStock(stock: MarketStockData, asOfDate?: string, eventRisk?: EventRiskResult): Promise<ScannerSignalResult> {
     // Differentiate yesterday's and today's daily candles robustly
     const todayStr = asOfDate || getISTDateString();
     const isTradingSession = asOfDate ? true : getISTTime().isTradingDay;
@@ -323,6 +326,8 @@ export class ScannerService {
       ...(crossAgeMinutes !== undefined && { crossAgeMinutes }),
       ...(setupFreshness !== undefined && { setupFreshness }),
       ...(vpaBreakdown ? { vpaBreakdown } : {}),
+      eventRiskScore: eventRisk ? eventRisk.severity : 0,
+      eventRiskReason: eventRisk ? eventRisk.reason : null,
     };
   }
 

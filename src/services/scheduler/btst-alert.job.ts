@@ -56,7 +56,8 @@ async function enrichBtstPick(sig: OvernightSignal, direction: 'LONG' | 'SHORT')
     direction,
     r.entry,
     r.sl,
-    r.target
+    r.target,
+    sig.signalDate
   );
   return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
 }

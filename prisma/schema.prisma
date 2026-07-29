@@ -384,6 +384,7 @@ model MarketEvent {
   eventStatus String   @default("CONFIRMED")
   createdAt   DateTime @default(now())
 
+  @@unique([symbol, date, eventType])
   @@index([symbol, date])
   @@index([date])
 }
