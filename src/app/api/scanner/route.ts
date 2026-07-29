@@ -5,7 +5,7 @@ import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
 import { isMarketOpen, getISTDateString } from '@/lib/market-hours';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
-
+import { EventCalendarService } from '@/services/overnight/event.service';
 export const dynamic = 'force-dynamic';
 
 async function enrichWithOptionSuggestions(
@@ -296,9 +296,16 @@ export async function GET(request: NextRequest) {
 
     // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
     const snapshotMap = new Map(matchingSnapshots.map((s: MarketSnapshot) => [s.symbol, s]));
+    
+    // Bulk fetch event risks for the current page of results
+    const resultSymbols = results.map((r: ScannerResult) => r.symbol.split(':')[0]);
+    const todayStr = getISTDateString();
+    const eventRisks = await EventCalendarService.getBulkEventRisk(resultSymbols, todayStr);
+
     const formattedResults = results.map((r: ScannerResult) => {
       const snap = snapshotMap.get(r.symbol);
       const cleanSymbol = r.symbol.split(':')[0];
+      const risk = eventRisks[cleanSymbol];
 
       return {
         ...r,
@@ -315,6 +322,8 @@ export async function GET(request: NextRequest) {
         sl: r.sl,
         target: r.target,
         rr: r.rr,
+        eventRiskScore: risk ? risk.score : 0,
+        eventRiskReason: risk ? risk.reason : null,
       };
     });
 
