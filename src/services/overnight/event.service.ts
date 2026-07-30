@@ -4,17 +4,40 @@ import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 import { getISTTime } from '@/lib/market-hours';
 
 export interface EventRiskResult {
-  severity: number;           // 0 to 100 (100 = critical event tomorrow)
-  reason: string | null;      // e.g., 'EARNINGS_TOMORROW'
+  severity: number;           // 0 to 100 (100 = critical event today)
+  reason: string | null;      // e.g., 'EARNINGS_NEXT_SESSION'
   source: string;             // e.g., 'LOCAL_DB'
   confidence: 'HIGH' | 'LOW' | 'UNKNOWN';
 }
 
-/** Base impact score, then -10 per calendar day so HIGH day-3 falls below option gate (80). */
-export function eventImpactSeverity(impact: string, daysAway: number): number {
+/** How many NSE trading sessions ahead to query/decay event risk. */
+export const EVENT_LOOKAHEAD_TRADING_DAYS = 3;
+
+/** Base impact score, then -10 per trading session so HIGH at session+3 falls below option gate (80). */
+export function eventImpactSeverity(impact: string, tradingSessionsAway: number): number {
   const base = impact === 'HIGH' ? 100 : impact === 'MEDIUM' ? 70 : 30;
-  const decayDays = Math.max(0, daysAway);
+  const decayDays = Math.max(0, tradingSessionsAway);
   return Math.max(0, base - 10 * decayDays);
+}
+
+function formatTradingTimeFrame(tradingSessionsAway: number): string {
+  if (tradingSessionsAway <= 0) return 'TODAY';
+  if (tradingSessionsAway === 1) return 'NEXT_SESSION';
+  return `IN_${tradingSessionsAway}_SESSIONS`;
+}
+
+function utcMidnightFromDateStr(dateStr: string): number | null {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (![y, m, d].every((n) => Number.isFinite(n))) return null;
+  return Date.UTC(y, m - 1, d);
+}
+
+function dateStrFromUtcMidnight(utcMs: number): string {
+  const dt = new Date(utcMs);
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dt.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export class EventCalendarService {
@@ -23,10 +46,8 @@ export class EventCalendarService {
    */
   static async getEventRisk(symbol: string, signalDate: string): Promise<EventRiskResult> {
     try {
-      const [y, m, d] = signalDate.split('-').map(Number);
-      const threeDaysFromNow = new Date(y, m - 1, d + 3);
       const todayStr = signalDate;
-      const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
+      const futureStr = this.addTradingDays(todayStr, EVENT_LOOKAHEAD_TRADING_DAYS);
 
       const events = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findMany({
         where: {
@@ -44,12 +65,12 @@ export class EventCalendarService {
         let reason = null;
 
         for (const event of events) {
-          const daysAway = this.daysBetween(todayStr, event.date);
-          const severity = eventImpactSeverity(event.impact, daysAway);
+          const sessionsAway = this.daysBetween(todayStr, event.date);
+          if (sessionsAway > EVENT_LOOKAHEAD_TRADING_DAYS) continue;
+          const severity = eventImpactSeverity(event.impact, sessionsAway);
           if (severity > highestSeverity) {
             highestSeverity = severity;
-            const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
-            reason = `${event.eventType}_${timeFrame}`;
+            reason = `${event.eventType}_${formatTradingTimeFrame(sessionsAway)}`;
           }
         }
 
@@ -117,26 +138,48 @@ export class EventCalendarService {
     return this.getEventRisk('MACRO', signalDate);
   }
 
-  // Make this public so we can write unit tests for the Friday-Monday edge case
+  /**
+   * Advance `startStr` by N NSE trading sessions (skips weekends/holidays).
+   * N=0 returns startStr. N=1 returns the next trading day.
+   */
+  static addTradingDays(startStr: string, tradingDays: number): string {
+    const startUtc = utcMidnightFromDateStr(startStr);
+    if (startUtc == null) return startStr;
+    if (tradingDays <= 0) return startStr;
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    let currentUtc = startUtc;
+    let remaining = tradingDays;
+    let safety = 0;
+
+    while (remaining > 0 && safety < 365) {
+      currentUtc += msPerDay;
+      if (getISTTime(new Date(currentUtc)).isTradingDay) {
+        remaining--;
+      }
+      safety++;
+    }
+
+    return dateStrFromUtcMidnight(currentUtc);
+  }
+
+  /**
+   * Count NSE trading sessions strictly after startStr up to and including endStr.
+   * Same day → 0; next trading session → 1. Public for unit tests.
+   */
   static daysBetween(startStr: string, endStr: string): number {
-    const [ys, ms, ds] = startStr.split('-').map(Number);
-    const [ye, me, de] = endStr.split('-').map(Number);
-    if (![ys, ms, ds, ye, me, de].every((n) => Number.isFinite(n))) return 0;
-    
-    const startUtc = Date.UTC(ys, ms - 1, ds);
-    const endUtc = Date.UTC(ye, me - 1, de);
+    const startUtc = utcMidnightFromDateStr(startStr);
+    const endUtc = utcMidnightFromDateStr(endStr);
+    if (startUtc == null || endUtc == null) return 0;
     
     // Start iterating from startStr + 1 day, count trading days up to and including endStr.
-    // This ensures same-day returns 0, and "next trading session" returns 1.
     let tradingDays = 0;
     const msPerDay = 1000 * 60 * 60 * 24;
     let currentUtc = startUtc + msPerDay;
-    let safety = 0; // Prevent infinite loops on malformed dates
+    let safety = 0;
     
     while (currentUtc <= endUtc && safety < 365) {
-      // getISTTime natively respects Int.DateTimeFormat timezone mapping based on UTC instant
-      const currentDate = new Date(currentUtc);
-      if (getISTTime(currentDate).isTradingDay) {
+      if (getISTTime(new Date(currentUtc)).isTradingDay) {
         tradingDays++;
       }
       currentUtc += msPerDay;
@@ -158,11 +201,8 @@ export class EventCalendarService {
     }
 
     try {
-      const [y, m, d] = signalDate.split('-').map(Number);
-      const threeDaysFromNow = new Date(y, m - 1, d + 3);
-
       const todayStr = signalDate;
-      const futureStr = `${threeDaysFromNow.getFullYear()}-${String(threeDaysFromNow.getMonth() + 1).padStart(2, '0')}-${String(threeDaysFromNow.getDate()).padStart(2, '0')}`;
+      const futureStr = this.addTradingDays(todayStr, EVENT_LOOKAHEAD_TRADING_DAYS);
 
       const events = await DatabaseCircuitBreaker.execute(() => prisma.marketEvent.findMany({
         where: {
@@ -172,14 +212,14 @@ export class EventCalendarService {
       }));
 
       for (const event of events) {
-        const daysAway = this.daysBetween(todayStr, event.date);
-        const severity = eventImpactSeverity(event.impact, daysAway);
+        const sessionsAway = this.daysBetween(todayStr, event.date);
+        if (sessionsAway > EVENT_LOOKAHEAD_TRADING_DAYS) continue;
+        const severity = eventImpactSeverity(event.impact, sessionsAway);
         const currentRisk = result[event.symbol];
         
         if (currentRisk.reason === 'UNVERIFIED_CALENDAR' || severity > currentRisk.severity) {
           currentRisk.severity = severity;
-          const timeFrame = daysAway === 0 ? 'TODAY' : (daysAway === 1 ? 'TOMORROW' : `IN_${daysAway}_DAYS`);
-          currentRisk.reason = `${event.eventType}_${timeFrame}`;
+          currentRisk.reason = `${event.eventType}_${formatTradingTimeFrame(sessionsAway)}`;
           currentRisk.confidence = 'HIGH';
         }
       }
@@ -206,7 +246,7 @@ export class EventCalendarService {
              const diffHours = (Date.now() - latestGlobalEvent.createdAt.getTime()) / (1000 * 60 * 60);
              if (diffHours > 72) isCalendarStale = true;
            }
-        }
+         }
       }
 
       for (const sym of symbols) {
