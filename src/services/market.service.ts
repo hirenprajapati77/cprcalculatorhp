@@ -522,13 +522,24 @@ export class MarketService {
               const o = quote.open?.[i] ?? c;
               const v = quote.volume?.[i] || 0;
 
+              // Yahoo frequently returns placeholder candles (all OHLC null with zero volume)
+              // near the live edge. These are expected and should be silently skipped.
+              const isNullOhlcPlaceholder =
+                h === null &&
+                l === null &&
+                c === null &&
+                o === null &&
+                (v === 0 || v === null);
+
               if (
                 h === null || l === null || c === null || o === null || v === null ||
                 isNaN(h) || isNaN(l) || isNaN(c) || isNaN(o) || isNaN(v) ||
                 h <= 0 || l <= 0 || c <= 0 || o <= 0 || v < 0 ||
                 h < l || c > h || c < l
               ) {
-                console.warn(`[MarketService] Validation failed for ${cleanSymbol} candle ${i}: H=${h}, L=${l}, C=${c}, O=${o}, V=${v}. Skipping candle.`);
+                if (!isNullOhlcPlaceholder) {
+                  console.warn(`[MarketService] Validation failed for ${cleanSymbol} candle ${i}: H=${h}, L=${l}, C=${c}, O=${o}, V=${v}. Skipping candle.`);
+                }
                 continue;
               }
 

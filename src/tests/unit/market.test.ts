@@ -289,4 +289,81 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
     }
   });
 
+  await t.test('getStockData() silently skips null-ohlc placeholder candles', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalWarn = console.warn;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+
+    const ts1 = Date.UTC(2026, 6, 20) / 1000;
+    const ts2 = Date.UTC(2026, 6, 21) / 1000;
+    const warns: string[] = [];
+    console.warn = ((...args: unknown[]) => {
+      warns.push(String(args[0] ?? ''));
+    }) as typeof console.warn;
+
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('interval=1d')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              meta: { regularMarketPrice: 122 },
+              timestamp: [ts1, ts2],
+              indicators: {
+                quote: [{
+                  open: [100, null],
+                  high: [125, null],
+                  low: [95, null],
+                  close: [120, null],
+                  volume: [1000, 0],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      if (url.includes('interval=15m')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              indicators: {
+                quote: [{
+                  open: [121],
+                  high: [123],
+                  low: [120],
+                  close: [122],
+                  volume: [500],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('TEST', 'NSE');
+      assert.ok(data, 'service should still return data when placeholder rows are present');
+      assert.ok((data!.history?.length ?? 0) >= 1, 'valid candles should survive history validation');
+      assert.strictEqual(
+        warns.some((w) => w.includes('Validation failed for TEST candle')),
+        false,
+        'placeholder candles should not emit noisy validation warnings'
+      );
+    } finally {
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      console.warn = originalWarn;
+    }
+  });
+
 });
