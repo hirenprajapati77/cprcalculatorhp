@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { prisma } from '@/lib/db';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
+import { getISTTime } from '@/lib/market-hours';
 
 export interface EventRiskResult {
   severity: number;           // 0 to 100 (100 = critical event tomorrow)
@@ -116,13 +117,33 @@ export class EventCalendarService {
     return this.getEventRisk('MACRO', signalDate);
   }
 
-  private static daysBetween(startStr: string, endStr: string): number {
+  // Make this public so we can write unit tests for the Friday-Monday edge case
+  static daysBetween(startStr: string, endStr: string): number {
     const [ys, ms, ds] = startStr.split('-').map(Number);
     const [ye, me, de] = endStr.split('-').map(Number);
     if (![ys, ms, ds, ye, me, de].every((n) => Number.isFinite(n))) return 0;
+    
     const startUtc = Date.UTC(ys, ms - 1, ds);
     const endUtc = Date.UTC(ye, me - 1, de);
-    return Math.max(0, Math.round((endUtc - startUtc) / (1000 * 60 * 60 * 24)));
+    
+    // Start iterating from startStr + 1 day, count trading days up to and including endStr.
+    // This ensures same-day returns 0, and "next trading session" returns 1.
+    let tradingDays = 0;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    let currentUtc = startUtc + msPerDay;
+    let safety = 0; // Prevent infinite loops on malformed dates
+    
+    while (currentUtc <= endUtc && safety < 365) {
+      // getISTTime natively respects Int.DateTimeFormat timezone mapping based on UTC instant
+      const currentDate = new Date(currentUtc);
+      if (getISTTime(currentDate).isTradingDay) {
+        tradingDays++;
+      }
+      currentUtc += msPerDay;
+      safety++;
+    }
+    
+    return tradingDays;
   }
 
   /**
