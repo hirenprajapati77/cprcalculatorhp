@@ -1,5 +1,5 @@
-/**
- * ATR threshold audit — compares 14-period trailing ATR vs legacy whole-history average
+﻿/**
+ * ATR threshold audit â€” compares 14-period trailing ATR vs legacy whole-history average
  * on the backtest universe (NIFTY50 + HistoricalProvider) and reports downstream flip
  * rates for classifyCprWidth() and EXTENSION_LIMITS gates.
  *
@@ -174,8 +174,46 @@ interface SymbolStats {
   oldAtrPct: number[];
 }
 
+const ALLOWED_MODES = ['mock', 'cached', 'live'] as const;
+type AllowedMode = (typeof ALLOWED_MODES)[number];
+
+function assertValidMode(mode: string): asserts mode is AllowedMode {
+  if (!ALLOWED_MODES.includes(mode as AllowedMode)) {
+    throw new Error(
+      `Invalid HISTORICAL_MODE="${mode}". Must be one of: ${ALLOWED_MODES.join(', ')}. ` +
+        `Refusing to run — an audit with an unrecognized mode is not comparable to any prior run.`
+    );
+  }
+}
+
 async function main() {
   const mode = process.env.HISTORICAL_MODE || 'mock';
+  assertValidMode(mode);
+
+  // Cross-check the mode this script believes it's running against the mode
+  // HistoricalProvider will actually use internally. These can diverge if a
+  // .env file, a leftover shell export, or module-load ordering sets
+  // process.env.HISTORICAL_MODE differently than expected (this is exactly
+  // the class of bug that caused a "live" run to silently read as mock).
+  const actualMode = HistoricalProvider.getMode();
+  if (actualMode !== mode) {
+    throw new Error(
+      `Mode mismatch: script resolved HISTORICAL_MODE="${mode}" but ` +
+        `HistoricalProvider.getMode() reports "${actualMode}". Refusing to run — ` +
+        `results would silently come from a different data source than the banner claims. ` +
+        `Check for a .env/.env.local file or inherited shell env overriding HISTORICAL_MODE.`
+    );
+  }
+
+  if (mode === 'live' && !process.argv.includes('--confirm-live')) {
+    throw new Error(
+      `HISTORICAL_MODE=live requires an explicit --confirm-live flag, e.g.:\n` +
+        `  HISTORICAL_MODE=live npx tsx scripts/atr_threshold_audit.ts --confirm-live\n` +
+        `This prevents accidentally auditing against live network calls (rate limits, ` +
+        `non-determinism, and cost) when mock/cached was intended.`
+    );
+  }
+
   const startDate = new Date(START_DATE);
   const endDate = new Date(END_DATE);
 
@@ -191,12 +229,25 @@ async function main() {
     origWarn(...args);
   };
 
+  if (mode === 'live') {
+    console.log('!'.repeat(80));
+    console.log('!! LIVE MODE — this run makes real network calls to Yahoo Finance for   !!');
+    console.log('!! every symbol in the universe. Results are NOT reproducible run-to-run !!');
+    console.log('!! (rate limits / transient failures / provider-side data changes).      !!');
+    console.log('!'.repeat(80));
+    console.log('');
+  }
+
   console.log('='.repeat(80));
   console.log('ATR THRESHOLD AUDIT — 14-period vs legacy whole-history average');
   console.log('='.repeat(80));
-  console.log(`Universe:     ${UNIVERSE} (${symbols.length} symbols)`);
+  console.log(`Universe:     ${UNIVERSE} (${symbols.length} symbols) — TODAY'S constituents, not point-in-time`);
+  console.log(`              ⚠ known limitation: this repo has no historical index-membership`);
+  console.log(`              snapshots, so ${START_DATE}–${END_DATE} is audited against ${UNIVERSE}'s`);
+  console.log(`              CURRENT composition. Stocks added/removed from the index since 2024`);
+  console.log(`              are silently excluded/included incorrectly — survivorship bias.`);
   console.log(`Period:       ${START_DATE} → ${END_DATE}`);
-  console.log(`Data source:  HistoricalProvider (HISTORICAL_MODE=${mode})`);
+  console.log(`Data source:  HistoricalProvider (HISTORICAL_MODE=${mode}, verified against HistoricalProvider.getMode())`);
   console.log(`ATR period:   ${DEFAULT_ATR_PERIOD} (new) vs full history (legacy)`);
   console.log('='.repeat(80));
   console.log('');
@@ -263,13 +314,13 @@ async function main() {
     } catch (err) {
       fetchErrors++;
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[WARN] ${symbol}: fetch failed — ${msg}`);
+      console.warn(`[WARN] ${symbol}: fetch failed â€” ${msg}`);
     }
   }
 
-  console.log('── Per-symbol ATR% distribution (min / median / mean / max) ────────────────────');
+  console.log('â”€â”€ Per-symbol ATR% distribution (min / median / mean / max) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   console.log(
-    `${'Symbol'.padEnd(14)}${'Days'.padStart(5)}  ${'New ATR%'.padEnd(28)}${'Old ATR%'.padEnd(28)}${'Δ mean'.padStart(8)}`
+    `${'Symbol'.padEnd(14)}${'Days'.padStart(5)}  ${'New ATR%'.padEnd(28)}${'Old ATR%'.padEnd(28)}${'Î” mean'.padStart(8)}`
   );
   console.log('-'.repeat(80));
 
@@ -289,13 +340,13 @@ async function main() {
   const poolOld = distStats(allOldAtr);
 
   console.log('');
-  console.log('── Pool-wide ATR% (all symbol-days) ────────────────────────────────────────────');
+  console.log('â”€â”€ Pool-wide ATR% (all symbol-days) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   console.log(`  New (14-period):  min=${poolNew.min.toFixed(3)}%  med=${poolNew.median.toFixed(3)}%  mean=${poolNew.mean.toFixed(3)}%  max=${poolNew.max.toFixed(3)}%`);
   console.log(`  Old (full hist):  min=${poolOld.min.toFixed(3)}%  med=${poolOld.median.toFixed(3)}%  mean=${poolOld.mean.toFixed(3)}%  max=${poolOld.max.toFixed(3)}%`);
-  console.log(`  Mean delta (new − old): ${(poolNew.mean - poolOld.mean >= 0 ? '+' : '')}${(poolNew.mean - poolOld.mean).toFixed(3)}%`);
+  console.log(`  Mean delta (new âˆ’ old): ${(poolNew.mean - poolOld.mean >= 0 ? '+' : '')}${(poolNew.mean - poolOld.mean).toFixed(3)}%`);
 
   console.log('');
-  console.log('── Downstream decision flips (legacy ATR → new 14-period ATR) ──────────────────');
+  console.log('â”€â”€ Downstream decision flips (legacy ATR â†’ new 14-period ATR) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
   console.log(`  Symbol-days analyzed:           ${totalSymbolDays}`);
   console.log(`  Symbols with data:              ${perSymbol.length} / ${symbols.length}`);
   console.log(`  Fetch errors:                   ${fetchErrors}`);
@@ -304,7 +355,7 @@ async function main() {
   console.log(`  EXTENSION_LIMITS LONG flips:    ${extLongFlips}  (${pct(extLongFlips, totalSymbolDays)} of symbol-days)`);
   console.log(`  EXTENSION_LIMITS SHORT flips:   ${extShortFlips}  (${pct(extShortFlips, totalSymbolDays)} of symbol-days)`);
   console.log('');
-  console.log('Note: Multipliers NOT adjusted — audit only. Recalibration is a separate step.');
+  console.log('Note: Multipliers NOT adjusted â€” audit only. Recalibration is a separate step.');
   console.log('='.repeat(80));
 
   console.warn = origWarn;
@@ -314,3 +365,5 @@ main().catch((err) => {
   console.error('Fatal:', err);
   process.exit(1);
 });
+
+
