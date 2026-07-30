@@ -57,11 +57,14 @@ Release `v2.0.0-production` marks the formal transition from a technical termina
 - **Overnight Signal Availability & Bypass**: Enhanced `/api/overnight` with database fallback between **3:10 PM and 12:00 AM Midnight IST** and on-demand calculation when `?bypass=true` is enabled.
 - **Option Contract Expiry Formatting**: Reformatted monthly stock option contract names to `JUL 2026 1960 CE` (full 4-digit year) and weekly index options to `30 JUL 2026 24500 CE`, eliminating month-vs-date ambiguity.
 - **Telegram Breakout Option Suggestions**: Integrated option contract lookup (`🎯 Option: ...`) directly into Telegram breakout alert messages.
+- **Telegram Alert Cron Isolation**: Re-architected the Telegram breakout alert pipeline to strictly bind to background cron jobs, ensuring that manual UI refreshes (`/api/scanner/refresh`) no longer unintentionally trigger broadcast messages to the channel.
+- **Event Risk Lookahead via Trading Sessions**: Transitioned the corporate event risk scanner (Earnings, Dividends) to evaluate lookahead windows and decay models using true NSE trading sessions (`addTradingDays`) rather than static calendar days, properly bridging weekends and market holidays.
 - **Unified Index Scanner**: Shipped new index scanner (`/api/index-scan`) aggregating intraday and overnight BTST signals for index instruments (`^NSEI`, `^NSEBANK`, `^BSESN`). Features regime-aligned modifiers and elevated-VIX ignore gates.
 - **Security & Rate Limiting**: Added Redis-backed rate limiting (`/api/auth/unlock`), middleware access token validation, and constant-time comparisons.
 - Shipped interactive Trade Journal UI (with analytics charts, CSV export, and signal breakdowns).
 - Implemented T+1 morning automated option price snapshots via cron (9:16 AM, 9:30 AM, 9:45 AM, 10:00 AM) to build realistic outcome data.
 - Standardized security deployment for API cron endpoints via strict token validation (`CRON_SECRET`).
+- Added an `ops/package-repo.ps1` Git-archive script to securely export the codebase for deployment without inadvertently leaking local `.env` files.
 
 ---
 
