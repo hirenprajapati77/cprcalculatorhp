@@ -41,7 +41,9 @@ export async function GET(_request: Request) {
     ) {
       return NextResponse.json({
         success: true,
-        executionWindowOpen: true,
+        // Derived from cashState, not hardcoded - a cache entry can still be
+        // "fresh" (< 45s old) a few seconds after the window closes at 15:30.
+        executionWindowOpen,
         cachedResult: true,
         scannedAt: cachedLive.scannedAt,
         degraded: false,

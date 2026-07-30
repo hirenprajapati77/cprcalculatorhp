@@ -57,6 +57,9 @@ pm2 delete cpr-platform || true
 pm2 start server.js --name cpr-platform
 pm2 save
 
+echo "=== Flushing PM2 logs to clear historical spam ==="
+pm2 flush cpr-platform
+
 echo "=== PM2 status ==="
 pm2 list
 

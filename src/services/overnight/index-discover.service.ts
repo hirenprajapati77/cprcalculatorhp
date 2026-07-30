@@ -873,6 +873,12 @@ export class IndexDiscoverService {
         const intraReasons = buildIntraReasons(intraSignals, direction, false, regimeCtx);
         if (live.hasLive) {
           intraReasons.unshift(`Live index LTP (${sessionMovePct >= 0 ? '+' : ''}${(sessionMovePct * 100).toFixed(2)}% vs prev close)`);
+        } else {
+          // No live tick available (mock mode, or the Yahoo 5m fetch failed/timed out
+          // during live hours) - ltp/open/high/low above are the last daily candle's
+          // close, not a real-time print. Surface that so the UI never implies a live
+          // quote it doesn't have.
+          intraReasons.unshift(`LTP proxy: last close (${lastCandle.date}) - live tick unavailable`);
         }
 
         // IGNORE setups must not advertise entry/SL/target (matches BTST score-safety UX).
