@@ -88,7 +88,6 @@ describe('Middleware Authentication & Gating', () => {
     const exemptPaths = [
       '/api/health',
       '/api/broker/fyers/callback',
-      '/api/broker/fyers/login',
       '/api/share/123',
       '/api/auth/unlock',
       '/api/auth/logout',
@@ -98,7 +97,25 @@ describe('Middleware Authentication & Gating', () => {
       const req = new NextRequest(`http://localhost:3000${path}`);
       const res = await middleware(req);
       assert.ok(res);
-      assert.strictEqual(res.headers.get('x-middleware-next'), '1');
+      assert.strictEqual(
+        res.headers.get('x-middleware-next'),
+        '1',
+        `${path} must remain exempt`
+      );
     }
+  });
+
+  it('requires auth for Fyers login (prevents token overwrite)', async () => {
+    const req = new NextRequest('http://localhost:3000/api/broker/fyers/login');
+    const res = await middleware(req);
+    assert.ok(res);
+    assert.strictEqual(res.status, 401);
+  });
+
+  it('does not treat /api/*.png spoof as a public static asset', async () => {
+    const req = new NextRequest('http://localhost:3000/api/settings.png');
+    const res = await middleware(req);
+    assert.ok(res);
+    assert.strictEqual(res.status, 401);
   });
 });

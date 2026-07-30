@@ -105,6 +105,8 @@ export class FyersAuthService {
           }
         });
         console.log('[FyersAuthService] Token cleared explicitly (e.g. due to 401 response).');
+        const { MarketService } = await import('@/services/market.service');
+        MarketService.clearFyersPermissionBlock();
       }
     } catch (err) {
       console.error('[FyersAuthService] Error clearing token from database:', err);

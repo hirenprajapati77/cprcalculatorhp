@@ -537,7 +537,11 @@ export class MarketService {
             const prevLow    = quote.low[idx] as number;
             const prevClose  = quote.close[idx] as number;
             const prevOpen   = (quote.open?.[idx] as number) ?? prevClose;
-            const prevVolume = (quote.volume?.[idx] as number) || 100000;
+            const rawVol = quote.volume?.[idx];
+            const prevVolume =
+              typeof rawVol === 'number' && Number.isFinite(rawVol) && rawVol >= 0
+                ? rawVol
+                : 0;
 
             // Average volume over the window, excluding today's partial candle
             const todayStr = getISTDateString();
@@ -565,7 +569,7 @@ export class MarketService {
               : volumeEntries.map(e => e.v);
             const avgVolume = validVolumes.length > 0
               ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
-              : prevVolume;
+              : (prevVolume > 0 ? prevVolume : 1);
 
             // LTP from regularMarketPrice (most current real-time price)
             const ltp = (meta.regularMarketPrice as number) || prevClose;
@@ -664,36 +668,71 @@ export class MarketService {
                 const json15 = await res15m.json();
                 const result15 = json15?.chart?.result?.[0];
                 const quotes15 = result15?.indicators?.quote?.[0];
-                if (quotes15 && quotes15.close && quotes15.close.length > 0) {
+                const rawTs15 = result15?.timestamp as number[] | undefined;
+                // Yahoo occasionally omits timestamps on 15m; synthesize index keys so
+                // alignment still gates on high/low/close lengths.
+                const ts15 =
+                  rawTs15 && rawTs15.length > 0
+                    ? rawTs15
+                    : Array.from(
+                        { length: Math.min(
+                          quotes15?.close?.length ?? 0,
+                          quotes15?.high?.length ?? 0,
+                          quotes15?.low?.length ?? 0
+                        ) },
+                        (_, i) => i
+                      );
+                const len15 = alignedYahooSeriesLength(ts15, quotes15, ['high', 'low', 'close']);
+                if (quotes15 && len15 > 0) {
                   let sumPriceVol = 0;
                   let sumVol = 0;
-                  for (let i = 0; i < quotes15.close.length; i++) {
+                  for (let i = 0; i < len15; i++) {
                     const h = quotes15.high[i];
                     const l = quotes15.low[i];
                     const c = quotes15.close[i];
-                    const v = quotes15.volume[i] || 0;
-                    if (h !== null && l !== null && c !== null) {
+                    const v = quotes15.volume?.[i];
+                    if (
+                      typeof h === 'number' && Number.isFinite(h) &&
+                      typeof l === 'number' && Number.isFinite(l) &&
+                      typeof c === 'number' && Number.isFinite(c)
+                    ) {
                       const typ = (h + l + c) / 3;
-                      sumPriceVol += typ * v;
-                      sumVol += v;
+                      const vol = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+                      sumPriceVol += typ * vol;
+                      sumVol += vol;
                     }
                   }
                   if (sumVol > 0) {
                     vwap = sumPriceVol / sumVol;
                   }
-                  
-                  let lastValidIdx = quotes15.close.length - 1;
-                  while (lastValidIdx >= 0 && quotes15.close[lastValidIdx] === null) {
+
+                  let lastValidIdx = len15 - 1;
+                  while (
+                    lastValidIdx >= 0 &&
+                    (quotes15.close[lastValidIdx] === null ||
+                      quotes15.close[lastValidIdx] === undefined ||
+                      !Number.isFinite(quotes15.close[lastValidIdx] as number))
+                  ) {
                     lastValidIdx--;
                   }
                   if (lastValidIdx >= 0) {
-                    candle15m = {
-                      open: quotes15.open[lastValidIdx] || quotes15.close[lastValidIdx],
-                      high: quotes15.high[lastValidIdx],
-                      low: quotes15.low[lastValidIdx],
-                      close: quotes15.close[lastValidIdx],
-                      volume: quotes15.volume[lastValidIdx] || 0
-                    };
+                    const c15 = quotes15.close[lastValidIdx] as number;
+                    const h15 = quotes15.high[lastValidIdx];
+                    const l15 = quotes15.low[lastValidIdx];
+                    const o15 = quotes15.open?.[lastValidIdx];
+                    const v15 = quotes15.volume?.[lastValidIdx];
+                    if (
+                      typeof h15 === 'number' && Number.isFinite(h15) &&
+                      typeof l15 === 'number' && Number.isFinite(l15)
+                    ) {
+                      candle15m = {
+                        open: typeof o15 === 'number' && Number.isFinite(o15) ? o15 : c15,
+                        high: h15,
+                        low: l15,
+                        close: c15,
+                        volume: typeof v15 === 'number' && Number.isFinite(v15) && v15 >= 0 ? v15 : 0,
+                      };
+                    }
                   }
                 }
               }

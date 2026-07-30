@@ -157,20 +157,20 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
 
   const alertPayload = [...enrichedLongs, ...enrichedShorts, ...enrichedIndexLongs, ...enrichedIndexShorts];
 
-  const baseResult = {
-    count: alertPayload.length,
-    longs: enrichedLongs.length,
-    shorts: enrichedShorts.length,
-    indexLongs: enrichedIndexLongs.length,
-    indexShorts: enrichedIndexShorts.length,
-    engine: 'advanced' as const,
-    regime,
-    suppressStbt,
-    suppressBtst,
-  };
-
   if (alertPayload.length === 0) {
-    return { sent: false, reason: 'no setups', ...baseResult };
+    return {
+      sent: false,
+      reason: 'no setups',
+      count: 0,
+      longs: 0,
+      shorts: 0,
+      indexLongs: 0,
+      indexShorts: 0,
+      engine: 'advanced' as const,
+      regime,
+      suppressStbt,
+      suppressBtst,
+    };
   }
 
   // ── Per-symbol dedup ──────────────────────────────────────────────────────
@@ -183,51 +183,125 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   });
   const alreadySentSet = new Set(alreadySentToday.map((r) => r.symbol));
 
-  const newPayload = alertPayload.filter((s) => !alreadySentSet.has(s.symbol));
+  // Pre-migration day-level rows were backfilled as symbol='_legacy'. Treat that
+  // as a full-day lock so we do not re-blast every ticker on deploy day.
+  if (alreadySentSet.has('_legacy')) {
+    return {
+      sent: false,
+      reason: 'already sent today',
+      count: 0,
+      longs: 0,
+      shorts: 0,
+      indexLongs: 0,
+      indexShorts: 0,
+      engine: 'advanced' as const,
+      regime,
+      suppressStbt,
+      suppressBtst,
+    };
+  }
+
+  // Prefer first occurrence (discover order already score-sorted); drop dups
+  // so LONG+SHORT for the same ticker cannot double-claim / double-list.
+  const seenSymbols = new Set<string>();
+  const dedupedPayload = alertPayload.filter((s) => {
+    if (seenSymbols.has(s.symbol)) return false;
+    seenSymbols.add(s.symbol);
+    return true;
+  });
+
+  const newPayload = dedupedPayload.filter((s) => !alreadySentSet.has(s.symbol));
 
   if (newPayload.length === 0) {
-    return { sent: false, reason: 'already sent today', ...baseResult };
+    return {
+      sent: false,
+      reason: 'already sent today',
+      count: 0,
+      longs: 0,
+      shorts: 0,
+      indexLongs: 0,
+      indexShorts: 0,
+      engine: 'advanced' as const,
+      regime,
+      suppressStbt,
+      suppressBtst,
+    };
   }
 
-  // Claim all new symbols atomically before sending (skip any that race-insert first)
   const claimedSymbols: string[] = [];
-  for (const stock of newPayload) {
+
+  const rollbackClaims = async (reason: string) => {
+    if (claimedSymbols.length === 0) return;
     try {
-      await prisma.btstAlertState.create({
-        data: { date: signalDate, symbol: stock.symbol, sentAt: new Date() },
+      await prisma.btstAlertState.deleteMany({
+        where: { date: signalDate, symbol: { in: claimedSymbols } },
       });
-      claimedSymbols.push(stock.symbol);
-    } catch (err) {
-      if (isUniqueConstraintError(err)) {
-        console.log(`[BtstAlert] ${stock.symbol} already claimed by concurrent run; skipping`);
-      } else {
-        throw err;
-      }
+    } catch (rollbackErr) {
+      console.error(
+        `[BtstAlert] Failed to roll back claims (${reason}) for ${claimedSymbols.join(',')}:`,
+        rollbackErr
+      );
     }
-  }
-
-  const claimedPayload = newPayload.filter((s) => claimedSymbols.includes(s.symbol));
-
-  if (claimedPayload.length === 0) {
-    return { sent: false, reason: 'already sent today', ...baseResult };
-  }
+  };
 
   try {
+    // Claim all new symbols before sending (skip any that race-insert first)
+    for (const stock of newPayload) {
+      try {
+        await prisma.btstAlertState.create({
+          data: { date: signalDate, symbol: stock.symbol, sentAt: new Date() },
+        });
+        claimedSymbols.push(stock.symbol);
+      } catch (err) {
+        if (isUniqueConstraintError(err)) {
+          console.log(`[BtstAlert] ${stock.symbol} already claimed by concurrent run; skipping`);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const claimedPayload = newPayload.filter((s) => claimedSymbols.includes(s.symbol));
+
+    if (claimedPayload.length === 0) {
+      return {
+        sent: false,
+        reason: 'already sent today',
+        count: 0,
+        longs: 0,
+        shorts: 0,
+        indexLongs: 0,
+        indexShorts: 0,
+        engine: 'advanced' as const,
+        regime,
+        suppressStbt,
+        suppressBtst,
+      };
+    }
+
+    const claimedSet = new Set(claimedSymbols);
+    const resultStats = {
+      count: claimedPayload.length,
+      longs: enrichedLongs.filter((s) => claimedSet.has(s.symbol)).length,
+      shorts: enrichedShorts.filter((s) => claimedSet.has(s.symbol)).length,
+      indexLongs: enrichedIndexLongs.filter((s) => claimedSet.has(s.symbol)).length,
+      indexShorts: enrichedIndexShorts.filter((s) => claimedSet.has(s.symbol)).length,
+      engine: 'advanced' as const,
+      regime,
+      suppressStbt,
+      suppressBtst,
+    };
+
     const result = await TelegramService.sendBtstAlert(claimedPayload);
 
     if (!result.sent) {
-      // Roll back claims so the next bucket can retry
-      await prisma.btstAlertState.deleteMany({
-        where: { date: signalDate, symbol: { in: claimedSymbols } },
-      }).catch(() => {});
-      return { sent: false, reason: result.reason, ...baseResult };
+      await rollbackClaims(result.reason ?? 'telegram_not_sent');
+      return { sent: false, reason: result.reason, ...resultStats };
     }
 
-    return { sent: result.sent, reason: result.reason, ...baseResult };
+    return { sent: result.sent, reason: result.reason, ...resultStats };
   } catch (sendError) {
-    await prisma.btstAlertState.deleteMany({
-      where: { date: signalDate, symbol: { in: claimedSymbols } },
-    }).catch(() => {});
+    await rollbackClaims(sendError instanceof Error ? sendError.message : 'send_exception');
     throw sendError;
   }
 }

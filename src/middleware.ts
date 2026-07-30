@@ -60,11 +60,13 @@ export async function middleware(request: NextRequest) {
   // 3. Gate /api routes
   if (url.pathname.startsWith('/api/')) {
     // Exempt public routes + cron-secret refresh + auth endpoints
+    // NOTE: /api/broker/fyers/login is intentionally NOT exempt — anyone who
+    // can start OAuth could overwrite the production Fyers broker token.
+    // Callback stays exempt (OAuth return cannot send the session cookie).
     if (
       url.pathname.startsWith('/api/health') ||
       isCronSecretExemptApiPath(url.pathname) ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
-      url.pathname.startsWith('/api/broker/fyers/login') ||
       url.pathname.startsWith('/api/share/') ||
       url.pathname === '/api/auth/unlock' ||
       url.pathname === '/api/auth/logout'
@@ -99,8 +101,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes except Next.js internals, PWA assets, and common static files
+  // Always run on /api/* (even spoofed extensions like /api/x.png).
+  // Pages: skip Next internals, PWA assets, and common static files.
   matcher: [
+    '/api/:path*',
     '/((?!_next/static|_next/image|favicon\\.ico|sw\\.js|manifest\\.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)',
   ],
 };

@@ -223,9 +223,62 @@ test('BTST alert cron — BtstAlertState claim logic (per-symbol dedup)', async 
 
       assert.strictEqual(result.sent, false);
       assert.strictEqual(result.reason, 'already sent today');
+      assert.strictEqual(result.count, 0);
       assert.strictEqual(mocks.createCalls.length, 0);
       assert.strictEqual(mocks.sendCalls.length, 0);
       assert.ok(signalDate); // sanity
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('pre-migration _legacy row locks the whole day (no re-blast)', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [{ symbol: '_legacy' }],
+      create: async () => { throw new Error('must not claim when _legacy day lock present'); },
+      sendBtstAlert: async () => { throw new Error('must not send when _legacy day lock present'); },
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(result.sent, false);
+      assert.strictEqual(result.reason, 'already sent today');
+      assert.strictEqual(result.count, 0);
+      assert.strictEqual(mocks.createCalls.length, 0);
+      assert.strictEqual(mocks.sendCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('claim-loop DB error rolls back already-claimed symbols', async () => {
+    let createCount = 0;
+    const mocks = mockBtstRouteDeps({
+      discover: async () => [
+        makeTradableSignal({ id: 'a', symbol: 'FIRST' }),
+        makeTradableSignal({ id: 'b', symbol: 'SECOND' }),
+      ],
+      findMany: async () => [],
+      create: async (args) => {
+        createCount++;
+        const a = args as { data: { date: string; symbol: string } };
+        if (a.data.symbol === 'SECOND') {
+          throw new Error('db unavailable');
+        }
+        return { id: createCount, date: a.data.date, symbol: a.data.symbol, sentAt: new Date(), updatedAt: new Date() };
+      },
+      sendBtstAlert: async () => { throw new Error('Telegram must not be called after claim failure'); },
+    });
+
+    try {
+      await assert.rejects(
+        () => withDiscoveryClock(() => runBtstAlertJob()),
+        /db unavailable/
+      );
+      assert.strictEqual(mocks.sendCalls.length, 0);
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 1, 'FIRST claim must be rolled back');
+      const deleteArg = mocks.deleteManyCallArgs[0] as { where: { symbol: { in: string[] } } };
+      assert.deepStrictEqual(deleteArg.where.symbol.in, ['FIRST']);
     } finally {
       mocks.restore();
     }
