@@ -193,6 +193,13 @@ describe('IndexDiscoverService.discoverIntraday', () => {
       assert.match(r.classification, /^(INDEX_STRONG|INDEX_READY|INDEX_WATCH|IGNORE)$/);
       assert.match(r.signalType, /^(CALL_BUY|PUT_BUY|NO_TRADE)$/);
       assert.ok(Array.isArray(r.reasons));
+      // Mock mode never has a live tick (live.hasLive is always false here), so
+      // every row must disclose it's using the daily-close LTP proxy - never
+      // silently imply a real-time quote it doesn't have.
+      assert.ok(
+        r.reasons?.some((x: string) => x.startsWith('LTP proxy: last close')),
+        `expected fallback-disclosure reason on row for ${r.symbol ?? '(unknown symbol)'}`
+      );
       // IGNORE must never advertise trade levels (even if BULLISH/BEARISH fired).
       if (r.classification === 'IGNORE') {
         assert.equal(r.entry, null);
