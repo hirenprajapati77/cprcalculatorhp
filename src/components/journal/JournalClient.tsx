@@ -791,10 +791,10 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               <>
                 {/* ── 1. KPI Cards ── */}
                 {(() => {
-                  const closed = reportingData.qualityBuckets.reduce((s, b) => s + b.count, 0);
+                  const closed = (stats ? (stats.totalClosedTrades ?? stats.totalTrades) : reportingData.qualityBuckets.reduce((s, b) => s + b.count, 0)) ?? 0;
                   const wins   = reportingData.executionOutcomes.find(b => b.groupValue === 'MODEL_VALID')?.count ?? 0;
-                  const wr     = closed > 0 ? (wins / closed) * 100 : 0;
-                  const avgPnl = reportingData.qualityBuckets.reduce((s, b) => s + b.avgPnlPct * b.count, 0) / (closed || 1);
+                  const wr     = stats ? stats.winRate : (closed > 0 ? (wins / closed) * 100 : 0);
+                  const avgPnl = stats ? stats.avgPnlPct : (reportingData.qualityBuckets.reduce((s, b) => s + b.avgPnlPct * b.count, 0) / (closed || 1));
                   const grossWin  = reportingData.executionOutcomes.filter(b => b.avgPnlPct > 0).reduce((s, b) => s + Math.abs(b.avgPnlPct) * b.count, 0);
                   const grossLoss = reportingData.executionOutcomes.filter(b => b.avgPnlPct < 0).reduce((s, b) => s + Math.abs(b.avgPnlPct) * b.count, 0);
                   const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? 999 : 0);

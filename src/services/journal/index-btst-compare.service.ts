@@ -64,6 +64,14 @@ function parseRegimeFromSummary(signalSummary: string): string | null {
   return part ? part.trim().replace('REGIME_', '') : null;
 }
 
+function normalizeSymbolForJoin(symbol: string): string {
+  let sym = symbol.toUpperCase().trim();
+  if (sym === '^NSEI' || sym === 'NIFTY') return 'NIFTY';
+  if (sym === '^NSEBANK' || sym === 'BANKNIFTY') return 'BANKNIFTY';
+  if (sym === '^BSESN' || sym === 'SENSEX') return 'SENSEX';
+  return sym;
+}
+
 async function resolveBacktestRun(backtestRunId?: string) {
   if (backtestRunId) {
     return prisma.backtestRun.findUnique({ where: { id: backtestRunId } });
@@ -103,12 +111,14 @@ export async function getIndexBtstCompare(
   // BTST journal entry per index/day.
   const liveByKey = new Map<string, (typeof liveEntries)[number]>();
   for (const e of liveEntries) {
-    liveByKey.set(`${e.symbol}_${journalDateKey(e.tradeDate)}`, e);
+    const normSym = normalizeSymbolForJoin(e.symbol);
+    liveByKey.set(`${normSym}_${journalDateKey(e.tradeDate)}`, e);
   }
 
   const btByKey = new Map<string, (typeof backtestTrades)[number]>();
   for (const t of backtestTrades) {
-    btByKey.set(`${t.symbol}_${backtestDateKey(t.entryDate)}`, t);
+    const normSym = normalizeSymbolForJoin(t.symbol);
+    btByKey.set(`${normSym}_${backtestDateKey(t.entryDate)}`, t);
   }
 
   const allKeys = new Set([...liveByKey.keys(), ...btByKey.keys()]);

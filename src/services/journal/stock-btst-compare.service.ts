@@ -76,6 +76,13 @@ function isStockBtstJournalEntry(signalSummary: string): boolean {
   return !signalSummary.includes('INDEX');
 }
 
+function normalizeSymbolForJoin(symbol: string): string {
+  let sym = symbol.toUpperCase().trim();
+  if (sym.endsWith('.NS')) sym = sym.slice(0, -3);
+  if (sym.endsWith('.BO')) sym = sym.slice(0, -3);
+  return sym;
+}
+
 async function resolveBacktestRun(backtestRunId?: string) {
   if (backtestRunId) {
     return prisma.backtestRun.findUnique({ where: { id: backtestRunId } });
@@ -116,12 +123,14 @@ export async function getStockBtstCompare(
   const liveByKey = new Map<string, (typeof liveEntries)[number]>();
   for (const e of liveEntries) {
     if (!isStockBtstJournalEntry(e.signalSummary)) continue;
-    liveByKey.set(`${e.symbol}_${journalDateKey(e.tradeDate)}`, e);
+    const normSym = normalizeSymbolForJoin(e.symbol);
+    liveByKey.set(`${normSym}_${journalDateKey(e.tradeDate)}`, e);
   }
 
   const btByKey = new Map<string, (typeof backtestTrades)[number]>();
   for (const t of backtestTrades) {
-    btByKey.set(`${t.symbol}_${backtestDateKey(t.entryDate)}`, t);
+    const normSym = normalizeSymbolForJoin(t.symbol);
+    btByKey.set(`${normSym}_${backtestDateKey(t.entryDate)}`, t);
   }
 
   const allKeys = new Set([...liveByKey.keys(), ...btByKey.keys()]);

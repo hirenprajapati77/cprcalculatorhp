@@ -1392,7 +1392,7 @@ export default function ScannerClient() {
         // Update KPI insights
         if (data.insights) {
           setInsightCounts({
-            strongBuy: data.insights.strongSignal || 0,
+            strongBuy: data.insights.strongBuy || 0,
             breakoutReady: data.insights.breakoutReady || 0,
             avoid: data.insights.avoid || 0,
           });
@@ -1530,7 +1530,7 @@ export default function ScannerClient() {
       setIndexMarketRegime(data.marketRegime ?? null);
       if (data.insights) {
         setInsightCounts({
-          strongBuy: data.insights.strongSignal || 0,
+          strongBuy: data.insights.strongBuy || 0,
           breakoutReady: data.insights.breakoutReady || 0,
           avoid: data.insights.avoid || 0,
         });
@@ -1978,6 +1978,7 @@ export default function ScannerClient() {
 
       const signals = item.signals;
       const score = item.score;
+      let matchedAny = false;
 
       const checkAndAddCell = (cellKey: string) => {
         const cell = grid[sec][cellKey];
@@ -1989,18 +1990,6 @@ export default function ScannerClient() {
           cell.topStockScore = score;
         }
 
-        // Row Total Increment
-        const rowTotal = grid[sec]['Total'];
-        rowTotal.count += 1;
-        if (!rowTotal.symbols.includes(item.symbol)) {
-          rowTotal.symbols.push(item.symbol);
-        }
-        rowTotal.avgScore = (rowTotal.avgScore * (rowTotal.count - 1) + score) / rowTotal.count;
-        if (score > rowTotal.topStockScore) {
-          rowTotal.topStock = item.symbol;
-          rowTotal.topStockScore = score;
-        }
-
         // Column Total Increment
         const colTotal = colTotals[cellKey];
         colTotal.count += 1;
@@ -2010,6 +1999,8 @@ export default function ScannerClient() {
           colTotal.topStock = item.symbol;
           colTotal.topStockScore = score;
         }
+        
+        matchedAny = true;
       };
 
       if (score >= thresholds.strong) checkAndAddCell('Strong Buy');
@@ -2025,16 +2016,28 @@ export default function ScannerClient() {
         (scannerMode !== 'CPR' && signals.includes('LOWER_VALUE'))
       ) checkAndAddCell('Bearish');
       if (score >= thresholds.watch && score < thresholds.ready) checkAndAddCell('Watch');
+
+      // Row Total Increment (Once per stock, if it matched at least one classification)
+      if (matchedAny) {
+        const rowTotal = grid[sec]['Total'];
+        rowTotal.count += 1;
+        rowTotal.symbols.push(item.symbol);
+        rowTotal.avgScore = (rowTotal.avgScore * (rowTotal.count - 1) + score) / rowTotal.count;
+        if (score > rowTotal.topStockScore) {
+          rowTotal.topStock = item.symbol;
+          rowTotal.topStockScore = score;
+        }
+      }
     });
 
     return { grid, colTotals };
   }, [results, scannerMode, thresholds.strong, thresholds.ready, thresholds.watch]);
 
   // V2 Scanner Insights
-  const strongBuyCount = results.filter(r => r.score >= thresholds.strong && !r.rejectionReason).length || insightCounts.strongBuy;
-  const breakoutReadyCount = results.filter(r => r.score >= thresholds.ready && r.score < thresholds.strong).length || insightCounts.breakoutReady;
+  const strongBuyCount = insightCounts.strongBuy;
+  const breakoutReadyCount = insightCounts.breakoutReady;
   const watchlistCount = Object.keys(watchlist).filter(k => watchlist[k]?.starred).length;
-  const avoidCount = results.filter(r => r.score < thresholds.watch || r.btstStatus === 'NEUTRAL_CONFLICT').length || insightCounts.avoid;
+  const avoidCount = insightCounts.avoid;
 
   // KPI calculations
   const totalActiveSignals = useMemo(() => {
@@ -2573,7 +2576,9 @@ export default function ScannerClient() {
                     );
                   })}
                   <td className="p-2.5 border-l border-border-primary text-accent-blue font-extrabold bg-bg-primary/30">
-                    <div className="text-sm">{results.length}</div>
+                    <div className="text-sm">
+                      {SECTORS_LIST.reduce((sum, sec) => sum + (heatmapGridData.grid[sec]?.Total?.count || 0), 0)}
+                    </div>
                   </td>
                 </tr>
               </tbody>
