@@ -1,4 +1,5 @@
 import { ScannerController } from '@/services/scanner-controller';
+import * as breakoutPipeline from '@/services/alert/breakout-alert.pipeline';
 
 export type CprScanJobResult = {
   success: boolean;
@@ -11,6 +12,7 @@ export type CprScanJobResult = {
 /**
  * Periodically recomputes CPR scanner results during cash market hours.
  * Defaults to NIFTY_FNO universe on NSE market.
+ * Breakout Telegram alerts fire from this cron path only (not UI refresh).
  */
 export async function runCprScanJob(
   universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' = 'NIFTY_FNO',
@@ -18,6 +20,7 @@ export async function runCprScanJob(
 ): Promise<CprScanJobResult> {
   try {
     const results = await ScannerController.runFullScan(universe, market);
+    breakoutPipeline.notifyBreakoutsFromScan(results, 'cpr-scan');
     return {
       success: true,
       count: results.length,

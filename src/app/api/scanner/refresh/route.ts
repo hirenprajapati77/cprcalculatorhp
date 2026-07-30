@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
-import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
-import { TelegramService } from '@/services/alert/telegram.service';
 import { isMarketOpen } from '@/lib/market-hours';
 
 export async function POST(request: NextRequest) {
@@ -42,32 +40,9 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
 
-    // Run the scan synchronously for immediate client feedback (LIVE SESSION OR BYPASS)
+    // UI / page-load refresh: recompute scanner data only.
+    // Telegram breakout alerts are cron-only (cpr-scan job + /api/cron/auto-scan).
     const results = await ScannerController.runFullScan(universe, market);
-
-    if (isMarketOpen()) {
-      // Fire-and-forget breakout alert — never blocks scan response
-      BreakoutWatcherService.detectNewBreakouts(
-      results.map(r => ({
-        symbol: r.symbol,
-        signals: r.signals || [],
-        ltp: r.ltp,
-        entry: r.entry ?? r.tc ?? r.ltp,
-        sl: r.sl ?? r.bc ?? r.ltp * 0.99,
-        target: r.target ?? r.r1 ?? r.ltp * 1.02,
-        rr: r.rr ?? '1:1.5',
-        score: r.score ?? 0,
-        sector: r.sector ?? 'Other',
-        eventRiskScore: r.eventRiskScore ?? 0,
-      }))
-    ).then(newBreakouts => {
-      if (newBreakouts.length > 0) {
-        return TelegramService.sendBreakoutAlert(newBreakouts);
-      }
-      }).catch(err => {
-        console.error('[BreakoutWatcher] Manual scan alert pipeline failed:', err);
-      });
-    }
 
     return NextResponse.json({
       success: true,
