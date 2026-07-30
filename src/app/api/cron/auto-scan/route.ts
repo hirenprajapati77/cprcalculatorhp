@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
 import { CacheService } from '@/services/cache.service';
-import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
-import { TelegramService } from '@/services/alert/telegram.service';
+import { notifyBreakoutsFromScan } from '@/services/alert/breakout-alert.pipeline';
 import { getISTTime, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 
@@ -34,27 +33,7 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString()
     }, 5 * 60); // cache for 5 minutes — keeps UI fresh between cron cycles
 
-    // Fire-and-forget breakout alert — never blocks scan response
-    BreakoutWatcherService.detectNewBreakouts(
-      results.map(r => ({
-        symbol: r.symbol,
-        signals: r.signals || [],
-        ltp: r.ltp,
-        entry: r.entry ?? r.tc ?? r.ltp,
-        sl: r.sl ?? r.bc ?? r.ltp * 0.99,
-        target: r.target ?? r.r1 ?? r.ltp * 1.02,
-        rr: r.rr ?? '1:1.5',
-        score: r.score ?? 0,
-        sector: r.sector ?? 'Other',
-        eventRiskScore: r.eventRiskScore ?? 0,
-      }))
-    ).then(newBreakouts => {
-      if (newBreakouts.length > 0) {
-        return TelegramService.sendBreakoutAlert(newBreakouts);
-      }
-    }).catch(err => {
-      console.error('[BreakoutWatcher] Auto-scan alert pipeline failed:', err);
-    });
+    notifyBreakoutsFromScan(results, 'auto-scan');
 
     return NextResponse.json({ success: true, count: results.length });
   } catch (error: unknown) {

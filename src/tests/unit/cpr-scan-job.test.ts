@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { lastRefreshLabel } from '@/utils/format';
 import { runCprScanJob } from '@/services/scheduler/cpr-scan.job';
 import { ScannerController } from '@/services/scanner-controller';
+import { BreakoutWatcherService } from '@/services/alert/breakout-watcher.service';
 import {
   tryClaimCronRun,
   completeCronRun,
@@ -28,33 +29,52 @@ describe('lastRefreshLabel (honest Last Refresh)', () => {
 });
 
 describe('runCprScanJob', () => {
-  it('returns success/count from ScannerController.runFullScan', async () => {
-    const original = ScannerController.runFullScan;
+  it('returns success/count from ScannerController.runFullScan and notifies breakouts', async () => {
+    const originalScan = ScannerController.runFullScan;
+    const originalDetect = BreakoutWatcherService.detectNewBreakouts;
+    let detectCalls = 0;
     ScannerController.runFullScan = (async () =>
-      [{ symbol: 'A' }, { symbol: 'B' }] as never) as typeof ScannerController.runFullScan;
+      [{ symbol: 'A', ltp: 1, signals: [] }, { symbol: 'B', ltp: 2, signals: [] }] as never) as typeof ScannerController.runFullScan;
+    BreakoutWatcherService.detectNewBreakouts = (async () => {
+      detectCalls += 1;
+      return [];
+    }) as typeof BreakoutWatcherService.detectNewBreakouts;
     try {
       const result = await runCprScanJob('NIFTY_FNO', 'NSE');
       assert.equal(result.success, true);
       assert.equal(result.count, 2);
       assert.equal(result.universe, 'NIFTY_FNO');
       assert.equal(result.market, 'NSE');
+      // Fire-and-forget: allow microtask queue to run detect
+      await Promise.resolve();
+      assert.equal(detectCalls, 1);
     } finally {
-      ScannerController.runFullScan = original;
+      ScannerController.runFullScan = originalScan;
+      BreakoutWatcherService.detectNewBreakouts = originalDetect;
     }
   });
 
-  it('returns success=false when runFullScan throws', async () => {
-    const original = ScannerController.runFullScan;
+  it('returns success=false when runFullScan throws and skips notify', async () => {
+    const originalScan = ScannerController.runFullScan;
+    const originalDetect = BreakoutWatcherService.detectNewBreakouts;
+    let detectCalls = 0;
     ScannerController.runFullScan = (async () => {
       throw new Error('boom');
     }) as typeof ScannerController.runFullScan;
+    BreakoutWatcherService.detectNewBreakouts = (async () => {
+      detectCalls += 1;
+      return [];
+    }) as typeof BreakoutWatcherService.detectNewBreakouts;
     try {
       const result = await runCprScanJob('NIFTY_FNO', 'NSE');
       assert.equal(result.success, false);
       assert.equal(result.count, 0);
       assert.equal(result.message, 'boom');
+      await Promise.resolve();
+      assert.equal(detectCalls, 0);
     } finally {
-      ScannerController.runFullScan = original;
+      ScannerController.runFullScan = originalScan;
+      BreakoutWatcherService.detectNewBreakouts = originalDetect;
     }
   });
 });

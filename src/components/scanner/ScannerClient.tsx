@@ -32,7 +32,7 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST, lastRefreshLabel } from '@/utils/format';
 import { IndexSignalRow } from './IndexSignalRow';
-import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMarketOpen } from '@/lib/market-hours';
+import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen } from '@/lib/market-hours';
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
@@ -1599,33 +1599,18 @@ export default function ScannerClient() {
   }, [universe, market, refreshInterval, scannerMode, fetchScannerData, fetchIndexData, fetchTopOpportunities, fetchHistoryRuns, showToast]);
 
   const refreshActiveData = useCallback(async (silent = true) => {
+    // Passive poll only — re-read latest DB/cache rows written by the background
+    // cpr-scan cron (~every 5m). Full recompute + Telegram are cron-only;
+    // explicit "Scan Market" still calls handleScanRefresh → /api/scanner/refresh.
     if (scannerMode === 'INDEX') {
       await fetchIndexData(silent);
       return;
     }
-    if (isOvernightMode(scannerMode)) {
-      await fetchScannerData(silent);
-      return;
-    }
-
-    // CPR: auto-refresh must recompute (same path as "Scan Market").
-    // A plain GET only re-reads DB and never produces new signals.
-    try {
-      const res = await fetch('/api/scanner/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ universe, market }),
-      });
-      if (!res.ok) {
-        await fetchScannerData(silent);
-        return;
-      }
-      await fetchScannerData(silent);
+    await fetchScannerData(silent);
+    if (scannerMode === 'CPR') {
       void fetchTopOpportunities();
-    } catch {
-      await fetchScannerData(silent);
     }
-  }, [scannerMode, universe, market, fetchIndexData, fetchScannerData, fetchTopOpportunities]);
+  }, [scannerMode, fetchIndexData, fetchScannerData, fetchTopOpportunities]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') {
@@ -1638,14 +1623,11 @@ export default function ScannerClient() {
 
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
 
-    // CPR + Interval on: run a real scan when the timer is armed (page load /
-    // interval change), so users are not stuck waiting a full cycle for the
-    // first recompute. Server inFlight guard dedupes concurrent runs.
-    if (scannerMode === 'CPR' && isMarketOpen()) {
-      void refreshActiveData(true).then(() => {
-        setCountdown(ms / 1000);
-      });
-    }
+    // Re-read frozen/live DB results immediately when the timer is armed —
+    // does not trigger a market-wide rescan or Telegram.
+    void refreshActiveData(true).then(() => {
+      setCountdown(ms / 1000);
+    });
 
     autoRefreshRef.current = setInterval(() => {
       void refreshActiveData(true);
