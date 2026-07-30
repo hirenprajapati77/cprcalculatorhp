@@ -6,6 +6,8 @@ import type { NextRequest } from 'next/server';
 
 /** PWA + public static assets must stay ungated — SW registration cannot follow an auth redirect. */
 function isPublicStaticAsset(pathname: string): boolean {
+  // Never exempt API routes — even if they end in a static extension (e.g. /api/x.png spoof)
+  if (pathname.startsWith('/api/')) return false;
   if (
     pathname === '/sw.js' ||
     pathname === '/manifest.webmanifest' ||

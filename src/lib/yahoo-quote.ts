@@ -34,13 +34,6 @@ export function alignedYahooSeriesLength(
     minLen = Math.min(minLen, series.length);
   }
 
-  for (const key of ['open', 'high', 'low', 'close', 'volume'] as const) {
-    if (required.includes(key)) continue;
-    const series = quotes[key];
-    if (series) {
-      minLen = Math.min(minLen, series.length);
-    }
-  }
 
   return minLen;
 }

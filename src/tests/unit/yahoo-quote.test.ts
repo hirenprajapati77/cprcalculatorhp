@@ -9,7 +9,9 @@ describe('alignedYahooSeriesLength', () => {
     assert.strictEqual(alignedYahooSeriesLength([1, 2], { high: [1, 2] }), 0);
   });
 
-  it('truncates to the shortest aligned series', () => {
+  it('truncates to the shortest REQUIRED series only (non-required like volume do not shrink length)', () => {
+    // low has 3 items (shortest required series) -> minLen = 3
+    // volume has 2 items but is NOT required -> should NOT shrink minLen
     assert.strictEqual(
       alignedYahooSeriesLength(
         [1, 2, 3, 4],
@@ -21,7 +23,23 @@ describe('alignedYahooSeriesLength', () => {
         },
         ['high', 'low', 'close']
       ),
-      2
+      3  // Correct: gated by 'low' (required, length 3) — NOT shrunk further by volume (non-required)
+    );
+  });
+
+  it('returns 0 when a required series is shorter than any non-required series', () => {
+    assert.strictEqual(
+      alignedYahooSeriesLength(
+        [1, 2, 3],
+        {
+          high: [1, 2, 3],
+          low: [1],        // required, length 1
+          close: [1, 2, 3],
+          volume: [10, 20, 30], // non-required, longer — must not override required gate
+        },
+        ['high', 'low', 'close']
+      ),
+      1
     );
   });
 });
