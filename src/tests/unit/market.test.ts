@@ -117,7 +117,7 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
     }
   });
 
-  await t.test('getStockData() Fyers Connected-only fallback after Yahoo 404', async () => {
+  await t.test('getStockData() Fyers Primary succeeds with quotes LTP + history', async () => {
     const originalMode = env.MARKET_DATA_MODE;
     const originalFetch = global.fetch;
     const originalCacheGet = CacheService.get;
@@ -148,11 +148,35 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       candles.push([start + i * 86400, px, px + 1, px - 1, px, 1000 + i]);
     }
 
+    let yahooCalls = 0;
     global.fetch = async (input: string | URL | Request): Promise<Response> => {
       const url = input.toString();
       if (url.includes('query1.finance.yahoo.com')) {
+        yahooCalls++;
         return new Response(JSON.stringify({ chart: { result: null, error: { code: 'Not Found' } } }), {
           status: 404,
+        });
+      }
+      if (url.includes('api-t1.fyers.in/data/quotes') && url.includes('NSE%3ALTM-EQ')) {
+        return new Response(JSON.stringify({
+          s: 'ok',
+          code: 200,
+          d: [{
+            n: 'NSE:LTM-EQ',
+            s: 'ok',
+            v: {
+              lp: 215.5,
+              open_price: 210,
+              high_price: 216,
+              low_price: 209,
+              prev_close_price: 208,
+              atp: 212.3,
+              volume: 50000,
+            },
+          }],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
         });
       }
       if (url.includes('api-t1.fyers.in/data/history') && url.includes('NSE%3ALTM-EQ')) {
@@ -166,21 +190,23 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
 
     try {
       const data = await MarketService.getStockData('LTM', 'NSE');
-      assert.ok(data, 'Fyers fallback should return stock data when Connected');
+      assert.ok(data, 'Fyers Primary should return stock data when Connected');
       assert.strictEqual(data!.symbol, 'LTM');
       assert.ok(data!.history && data!.history.length > 0);
       assert.ok(data!.history!.length <= 22, 'history should be truncated to ~22 for CPR/ATR');
-      assert.strictEqual(data!.ltp, data!.close);
+      assert.strictEqual(data!.ltp, 215.5, 'ltp must come from quotes lp, not history close');
+      assert.strictEqual(data!.previousClose, 208, 'previousClose from quote prev_close_price');
+      assert.strictEqual(data!.vwap, 212.3, 'vwap prefers quote atp');
+      assert.strictEqual(data!.candle15m, null);
       assert.ok(typeof data!.sma50Slope === 'number');
-      // BUG-3: previousClose must be prior session, not last.close (== ltp)
       assert.ok(
         data!.previousClose != null && data!.previousClose !== data!.ltp,
         'Fyers previousClose must not collapse to ltp (extension gate needs real day-return)'
       );
-      const hist = data!.history!;
-      assert.strictEqual(data!.previousClose, hist[hist.length - 2].close);
-      assert.ok(cached, 'successful Fyers fallback should populate cache');
+      assert.strictEqual(yahooCalls, 0, 'Yahoo must not be consulted when Fyers Primary succeeds');
+      assert.ok(cached, 'successful Fyers Primary should populate cache');
     } finally {
+      MarketService.clearFyersPermissionBlock();
       (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
       global.fetch = originalFetch;
       CacheService.get = originalCacheGet;
@@ -191,12 +217,44 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
     }
   });
 
-  await t.test('getStockData() keeps Yahoo live quote primary when Fyers is connected', async () => {
+  await t.test('probeFyersDataApi() reports permission denial clearly', async () => {
+    const originalFetch = global.fetch;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
+
+    FyersAuthService.getAccessToken = async () => 'fyers_test_token';
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
+    global.fetch = async () =>
+      new Response(JSON.stringify({
+        s: 'error',
+        code: -403,
+        message: 'Additional permission required',
+      }), { status: 403 });
+
+    try {
+      const probe = await MarketService.probeFyersDataApi();
+      assert.strictEqual(probe.connected, true);
+      assert.strictEqual(probe.ok, false);
+      assert.ok(probe.message.includes('myapi.fyers.in'), 'probe should include remediation');
+    } finally {
+      MarketService.clearFyersPermissionBlock();
+      global.fetch = originalFetch;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
+    }
+  });
+
+  await t.test('getStockData() uses Yahoo Fallback when Fyers Primary fails', async () => {
     const originalMode = env.MARKET_DATA_MODE;
     const originalFetch = global.fetch;
     const originalCacheGet = CacheService.get;
     const originalCacheSet = CacheService.set;
     const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
 
     (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
     CacheService.get = async () => null;
@@ -206,11 +264,23 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       fyersTokenCalls++;
       return 'fyers_test_token';
     };
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
 
     const t1 = Date.UTC(2026, 6, 20) / 1000;
     const t2 = Date.UTC(2026, 6, 21) / 1000;
     global.fetch = async (input: string | URL | Request): Promise<Response> => {
       const url = input.toString();
+      if (url.includes('api-t1.fyers.in')) {
+        return new Response(JSON.stringify({
+          s: 'error',
+          code: 403,
+          message: 'Additional permission required',
+        }), { status: 403 });
+      }
       if (url.includes('interval=1d')) {
         return new Response(JSON.stringify({
           chart: {
@@ -256,17 +326,19 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.ok(data);
       assert.strictEqual(data!.ltp, 123);
       assert.strictEqual(data!.candle15m?.close, 123);
-      assert.strictEqual(fyersTokenCalls, 0, 'Fyers should not be consulted while Yahoo live data succeeds');
+      assert.ok(fyersTokenCalls >= 1, 'Fyers should be attempted first');
     } finally {
+      MarketService.clearFyersPermissionBlock();
       (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
       global.fetch = originalFetch;
       CacheService.get = originalCacheGet;
       CacheService.set = originalCacheSet;
       FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
     }
   });
 
-  await t.test('getStockData() skips Fyers fallback when not Connected', async () => {
+  await t.test('getStockData() skips Fyers Primary when not Connected', async () => {
     const originalMode = env.MARKET_DATA_MODE;
     const originalFetch = global.fetch;
     const originalCacheGet = CacheService.get;
@@ -294,11 +366,14 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
     const originalFetch = global.fetch;
     const originalCacheGet = CacheService.get;
     const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
     const originalWarn = console.warn;
 
     (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
     CacheService.get = async () => null;
     CacheService.set = async () => {};
+    // Force Yahoo Fallback path so this test isolates Yahoo placeholder handling.
+    FyersAuthService.getAccessToken = async () => null;
 
     const ts1 = Date.UTC(2026, 6, 20) / 1000;
     const ts2 = Date.UTC(2026, 6, 21) / 1000;
@@ -362,6 +437,7 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       global.fetch = originalFetch;
       CacheService.get = originalCacheGet;
       CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
       console.warn = originalWarn;
     }
   });

@@ -340,7 +340,13 @@ const STOCK_UNIVERSE: {
 
 export class MarketService {
   private static providerErrorLastLoggedAtMs = new Map<string, number>();
-  private static fyersPermissionBlockedUntilMs = new Map<string, number>();
+  /** Account-level Data API permission block (403). Global — not per-symbol. */
+  private static fyersPermissionBlockedUntilMs = 0;
+
+  /** Clears the Fyers Data API permission cooldown (e.g. after re-login or successful probe). */
+  static clearFyersPermissionBlock(): void {
+    this.fyersPermissionBlockedUntilMs = 0;
+  }
 
   private static shouldLogProviderError(key: string): boolean {
     const now = Date.now();
@@ -384,7 +390,7 @@ export class MarketService {
    */
   static getLiveStatus(): LiveStatus {
     const dataMode = (env.MARKET_DATA_MODE || 'live').toLowerCase();
-    if (dataMode === 'live') return { mode: 'live', source: 'Yahoo Finance (Real-time)' };
+    if (dataMode === 'live') return { mode: 'live', source: 'Fyers Primary / Yahoo Fallback' };
     if (dataMode === 'paper') return { mode: 'paper', source: 'Paper Trading (Simulated)' };
     return { mode: 'mock', source: 'Mock Data (Static)' };
   }
@@ -439,9 +445,9 @@ export class MarketService {
   }
 
   /**
-   * Fetches daily OHLC, Volume, and LTP from Yahoo Finance (LIVE).
-   * Includes last 5 days of candle history.
-   * Falls back to paper/mock data ONLY if MARKET_DATA_MODE is explicitly set to 'paper' or 'mock'.
+   * Fetches daily OHLC, Volume, and LTP.
+   * Live: Fyers quotes+history primary, Yahoo (incl. 15m VWAP) as fallback.
+   * Paper/mock only when MARKET_DATA_MODE is explicitly 'paper' or 'mock'.
    */
   static async getStockData(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): Promise<MarketStockData | null> {
     const cleanSymbol = symbol.trim();
@@ -468,8 +474,18 @@ export class MarketService {
     const sector = (staticMeta?.sector || 'Other').trim();
     const marketCap = staticMeta?.marketCap || 50000;
 
-    // ── LIVE MODE: Yahoo live quote first, Fyers daily history as outage fallback ─
+    // ── LIVE MODE: Fyers quotes+history primary, Yahoo (incl. 15m) as fallback ─
     if (dataMode === 'live') {
+      const fyersPrimary = await MarketService.tryFyersPrimary(
+        cleanSymbol,
+        market,
+        sector,
+        marketCap,
+        sma200,
+        cacheKey
+      );
+      if (fyersPrimary) return fyersPrimary;
+
       try {
         const res = await this.fetchWithTimeout(
           // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
@@ -708,6 +724,7 @@ export class MarketService {
               resultData.sma200 = sma200;
             }
             await CacheService.set(cacheKey, resultData, 60);
+            console.log(`[LiveFeed] Yahoo Fallback OK for ${ticker}`);
             return resultData;
           }
         }
@@ -715,18 +732,9 @@ export class MarketService {
         throw new Error(`Invalid quote data from Yahoo Finance for ${ticker}`);
 
       } catch (err) {
-        if (this.shouldLogProviderError(`yahoo:${ticker}`)) {
-          console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}: ${this.summarizeProviderError(err)}`);
+        if (this.shouldLogProviderError(`yahoo-fallback:${ticker}`)) {
+          console.warn(`[LiveFeed] Yahoo Fallback failed for ${ticker}: ${this.summarizeProviderError(err)}`);
         }
-        const fyersFallback = await MarketService.tryFyersHistoryFallback(
-          cleanSymbol,
-          market,
-          sector,
-          marketCap,
-          sma200,
-          cacheKey
-        );
-        if (fyersFallback) return fyersFallback;
         return null;
       }
     }
@@ -804,11 +812,13 @@ export class MarketService {
   }
 
   /**
-   * Yahoo→Fyers OHLC fallback (Connected-only).
-   * Uses daily history only; skips 15m/VWAP enrichment. Returns null if not logged in,
-   on auth/symbol errors, or if candle remap fails.
+   * Fyers primary live feed (Connected-only).
+   * Quotes API for true LTP (`lp`) + daily history for ATR/CPR windows.
+   * Skips Yahoo 15m enrichment; uses quote `atp` for VWAP when present.
+   * Returns null if not logged in, on auth/symbol errors, or if remap fails
+   * so the caller can fall through to Yahoo Fallback.
    */
-  static async tryFyersHistoryFallback(
+  static async tryFyersPrimary(
     cleanSymbol: string,
     market: 'NSE' | 'BSE',
     sector: string,
@@ -816,11 +826,14 @@ export class MarketService {
     sma200: number | undefined,
     cacheKey: string
   ): Promise<MarketStockData | null> {
-    const blockedUntil = this.fyersPermissionBlockedUntilMs.get(cleanSymbol) ?? 0;
+    const blockedUntil = this.fyersPermissionBlockedUntilMs;
     if (blockedUntil > Date.now()) {
-      if (this.shouldLogProviderError(`fyers-permission-blocked:${cleanSymbol}`)) {
+      if (this.shouldLogProviderError(`fyers-permission-blocked:global`)) {
         const waitSec = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000));
-        console.warn(`[LiveFeed] Fyers fallback temporarily skipped for ${cleanSymbol}: permission denied recently (${waitSec}s cooldown)`);
+        console.warn(
+          `[LiveFeed] Fyers Primary temporarily skipped (all symbols): Data API permission denied recently (${waitSec}s cooldown). ` +
+            `Enable Quotes & Market Data + Historical Data on https://myapi.fyers.in then Reconnect Fyers.`
+        );
       }
       return null;
     }
@@ -828,7 +841,7 @@ export class MarketService {
     const token = await FyersAuthService.getAccessToken();
     if (!token) {
       if (this.shouldLogProviderError(`fyers-not-connected:${cleanSymbol}`)) {
-        console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: not connected`);
+        console.warn(`[LiveFeed] Fyers Primary skipped for ${cleanSymbol}: not connected`);
       }
       return null;
     }
@@ -837,12 +850,37 @@ export class MarketService {
     try {
       appId = FyersAuthService.getCredentials().appId;
     } catch (e) {
-      console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: credentials missing`, e);
+      console.warn(`[LiveFeed] Fyers Primary skipped for ${cleanSymbol}: credentials missing`, e);
       return null;
     }
 
     const fyersSymbol =
       market === 'NSE' ? `NSE:${cleanSymbol}-EQ` : `BSE:${cleanSymbol}-EQ`;
+    const authHeaders = {
+      Authorization: `${appId}:${token}`,
+      Accept: 'application/json',
+    };
+
+    const markPermissionCooldown = (status: number, message: string | undefined) => {
+      const msg = typeof message === 'string' ? message.toLowerCase() : '';
+      const isPermissionError =
+        status === 403 ||
+        msg.includes('additional permission required') ||
+        msg.includes('do not have permission');
+      if (!isPermissionError) return;
+      this.fyersPermissionBlockedUntilMs = Date.now() + 10 * 60 * 1000;
+      if (this.shouldLogProviderError('fyers-permission-remediation')) {
+        console.warn(
+          `[LiveFeed] Fyers Data API permission denied (${message ?? `HTTP ${status}`}). ` +
+            `Fix: myapi.fyers.in → edit app → enable Quotes & Market Data + Historical Data ` +
+            `(Fyers often requires all permission checkboxes) → Save → Reconnect Fyers in Settings. ` +
+            `Skipping Fyers for 10m; Yahoo Fallback remains active.`
+        );
+      }
+    };
+
+    const isPositivePrice = (n: unknown): n is number =>
+      typeof n === 'number' && Number.isFinite(n) && n > 0;
 
     const todayStr = getISTDateString();
     const rangeTo = todayStr;
@@ -850,7 +888,11 @@ export class MarketService {
     fromDate.setUTCDate(fromDate.getUTCDate() - 250); // ~175 trading days; buffer for holiday clusters
     const rangeFrom = getISTDateString(fromDate);
 
-    const url =
+    const quotesUrl =
+      `https://api-t1.fyers.in/data/quotes?` +
+      new URLSearchParams({ symbols: fyersSymbol }).toString();
+
+    const historyUrl =
       `https://api-t1.fyers.in/data/history?` +
       new URLSearchParams({
         symbol: fyersSymbol,
@@ -862,12 +904,64 @@ export class MarketService {
       }).toString();
 
     try {
-      const res = await this.fetchWithTimeout(url, {
+      // ── Quotes: true last-traded price ──────────────────────────────────
+      const quotesRes = await this.fetchWithTimeout(quotesUrl, {
         cache: 'no-store',
-        headers: {
-          Authorization: `${appId}:${token}`,
-          Accept: 'application/json',
-        },
+        headers: authHeaders,
+      }, env.FYERS_REQUEST_TIMEOUT_MS);
+
+      if (quotesRes.status === 401) {
+        if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+        }
+        await FyersAuthService.clearToken();
+        return null;
+      }
+
+      const quotesJson = (await quotesRes.json()) as {
+        s?: string;
+        code?: number;
+        message?: string;
+        d?: Array<{
+          n?: string;
+          s?: string;
+          v?: {
+            lp?: number;
+            open_price?: number;
+            high_price?: number;
+            low_price?: number;
+            prev_close_price?: number;
+            atp?: number;
+            volume?: number;
+          };
+        }>;
+      };
+
+      if (!quotesRes.ok || quotesJson.s !== 'ok' || !Array.isArray(quotesJson.d) || quotesJson.d.length === 0) {
+        markPermissionCooldown(quotesRes.status, quotesJson.message);
+        if (this.shouldLogProviderError(`fyers-quotes:${fyersSymbol}:${quotesRes.status}:${quotesJson.code ?? 'na'}`)) {
+          console.warn(
+            `[LiveFeed] Fyers quotes failed for ${fyersSymbol}: HTTP ${quotesRes.status} code=${quotesJson.code} msg=${quotesJson.message ?? ''}`
+          );
+        }
+        return null;
+      }
+
+      const quoteRow = quotesJson.d[0];
+      const qv = quoteRow?.v;
+      if (quoteRow?.s !== 'ok' || !qv || !isPositivePrice(qv.lp)) {
+        if (this.shouldLogProviderError(`fyers-quotes-invalid:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers quotes invalid LTP for ${fyersSymbol}`);
+        }
+        return null;
+      }
+
+      const ltp = qv.lp;
+
+      // ── Daily history: ATR/CPR window + slopes ──────────────────────────
+      const res = await this.fetchWithTimeout(historyUrl, {
+        cache: 'no-store',
+        headers: authHeaders,
       }, env.FYERS_REQUEST_TIMEOUT_MS);
 
       if (res.status === 401) {
@@ -886,13 +980,7 @@ export class MarketService {
       };
 
       if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
-        const isPermissionError =
-          res.status === 403 &&
-          typeof data.message === 'string' &&
-          data.message.toLowerCase().includes('additional permission required');
-        if (isPermissionError) {
-          this.fyersPermissionBlockedUntilMs.set(cleanSymbol, Date.now() + 10 * 60 * 1000);
-        }
+        markPermissionCooldown(res.status, data.message);
         if (this.shouldLogProviderError(`fyers-history:${fyersSymbol}:${res.status}:${data.code ?? 'na'}`)) {
           console.warn(
             `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
@@ -951,12 +1039,24 @@ export class MarketService {
 
       history = history.slice(-22);
       const last = history[history.length - 1];
-      // Prior completed session vs the OHLC bar we return as open/high/low/close.
-      // Always use n-2 when available — if last is not today, last.close === ltp and
-      // using last.close as previousClose collapses day-return to ~0 and disables the
-      // Dixon-class extension gate.
-      const previousClose =
-        history.length >= 2 ? history[history.length - 2].close : last.close;
+
+      // Prefer quote session fields when valid; else last daily bar.
+      const open = isPositivePrice(qv.open_price) ? qv.open_price : last.open;
+      const high = isPositivePrice(qv.high_price) ? qv.high_price : last.high;
+      const low = isPositivePrice(qv.low_price) ? qv.low_price : last.low;
+      const close = isPositivePrice(qv.lp) ? qv.lp : last.close;
+      const volume =
+        typeof qv.volume === 'number' && Number.isFinite(qv.volume) && qv.volume >= 0
+          ? qv.volume
+          : last.volume;
+
+      // Prior completed session: quote prev_close when valid, else history n-2.
+      // Never collapse previousClose to ltp (extension gate needs real day-return).
+      const previousClose = isPositivePrice(qv.prev_close_price)
+        ? qv.prev_close_price
+        : history.length >= 2
+          ? history[history.length - 2].close
+          : last.close;
 
       const volumeBase =
         last.date === todayStr && history.length > 1 && !isTodayCandleClosed()
@@ -965,24 +1065,26 @@ export class MarketService {
       const avgVolume =
         volumeBase.length > 0
           ? volumeBase.reduce((a, c) => a + c.volume, 0) / volumeBase.length
-          : last.volume;
+          : volume;
 
-      const typical = (last.high + last.low + last.close) / 3;
+      const typical = (high + low + close) / 3;
+      const vwap = isPositivePrice(qv.atp) ? qv.atp : typical;
+
       const resultData: MarketStockData = {
         symbol: cleanSymbol,
         market,
         sector,
-        open: last.open,
-        high: last.high,
-        low: last.low,
-        close: last.close,
+        open,
+        high,
+        low,
+        close,
         previousClose,
-        volume: last.volume,
+        volume,
         avgVolume,
         marketCap,
-        ltp: last.close,
+        ltp,
         history,
-        vwap: typical,
+        vwap,
         candle15m: null,
         sma20Slope,
         sma50Slope,
@@ -992,15 +1094,95 @@ export class MarketService {
       }
 
       await CacheService.set(cacheKey, resultData, 60);
+      this.fyersPermissionBlockedUntilMs = 0;
       console.log(
-        `[LiveFeed] Fyers fallback OK for ${fyersSymbol} (candles=${data.candles.length}, hist=${history.length})`
+        `[LiveFeed] Fyers Primary OK for ${fyersSymbol} (ltp=${ltp}, candles=${data.candles.length}, hist=${history.length})`
       );
       return resultData;
     } catch (err) {
-      if (this.shouldLogProviderError(`fyers-fallback-exception:${fyersSymbol}`)) {
-        console.warn(`[LiveFeed] Fyers fallback exception for ${fyersSymbol}: ${this.summarizeProviderError(err)}`);
+      if (this.shouldLogProviderError(`fyers-primary-exception:${fyersSymbol}`)) {
+        console.warn(`[LiveFeed] Fyers Primary exception for ${fyersSymbol}: ${this.summarizeProviderError(err)}`);
       }
       return null;
+    }
+  }
+
+  /**
+   * One-shot probe: can this Fyers session call Quotes?
+   * Used by Settings / health to surface "Additional permission required" before scans.
+   */
+  static async probeFyersDataApi(): Promise<{
+    ok: boolean;
+    connected: boolean;
+    message: string;
+  }> {
+    const token = await FyersAuthService.getAccessToken();
+    if (!token) {
+      return { ok: false, connected: false, message: 'Fyers not connected' };
+    }
+
+    let appId: string;
+    try {
+      appId = FyersAuthService.getCredentials().appId;
+    } catch {
+      return { ok: false, connected: false, message: 'Fyers credentials missing from environment' };
+    }
+
+    const probeSymbol = 'NSE:SBIN-EQ';
+    const url =
+      `https://api-t1.fyers.in/data/quotes?` +
+      new URLSearchParams({ symbols: probeSymbol }).toString();
+
+    try {
+      const res = await this.fetchWithTimeout(url, {
+        cache: 'no-store',
+        headers: {
+          Authorization: `${appId}:${token}`,
+          Accept: 'application/json',
+        },
+      }, env.FYERS_REQUEST_TIMEOUT_MS);
+
+      if (res.status === 401) {
+        await FyersAuthService.clearToken();
+        return { ok: false, connected: false, message: 'Fyers token expired (401) — reconnect' };
+      }
+
+      const data = (await res.json()) as {
+        s?: string;
+        code?: number;
+        message?: string;
+        d?: Array<{ s?: string; v?: { lp?: number } }>;
+      };
+
+      if (res.ok && data.s === 'ok' && Array.isArray(data.d) && data.d[0]?.v?.lp && data.d[0].v.lp > 0) {
+        this.fyersPermissionBlockedUntilMs = 0;
+        return { ok: true, connected: true, message: `Quotes OK (SBIN lp=${data.d[0].v.lp})` };
+      }
+
+      const msg = data.message || `HTTP ${res.status} code=${data.code ?? 'na'}`;
+      const lower = msg.toLowerCase();
+      if (
+        res.status === 403 ||
+        lower.includes('additional permission') ||
+        lower.includes('do not have permission')
+      ) {
+        this.fyersPermissionBlockedUntilMs = Date.now() + 10 * 60 * 1000;
+        return {
+          ok: false,
+          connected: true,
+          message:
+            `Data API permission denied: ${msg}. ` +
+            `On myapi.fyers.in enable Quotes & Market Data + Historical Data (enable all app permissions), Save, then Reconnect Fyers.`,
+        };
+      }
+
+      return { ok: false, connected: true, message: `Quotes probe failed: ${msg}` };
+    } catch (err) {
+      return {
+        ok: false,
+        connected: true,
+        message: `Quotes probe exception: ${this.summarizeProviderError(err)}`,
+      };
     }
   }
 

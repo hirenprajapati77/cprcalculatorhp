@@ -27,6 +27,8 @@ export default function SettingsPage() {
   const [fyersConnected, setFyersConnected] = useState<boolean>(false);
   const [fyersExpiry, setFyersExpiry] = useState<string>('');
   const [fyersLoading, setFyersLoading] = useState<boolean>(true);
+  const [fyersDataApiOk, setFyersDataApiOk] = useState<boolean | null>(null);
+  const [fyersDataApiMessage, setFyersDataApiMessage] = useState<string>('');
   const { showToast } = useToast();
 
   // Load settings from server on mount (works on any device)
@@ -73,8 +75,12 @@ export default function SettingsPage() {
           if (data.connected) {
             setFyersConnected(true);
             setFyersExpiry(new Date(data.expiresAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+            setFyersDataApiOk(data.dataApiOk === true);
+            setFyersDataApiMessage(typeof data.dataApiMessage === 'string' ? data.dataApiMessage : '');
           } else {
             setFyersConnected(false);
+            setFyersDataApiOk(null);
+            setFyersDataApiMessage('');
           }
         }
       } catch (err) {
@@ -374,6 +380,25 @@ export default function SettingsPage() {
                 {fyersConnected ? 'Reconnect Fyers Account' : 'Connect Fyers Account'}
               </Button>
             </div>
+            {fyersConnected && fyersDataApiOk === false && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200 leading-relaxed">
+                <p className="font-bold text-amber-300 mb-1">Data API permission missing</p>
+                <p>
+                  Login works, but Quotes/History returned permission denied. Live scanner will keep using Yahoo until this is fixed.
+                </p>
+                <ol className="list-decimal ml-4 mt-2 space-y-1 text-amber-100/90">
+                  <li>Open <span className="font-mono">myapi.fyers.in</span> → edit this app</li>
+                  <li>Enable <strong>Quotes &amp; Market Data</strong> and <strong>Historical Data</strong> (enable all permission checkboxes if unsure)</li>
+                  <li>Save, then click <strong>Reconnect Fyers Account</strong> above</li>
+                </ol>
+                {fyersDataApiMessage && (
+                  <p className="mt-2 text-[10px] text-amber-100/70 font-mono break-words">{fyersDataApiMessage}</p>
+                )}
+              </div>
+            )}
+            {fyersConnected && fyersDataApiOk === true && (
+              <p className="text-[10px] text-emerald-400/90">Data API probe OK — Fyers is usable as primary live feed.</p>
+            )}
             <p className="text-[9px] text-slate-500 leading-normal">
               Fyers API authentication token expires every 24 hours. Ensure you click to connect and authorize daily to enable real-time F&O option suggestions.
             </p>

@@ -84,6 +84,9 @@ export class FyersAuthService {
         }
       });
       console.log('[FyersAuthService] Token saved successfully in DB.');
+      // New login may include updated app scopes — drop stale Data API cooldown.
+      const { MarketService } = await import('@/services/market.service');
+      MarketService.clearFyersPermissionBlock();
     } catch (err) {
       console.error('[FyersAuthService] Error saving token to database:', err);
       throw err instanceof Error ? err : new Error('Failed to persist Fyers token');
