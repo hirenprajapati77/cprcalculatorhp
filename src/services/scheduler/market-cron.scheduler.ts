@@ -105,7 +105,12 @@ export function startMarketCronScheduler(): void {
     }
 
     if (isBtstDiscoveryOpen()) {
-      await runClaimedJob(`btst-alert:${dateKey}`, runBtstAlertJob, 'btst-alert');
+      // Time-bucketed key (5-min buckets) — mirrors cpr-scan pattern so the
+      // scheduler re-checks every 5 minutes across the 15:10–15:25 window.
+      // Double-send is prevented by BtstAlertState DB unique constraint inside
+      // runBtstAlertJob itself (returns sent:false, reason:'already sent today').
+      const btstBucket = Math.floor(istTime.totalMinutes / 5);
+      await runClaimedJob(`btst-alert:${dateKey}:${btstBucket}`, runBtstAlertJob, 'btst-alert');
     }
 
     if (isCprJournalWindowOpen()) {

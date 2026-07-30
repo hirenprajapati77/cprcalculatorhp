@@ -200,7 +200,7 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.strictEqual(data!.candle15m, null);
       assert.ok(typeof data!.sma50Slope === 'number');
       assert.ok(
-        data!.previousClose != null && data!.previousClose !== data!.ltp,
+        data!.previousClose != null && (data!.previousClose as number) !== (data!.ltp as number),
         'Fyers previousClose must not collapse to ltp (extension gate needs real day-return)'
       );
       assert.strictEqual(yahooCalls, 0, 'Yahoo must not be consulted when Fyers Primary succeeds');
