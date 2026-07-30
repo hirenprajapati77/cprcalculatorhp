@@ -141,8 +141,8 @@ export async function GET(request: NextRequest) {
 
 
     // If circuit is open, fallback to cache immediately — before any of the
-    // three DB query sites below (marketSnapshot.findMany, scannerResult batch,
-    // topForOptions findMany) are reached.
+    // DB query sites below (auto-init count/latest, marketSnapshot.findMany,
+    // scannerResult batch, topForOptions findMany, scannedAt lookups) are reached.
     if (DatabaseCircuitBreaker.isOpen()) {
       return await serveDegradedScannerCache();
     }
@@ -150,9 +150,11 @@ export async function GET(request: NextRequest) {
     // 1. Auto-initialize today's database records if empty (LIVE SESSION ONLY)
     let targetDate = today;
     try {
-      const todayCount = await prisma.scannerResult.count({
-        where: { date: today },
-      });
+      const todayCount = await DatabaseCircuitBreaker.execute(() =>
+        prisma.scannerResult.count({
+          where: { date: today },
+        })
+      );
       if (todayCount === 0) {
         if (isMarketOpen()) {
           console.log("No scanner records found for today during live session. Performing auto-scan initialization...");
@@ -160,16 +162,25 @@ export async function GET(request: NextRequest) {
           await ScannerController.runFullScan('ALL', 'BSE');
         } else {
           // Outside live session: serve frozen results from the latest available date
-          const latestRecord = await prisma.scannerResult.findFirst({
-            orderBy: { date: 'desc' },
-            select: { date: true },
-          });
+          const latestRecord = await DatabaseCircuitBreaker.execute(() =>
+            prisma.scannerResult.findFirst({
+              orderBy: { date: 'desc' },
+              select: { date: true },
+            })
+          );
           if (latestRecord) {
             targetDate = latestRecord.date;
           }
         }
       }
     } catch (dbErr) {
+      // A DB connectivity failure here trips the breaker (inside execute())
+      // and rethrows CIRCUIT_OPEN — let the outer catch route to the
+      // degraded cache immediately instead of silently continuing with
+      // whatever partial state we have.
+      if (dbErr instanceof Error && dbErr.message === 'CIRCUIT_OPEN') {
+        throw dbErr;
+      }
       console.warn("DB check failed during initial get, continuing:", dbErr);
     }
 
