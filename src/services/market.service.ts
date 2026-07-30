@@ -1093,7 +1093,7 @@ export class MarketService {
       // Never collapse previousClose to ltp (extension gate needs real day-return).
       const previousClose = isPositivePrice(qv.prev_close_price)
         ? qv.prev_close_price
-        : history.length >= 2
+        : last.date === todayStr && history.length >= 2
           ? history[history.length - 2].close
           : last.close;
 
