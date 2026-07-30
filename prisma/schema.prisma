@@ -300,10 +300,14 @@ model BreakoutAlertState {
 
 model BtstAlertState {
   id        Int      @id @default(autoincrement())
-  date      String   @unique
+  date      String
+  symbol    String
   sentAt    DateTime
   updatedAt DateTime @updatedAt
+
+  @@unique([date, symbol])
 }
+
 
 model TradeJournal {
   id             String   @id @default(cuid())

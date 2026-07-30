@@ -173,32 +173,62 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     return { sent: false, reason: 'no setups', ...baseResult };
   }
 
-  let claimedDate = false;
-  try {
-    await prisma.btstAlertState.create({
-      data: { date: signalDate, sentAt: new Date() },
-    });
-    claimedDate = true;
-  } catch (err) {
-    if (isUniqueConstraintError(err)) {
-      return { sent: false, reason: 'already sent today', ...baseResult };
+  // ── Per-symbol dedup ──────────────────────────────────────────────────────
+  // Filter out any symbol already alerted today. This allows the 15:15 / 15:20
+  // buckets to send a follow-up Telegram for genuinely NEW breakout stocks that
+  // were not qualifying at the time of the earlier alert.
+  const alreadySentToday = await prisma.btstAlertState.findMany({
+    where: { date: signalDate },
+    select: { symbol: true },
+  });
+  const alreadySentSet = new Set(alreadySentToday.map((r) => r.symbol));
+
+  const newPayload = alertPayload.filter((s) => !alreadySentSet.has(s.symbol));
+
+  if (newPayload.length === 0) {
+    return { sent: false, reason: 'already sent today', ...baseResult };
+  }
+
+  // Claim all new symbols atomically before sending (skip any that race-insert first)
+  const claimedSymbols: string[] = [];
+  for (const stock of newPayload) {
+    try {
+      await prisma.btstAlertState.create({
+        data: { date: signalDate, symbol: stock.symbol, sentAt: new Date() },
+      });
+      claimedSymbols.push(stock.symbol);
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        console.log(`[BtstAlert] ${stock.symbol} already claimed by concurrent run; skipping`);
+      } else {
+        throw err;
+      }
     }
-    throw err;
+  }
+
+  const claimedPayload = newPayload.filter((s) => claimedSymbols.includes(s.symbol));
+
+  if (claimedPayload.length === 0) {
+    return { sent: false, reason: 'already sent today', ...baseResult };
   }
 
   try {
-    const result = await TelegramService.sendBtstAlert(alertPayload);
+    const result = await TelegramService.sendBtstAlert(claimedPayload);
 
     if (!result.sent) {
-      await prisma.btstAlertState.delete({ where: { date: signalDate } });
+      // Roll back claims so the next bucket can retry
+      await prisma.btstAlertState.deleteMany({
+        where: { date: signalDate, symbol: { in: claimedSymbols } },
+      }).catch(() => {});
       return { sent: false, reason: result.reason, ...baseResult };
     }
 
     return { sent: result.sent, reason: result.reason, ...baseResult };
   } catch (sendError) {
-    if (claimedDate) {
-      await prisma.btstAlertState.delete({ where: { date: signalDate } }).catch(() => {});
-    }
+    await prisma.btstAlertState.deleteMany({
+      where: { date: signalDate, symbol: { in: claimedSymbols } },
+    }).catch(() => {});
     throw sendError;
   }
 }
+

@@ -74,18 +74,24 @@ type BtstRouteMocks = {
   restore: () => void;
   createCalls: unknown[];
   deleteCalls: unknown[];
+  deleteManyCallArgs: unknown[];
   sendCalls: unknown[];
+  findManyCalls: unknown[];
 };
 
 function mockBtstRouteDeps(handlers: {
   create?: (args: unknown) => Promise<unknown>;
   delete?: (args: unknown) => Promise<unknown>;
+  deleteMany?: (args: unknown) => Promise<unknown>;
+  findMany?: (args: unknown) => Promise<{ symbol: string }[]>;
   sendBtstAlert?: (payload: unknown) => Promise<{ sent: boolean; reason?: string }>;
   discover?: () => Promise<OvernightSignal[]>;
   suggestOptionForBtst?: typeof OptionSuggestionService.suggestOptionForBtst;
 }): BtstRouteMocks {
   const originalCreate = prisma.btstAlertState.create;
   const originalDelete = prisma.btstAlertState.delete;
+  const originalDeleteMany = prisma.btstAlertState.deleteMany;
+  const originalFindMany = prisma.btstAlertState.findMany;
   const originalRegime = RegimeService.getMarketRegime;
   const originalDiscover = OvernightService.discover;
   const originalIndexDiscover = IndexDiscoverService.discover;
@@ -96,14 +102,26 @@ function mockBtstRouteDeps(handlers: {
 
   const createCalls: unknown[] = [];
   const deleteCalls: unknown[] = [];
+  const deleteManyCallArgs: unknown[] = [];
   const sendCalls: unknown[] = [];
+  const findManyCalls: unknown[] = [];
+
+  // findMany — returns already-alerted symbols for the day (default: none)
+  prisma.btstAlertState.findMany = (async (args: unknown) => {
+    findManyCalls.push(args);
+    if (handlers.findMany) {
+      return handlers.findMany(args);
+    }
+    return [];
+  }) as unknown as typeof prisma.btstAlertState.findMany;
 
   prisma.btstAlertState.create = (async (args: unknown) => {
     createCalls.push(args);
     if (handlers.create) {
       return handlers.create(args);
     }
-    return { id: 1, date: getISTDateString(DISCOVERY_INSTANT), sentAt: new Date() };
+    const a = args as { data: { date: string; symbol: string } };
+    return { id: 1, date: a.data.date, symbol: a.data.symbol, sentAt: new Date(), updatedAt: new Date() };
   }) as unknown as typeof prisma.btstAlertState.create;
 
   prisma.btstAlertState.delete = (async (args: unknown) => {
@@ -111,8 +129,16 @@ function mockBtstRouteDeps(handlers: {
     if (handlers.delete) {
       return handlers.delete(args);
     }
-    return { id: 1, date: getISTDateString(DISCOVERY_INSTANT), sentAt: new Date() };
+    return { id: 1, date: getISTDateString(DISCOVERY_INSTANT), symbol: 'TEST', sentAt: new Date(), updatedAt: new Date() };
   }) as unknown as typeof prisma.btstAlertState.delete;
+
+  prisma.btstAlertState.deleteMany = (async (args: unknown) => {
+    deleteManyCallArgs.push(args);
+    if (handlers.deleteMany) {
+      return handlers.deleteMany(args);
+    }
+    return { count: 1 };
+  }) as unknown as typeof prisma.btstAlertState.deleteMany;
 
   RegimeService.getMarketRegime = (async () => ({
     trend: 'BULL',
@@ -125,8 +151,7 @@ function mockBtstRouteDeps(handlers: {
   OptionSuggestionService.suggestOptionForBtst =
     (handlers.suggestOptionForBtst ?? (async () => ({ error: 'NO_CHAIN' }))) as typeof OptionSuggestionService.suggestOptionForBtst;
 
-  // Index BTST leg (added alongside stock discovery): no index signals today,
-  // and no real overnightSignal table lookup — keeps this a pure unit test.
+  // Index BTST leg: no index signals — keeps this a pure unit test.
   IndexDiscoverService.discover = (async () => []) as typeof IndexDiscoverService.discover;
   prisma.overnightSignal.findMany = (async () => []) as unknown as typeof prisma.overnightSignal.findMany;
 
@@ -141,10 +166,14 @@ function mockBtstRouteDeps(handlers: {
   return {
     createCalls,
     deleteCalls,
+    deleteManyCallArgs,
     sendCalls,
+    findManyCalls,
     restore: () => {
       prisma.btstAlertState.create = originalCreate;
       prisma.btstAlertState.delete = originalDelete;
+      prisma.btstAlertState.deleteMany = originalDeleteMany;
+      prisma.btstAlertState.findMany = originalFindMany;
       RegimeService.getMarketRegime = originalRegime;
       OvernightService.discover = originalDiscover;
       IndexDiscoverService.discover = originalIndexDiscover;
@@ -156,10 +185,14 @@ function mockBtstRouteDeps(handlers: {
   };
 }
 
-test('BTST alert cron — BtstAlertState claim logic', async (t) => {
-  await t.test('first claim of the day: create succeeds, send succeeds → sent true, no delete', async () => {
+test('BTST alert cron — BtstAlertState claim logic (per-symbol dedup)', async (t) => {
+  await t.test('first claim of the day: findMany returns empty, create succeeds, send succeeds → sent true', async () => {
     const mocks = mockBtstRouteDeps({
-      create: async () => ({ id: 1, date: getISTDateString(DISCOVERY_INSTANT), sentAt: new Date() }),
+      findMany: async () => [], // no symbols alerted yet
+      create: async (args) => {
+        const a = args as { data: { date: string; symbol: string } };
+        return { id: 1, date: a.data.date, symbol: a.data.symbol, sentAt: new Date(), updatedAt: new Date() };
+      },
       sendBtstAlert: async () => ({ sent: true }),
     });
 
@@ -167,22 +200,22 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
       const result = await withDiscoveryClock(() => runBtstAlertJob());
 
       assert.strictEqual(result.sent, true);
-      assert.strictEqual(mocks.createCalls.length, 1);
+      assert.strictEqual(mocks.findManyCalls.length, 1, 'findMany must be called once');
+      assert.ok(mocks.createCalls.length >= 1, 'at least one symbol claim must be created');
       assert.strictEqual(mocks.sendCalls.length, 1);
-      assert.strictEqual(mocks.deleteCalls.length, 0);
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 0, 'no rollback on success');
     } finally {
       mocks.restore();
     }
   });
 
-  await t.test('concurrent second call: create P2002 → already sent, Telegram never called', async () => {
+  await t.test('symbol already alerted today: filtered out, no Telegram send', async () => {
+    const signalDate = getISTDateString(DISCOVERY_INSTANT);
     const mocks = mockBtstRouteDeps({
-      create: async () => {
-        throw makeUniqueConstraintError();
-      },
-      sendBtstAlert: async () => {
-        throw new Error('Telegram should not be called');
-      },
+      // TEST was already alerted at 15:10
+      findMany: async () => [{ symbol: 'TEST' }],
+      create: async () => { throw new Error('create must not be called for already-sent symbol'); },
+      sendBtstAlert: async () => { throw new Error('Telegram must not be called when all symbols already sent'); },
     });
 
     try {
@@ -190,18 +223,65 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
 
       assert.strictEqual(result.sent, false);
       assert.strictEqual(result.reason, 'already sent today');
-      assert.strictEqual(mocks.createCalls.length, 1);
+      assert.strictEqual(mocks.createCalls.length, 0);
       assert.strictEqual(mocks.sendCalls.length, 0);
-      assert.strictEqual(mocks.deleteCalls.length, 0);
+      assert.ok(signalDate); // sanity
     } finally {
       mocks.restore();
     }
   });
 
-  await t.test('claim succeeds, Telegram returns sent false → delete claim, failure response', async () => {
+  await t.test('new symbol at 15:20 bucket: existing symbol filtered, only new symbol sent', async () => {
+    const mocks = mockBtstRouteDeps({
+      discover: async () => [
+        makeTradableSignal({ symbol: 'ALREADY_SENT', overnightScore: 115 }),
+        makeTradableSignal({ id: 'new-signal', symbol: 'NEW_STOCK', overnightScore: 110 }),
+      ],
+      // ALREADY_SENT was alerted in the 15:10 bucket; NEW_STOCK is new
+      findMany: async () => [{ symbol: 'ALREADY_SENT' }],
+      sendBtstAlert: async (payload) => {
+        const symbols = (payload as Array<{ symbol: string }>).map((r) => r.symbol);
+        assert.deepStrictEqual(symbols, ['NEW_STOCK'], 'Only the new symbol should be sent');
+        return { sent: true };
+      },
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true);
+      assert.strictEqual(mocks.sendCalls.length, 1);
+      // Only NEW_STOCK should be claimed
+      const claimArgs = mocks.createCalls as Array<{ data: { symbol: string } }>;
+      assert.ok(claimArgs.every(a => a.data.symbol === 'NEW_STOCK'), 'Only new symbol should be claimed');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('concurrent race: create P2002 for all symbols → already sent, Telegram never called', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [], // looks empty initially
+      create: async () => { throw makeUniqueConstraintError(); }, // but concurrent run beat us
+      sendBtstAlert: async () => { throw new Error('Telegram should not be called'); },
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, false);
+      assert.strictEqual(result.reason, 'already sent today');
+      assert.strictEqual(mocks.sendCalls.length, 0);
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('claim succeeds, Telegram returns sent false → deleteMany rollback, failure response', async () => {
     const signalDate = getISTDateString(DISCOVERY_INSTANT);
     const mocks = mockBtstRouteDeps({
-      create: async () => ({ id: 1, date: signalDate, sentAt: new Date() }),
+      findMany: async () => [],
       sendBtstAlert: async () => ({ sent: false, reason: 'telegram_api_error' }),
     });
 
@@ -211,23 +291,20 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
       assert.strictEqual(result.sent, false);
       assert.strictEqual(result.reason, 'telegram_api_error');
       assert.strictEqual(mocks.sendCalls.length, 1);
-      assert.strictEqual(mocks.deleteCalls.length, 1);
-      assert.deepStrictEqual(
-        (mocks.deleteCalls[0] as { where: { date: string } }).where,
-        { date: signalDate }
-      );
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 1, 'deleteMany must roll back claims on failure');
+      const deleteArg = mocks.deleteManyCallArgs[0] as { where: { date: string; symbol: { in: string[] } } };
+      assert.strictEqual(deleteArg.where.date, signalDate);
+      assert.ok(Array.isArray(deleteArg.where.symbol.in), 'rollback must target specific claimed symbols');
     } finally {
       mocks.restore();
     }
   });
 
-  await t.test('claim succeeds, sendBtstAlert throws → delete claim, 500 response', async () => {
+  await t.test('claim succeeds, sendBtstAlert throws → deleteMany rollback, error re-thrown', async () => {
     const signalDate = getISTDateString(DISCOVERY_INSTANT);
     const mocks = mockBtstRouteDeps({
-      create: async () => ({ id: 1, date: signalDate, sentAt: new Date() }),
-      sendBtstAlert: async () => {
-        throw new Error('network timeout');
-      },
+      findMany: async () => [],
+      sendBtstAlert: async () => { throw new Error('network timeout'); },
     });
 
     try {
@@ -236,11 +313,9 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
         /network timeout/
       );
       assert.strictEqual(mocks.sendCalls.length, 1);
-      assert.strictEqual(mocks.deleteCalls.length, 1);
-      assert.deepStrictEqual(
-        (mocks.deleteCalls[0] as { where: { date: string } }).where,
-        { date: signalDate }
-      );
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 1, 'deleteMany must roll back on throw');
+      const deleteArg = mocks.deleteManyCallArgs[0] as { where: { date: string; symbol: { in: string[] } } };
+      assert.strictEqual(deleteArg.where.date, signalDate);
     } finally {
       mocks.restore();
     }
@@ -249,12 +324,8 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
   await t.test('empty payload: no Telegram send and no day claim retained', async () => {
     const mocks = mockBtstRouteDeps({
       discover: async () => [],
-      create: async () => {
-        throw new Error('claim should not be created for empty payload');
-      },
-      sendBtstAlert: async () => {
-        throw new Error('Telegram should not be called for empty payload');
-      },
+      create: async () => { throw new Error('claim should not be created for empty payload'); },
+      sendBtstAlert: async () => { throw new Error('Telegram should not be called for empty payload'); },
     });
 
     try {
@@ -265,7 +336,7 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
       assert.strictEqual(result.count, 0);
       assert.strictEqual(mocks.createCalls.length, 0);
       assert.strictEqual(mocks.sendCalls.length, 0);
-      assert.strictEqual(mocks.deleteCalls.length, 0);
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 0);
     } finally {
       mocks.restore();
     }
@@ -277,6 +348,7 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
         makeTradableSignal({ id: 'ok-signal', symbol: 'GOOD' }),
         makeTradableSignal({ id: 'bad-signal', symbol: 'BAD' }),
       ],
+      findMany: async () => [],
       suggestOptionForBtst: async (symbol) => {
         if (symbol === 'BAD') {
           throw new Error('option chain unavailable');
@@ -296,11 +368,12 @@ test('BTST alert cron — BtstAlertState claim logic', async (t) => {
       assert.strictEqual(result.sent, true);
       assert.strictEqual(result.count, 1);
       assert.strictEqual(result.longs, 1);
-      assert.strictEqual(mocks.createCalls.length, 1);
+      assert.ok(mocks.createCalls.length >= 1, 'GOOD symbol must be claimed');
       assert.strictEqual(mocks.sendCalls.length, 1);
-      assert.strictEqual(mocks.deleteCalls.length, 0);
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 0);
     } finally {
       mocks.restore();
     }
   });
 });
+
