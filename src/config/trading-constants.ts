@@ -78,9 +78,10 @@ export const BTST_WINDOWS = {
 /**
  * CPR journal cron IST window (distinct from BTST_WINDOWS).
  * Compared as HHMM integers: hour * 100 + minute (inclusive both ends).
+ * Starts 15:20 so CPR entries stamp nearer end-of-day liquidity, after early BTST alerts.
  */
 export const CPR_JOURNAL_WINDOW = {
-  START_HHMM: 1515,
+  START_HHMM: 1520,
   END_HHMM: 1529,
 } as const;
 

@@ -304,7 +304,7 @@ model TradeJournal {
   optionContract String // e.g. '1920 CE' | '2400 PE'
   optionStrike   Int
   optionType     String // 'CE' | 'PE'
-  entryCmp       Float // option CMP at signal time (~3:15-3:25 PM)
+  entryCmp       Float // option CMP at signal time (~3:20-3:30 PM)
   entryTime      DateTime // exact signal capture time
 
   // Next day snapshots (null until cron fills them)

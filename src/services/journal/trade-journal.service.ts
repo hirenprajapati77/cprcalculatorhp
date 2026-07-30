@@ -11,7 +11,7 @@ import { computeWinRate } from '@/lib/win-rate';
 export class TradeJournalService {
 
   /**
-   * Called at signal time (3:15–3:25 PM) by BTST/CPR crons.
+   * Called at signal time (3:20–3:30 PM) by BTST/CPR crons.
    * Fetches live option CMP via OptionChainService and persists entry.
    * Silently skips if duplicate (same symbol + date + signalType).
    */
@@ -204,7 +204,7 @@ export class TradeJournalService {
 
   /**
    * Called by snapshot cron at 9:16, 9:30, 9:45 AM IST (Day D+1).
-   * Uses previousTradingDayMidnightIST() because signals are logged on Day D at 3:15 PM,
+   * Uses previousTradingDayMidnightIST() because signals are logged on Day D at 3:20 PM,
    * and snapshots fire the next morning — both must resolve to the same IST date key.
    * At 9:45 AM auto-closes entries that have no manual exit yet.
    */
@@ -426,7 +426,7 @@ export class TradeJournalService {
 
   /**
    * Returns the UTC timestamp corresponding to midnight IST for TODAY.
-   * Used by logSignal() — signals fire at 3:15-3:25 PM IST (same IST day).
+   * Used by logSignal() — signals fire at 3:20–3:30 PM IST (same IST day).
    *
    * Example: Jun 25 IST day → Jun 24 18:30 UTC
    * (IST = UTC+5:30, so IST midnight = UTC -5h30m from calendar midnight)
