@@ -46,6 +46,9 @@ const envSchema = z.object({
   BTST_BYPASS_WINDOW: z.string().default('false'),
   YAHOO_BATCH_SIZE: z.coerce.number().default(50),
   YAHOO_MAX_RETRIES: z.coerce.number().default(3),
+  YAHOO_REQUEST_TIMEOUT_MS: z.coerce.number().default(12000),
+  FYERS_REQUEST_TIMEOUT_MS: z.coerce.number().default(10000),
+  PROVIDER_ERROR_LOG_COOLDOWN_MS: z.coerce.number().default(300000),
   
   RATE_LIMIT_MAX: z.coerce.number().default(100),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),

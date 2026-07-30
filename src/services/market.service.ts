@@ -339,6 +339,46 @@ const STOCK_UNIVERSE: {
 ];
 
 export class MarketService {
+  private static providerErrorLastLoggedAtMs = new Map<string, number>();
+  private static fyersPermissionBlockedUntilMs = new Map<string, number>();
+
+  private static shouldLogProviderError(key: string): boolean {
+    const now = Date.now();
+    const cooldownMs = Math.max(1000, env.PROVIDER_ERROR_LOG_COOLDOWN_MS || 300000);
+    const prev = this.providerErrorLastLoggedAtMs.get(key) ?? 0;
+    if (now - prev < cooldownMs) return false;
+    this.providerErrorLastLoggedAtMs.set(key, now);
+    return true;
+  }
+
+  private static summarizeProviderError(err: unknown): string {
+    if (err instanceof Error) {
+      const anyErr = err as Error & { cause?: unknown };
+      if (anyErr.cause && typeof anyErr.cause === 'object' && anyErr.cause !== null) {
+        const causeObj = anyErr.cause as { code?: unknown; message?: unknown };
+        const code = typeof causeObj.code === 'string' ? causeObj.code : '';
+        const message = typeof causeObj.message === 'string' ? causeObj.message : '';
+        if (code || message) return `${err.message}${code ? ` [${code}]` : ''}${message ? `: ${message}` : ''}`;
+      }
+      return err.message;
+    }
+    return String(err);
+  }
+
+  private static async fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    const timeout = Math.max(1000, timeoutMs);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /**
    * Returns the current data mode (live/mock/paper) for the UI status badge.
    */
@@ -431,7 +471,7 @@ export class MarketService {
     // ── LIVE MODE: Yahoo live quote first, Fyers daily history as outage fallback ─
     if (dataMode === 'live') {
       try {
-        const res = await fetch(
+        const res = await this.fetchWithTimeout(
           // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
           // which 1mo (~22 candles) can never supply. history[] fed to ATR/CPR is truncated back
           // to a ~1mo window further down so this does NOT change ATR/CPR-width behavior.
@@ -442,7 +482,8 @@ export class MarketService {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': 'application/json',
             },
-          }
+          },
+          env.YAHOO_REQUEST_TIMEOUT_MS
         );
 
         if (!res.ok) {
@@ -592,7 +633,7 @@ export class MarketService {
             let vwap = (prevHigh + prevLow + prevClose) / 3;
             let candle15m = null;
             try {
-              const res15m = await fetch(
+              const res15m = await this.fetchWithTimeout(
                 `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=15m&range=1d`,
                 {
                   cache: 'no-store',
@@ -600,7 +641,8 @@ export class MarketService {
                     'User-Agent': 'Mozilla/5.0',
                     'Accept': 'application/json',
                   },
-                }
+                },
+                env.YAHOO_REQUEST_TIMEOUT_MS
               );
               if (res15m.ok) {
                 const json15 = await res15m.json();
@@ -673,7 +715,9 @@ export class MarketService {
         throw new Error(`Invalid quote data from Yahoo Finance for ${ticker}`);
 
       } catch (err) {
-        console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}:`, err);
+        if (this.shouldLogProviderError(`yahoo:${ticker}`)) {
+          console.warn(`[LiveFeed] Yahoo Finance failed for ${ticker}: ${this.summarizeProviderError(err)}`);
+        }
         const fyersFallback = await MarketService.tryFyersHistoryFallback(
           cleanSymbol,
           market,
@@ -772,9 +816,20 @@ export class MarketService {
     sma200: number | undefined,
     cacheKey: string
   ): Promise<MarketStockData | null> {
+    const blockedUntil = this.fyersPermissionBlockedUntilMs.get(cleanSymbol) ?? 0;
+    if (blockedUntil > Date.now()) {
+      if (this.shouldLogProviderError(`fyers-permission-blocked:${cleanSymbol}`)) {
+        const waitSec = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 1000));
+        console.warn(`[LiveFeed] Fyers fallback temporarily skipped for ${cleanSymbol}: permission denied recently (${waitSec}s cooldown)`);
+      }
+      return null;
+    }
+
     const token = await FyersAuthService.getAccessToken();
     if (!token) {
-      console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: not connected`);
+      if (this.shouldLogProviderError(`fyers-not-connected:${cleanSymbol}`)) {
+        console.warn(`[LiveFeed] Fyers fallback skipped for ${cleanSymbol}: not connected`);
+      }
       return null;
     }
 
@@ -807,16 +862,18 @@ export class MarketService {
       }).toString();
 
     try {
-      const res = await fetch(url, {
+      const res = await this.fetchWithTimeout(url, {
         cache: 'no-store',
         headers: {
           Authorization: `${appId}:${token}`,
           Accept: 'application/json',
         },
-      });
+      }, env.FYERS_REQUEST_TIMEOUT_MS);
 
       if (res.status === 401) {
-        console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+        if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+        }
         await FyersAuthService.clearToken();
         return null;
       }
@@ -829,9 +886,18 @@ export class MarketService {
       };
 
       if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
-        console.warn(
-          `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
-        );
+        const isPermissionError =
+          res.status === 403 &&
+          typeof data.message === 'string' &&
+          data.message.toLowerCase().includes('additional permission required');
+        if (isPermissionError) {
+          this.fyersPermissionBlockedUntilMs.set(cleanSymbol, Date.now() + 10 * 60 * 1000);
+        }
+        if (this.shouldLogProviderError(`fyers-history:${fyersSymbol}:${res.status}:${data.code ?? 'na'}`)) {
+          console.warn(
+            `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
+          );
+        }
         return null;
       }
 
@@ -863,7 +929,9 @@ export class MarketService {
       }
 
       if (history.length === 0) {
-        console.warn(`[LiveFeed] Fyers history empty after validation for ${fyersSymbol}`);
+        if (this.shouldLogProviderError(`fyers-empty-history:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers history empty after validation for ${fyersSymbol}`);
+        }
         return null;
       }
 
@@ -929,7 +997,9 @@ export class MarketService {
       );
       return resultData;
     } catch (err) {
-      console.warn(`[LiveFeed] Fyers fallback exception for ${fyersSymbol}:`, err);
+      if (this.shouldLogProviderError(`fyers-fallback-exception:${fyersSymbol}`)) {
+        console.warn(`[LiveFeed] Fyers fallback exception for ${fyersSymbol}: ${this.summarizeProviderError(err)}`);
+      }
       return null;
     }
   }
@@ -946,7 +1016,7 @@ export class MarketService {
     for (const sym of symbols) {
       try {
         const ticker = `${sym}.NS`;
-        const res = await fetch(
+        const res = await this.fetchWithTimeout(
           `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`,
           {
             cache: 'no-store',
@@ -954,7 +1024,8 @@ export class MarketService {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
               'Accept': 'application/json',
             },
-          }
+          },
+          env.YAHOO_REQUEST_TIMEOUT_MS
         );
 
         if (!res.ok) {
