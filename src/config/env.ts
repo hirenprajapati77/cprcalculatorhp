@@ -90,6 +90,13 @@ const envSchema = z.object({
    * Telegram breakout alerts and CPR Journal auto-logging behind the tag.
    */
   SECTOR_FILTER_MODE: z.enum(['shadow', 'live']).default('shadow'),
+  /**
+   * Max signals the daily CPR journal will auto-log, ranked by score desc.
+   * Must be a positive integer: 0 would silently disable journaling, a
+   * negative value flips Prisma `take` to "from the end" (lowest scores),
+   * and a float makes Prisma throw at runtime.
+   */
+  CPR_JOURNAL_MAX_SIGNALS: z.coerce.number().int().min(1).default(5),
   VPA_COMPONENT_RVOL: z.string().default('true'),
   VPA_COMPONENT_CLV: z.string().default('true'),
   VPA_COMPONENT_EFFORT: z.string().default('true'),

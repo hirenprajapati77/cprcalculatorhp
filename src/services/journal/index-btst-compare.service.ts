@@ -65,7 +65,7 @@ function parseRegimeFromSummary(signalSummary: string): string | null {
 }
 
 function normalizeSymbolForJoin(symbol: string): string {
-  let sym = symbol.toUpperCase().trim();
+  const sym = symbol.toUpperCase().trim();
   if (sym === '^NSEI' || sym === 'NIFTY') return 'NIFTY';
   if (sym === '^NSEBANK' || sym === 'BANKNIFTY') return 'BANKNIFTY';
   if (sym === '^BSESN' || sym === 'SENSEX') return 'SENSEX';

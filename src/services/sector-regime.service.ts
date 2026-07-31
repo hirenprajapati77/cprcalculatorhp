@@ -8,12 +8,20 @@
 export class SectorRegimeService {
   private static readonly MIN_SECTOR_SAMPLE = 3;
 
+  /**
+   * Fallback buckets for stocks with missing sector metadata. These group
+   * unrelated stocks, so judging them as a "sector" would produce bogus
+   * divergence tags.
+   */
+  private static readonly EXCLUDED_SECTORS = new Set(['Other', 'Unknown', '']);
+
   static applySectorDivergence<T extends { sector: string; signals: string[] }>(
     results: T[]
   ): void {
     const counts = new Map<string, { bull: number; bear: number }>();
 
     for (const r of results) {
+      if (SectorRegimeService.EXCLUDED_SECTORS.has(r.sector)) continue;
       const c = counts.get(r.sector) || { bull: 0, bear: 0 };
       if (r.signals.includes('BULLISH')) c.bull++;
       if (r.signals.includes('BEARISH')) c.bear++;
@@ -25,7 +33,8 @@ export class SectorRegimeService {
       const c = counts.get(r.sector);
       if (!c) continue;
       const sample = c.bull + c.bear;
-      if (sample >= SectorRegimeService.MIN_SECTOR_SAMPLE && c.bear >= c.bull) {
+      // Strict > : a tied sector (e.g. 2 bulls / 2 bears) is not net-bearish.
+      if (sample >= SectorRegimeService.MIN_SECTOR_SAMPLE && c.bear > c.bull) {
         r.signals.push('SECTOR_DIVERGENCE');
       }
     }

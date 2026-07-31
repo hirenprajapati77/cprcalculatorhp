@@ -1089,8 +1089,12 @@ export class MarketService {
           ? qv.volume
           : last.volume;
 
-      // Prior completed session: quote prev_close when valid, else history n-2.
-      // Never collapse previousClose to ltp (extension gate needs real day-return).
+      // Prior completed session: quote prev_close when valid, else history n-2
+      // while today's candle is forming. Off-hours (last candle != today) this
+      // falls back to last.close, which equals ltp and collapses day-return to
+      // ~0 — same as the Yahoo path. Acceptable: production scans run during
+      // market hours; only off-hours manual scans lose the extension gate, and
+      // only when the quote's prev_close_price is missing.
       const previousClose = isPositivePrice(qv.prev_close_price)
         ? qv.prev_close_price
         : last.date === todayStr && history.length >= 2
