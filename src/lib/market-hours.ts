@@ -49,7 +49,7 @@ export function getISTTime(date: Date = new Date()) {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour12: false
+    hourCycle: 'h23',
   }).formatToParts(date);
   
   const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);

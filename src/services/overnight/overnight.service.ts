@@ -25,12 +25,13 @@ import { SignalQualityService } from './signal-quality.service';
 import { resolveOvernightConflict } from './overnight-conflict';
 import { isVpaLiveGatesEnabled } from '@/config/vpa.config';
 import type { VpaConfirmationResult } from '@/services/vpa';
+import { safeRatio } from '@/lib/math';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
- * 15 balances wall-clock speed (~14 rounds for ~211 symbols) against Yahoo
+ * 15 balances wall-clock speed (~7 rounds for ~100 F&O symbols) against Yahoo
  * rate-limit risk from a single IP — wide enough to cut sequential latency,
- * small enough to avoid a 200+ burst.
+ * small enough to avoid a full-universe burst.
  */
 const STOCK_DATA_PREFETCH_CHUNK = 15;
 
@@ -293,8 +294,11 @@ export class OvernightService {
 
         const history = fullStock.history || [];
         const stockReturn5d = history.length > RS_LOOKBACK
-          ? ((history[history.length - 1].close - history[history.length - 1 - RS_LOOKBACK].close) /
-             history[history.length - 1 - RS_LOOKBACK].close) * 100
+          ? safeRatio(
+              history[history.length - 1].close - history[history.length - 1 - RS_LOOKBACK].close,
+              history[history.length - 1 - RS_LOOKBACK].close,
+              0
+            ) * 100
           : 0;
         const relativeStrength = stockReturn5d - (regime.niftyReturn5d ?? 0);
 

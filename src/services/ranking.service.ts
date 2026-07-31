@@ -24,7 +24,7 @@ export class RankingService {
    *   STALE_SETUP  (> 90 min, much of the move may be done):  -10
    *
    * Category F — EMA 9/21 + RSI Confluence (max +15, min -10):
-   *   EMA_CROSS_BULL/BEAR on same bar + RSI_STRONG/RSI_OVERSOLD (bull) or RSI_BEARISH/RSI_OVERSOLD (bear)
+   *   EMA_CROSS_BULL + RSI_STRONG/RSI_OVERSOLD (bull) or EMA_CROSS_BEAR + RSI_BEARISH/RSI_OVERBOUGHT (bear)
    *     + BREAKOUT/BREAKDOWN volume: +15  ← all 3 conditions met (highest conviction)
    *   EMA_CROSS_BULL/BEAR + good RSI (no volume): +10
    *   EMA_BULL_ALIGN + RSI_STRONG (continuation): +5
@@ -119,10 +119,12 @@ export class RankingService {
 
     // Category F: EMA 9/21 + RSI Confluence (max +15, min -10)
     // Rewards the high-conviction triple: fresh cross + good RSI + volume.
-    // Penalises running into overbought/oversold territory.
+    // Bull: fresh cross out of OVERSOLD (or RSI_STRONG) is a reversal long.
+    // Bear: fresh cross from OVERBOUGHT (or RSI_BEARISH) is a reversal short.
+    // RSI_OVERSOLD on a bearish setup is the late-short trap — never reward it.
     let catF = 0;
     const hasBullishRSI  = signals.includes('RSI_STRONG') || signals.includes('RSI_OVERSOLD');
-    const hasBearishRSI  = signals.includes('RSI_BEARISH') || signals.includes('RSI_OVERSOLD');
+    const hasBearishRSI  = signals.includes('RSI_BEARISH') || signals.includes('RSI_OVERBOUGHT');
     const hasVolume      = signals.includes('BREAKOUT') || signals.includes('BREAKDOWN') || signals.includes('VOLUME_SPIKE');
 
     if (signals.includes('EMA_CROSS_BULL') && hasBullishRSI) {

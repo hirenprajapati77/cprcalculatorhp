@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
 
       interface OvernightResultItem {
         symbol: string;
-        ltp: number;
+        ltp?: number;
         overnightScore: number;
         direction: 'LONG' | 'SHORT' | 'NEUTRAL_CONFLICT' | 'WEAK';
         entry?: number;
@@ -177,10 +177,14 @@ export async function GET(req: NextRequest) {
           const enrichmentPromises = eligibleOvernight.map(async (r) => {
             const cleanSym = r.symbol.split(':')[0].trim();
             try {
-              const stockEntry = r.entry ?? r.ltp;
-              const stockSl = r.stopLoss != null ? r.stopLoss : (r.direction === 'SHORT' ? r.ltp * 1.02 : r.ltp * 0.98);
-              const stockTarget = r.target != null ? r.target : (r.direction === 'SHORT' ? r.ltp * 0.96 : r.ltp * 1.04);
-              const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, r.ltp, r.direction as 'LONG' | 'SHORT', stockEntry, stockSl, stockTarget, date);
+              const spot = r.entry ?? r.ltp;
+              if (!Number.isFinite(spot) || (spot as number) <= 0) {
+                return { symbol: r.symbol, suggestion: { error: 'INVALID_SPOT' } };
+              }
+              const stockEntry = r.entry ?? spot;
+              const stockSl = r.stopLoss != null ? r.stopLoss : (r.direction === 'SHORT' ? (spot as number) * 1.02 : (spot as number) * 0.98);
+              const stockTarget = r.target != null ? r.target : (r.direction === 'SHORT' ? (spot as number) * 0.96 : (spot as number) * 1.04);
+              const suggestion = await OptionSuggestionService.suggestOptionForBtst(cleanSym, spot as number, r.direction as 'LONG' | 'SHORT', stockEntry as number, stockSl, stockTarget, date);
               return { symbol: r.symbol, suggestion };
             } catch (e) {
               console.warn(`Failed to generate option suggestion for Overnight ${r.symbol}:`, e);

@@ -124,7 +124,8 @@ export class OptionSuggestionService {
         }
 
         // Weekly contract (e.g. "26730" -> "30 JUL 2026")
-        const weeklyMatch = rawExpiry.match(/^(\d{2})([1-9ONDE])(\d{2})$/);
+        // Fyers month codes: 1-9 (Jan-Sep), O/N/D (Oct/Nov/Dec). No 'E'.
+        const weeklyMatch = rawExpiry.match(/^(\d{2})([1-9OND])(\d{2})$/);
         if (weeklyMatch) {
           const [, yy, mToken, dd] = weeklyMatch;
           const monthMap: Record<string, string> = {
@@ -264,12 +265,14 @@ export class OptionSuggestionService {
       ? Math.round(((opt.volume || 0) / maxVolume) * 20)
       : 0;
 
-    // 4. Spread Score (max 20): tighter spread = better execution quality
+    // 4. Spread Score (max 20): tighter spread = better execution quality.
+    // Crossed markets (bid >= ask) are untradeable — treat as infinite spread
+    // so they never win the max liquidity score via a negative spreadPct.
     const bid = opt.bid || 0;
     const ask = opt.ask || 0;
     let spreadScore: number;
-    if (ask <= 0) {
-      spreadScore = 0; // missing data — penalise fully
+    if (ask <= 0 || bid >= ask) {
+      spreadScore = 0;
     } else {
       const spreadPct = safeRatio(ask - bid, ask, Number.POSITIVE_INFINITY) * 100;
       spreadScore = spreadPct <= 1 ? 20
