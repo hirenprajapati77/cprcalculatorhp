@@ -10,6 +10,7 @@ import { getISTDateString } from '../../lib/market-hours';
 import { runBtstAlertJob } from '../../services/scheduler/btst-alert.job';
 import { MarketService } from '../../services/market.service';
 import { OptionSuggestionService } from '../../services/option-suggestion.service';
+import { TradeJournalService } from '../../services/journal/trade-journal.service';
 
 /** Monday 2026-07-20 15:15 IST — inside BTST discovery window. */
 const DISCOVERY_INSTANT = new Date('2026-07-20T09:45:00.000Z');
@@ -77,6 +78,7 @@ type BtstRouteMocks = {
   deleteManyCallArgs: unknown[];
   sendCalls: unknown[];
   findManyCalls: unknown[];
+  journalCalls: unknown[];
 };
 
 function mockBtstRouteDeps(handlers: {
@@ -87,6 +89,8 @@ function mockBtstRouteDeps(handlers: {
   sendBtstAlert?: (payload: unknown) => Promise<{ sent: boolean; reason?: string }>;
   discover?: () => Promise<OvernightSignal[]>;
   suggestOptionForBtst?: typeof OptionSuggestionService.suggestOptionForBtst;
+  overnightSignalFindMany?: () => Promise<OvernightSignal[]>;
+  logSignal?: typeof TradeJournalService.logSignal;
 }): BtstRouteMocks {
   const originalCreate = prisma.btstAlertState.create;
   const originalDelete = prisma.btstAlertState.delete;
@@ -99,12 +103,14 @@ function mockBtstRouteDeps(handlers: {
   const originalSend = TelegramService.sendBtstAlert;
   const originalGetStockData = MarketService.getStockData;
   const originalSuggestOption = OptionSuggestionService.suggestOptionForBtst;
+  const originalLogSignal = TradeJournalService.logSignal;
 
   const createCalls: unknown[] = [];
   const deleteCalls: unknown[] = [];
   const deleteManyCallArgs: unknown[] = [];
   const sendCalls: unknown[] = [];
   const findManyCalls: unknown[] = [];
+  const journalCalls: unknown[] = [];
 
   // findMany — returns already-alerted symbols for the day (default: none)
   prisma.btstAlertState.findMany = (async (args: unknown) => {
@@ -151,9 +157,18 @@ function mockBtstRouteDeps(handlers: {
   OptionSuggestionService.suggestOptionForBtst =
     (handlers.suggestOptionForBtst ?? (async () => ({ error: 'NO_CHAIN' }))) as typeof OptionSuggestionService.suggestOptionForBtst;
 
-  // Index BTST leg: no index signals — keeps this a pure unit test.
+  // Index BTST leg: no index signals by default — keeps this a pure unit test.
   IndexDiscoverService.discover = (async () => []) as typeof IndexDiscoverService.discover;
-  prisma.overnightSignal.findMany = (async () => []) as unknown as typeof prisma.overnightSignal.findMany;
+  prisma.overnightSignal.findMany = (handlers.overnightSignalFindMany ??
+    (async () => [])) as unknown as typeof prisma.overnightSignal.findMany;
+
+  TradeJournalService.logSignal = (async (params: unknown) => {
+    journalCalls.push(params);
+    if (handlers.logSignal) {
+      return handlers.logSignal(params as Parameters<typeof TradeJournalService.logSignal>[0]);
+    }
+    return true;
+  }) as typeof TradeJournalService.logSignal;
 
   TelegramService.sendBtstAlert = (async (payload: unknown) => {
     sendCalls.push(payload);
@@ -169,6 +184,7 @@ function mockBtstRouteDeps(handlers: {
     deleteManyCallArgs,
     sendCalls,
     findManyCalls,
+    journalCalls,
     restore: () => {
       prisma.btstAlertState.create = originalCreate;
       prisma.btstAlertState.delete = originalDelete;
@@ -181,6 +197,7 @@ function mockBtstRouteDeps(handlers: {
       TelegramService.sendBtstAlert = originalSend;
       MarketService.getStockData = originalGetStockData;
       OptionSuggestionService.suggestOptionForBtst = originalSuggestOption;
+      TradeJournalService.logSignal = originalLogSignal;
     },
   };
 }
@@ -424,6 +441,136 @@ test('BTST alert cron — BtstAlertState claim logic (per-symbol dedup)', async 
       assert.ok(mocks.createCalls.length >= 1, 'GOOD symbol must be claimed');
       assert.strictEqual(mocks.sendCalls.length, 1);
       assert.strictEqual(mocks.deleteManyCallArgs.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+});
+
+test('BTST alert cron — alert-time journaling (alert ↔ journal parity)', async (t) => {
+  await t.test('successful stock alert with option data is journaled immediately', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      suggestOptionForBtst: (async (symbol: string) => ({
+        strike: 100,
+        ltp: 4.2,
+        formattedName: `${symbol} 100 CE`,
+      })) as typeof OptionSuggestionService.suggestOptionForBtst,
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true);
+      assert.deepStrictEqual(result.logged, ['TEST'], 'alerted symbol must be journaled');
+      assert.strictEqual(mocks.journalCalls.length, 1);
+      const entry = mocks.journalCalls[0] as Record<string, unknown>;
+      assert.strictEqual(entry.signalType, 'BTST');
+      assert.strictEqual(entry.symbol, 'TEST');
+      assert.strictEqual(entry.optionType, 'CE');
+      assert.strictEqual(entry.optionContract, '100 CE');
+      assert.strictEqual(entry.entryCmp, 4.2);
+      assert.strictEqual(entry.overnightSignalId, 'btst-alert-test-signal');
+      assert.strictEqual(entry.signalSummary, 'STRONG_BTST,TRADEABLE,LONG,REGIME_BULL');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('index BTST alert is journaled with the INDEX tag', async () => {
+    const indexSignal = makeTradableSignal({
+      id: 'idx-nifty',
+      symbol: 'NIFTY',
+      instrumentType: 'INDEX',
+      classification: 'INDEX_READY',
+      direction: 'LONG',
+      overnightScore: 110,
+      confidence: 95,
+    });
+    const mocks = mockBtstRouteDeps({
+      discover: async () => [], // no stock setups — index-only alert
+      findMany: async () => [],
+      overnightSignalFindMany: async () => [indexSignal],
+      suggestOptionForBtst: (async (symbol: string) => ({
+        strike: 24000,
+        ltp: 150,
+        formattedName: `${symbol} 24000 CE`,
+      })) as typeof OptionSuggestionService.suggestOptionForBtst,
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true);
+      assert.strictEqual(result.indexLongs, 1);
+      assert.deepStrictEqual(result.logged, ['NIFTY']);
+      const entry = mocks.journalCalls[0] as Record<string, unknown>;
+      assert.strictEqual(entry.signalType, 'BTST');
+      assert.strictEqual(entry.optionType, 'CE');
+      assert.strictEqual(entry.optionContract, '24000 CE');
+      assert.strictEqual(entry.overnightSignalId, 'idx-nifty');
+      assert.strictEqual(entry.signalSummary, 'INDEX_READY,TRADEABLE,LONG,INDEX,REGIME_BULL');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('failed Telegram send never journals (claims rolled back instead)', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      suggestOptionForBtst: (async () => ({
+        strike: 100,
+        ltp: 4.2,
+        formattedName: 'TEST 100 CE',
+      })) as typeof OptionSuggestionService.suggestOptionForBtst,
+      sendBtstAlert: async () => ({ sent: false, reason: 'telegram_api_error' }),
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, false);
+      assert.strictEqual(mocks.journalCalls.length, 0, 'unsent alerts must not be journaled');
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('journal failure never breaks an already-sent alert', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      suggestOptionForBtst: (async () => ({
+        strike: 100,
+        ltp: 4.2,
+        formattedName: 'TEST 100 CE',
+      })) as typeof OptionSuggestionService.suggestOptionForBtst,
+      logSignal: (async () => { throw new Error('journal db down'); }) as typeof TradeJournalService.logSignal,
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true, 'alert result must stand even if journaling fails');
+      assert.deepStrictEqual(result.logged, [], 'no symbols journaled on failure');
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 0, 'claims must not be rolled back for journal errors');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('alert without option suggestion defers to the 15:25 journal job', async () => {
+    // Default harness suggestion is { error: 'NO_CHAIN' } → no option data.
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+
+      assert.strictEqual(result.sent, true);
+      assert.deepStrictEqual(result.logged, []);
+      assert.strictEqual(mocks.journalCalls.length, 0, 'no journal write without option strike/ltp');
     } finally {
       mocks.restore();
     }
