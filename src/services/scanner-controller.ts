@@ -4,6 +4,7 @@ import { CacheService } from './cache.service';
 import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
+import { SectorRegimeService } from './sector-regime.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { EventCalendarService } from './overnight/event.service';
 
@@ -132,6 +133,10 @@ export class ScannerController {
 
     // Rank the stocks using the RankingService
     const ranked = RankingService.rankStocks(rawResults);
+
+    // Tag SECTOR_DIVERGENCE before the score gate/persist so it's always visible
+    // in the UI and baked into signalSummary for downstream alert/journal gating.
+    SectorRegimeService.applySectorDivergence(ranked);
 
     // Score gate: filter out completely useless results (score < 10)
     const filtered = ranked.filter(r => r.score >= 10);

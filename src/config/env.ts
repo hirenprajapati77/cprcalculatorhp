@@ -84,6 +84,12 @@ const envSchema = z.object({
   VPA_SHADOW_MODE: z.string().default('true'),
   VPA_LIVE_CONFIDENCE: z.string().default('false'),
   VPA_LIVE_GATES: z.string().default('false'),
+  /**
+   * Sector Divergence filter. 'shadow' = tag stocks SECTOR_DIVERGENCE and log what
+   * would be suppressed, but never block alerts/journal. 'live' = actually gate
+   * Telegram breakout alerts and CPR Journal auto-logging behind the tag.
+   */
+  SECTOR_FILTER_MODE: z.enum(['shadow', 'live']).default('shadow'),
   VPA_COMPONENT_RVOL: z.string().default('true'),
   VPA_COMPONENT_CLV: z.string().default('true'),
   VPA_COMPONENT_EFFORT: z.string().default('true'),

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { env } from '@/config/env';
 
 const MIN_BREAKOUT_ALERT_SCORE = 75;
 
@@ -45,8 +46,18 @@ export class BreakoutWatcherService {
         console.log(`[BreakoutWatcher] Suppressing alert for ${result.symbol} due to high event risk: ${result.eventRiskScore}`);
       }
 
+      const hasSectorDivergence = result.signals.includes('SECTOR_DIVERGENCE');
+      const sectorFilterLive = env.SECTOR_FILTER_MODE === 'live';
+      if (hasBreakoutNow && hasSectorDivergence) {
+        console.log(
+          `[BreakoutWatcher] ${result.symbol} flagged SECTOR_DIVERGENCE` +
+          (sectorFilterLive ? ' — suppressing alert (live mode).' : ' — shadow mode, alert not suppressed.')
+        );
+      }
+
       const qualifiesForAlert =
-        hasBreakoutNow && result.score >= MIN_BREAKOUT_ALERT_SCORE && (result.eventRiskScore ?? 0) < 80;
+        hasBreakoutNow && result.score >= MIN_BREAKOUT_ALERT_SCORE && (result.eventRiskScore ?? 0) < 80 &&
+        !(hasSectorDivergence && sectorFilterLive);
 
       let stateReadFailed = false;
       let isNewAlert = false;

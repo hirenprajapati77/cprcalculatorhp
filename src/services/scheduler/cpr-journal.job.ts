@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { env } from '@/config/env';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 
@@ -52,6 +53,16 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       console.log(
         `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} < Entry ${signal.entry}`
       );
+      skipped.push(signal.symbol);
+      continue;
+    }
+
+    // SECTOR_DIVERGENCE is baked into signalSummary by SectorRegimeService at
+    // scan time. In live mode, skip journaling — the stock's own sector was
+    // net-bearish that day. Shadow mode logs only, never blocks.
+    const hasSectorDivergence = signal.signalSummary?.includes('SECTOR_DIVERGENCE') ?? false;
+    if (hasSectorDivergence && env.SECTOR_FILTER_MODE === 'live') {
+      console.log(`[CPRJournal] ${signal.symbol} skipped: sector divergence (live mode)`);
       skipped.push(signal.symbol);
       continue;
     }
