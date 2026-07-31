@@ -754,4 +754,77 @@ describe('Overnight Engine Tests', () => {
       EventCalendarService.getBulkEventRisk = originalBulkEvent;
     }
   });
+
+  test('overnight/btst symbol API routes strip indexCorrelationEstimate from response', async () => {
+    const originalGetStockData = MarketService.getStockData;
+    const originalGetNiftyHistory = NiftyHistoryService.getNiftyHistory;
+    const originalFindMany = prisma.overnightSignal.findMany;
+
+    const mockHistory = Array.from({ length: 100 }).map((_, i) => ({
+      date: `2026-07-${(i + 1).toString().padStart(2, '0')}`,
+      open: 100 + i * 0.1,
+      high: 105 + i * 0.1,
+      low: 95 + i * 0.1,
+      close: 100 + i * 0.1,
+      volume: 1000000,
+    }));
+
+    const mockStock = {
+      symbol: 'TESTSTRIP',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100,
+      high: 105,
+      low: 95,
+      close: 100,
+      volume: 1000000,
+      avgVolume: 900000,
+      marketCap: 100000,
+      ltp: 100,
+      history: mockHistory,
+    };
+
+    MarketService.getStockData = async () => mockStock as any;
+    NiftyHistoryService.getNiftyHistory = async () => {
+      return mockHistory.map(h => ({
+        date: h.date,
+        open: h.open * 1.01,
+        high: h.high * 1.01,
+        low: h.low * 1.01,
+        close: h.close * 1.01,
+        volume: h.volume,
+      }));
+    };
+    prisma.overnightSignal.findMany = async () => [] as any;
+
+    try {
+      const { NextRequest } = await import('next/server');
+      const getOvernightRoute = await import('../../app/api/overnight/[symbol]/route');
+      const getBtstRoute = await import('../../app/api/btst/[symbol]/route');
+
+      // 1. Test GET /api/overnight/[symbol]
+      const reqOvernight = new NextRequest('http://localhost/api/overnight/TESTSTRIP');
+      const resOvernight = await getOvernightRoute.GET(reqOvernight, {
+        params: Promise.resolve({ symbol: 'TESTSTRIP' }),
+      });
+      assert.strictEqual(resOvernight.status, 200);
+      const jsonOvernight = await resOvernight.json();
+      assert.ok(jsonOvernight.risk, 'Should return risk metrics');
+      assert.strictEqual('indexCorrelationEstimate' in jsonOvernight.risk, false, 'indexCorrelationEstimate should be stripped from overnight API response');
+
+      // 2. Test GET /api/btst/[symbol]
+      const reqBtst = new NextRequest('http://localhost/api/btst/TESTSTRIP');
+      const resBtst = await getBtstRoute.GET(reqBtst, {
+        params: Promise.resolve({ symbol: 'TESTSTRIP' }),
+      });
+      assert.strictEqual(resBtst.status, 200);
+      const jsonBtst = await resBtst.json();
+      assert.ok(jsonBtst.risk, 'Should return risk metrics');
+      assert.strictEqual('indexCorrelationEstimate' in jsonBtst.risk, false, 'indexCorrelationEstimate should be stripped from btst API response');
+    } finally {
+      MarketService.getStockData = originalGetStockData;
+      NiftyHistoryService.getNiftyHistory = originalGetNiftyHistory;
+      prisma.overnightSignal.findMany = originalFindMany;
+    }
+  });
 });

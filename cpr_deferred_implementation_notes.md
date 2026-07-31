@@ -67,3 +67,24 @@ This document provides the exact formulas, boundary conditions, and worked examp
   - Setup is NARROW (+35), HIGHER_VALUE (+30), NON-VIRGIN (+0), ALIGNED (+20).
   - *Total Score:* 35 + 30 + 0 + 20 = 85.
   - *Result:* 85 falls in the `≥75` bracket → **Grade: A**.
+
+---
+
+## indexCorrelationEstimate (NIFTY beta proxy) — computed, intentionally unexposed
+
+`OvernightRiskService.calculateOvernightRisk()` computes a real 60-day rolling
+beta (`cov/var` vs NIFTY, `CORRELATION_WINDOW = 60`) into `indexCorrelationEstimate`.
+
+Status:
+- NOT wired into any ranking/scoring service (BtstRankingService, StbtRankingService,
+  IndexRankingService) — riskLevel aggregation explicitly skips it
+  ("indexCorrelationEstimate scoring is deferred (Phase 2B optional)").
+- NOT exposed in any API response — both `api/overnight/[symbol]/route.ts` and
+  `api/btst/[symbol]/route.ts` destructure it out before returning `risk`.
+- Field name is misleading: it's a beta coefficient (unbounded, e.g. can exceed 1.8),
+  not a Pearson correlation (bounded [-1, 1]). Rename before either exposing to API
+  or wiring into scoring, or a consumer will misread a beta as a correlation.
+- Test gap: no test exercises the API route's exclusion behavior — only the service's
+  own null-history and null-variance cases are covered
+  (`overnight-risk.test.ts`, `overnight.test.ts`). If the route is ever refactored,
+  nothing currently catches the field leaking through.

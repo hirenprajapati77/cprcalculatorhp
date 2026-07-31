@@ -66,13 +66,20 @@ Log "Setting NEXT_PUBLIC_BASE_URL to production..."
 Ok "NEXT_PUBLIC_BASE_URL = $PROD_URL"
 
 # ── 3. BUILD ─────────────────────────────────────────────────
-Log "Installing dependencies and generating Prisma client..."
+Log "Installing dependencies..."
 $ErrorActionPreference = "Continue"
-$build = & npm ci 2>&1
-if ($LASTEXITCODE -eq 0) { $build = & npx prisma generate 2>&1 }
-Log "Building Next.js (this takes ~1-2 min)..."
-if ($LASTEXITCODE -eq 0) { $build = & npm run build 2>&1 }
+$build = & npm install 2>&1
 $exitCode = $LASTEXITCODE
+if ($exitCode -eq 0) {
+    Log "Generating Prisma client..."
+    $build = & node node_modules/prisma/build/index.js generate 2>&1
+    $exitCode = $LASTEXITCODE
+}
+if ($exitCode -eq 0) {
+    Log "Building Next.js (this takes ~1-2 min)..."
+    $build = & npm run build 2>&1
+    $exitCode = $LASTEXITCODE
+}
 $ErrorActionPreference = "Stop"
 if ($exitCode -ne 0) {
     # Restore .env before failing
