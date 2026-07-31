@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { VpaConfirmationService } from '../../services/vpa/vpa-confirmation.service';
 import { scoreVpaBreakoutConfirm } from '../../services/vpa/breakout-confirm.service';
+import { scoreVpaClv } from '../../services/vpa/clv.service';
 import { computeClv, computeRvol } from '../../services/vpa/vpa.math';
 import { BtstRankingService } from '../../services/overnight/btst-ranking.service';
 import { VPA_LIMITS } from '../../config/vpa.config';
@@ -422,5 +423,37 @@ describe('VpaConfirmationResult.live flag', () => {
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.enabled, false);
     assert.equal(result.live, false);
+  });
+});
+
+describe('scoreVpaClv', () => {
+  it('neutral close (exactly mid-range) does not flag BEARISH for LONG or BULLISH_CLOSE for SHORT', () => {
+    const longRes = scoreVpaClv('LONG', 100, 110, 90);
+    assert.equal(longRes.flag, 'VPA_CLV_NEUTRAL');
+    assert.equal(longRes.points, -1);
+
+    const shortRes = scoreVpaClv('SHORT', 100, 110, 90);
+    assert.equal(shortRes.flag, 'VPA_CLV_NEUTRAL');
+    assert.equal(shortRes.points, -1);
+  });
+
+  it('close in the bottom ~15% of range (e.g. 92 out of 90-110) flags BEARISH for LONG', () => {
+    const longRes = scoreVpaClv('LONG', 92, 110, 90);
+    assert.equal(longRes.flag, 'VPA_CLV_BEARISH');
+    assert.equal(longRes.points, -3);
+
+    const shortRes = scoreVpaClv('SHORT', 92, 110, 90);
+    assert.equal(shortRes.flag, 'VPA_CLV_BEARISH_CLOSE');
+    assert.equal(shortRes.points, 3);
+  });
+
+  it('close in the top ~15% of range (e.g. 108 out of 90-110) flags BULLISH for LONG', () => {
+    const longRes = scoreVpaClv('LONG', 108, 110, 90);
+    assert.equal(longRes.flag, 'VPA_CLV_BULLISH');
+    assert.equal(longRes.points, 3);
+
+    const shortRes = scoreVpaClv('SHORT', 108, 110, 90);
+    assert.equal(shortRes.flag, 'VPA_CLV_BULLISH_CLOSE');
+    assert.equal(shortRes.points, -3);
   });
 });

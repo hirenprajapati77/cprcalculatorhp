@@ -72,8 +72,8 @@ export const VPA_RVOL = {
 } as const;
 
 export const VPA_CLV = {
-  BULLISH: 0.7,
-  BEARISH: 0.3,
+  BULLISH: 0.4,
+  BEARISH: -0.4,
   BULLISH_ADJ: 3,
   BEARISH_ADJ: -3,
   NEUTRAL_PENALTY: -1,
