@@ -290,7 +290,7 @@ export class BacktestService {
 
                 // M-9: Combine trade create + journal inserts in one transaction
                 // (atomic write + 1 round-trip instead of 2).
-                const [trade] = await prisma.$transaction(async (tx) => {
+                await prisma.$transaction(async (tx) => {
                   const t = await tx.trade.create({
                     data: {
                       backtestRunId: runId,
@@ -334,7 +334,6 @@ export class BacktestService {
                       }))
                     });
                   }
-                  return [t];
                 });
 
                 processedTrades++;

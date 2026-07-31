@@ -63,8 +63,7 @@ model ScannerResult {
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])
-  @@index([date])
-  @@index([date, score])
+  @@index([date, score])  // covers leading-column [date] queries — standalone [date] index dropped
   @@index([score])
   @@index([createdAt])
   @@index([symbol])
@@ -176,7 +175,7 @@ model Trade {
   run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
   journal Journal[]
 
-  @@index([backtestRunId])
+  // @@index([backtestRunId]) dropped — covered by the composite indexes below
   @@index([backtestRunId, status])
   @@index([backtestRunId, pnl])
   @@index([symbol])
@@ -232,6 +231,8 @@ model OvernightSignal {
 
   direction String @default("LONG")
 
+  instrumentType String? // "STOCK" | "INDEX", null = STOCK (no backfill needed)
+
   entry    Float?
   stopLoss Float?
   target   Float?
@@ -272,10 +273,10 @@ model OvernightSignal {
 
   journalEntries TradeJournal[]
 
-  @@unique([symbol, signalDate, signalTime])
+  @@unique([symbol, signalDate, signalTime, direction])
   @@index([direction])
   @@index([classification])
-  @@index([signalDate])
+  // @@index([signalDate]) dropped — covered by composite @@index([signalDate, direction])
   @@index([signalDate, direction])
   @@map("BtstSignal")
 }
@@ -295,6 +296,17 @@ model BreakoutAlertState {
   lastAlerted DateTime?
   updatedAt   DateTime  @updatedAt
 }
+
+model BtstAlertState {
+  id        Int      @id @default(autoincrement())
+  date      String
+  symbol    String
+  sentAt    DateTime
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, symbol])
+}
+
 
 model TradeJournal {
   id             String   @id @default(cuid())
@@ -375,6 +387,7 @@ model MarketEvent {
   eventStatus String   @default("CONFIRMED")
   createdAt   DateTime @default(now())
 
+  @@unique([symbol, date, eventType])
   @@index([symbol, date])
   @@index([date])
 }
