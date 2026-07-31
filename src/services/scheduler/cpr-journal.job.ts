@@ -45,6 +45,17 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     // on that filter to stay correct.
     const cleanSym = signal.symbol.split(':')[0].trim();
 
+    // Entry is the LONG breakout-continuation trigger (tomorrow's projected TC,
+    // see scanner.service.ts entry = cprTomorrow.tc). If price hasn't reached it
+    // yet, this signal was never actually triggerable — don't fabricate a fill.
+    if (signal.ltp < signal.entry) {
+      console.log(
+        `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} < Entry ${signal.entry}`
+      );
+      skipped.push(signal.symbol);
+      continue;
+    }
+
     const suggestion = await OptionSuggestionService.suggestOptionForBtst(
       cleanSym,
       signal.ltp,
