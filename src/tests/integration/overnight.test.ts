@@ -13,6 +13,10 @@ import { EventCalendarService } from '../../services/overnight/event.service';
 import { prisma } from '../../lib/db';
 import { BTST_WINDOWS } from '../../config/trading-constants';
 import { BTST_CLOCK } from '../../lib/market-hours';
+import { MarketService } from '../../services/market.service';
+import { NiftyHistoryService } from '../../services/overnight/nifty-history.service';
+
+
 
 function pad2(n: number): string { return String(n).padStart(2, '0'); }
 /** Build an IST Date from calendar day + hour/minute (no hardcoded HH:MM clock strings). */

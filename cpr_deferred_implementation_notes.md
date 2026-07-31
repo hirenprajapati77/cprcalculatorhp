@@ -84,7 +84,4 @@ Status:
 - Field name is misleading: it's a beta coefficient (unbounded, e.g. can exceed 1.8),
   not a Pearson correlation (bounded [-1, 1]). Rename before either exposing to API
   or wiring into scoring, or a consumer will misread a beta as a correlation.
-- Test gap: no test exercises the API route's exclusion behavior — only the service's
-  own null-history and null-variance cases are covered
-  (`overnight-risk.test.ts`, `overnight.test.ts`). If the route is ever refactored,
-  nothing currently catches the field leaking through.
+- Test status: Covered by the integration test "overnight/btst symbol API routes strip indexCorrelationEstimate from response" in src/tests/integration/overnight.test.ts, which directly exercises the routes and ensures the field is stripped.
