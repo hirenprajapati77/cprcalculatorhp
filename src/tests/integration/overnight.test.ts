@@ -799,7 +799,7 @@ describe('Overnight Engine Tests', () => {
         volume: h.volume,
       }));
     };
-    prisma.overnightSignal.findMany = async () => [] as any;
+    (prisma.overnightSignal.findMany as any) = () => Promise.resolve([]);
 
     try {
       const { NextRequest } = await import('next/server');
