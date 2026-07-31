@@ -21,9 +21,8 @@ export class FyersAuthService {
   public static async getAccessToken(): Promise<string | null> {
     try {
       const prisma = await getPrisma();
-      const tokenRecord = await prisma.brokerToken.findFirst({
+      const tokenRecord = await prisma.brokerToken.findUnique({
         where: { broker: 'fyers' },
-        orderBy: { updatedAt: 'desc' }
       });
       if (tokenRecord && tokenRecord.expiresAt > new Date()) {
         try {
@@ -43,9 +42,8 @@ export class FyersAuthService {
   public static async getTokenDetails() {
     try {
       const prisma = await getPrisma();
-      const tokenRecord = await prisma.brokerToken.findFirst({
+      const tokenRecord = await prisma.brokerToken.findUnique({
         where: { broker: 'fyers' },
-        orderBy: { updatedAt: 'desc' }
       });
       if (tokenRecord && tokenRecord.expiresAt > new Date()) {
         try {
@@ -152,7 +150,11 @@ export class FyersAuthService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      // 1. Attempt DIRECT call first
+      // 1. Attempt DIRECT call first.
+      // OAuth auth codes are single-use. Only retry via the proxy when the
+      // direct attempt never reached Fyers (network/DNS/timeout). An HTTP
+      // response — even a failure — means Fyers already saw the code.
+      let directReachedFyers = false;
       try {
         console.log('[FyersAuthService] Attempting token generation DIRECTLY...');
         const res = await fetch('https://api-t1.fyers.in/api/v3/validate-authcode', {
@@ -167,43 +169,50 @@ export class FyersAuthService {
         });
 
         clearTimeout(timeoutId);
+        directReachedFyers = true;
 
         if (!res.ok) {
           const bodyText = await res.text();
           console.warn(`[FyersAuthService] Direct token exchange HTTP ${res.status}: ${bodyText}`);
-        } else {
-          const data = await res.json();
-          if (data.s === 'ok') {
-            const token = data.access_token || data.data?.access_token;
-            if (token) {
-              // NOTE: Fyers tokens reportedly expire daily around 6:00 AM IST (00:30 UTC).
-              // This is based on community consensus, not explicitly documented API fields.
-              // If we are currently past 00:30 UTC, expiry is tomorrow at 00:30 UTC.
-              const expiresAt = new Date();
-              expiresAt.setUTCHours(0, 30, 0, 0);
-              if (new Date() >= expiresAt) {
-                expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
-              }
-              try {
-                await this.saveToken(token, expiresAt);
-              } catch (saveErr) {
-                console.error('[FyersAuthService] Token received but DB persist failed (direct):', saveErr);
-                return { success: false, message: 'Token received but failed to save. Please retry login.' };
-              }
-              console.log('[FyersAuthService] Direct token exchange succeeded.');
-              return { success: true, message: 'Login successful (Direct)' };
-            } else {
-              console.warn('[FyersAuthService] Direct token exchange succeeded but no token in response:', JSON.stringify(data));
-            }
-          } else {
-            console.warn('[FyersAuthService] Direct token exchange returned non-ok status:', JSON.stringify(data));
-          }
+          return { success: false, message: `Fyers rejected the auth code (HTTP ${res.status}). Please retry login.` };
         }
+
+        const data = await res.json();
+        if (data.s === 'ok') {
+          const token = data.access_token || data.data?.access_token;
+          if (token) {
+            // NOTE: Fyers tokens reportedly expire daily around 6:00 AM IST (00:30 UTC).
+            // This is based on community consensus, not explicitly documented API fields.
+            // If we are currently past 00:30 UTC, expiry is tomorrow at 00:30 UTC.
+            const expiresAt = new Date();
+            expiresAt.setUTCHours(0, 30, 0, 0);
+            if (new Date() >= expiresAt) {
+              expiresAt.setUTCDate(expiresAt.getUTCDate() + 1);
+            }
+            try {
+              await this.saveToken(token, expiresAt);
+            } catch (saveErr) {
+              console.error('[FyersAuthService] Token received but DB persist failed (direct):', saveErr);
+              return { success: false, message: 'Token received but failed to save. Please retry login.' };
+            }
+            console.log('[FyersAuthService] Direct token exchange succeeded.');
+            return { success: true, message: 'Login successful (Direct)' };
+          }
+          console.warn('[FyersAuthService] Direct token exchange succeeded but no token in response:', JSON.stringify(data));
+          return { success: false, message: 'Fyers returned no access token. Please retry login.' };
+        }
+
+        console.warn('[FyersAuthService] Direct token exchange returned non-ok status:', JSON.stringify(data));
+        return { success: false, message: data.message || 'Fyers rejected the auth code. Please retry login.' };
       } catch (directErr) {
+        clearTimeout(timeoutId);
         console.warn('[FyersAuthService] Direct token exchange failed with error:', directErr);
+        if (directReachedFyers) {
+          return { success: false, message: 'Fyers auth exchange failed. Please retry login.' };
+        }
       }
 
-      // 2. Fallback to Cloudflare Worker Proxy
+      // 2. Fallback to Cloudflare Worker Proxy — only when the direct call never reached Fyers.
       const authProxyUrl = env.FYERS_AUTH_PROXY_URL;
       if (!authProxyUrl) {
         return { success: false, message: 'Direct Fyers token exchange failed and no trusted proxy is configured.' };

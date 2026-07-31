@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/db';
+
+const watchlistUpsertSchema = z.object({
+  symbol: z.string().trim().min(1),
+  starred: z.boolean().optional(),
+  pinned: z.boolean().optional(),
+  notify: z.boolean().optional(),
+});
 
 export async function GET() {
   try {
@@ -19,12 +27,18 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+async function upsertWatchlist(req: Request) {
   try {
     const body = await req.json();
-    const { symbol, starred, pinned, notify } = body;
+    const parsed = watchlistUpsertSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid watchlist payload', details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
 
-    if (!symbol) return NextResponse.json({ error: 'Symbol required' }, { status: 400 });
+    const { symbol, starred, pinned, notify } = parsed.data;
 
     const updated = await prisma.watchlist.upsert({
       where: { symbol },
@@ -43,9 +57,18 @@ export async function POST(req: Request) {
 
     return NextResponse.json(updated);
   } catch (err) {
-    console.error('Failed to POST watchlist:', err);
+    console.error('Failed to upsert watchlist:', err);
     return NextResponse.json({ error: 'Failed to update watchlist' }, { status: 500 });
   }
+}
+
+export async function POST(req: Request) {
+  return upsertWatchlist(req);
+}
+
+/** Alias for clients that send PATCH (watchlist page pin/notify toggles). */
+export async function PATCH(req: Request) {
+  return upsertWatchlist(req);
 }
 
 export async function DELETE(req: Request) {

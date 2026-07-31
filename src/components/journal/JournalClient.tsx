@@ -1077,25 +1077,25 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   </div>
                 )}
 
-                {/* ── 7. Execution Variance Card ── */}
+                {/* ── 7. Option vs Spot Delta Card ── */}
                 <div className="rounded-xl border border-border-primary/50 bg-bg-secondary p-4 flex items-start gap-4">
                   <div style={{ background: (reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444') + '18', color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}
                     className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 text-lg">
                     <Activity size={18} />
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Execution Variance</div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Option vs Spot Delta</div>
                     <div style={{ color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}
                       className="text-2xl font-bold font-mono">
                       {reportingData.variance.averageVariancePct >= 0 ? '+' : ''}{reportingData.variance.averageVariancePct.toFixed(2)}%
                     </div>
                     <div className="text-[11px] text-text-tertiary mt-0.5">
-                      Average gap between model prediction and actual return · {reportingData.variance.sampleSize} trades sampled
+                      Option premium % minus underlying spot move % (leverage delta, not fill slippage) · {reportingData.variance.sampleSize} trades sampled
                     </div>
                     <div className="mt-2 text-[10px]" style={{ color: reportingData.variance.averageVariancePct >= -2 ? '#22c55e' : '#ef4444' }}>
                       {reportingData.variance.averageVariancePct >= -2
-                        ? '● Execution quality is within acceptable range'
-                        : '● Execution slippage is hurting returns — review option selection'}
+                        ? '● Option leverage is close to the underlying move'
+                        : '● Option premium moved far from the spot model — review strike selection'}
                     </div>
                   </div>
                 </div>

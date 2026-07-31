@@ -115,10 +115,10 @@ class CacheServiceImpl {
         const data = await this.redisClient!.get(key);
         result = data ? JSON.parse(data) : null;
       } catch {
-        result = memoryCache.get(key) as T | null ?? null;
+        result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
       }
     } else {
-      result = memoryCache.get(key) as T | null ?? null;
+      result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
     }
 
     if (result !== null) {
@@ -139,7 +139,9 @@ class CacheServiceImpl {
         // fallback
       }
     }
-    memoryCache.set(key, value, { ttl: ttlSeconds * 1000 });
+    // Clone on write so Redis (JSON round-trip) and memory paths share isolation
+    // semantics — consumers mutating the returned object must not poison the cache.
+    memoryCache.set(key, structuredClone(value), { ttl: ttlSeconds * 1000 });
   }
 
   async delete(key: string): Promise<void> {

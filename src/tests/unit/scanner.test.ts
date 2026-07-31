@@ -972,7 +972,21 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_BEARISH + BREAKDOWN must award +15 points');
   });
 
-  await t.test('EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN awards +15 in Category F', () => {
+  await t.test('EMA_CROSS_BEAR + RSI_OVERBOUGHT + BREAKDOWN awards +15 in Category F', () => {
+    const resWithBearCross = {
+      ...baseResult,
+      signals: ['EMA_CROSS_BEAR', 'RSI_OVERBOUGHT', 'BREAKDOWN'],
+    };
+    const resWithoutBearCross = {
+      ...baseResult,
+      signals: ['BREAKDOWN'],
+    };
+    const scoreWith = RankingService.calculateScore(resWithBearCross as unknown as ScannerSignalResult);
+    const scoreWithout = RankingService.calculateScore(resWithoutBearCross as unknown as ScannerSignalResult);
+    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_OVERBOUGHT + BREAKDOWN must award +15 points');
+  });
+
+  await t.test('EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN does NOT award Category F (late-short trap)', () => {
     const resWithBearCross = {
       ...baseResult,
       signals: ['EMA_CROSS_BEAR', 'RSI_OVERSOLD', 'BREAKDOWN'],
@@ -983,7 +997,7 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     };
     const scoreWith = RankingService.calculateScore(resWithBearCross as unknown as ScannerSignalResult);
     const scoreWithout = RankingService.calculateScore(resWithoutBearCross as unknown as ScannerSignalResult);
-    assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BEAR + RSI_OVERSOLD + BREAKDOWN must award +15 points');
+    assert.strictEqual(scoreWith - scoreWithout, 0, 'EMA_CROSS_BEAR + RSI_OVERSOLD must not award Category F points');
   });
 
   await t.test('EMA_CROSS_BULL + RSI_STRONG + BREAKOUT awards +15 in Category F', () => {
@@ -1000,7 +1014,7 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
     assert.strictEqual(scoreWith - scoreWithout, 15, 'EMA_CROSS_BULL + RSI_STRONG + BREAKOUT must award +15 points');
   });
 
-  await t.test('hasBullishRSI and hasBearishRSI are mutually exclusive except at RSI_OVERSOLD', () => {
+  await t.test('hasBullishRSI and hasBearishRSI are mutually exclusive', () => {
     const neutralUp = RankingService.calculateScore({ ...baseResult, signals: ['BREAKOUT'] } as unknown as ScannerSignalResult);
     const neutralDown = RankingService.calculateScore({ ...baseResult, signals: ['BREAKDOWN'] } as unknown as ScannerSignalResult);
 

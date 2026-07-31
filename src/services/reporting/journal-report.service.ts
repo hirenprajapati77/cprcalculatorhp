@@ -98,7 +98,9 @@ export class JournalReportService {
         const modelPnlPct = isShort
           ? ((t.modelEntryPrice - t.modelExitPrice) / t.modelEntryPrice) * 100
           : ((t.modelExitPrice - t.modelEntryPrice) / t.modelEntryPrice) * 100;
-        // In options, variance is not 1:1, but this gives a directional heuristic
+        // modelEntry/Exit are underlying spot levels; pnlPct is option-premium %.
+        // This is NOT execution slippage — it is an option-vs-spot leverage delta
+        // (directional heuristic only). Do not treat the number as fill quality.
         const variance = t.pnlPct - modelPnlPct;
         totalVariance += variance;
         count++;

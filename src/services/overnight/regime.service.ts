@@ -13,16 +13,16 @@ export interface MarketRegime {
 }
 
 export class RegimeService {
-  private static cachedRegime: { date: string; regime: MarketRegime } | null = null;
+  /** Multi-date memo — backtests walk many dates and the previous single-entry cache thrashed every call. */
+  private static regimeByDate = new Map<string, MarketRegime>();
 
   /**
    * Fetches the broad market regime based on NIFTY 50 (^NSEI) history.
-   * Caches the result per day to avoid redundant network calls.
+   * Caches the result per day to avoid redundant network/CPU work.
    */
   static async getMarketRegime(date: string): Promise<MarketRegime> {
-    if (this.cachedRegime && this.cachedRegime.date === date) {
-      return this.cachedRegime.regime;
-    }
+    const cached = this.regimeByDate.get(date);
+    if (cached) return cached;
 
     try {
       // Use ^NSEI for Nifty 50. End = exclusive next UTC day so Yahoo includes `date`'s bar.
@@ -73,8 +73,7 @@ export class RegimeService {
 
       const regime = { trend, volatility, score, niftyReturn5d };
       
-      // Cache it
-      this.cachedRegime = { date, regime };
+      this.regimeByDate.set(date, regime);
       
       console.log(`[RegimeService] NIFTY 50 Regime for ${date}: ${trend} / ${volatility} (ATR%: ${atrPct.toFixed(2)}%)`);
       return regime;

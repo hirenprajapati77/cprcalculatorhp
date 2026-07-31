@@ -49,8 +49,15 @@ export async function GET(request: NextRequest) {
     const mode = searchParams.get('mode') || 'ALL'; // NARROW | WIDE | BULLISH | BEARISH | BREAKOUT | etc.
     const limitParam = searchParams.get('limit') || '10';
     const isAll = limitParam === 'ALL';
-    const page = isAll ? 1 : parseInt(searchParams.get('page') || '1', 10);
-    const limit = isAll ? undefined : parseInt(limitParam, 10);
+    // Cap every path — including limit=ALL — so a single request cannot load an
+    // unbounded Prisma result set into memory. Auth gates this route, but an
+    // authenticated client can still OOM the process without a hard ceiling.
+    const MAX_SCANNER_LIMIT = 500;
+    const page = isAll ? 1 : Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+    const parsedLimit = parseInt(limitParam, 10);
+    const limit = isAll
+      ? MAX_SCANNER_LIMIT
+      : Math.min(Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 10), MAX_SCANNER_LIMIT);
     const ALLOWED_SORT_FIELDS = new Set([
       'score', 'ltp', 'volume', 'width', 'pivot', 'bc', 'tc', 'createdAt', 'updatedAt', 'date', 'symbol'
     ]);
@@ -277,7 +284,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Query Database
-    const offset = isAll ? undefined : (page - 1) * limit!;
+    const offset = (page - 1) * limit;
     
     const [results, total, fullStats] = await DatabaseCircuitBreaker.execute(() => Promise.all([
       prisma.scannerResult.findMany({
@@ -285,8 +292,8 @@ export async function GET(request: NextRequest) {
         orderBy: {
           [sortField]: sortOrder,
         },
-        ...(isAll || offset === undefined ? {} : { skip: offset }),
-        ...(isAll || limit === undefined ? {} : { take: limit }),
+        skip: offset,
+        take: limit,
       }),
       prisma.scannerResult.count({ where }),
       prisma.scannerResult.findMany({

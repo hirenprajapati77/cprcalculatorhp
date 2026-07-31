@@ -795,6 +795,34 @@ const StockRow = React.memo(({
 });
 StockRow.displayName = 'StockRow';
 
+/** Isolated countdown tick — keeps the 1s interval out of the God parent so StockRow memo stays intact. */
+function AutoRefreshCountdownLabel({
+  resetSeconds,
+  refreshInterval,
+}: {
+  resetSeconds: number;
+  refreshInterval: string;
+}) {
+  const [seconds, setSeconds] = useState(resetSeconds);
+
+  useEffect(() => {
+    setSeconds(resetSeconds);
+  }, [resetSeconds]);
+
+  useEffect(() => {
+    if (refreshInterval === 'Off') return;
+    const tick = setInterval(() => {
+      setSeconds((c) => (c > 0 ? c - 1 : c));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [refreshInterval]);
+
+  if (refreshInterval === 'Off') return <>Off</>;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return <>{`${m}:${s.toString().padStart(2, '0')}`}</>;
+}
+
 export default function ScannerClient() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -905,6 +933,8 @@ export default function ScannerClient() {
 
   // Watchlist & Pins (stored in localStorage)
   const [watchlist, setWatchlist] = useState<Record<string, WatchlistItemState>>({});
+  const watchlistRef = useRef(watchlist);
+  watchlistRef.current = watchlist;
   const [showWatchlistOnly, setShowWatchlistOnly] = useState<boolean>(false);
 
   // Auto Refresh Mode
@@ -1158,10 +1188,10 @@ export default function ScannerClient() {
     }
   }, [scannerMode]);
 
-  const saveWatchlistSettings = (updated: Record<string, WatchlistItemState>) => {
+  const saveWatchlistSettings = useCallback((updated: Record<string, WatchlistItemState>) => {
     setWatchlist(updated);
     localStorage.setItem('cpr_watchlist_v2', JSON.stringify(updated));
-  };
+  }, []);
 
   const handleToggleColumn = (key: string) => {
     let updated: string[];
@@ -1180,23 +1210,28 @@ export default function ScannerClient() {
     localStorage.setItem('cpr_scanner_density', next);
   };
 
-  // Toggle watchlist configurations (Star, Pin, Notify)
-  const handleToggleWatchlistState = async (symbol: string, key: keyof WatchlistItemState) => {
-    const updated = { ...watchlist };
-    const current = updated[symbol] ? { ...updated[symbol] } : { starred: false, pinned: false, notify: false };
+  // Toggle watchlist configurations (Star, Pin, Notify). Uses a ref so rapid
+  // clicks always see the latest snapshot without stale-closure races.
+  const handleToggleWatchlistState = useCallback(async (symbol: string, key: keyof WatchlistItemState) => {
+    const updated = { ...watchlistRef.current };
+    const current = updated[symbol]
+      ? { ...updated[symbol]! }
+      : { starred: false, pinned: false, notify: false };
     current[key] = !current[key];
-    
-    // Clean up empty configurations
+
     if (!current.starred && !current.pinned && !current.notify) {
       delete updated[symbol];
-      try {
-        await fetch(`/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
-      } catch (err) {
-        console.error('Failed to sync watchlist deletion with DB:', err);
-      }
     } else {
       updated[symbol] = current;
-      try {
+    }
+
+    watchlistRef.current = updated;
+    saveWatchlistSettings(updated);
+
+    try {
+      if (!updated[symbol]) {
+        await fetch(`/api/watchlist?symbol=${symbol}`, { method: 'DELETE' });
+      } else {
         await fetch('/api/watchlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1207,14 +1242,13 @@ export default function ScannerClient() {
             notify: current.notify,
           }),
         });
-      } catch (err) {
-        console.error('Failed to sync watchlist updates with DB:', err);
       }
+    } catch (err) {
+      console.error('Failed to sync watchlist with DB:', err);
     }
-    
-    saveWatchlistSettings(updated);
+
     showToast(`${symbol} watchlist settings updated`, 'success');
-  };
+  }, [saveWatchlistSettings, showToast]);
 
   // Fetch History Run logs
   const fetchHistoryRuns = useCallback(async () => {
@@ -1639,14 +1673,6 @@ export default function ScannerClient() {
     };
   }, [refreshInterval, refreshActiveData, scannerMode]);
 
-  useEffect(() => {
-    if (refreshInterval === 'Off') return;
-    const tick = setInterval(() => {
-      setCountdown((c) => (c > 0 ? c - 1 : c));
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [refreshInterval]);
-
   const hasFetchedRef = useRef(false);
   const [btstBypassActive, setBtstBypassActive] = useState(false);
 
@@ -1751,7 +1777,7 @@ export default function ScannerClient() {
   };
 
   // Open Quick Analyze Drawer & Load notes/history (history lazy-loaded on tab open)
-  const handleOpenDrawer = async (stock: ScannedStock) => {
+  const handleOpenDrawer = useCallback(async (stock: ScannedStock) => {
     setDrawerStock(stock);
     setDrawerOpen(true);
     setDrawerTab('overview');
@@ -1762,7 +1788,7 @@ export default function ScannerClient() {
     setDrawerMtf(null);
     setCompareStocks([]);
     setCompareError(null);
-  };
+  }, []);
 
   // Save stock user notes state
   const handleSaveNotes = (val: string) => {
@@ -1895,17 +1921,46 @@ export default function ScannerClient() {
     return () => clearTimeout(timeout);
   }, [stockNotes, drawerStock, drawerTab, drawerOpen]);
   // Multi-stock compare selection (capped at 5)
-  const handleToggleCompareCheckbox = (symbol: string) => {
-    if (compareSymbols.includes(symbol)) {
-      setCompareSymbols(compareSymbols.filter(s => s !== symbol));
-    } else {
-      if (compareSymbols.length >= 5) {
-        showToast('Maximum comparison basket size is 5 stocks.', 'info');
-        return;
+  const handleToggleCompareCheckbox = useCallback((symbol: string) => {
+    setCompareSymbols((prev) => {
+      if (prev.includes(symbol)) {
+        return prev.filter((s) => s !== symbol);
       }
-      setCompareSymbols([...compareSymbols, symbol]);
-    }
-  };
+      if (prev.length >= 5) {
+        showToast('Maximum comparison basket size is 5 stocks.', 'info');
+        return prev;
+      }
+      return [...prev, symbol];
+    });
+  }, [showToast]);
+
+  const handleChartRedirect = useCallback((r: ScannedStock) => {
+    const cprRecord = {
+      id: r.id,
+      high: r.price * 1.015,
+      low: r.price * 0.985,
+      close: r.ltp,
+      pivot: r.pivot,
+      bc: r.bc,
+      tc: r.tc,
+      r1: r.r1,
+      r2: r.r2,
+      r3: r.r3,
+      r4: r.r4,
+      s1: r.s1,
+      s2: r.s2,
+      s3: r.s3,
+      s4: r.s4,
+      width: r.width,
+      classification: r.classification,
+      trend: r.score >= 50 ? 'Bullish' : 'Bearish',
+      createdAt: new Date().toISOString(),
+      ltp: r.ltp,
+    };
+    sessionStorage.setItem('cpr_last_calculation', JSON.stringify(cprRecord));
+    sessionStorage.setItem('cpr_last_saved', 'false');
+    router.push('/calculate');
+  }, [router]);
 
   const executeCompareRedirect = () => {
     if (compareSymbols.length === 0) return;
@@ -1919,14 +1974,6 @@ export default function ScannerClient() {
     if (log.filters.market) setMarket(log.filters.market as 'NSE' | 'BSE');
     setShowLogsList(false);
     fetchScannerData();
-  };
-
-  // Format Auto-Refresh Timer Countdown String
-  const formatCountdown = () => {
-    if (refreshInterval === 'Off') return 'Off';
-    const m = Math.floor(countdown / 60);
-    const s = countdown % 60;
-    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
   };
 
   // Mode-aware badges: CPR uses 0–100 Simple thresholds; overnight uses Advanced 0–130
@@ -2226,7 +2273,12 @@ export default function ScannerClient() {
                   <span className="block text-[8px] text-text-tertiary uppercase">
                     {scannerMode === 'CPR' ? 'Next Scan' : 'Next Refresh'}
                   </span>
-                  <span className="font-bold text-text-primary">{formatCountdown()}</span>
+                  <span className="font-bold text-text-primary">
+                    <AutoRefreshCountdownLabel
+                      resetSeconds={countdown}
+                      refreshInterval={refreshInterval}
+                    />
+                  </span>
                 </div>
               </div>
               <select
@@ -3209,33 +3261,7 @@ export default function ScannerClient() {
                             onToggleCompare={handleToggleCompareCheckbox}
                             onToggleWatchlist={handleToggleWatchlistState}
                             onOpenDrawer={handleOpenDrawer}
-                            onChartRedirect={(r) => {
-                              const cprRecord = {
-                                id: r.id,
-                                high: r.price * 1.015,
-                                low: r.price * 0.985,
-                                close: r.ltp,
-                                pivot: r.pivot,
-                                bc: r.bc,
-                                tc: r.tc,
-                                r1: r.r1,
-                                r2: r.r2,
-                                r3: r.r3,
-                                r4: r.r4,
-                                s1: r.s1,
-                                s2: r.s2,
-                                s3: r.s3,
-                                s4: r.s4,
-                                width: r.width,
-                                classification: r.classification,
-                                trend: r.score >= 50 ? 'Bullish' : 'Bearish',
-                                createdAt: new Date().toISOString(),
-                                ltp: r.ltp
-                              };
-                              sessionStorage.setItem('cpr_last_calculation', JSON.stringify(cprRecord));
-                              sessionStorage.setItem('cpr_last_saved', 'false');
-                              router.push('/calculate');
-                            }}
+                            onChartRedirect={handleChartRedirect}
                           />
                         );
                       })}
