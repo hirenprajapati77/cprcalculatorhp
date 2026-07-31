@@ -16,6 +16,18 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     timeZone: 'Asia/Kolkata',
   });
 
+  const maxSignals = env.CPR_JOURNAL_MAX_SIGNALS;
+
+  // Count all qualifying signals (uncapped) so we can log exactly what the
+  // cap below cuts, instead of silently truncating.
+  const qualifyingCount = await prisma.scannerResult.count({
+    where: {
+      date: todayStr,
+      score: { gte: 75 },
+      NOT: { symbol: { endsWith: ':BSE' } },
+    },
+  });
+
   const topSignals = await prisma.scannerResult.findMany({
     where: {
       date: todayStr,
@@ -23,8 +35,15 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       NOT: { symbol: { endsWith: ':BSE' } },
     },
     orderBy: { score: 'desc' },
-    take: 2,
+    take: maxSignals,
   });
+
+  if (qualifyingCount > topSignals.length) {
+    console.log(
+      `[CPRJournal] ${qualifyingCount - topSignals.length} qualifying signal(s) cut by ` +
+      `CPR_JOURNAL_MAX_SIGNALS=${maxSignals} (${qualifyingCount} qualified today)`
+    );
+  }
 
   if (topSignals.length === 0) {
     return {

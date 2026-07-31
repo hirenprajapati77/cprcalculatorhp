@@ -74,6 +74,33 @@ export class TelegramService {
     }
   }
 
+  /**
+   * Chat targets for BTST alerts. Alerts are delivered to the group chat only
+   * (TELEGRAM_GROUP_CHAT_ID — same destination breakout alerts use); the
+   * personal chat is kept solely as a fallback when no group is configured.
+   * Env wins; AppSettings is the fallback, mirroring sendMessage /
+   * sendBreakoutAlert resolution.
+   */
+  private static async resolveBtstChatTargets(): Promise<{
+    personal: string | undefined;
+    group: string | undefined;
+  }> {
+    let personal = env.TELEGRAM_CHAT_ID;
+    let group = env.TELEGRAM_GROUP_CHAT_ID;
+
+    if (!personal || !group) {
+      try {
+        const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
+        personal = personal || settings?.telegramChatId || undefined;
+        group = group || settings?.telegramGroupChatId || undefined;
+      } catch (dbErr) {
+        console.error('[Telegram] Failed to load BTST chat targets from AppSettings:', dbErr);
+      }
+    }
+
+    return { personal, group };
+  }
+
   static async sendBtstAlert(results: (BtstScoreResultEnriched & { optionSuggestion?: OptionSuggestion | undefined })[]): Promise<{ sent: boolean; reason?: string }> {
     const longs = results.filter(r => r.tag === 'LONG' && r.longScore >= MIN_BTST_ALERT_SCORE);
     const shorts = results.filter(r => r.tag === 'SHORT' && r.shortScore >= MIN_BTST_ALERT_SCORE);
@@ -98,13 +125,22 @@ export class TelegramService {
 
     const dateStr = new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', month: 'short', day: 'numeric', year: 'numeric' });
 
+    // Group chat only (stock + index BTST/STBT). Personal DM is used solely as
+    // a fallback when no group chat is configured, so alerts are never dropped.
+    const { personal, group } = await this.resolveBtstChatTargets();
+    if (!group) {
+      console.warn('[Telegram] TELEGRAM_GROUP_CHAT_ID not set; falling back to personal chat for BTST alert');
+    }
+    const targetChatId = group ?? personal;
+
     // Only send if strongSignal > 0 OR breakoutReady > 2
     if (strongSignalCount === 0 && breakoutCount <= 2 && longs.length === 0 && shorts.length === 0) {
       const result = await this.sendMessage(
         `📊 <b>CPR PRO — BTST/STBT SCAN</b>\n` +
         `📅 ${dateStr}\n\n` +
         `<i>No qualifying setups found today (score < ${MIN_BTST_ALERT_SCORE}).\n` +
-        `Scanner ran successfully.</i>`
+        `Scanner ran successfully.</i>`,
+        targetChatId
       );
       return { sent: result.ok, ...(result.ok ? { reason: 'no setups' } : (result.reason ? { reason: result.reason } : {})) };
     }
@@ -143,8 +179,9 @@ export class TelegramService {
     text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;
     text += `📊 Strong Signal: ${strongSignalCount} | Breakout: ${breakoutCount}\n`;
 
-    // Uses default TELEGRAM_CHAT_ID (no chatId arg = personal BTST alert — unchanged)
-    const result = await this.sendMessage(text);
+    // Single delivery to the group chat. On failure sent=false, so the claim
+    // rollback in runBtstAlertJob retries on the next 5-min bucket.
+    const result = await this.sendMessage(text, targetChatId);
     return { sent: result.ok, ...(result.ok ? {} : (result.reason ? { reason: result.reason } : {})) };
   }
 

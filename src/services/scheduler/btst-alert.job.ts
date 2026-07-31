@@ -1,6 +1,7 @@
 import { Prisma, type OvernightSignal } from '@prisma/client';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
+import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { MarketService } from '@/services/market.service';
@@ -38,6 +39,8 @@ export type BtstAlertJobResult = {
   regime: Awaited<ReturnType<typeof RegimeService.getMarketRegime>>;
   suppressStbt: boolean;
   suppressBtst: boolean;
+  /** Symbols journaled at alert time (only present on the success path). */
+  logged?: string[];
 };
 
 async function buildEnrichedIndexLongs(picks: OvernightSignal[]) {
@@ -59,7 +62,87 @@ async function enrichBtstPick(sig: OvernightSignal, direction: 'LONG' | 'SHORT')
     r.target,
     sig.signalDate
   );
-  return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion };
+  // sourceSignal carries id/direction/classification for alert-time journaling.
+  return { ...r, optionSuggestion: suggestion.error ? undefined : suggestion, sourceSignal: sig };
+}
+
+type EnrichedAlertPick = Awaited<ReturnType<typeof enrichBtstPick>>;
+
+/**
+ * Journal every alerted pick immediately after the Telegram send succeeds.
+ *
+ * Guarantees alert ↔ journal parity: the 15:25 btst-journal job re-runs
+ * discovery and re-applies the READY gate at its own moment, so a signal that
+ * qualified at alert time (15:10–15:25) but faded by 15:25 would otherwise be
+ * alerted to the user yet silently missing from the TradeJournal (this is
+ * exactly what happened with index BTST). logSignal upserts on
+ * symbol+date+signalType, so the later journal job never duplicates these
+ * rows and still fills in v2 shadow fields for stocks.
+ *
+ * Never throws: the alert has already been sent, so journal failures must not
+ * roll back claims or fail the job.
+ */
+async function journalClaimedAlerts(
+  claimedPayload: EnrichedAlertPick[],
+  regimeTrend: string
+): Promise<string[]> {
+  const journaled: string[] = [];
+
+  for (const pick of claimedPayload) {
+    try {
+      const sig = pick.sourceSignal;
+      const suggestion = pick.optionSuggestion;
+
+      if (!suggestion?.strike || !suggestion?.ltp) {
+        // Alert went out without option data — leave it to the 15:25 journal
+        // job, which fetches its own suggestion.
+        console.warn(
+          `[BtstAlert] ${pick.symbol} alerted without option suggestion; deferring journal to btst-journal job`
+        );
+        continue;
+      }
+
+      const signalType = sig.direction === 'SHORT' ? 'STBT' : 'BTST';
+      const optionType = sig.direction === 'SHORT' ? 'PE' : 'CE';
+      const isIndex = sig.instrumentType === 'INDEX';
+
+      const cleanSym = pick.symbol.split(':')[0].trim();
+      const optionName =
+        suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
+        `${suggestion.strike} ${optionType}`;
+
+      // Same summary format as btst-journal.job.ts / index-overnight-persist.ts
+      // so analytics and compare joins treat these rows identically.
+      const signalSummary = [
+        sig.classification,
+        sig.qualityBucket,
+        sig.direction,
+        isIndex ? 'INDEX' : null,
+        `REGIME_${regimeTrend}`,
+      ]
+        .filter(Boolean)
+        .join(',');
+
+      const didLog = await TradeJournalService.logSignal({
+        signalType,
+        symbol: pick.symbol,
+        optionContract: optionName,
+        optionStrike: suggestion.strike,
+        optionType,
+        entryCmp: suggestion.ltp,
+        score: sig.overnightScore ?? 0,
+        confidence: sig.confidence ?? sig.overnightScore ?? 0,
+        signalSummary,
+        overnightSignalId: sig.id,
+      });
+
+      if (didLog) journaled.push(pick.symbol);
+    } catch (journalErr) {
+      console.error(`[BtstAlert] Alert-time journal failed for ${pick.symbol}:`, journalErr);
+    }
+  }
+
+  return journaled;
 }
 
 async function buildEnrichedPicks(picks: OvernightSignal[], direction: 'LONG' | 'SHORT') {
@@ -299,7 +382,10 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
       return { sent: false, reason: result.reason, ...resultStats };
     }
 
-    return { sent: result.sent, reason: result.reason, ...resultStats };
+    // Alert delivered — journal exactly what the user was told, right now.
+    const journaled = await journalClaimedAlerts(claimedPayload, regime.trend);
+
+    return { sent: result.sent, reason: result.reason, ...resultStats, logged: journaled };
   } catch (sendError) {
     await rollbackClaims(sendError instanceof Error ? sendError.message : 'send_exception');
     throw sendError;
