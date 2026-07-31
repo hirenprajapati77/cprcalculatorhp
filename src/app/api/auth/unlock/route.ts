@@ -11,11 +11,18 @@ function cookieSecure(req: NextRequest): boolean {
 }
 
 async function checkUnlockRateLimit(request: NextRequest): Promise<boolean> {
+  // Prefer nginx's X-Real-IP (always the direct peer). Only when TRUST_PROXY is
+  // set do we consult X-Forwarded-For — and we take the *last* hop, which
+  // nginx's $proxy_add_x_forwarded_for appends as the real client. Taking the
+  // first hop lets an attacker rotate spoofed IPs and bypass the unlock limit.
   let ip = request.headers.get('x-real-ip') || '127.0.0.1';
   if (env.TRUST_PROXY === 'true') {
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
-      ip = forwardedFor.split(',')[0].trim();
+      const hops = forwardedFor.split(',').map((h) => h.trim()).filter(Boolean);
+      if (hops.length > 0) {
+        ip = hops[hops.length - 1]!;
+      }
     }
   }
 

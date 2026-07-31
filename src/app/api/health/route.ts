@@ -5,21 +5,27 @@ import { QueueService } from '@/services/queue.service';
 import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
 import { RegimeService } from '@/services/overnight/regime.service';
+import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 
 export const dynamic = 'force-dynamic';
 
-function isAuthorized(req: NextRequest): boolean {
+async function isAuthorized(req: NextRequest): Promise<boolean> {
   const expected = env.APP_ACCESS_TOKEN?.trim();
   if (!expected) return env.NODE_ENV !== 'production';
   const authHeader = req.headers.get('authorization');
   const cookie = req.cookies.get('app_access_token')?.value;
-  if (authHeader === `Bearer ${expected}`) return true;
-  if (cookie === expected) return true;
+  if (authHeader && timingSafeEqual(authHeader, `Bearer ${expected}`)) return true;
+  if (cookie && timingSafeEqual(cookie, expected)) return true;
+  // Unlock sets a SHA-256 hash of the token as the cookie value.
+  if (cookie) {
+    const expectedHash = await hashToken(expected);
+    if (timingSafeEqual(cookie, expectedHash)) return true;
+  }
   return false;
 }
 
 export async function GET(req: NextRequest) {
-  const detailed = isAuthorized(req);
+  const detailed = await isAuthorized(req);
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
 
@@ -85,30 +91,32 @@ export async function GET(req: NextRequest) {
 
   const publicBody = {
     status: isHealthy ? 'healthy' : 'degraded',
-    ...(hasMisconfig
-      ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` }
-      : {}),
-    version: appVersion,
-    build: env.BUILD_TIMESTAMP || new Date().toISOString(),
-    environment: env.NODE_ENV || 'development',
-    executionMode,
-    checks: {
-      database: dbStatus,
-      redis: CacheService.isRedisConnected ? 'connected' : 'disconnected',
-      signals: signalsHealth,
-      events: eventsHealth,
-      regime: regimeHealth,
-    },
-    uptime: process.uptime(),
   };
 
   if (!detailed) {
+    // Unauthenticated callers get status only — version/build/environment/checks
+    // are reconnaissance aids for an internet-exposed endpoint.
     return NextResponse.json(publicBody, { status: isHealthy ? 200 : 503 });
   }
 
   return NextResponse.json(
     {
       ...publicBody,
+      ...(hasMisconfig
+        ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` }
+        : {}),
+      version: appVersion,
+      build: env.BUILD_TIMESTAMP || new Date().toISOString(),
+      environment: env.NODE_ENV || 'development',
+      executionMode,
+      checks: {
+        database: dbStatus,
+        redis: CacheService.isRedisConnected ? 'connected' : 'disconnected',
+        signals: signalsHealth,
+        events: eventsHealth,
+        regime: regimeHealth,
+      },
+      uptime: process.uptime(),
       timestamps: {
         latestSignal: latestSignalDate,
         latestEvent: latestEventDate,

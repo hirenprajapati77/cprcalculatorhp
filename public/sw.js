@@ -145,13 +145,16 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // If successful, cache the HTML in OFFLINE_CACHE to allow "Last viewed" offline access
-          const responseToCache = response.clone();
-          caches.open(CACHES.OFFLINE).then((cache) => {
-            cache.put(request, responseToCache).then(() => {
-               trimCache(CACHES.OFFLINE, 5); // Keep last 5 viewed pages
+          // Never cache HTTP error pages as "last viewed" offline content —
+          // a 502 would otherwise replace the real app shell for offline users.
+          if (response.ok) {
+            const responseToCache = response.clone();
+            caches.open(CACHES.OFFLINE).then((cache) => {
+              cache.put(request, responseToCache).then(() => {
+                 trimCache(CACHES.OFFLINE, 5); // Keep last 5 viewed pages
+              });
             });
-          });
+          }
           return response;
         })
         .catch(() => {
