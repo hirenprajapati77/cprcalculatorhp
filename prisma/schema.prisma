@@ -63,8 +63,7 @@ model ScannerResult {
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])
-  @@index([date])
-  @@index([date, score])
+  @@index([date, score])  // covers leading-column [date] queries — standalone [date] index dropped
   @@index([score])
   @@index([createdAt])
   @@index([symbol])
@@ -176,7 +175,7 @@ model Trade {
   run     BacktestRun @relation(fields: [backtestRunId], references: [id], onDelete: Cascade)
   journal Journal[]
 
-  @@index([backtestRunId])
+  // @@index([backtestRunId]) dropped — covered by the composite indexes below
   @@index([backtestRunId, status])
   @@index([backtestRunId, pnl])
   @@index([symbol])
@@ -277,7 +276,7 @@ model OvernightSignal {
   @@unique([symbol, signalDate, signalTime, direction])
   @@index([direction])
   @@index([classification])
-  @@index([signalDate])
+  // @@index([signalDate]) dropped — covered by composite @@index([signalDate, direction])
   @@index([signalDate, direction])
   @@map("BtstSignal")
 }

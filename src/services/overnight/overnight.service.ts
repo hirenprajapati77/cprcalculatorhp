@@ -285,6 +285,38 @@ export class OvernightService {
       }
     }
 
+    // H-7: Pre-fetch all intraday 5m data in parallel batches before the scoring loop.
+    // Previously this was awaited sequentially inside the loop — 200 HTTP requests
+    // at ~200-500 ms each = 40-100 s of stall, routinely missing the BTST window.
+    // Chunked at STOCK_DATA_PREFETCH_CHUNK to avoid Yahoo rate-limit bans.
+    const intradayBySymbol = new Map<string, OvernightIntradayMetrics>();
+    {
+      const stocksForIntraday = mockStocks
+        ? mockStocks.map(s => s as MarketStockData)
+        : ([...stockDataBySymbol.entries()]
+            .filter(([, v]) => v !== null)
+            .map(([, v]) => v as MarketStockData));
+
+      for (let i = 0; i < stocksForIntraday.length; i += STOCK_DATA_PREFETCH_CHUNK) {
+        const chunk = stocksForIntraday.slice(i, i + STOCK_DATA_PREFETCH_CHUNK);
+        const settled = await Promise.allSettled(
+          chunk.map((stock) => OvernightService.getIntradayData(stock, currentTime))
+        );
+        settled.forEach((result, idx) => {
+          const sym = chunk[idx]!.symbol;
+          if (result.status === 'fulfilled') {
+            intradayBySymbol.set(sym, result.value);
+          } else {
+            console.warn(
+              `[Overnight] Intraday pre-fetch failed for ${sym} — will use no-intraday fallback:`,
+              result.reason instanceof Error ? result.reason.message : result.reason
+            );
+            intradayBySymbol.set(sym, { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false });
+          }
+        });
+      }
+    }
+
     for (const stock of universeStocks) {
       try {
         const fullStock = mockStocks
@@ -367,7 +399,9 @@ export class OvernightService {
           low: todayCandle.low,
           close: todayCandle.close,
         }, atrPct);
-        const intraday = await this.getIntradayData(fullStock, currentTime);
+        // Read from the pre-fetched map — no HTTP call here.
+        const intraday = intradayBySymbol.get(fullStock.symbol)
+          ?? { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
 
         const mockStock = fullStock as MockOvernightStock;
 
@@ -539,34 +573,40 @@ export class OvernightService {
       return (b.overnightScore || 0) - (a.overnightScore || 0);
     });
 
+    // H-6: Batch all upserts into a single interactive transaction instead of
+    // 200 sequential await prisma.overnightSignal.upsert() calls (~1 s of DB I/O).
     const savedSignals: (OvernightSignal & {
       scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
       vpaBreakdown?: VpaConfirmationResult | null;
     })[] = [];
-    for (const sig of signalsToSave) {
-      try {
-        const saved = await prisma.overnightSignal.upsert({
-          where: {
-            symbol_signalDate_signalTime_direction: {
-              symbol: sig.symbol,
-              signalDate: sig.signalDate,
-              signalTime: sig.signalTime,
-              direction: sig.direction!
-            }
-          },
-          update: sig,
-          create: sig
-        });
-        const breakdown = scoreBreakdownBySymbol.get(sig.symbol);
-        const vpa = vpaBreakdownBySymbol.get(sig.symbol);
+    try {
+      const results = await prisma.$transaction(
+        signalsToSave.map((sig) =>
+          prisma.overnightSignal.upsert({
+            where: {
+              symbol_signalDate_signalTime_direction: {
+                symbol: sig.symbol,
+                signalDate: sig.signalDate,
+                signalTime: sig.signalTime,
+                direction: sig.direction!
+              }
+            },
+            update: sig,
+            create: sig
+          })
+        )
+      );
+      for (const saved of results) {
+        const breakdown = scoreBreakdownBySymbol.get(saved.symbol);
+        const vpa = vpaBreakdownBySymbol.get(saved.symbol);
         savedSignals.push({
           ...saved,
           ...(breakdown ? { scoreBreakdown: breakdown } : {}),
           ...(vpa ? { vpaBreakdown: vpa } : {}),
         });
-      } catch (err) {
-        console.error(`Error saving overnight signal for ${sig.symbol}:`, err);
       }
+    } catch (err) {
+      console.error('[Overnight] Batch upsert transaction failed — signals not saved:', err);
     }
 
     return savedSignals;

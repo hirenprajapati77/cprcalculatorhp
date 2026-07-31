@@ -288,50 +288,54 @@ export class BacktestService {
                 const fees = (entrySlipped + exitPriceForFees) * tradeResult.positionSize * 0.0003;
                 const netPnl = tradeResult.pnl - fees;
 
-                const trade = await prisma.trade.create({
-                  data: {
-                    backtestRunId: runId,
-                    symbol,
-                    type: direction,
-                    signal: bias === 'BULLISH' ? 'SCANNER_BULLISH' : 'SCANNER_BEARISH',
-                    status: tradeResult.status,
-                    strategyMode: 'SCANNER_DRIVEN',
-                    entryDate: new Date(ohlc[triggeredIndex].date),
-                    entryPrice: entrySlipped,
-                    entryReason: `Scanner Triggered (${triggeredIndex - i} days delay)`,
-                    exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
-                    exitPrice: tradeResult.exitPrice,
-                    exitReason: tradeResult.exitReason,
-                    stopLoss: sl,
-                    target: target,
-                    riskAmount: tradeResult.riskAmount,
-                    fees,
-                    slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
-                    executionDelayMs: 0,
-                    rr: tradeResult.rr,
-                    durationDays: tradeResult.durationDays,
-                    positionSize: tradeResult.positionSize,
-                    pnl: netPnl,
-                    pnlPercent: netPnl / run.capital * 100,
-                    cprWidth: scanResult.width,
-                    score,
-                    confidence,
-                    signalsJson: JSON.stringify(signals),
-                    triggerDelayDays: triggeredIndex - i
-                  }
-                });
-
-                if (tradeResult.journalEvents.length > 0) {
-                  const limitedEvents = tradeResult.journalEvents.slice(0, 100);
-                  await prisma.journal.createMany({
-                    data: limitedEvents.map(e => ({
-                      tradeId: trade.id,
-                      timestamp: e.timestamp,
-                      event: e.event,
-                      details: e.details
-                    }))
+                // M-9: Combine trade create + journal inserts in one transaction
+                // (atomic write + 1 round-trip instead of 2).
+                const [trade] = await prisma.$transaction(async (tx) => {
+                  const t = await tx.trade.create({
+                    data: {
+                      backtestRunId: runId,
+                      symbol,
+                      type: direction,
+                      signal: bias === 'BULLISH' ? 'SCANNER_BULLISH' : 'SCANNER_BEARISH',
+                      status: tradeResult.status,
+                      strategyMode: 'SCANNER_DRIVEN',
+                      entryDate: new Date(ohlc[triggeredIndex].date),
+                      entryPrice: entrySlipped,
+                      entryReason: `Scanner Triggered (${triggeredIndex - i} days delay)`,
+                      exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
+                      exitPrice: tradeResult.exitPrice,
+                      exitReason: tradeResult.exitReason,
+                      stopLoss: sl,
+                      target: target,
+                      riskAmount: tradeResult.riskAmount,
+                      fees,
+                      slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
+                      executionDelayMs: 0,
+                      rr: tradeResult.rr,
+                      durationDays: tradeResult.durationDays,
+                      positionSize: tradeResult.positionSize,
+                      pnl: netPnl,
+                      pnlPercent: netPnl / run.capital * 100,
+                      cprWidth: scanResult.width,
+                      score,
+                      confidence,
+                      signalsJson: JSON.stringify(signals),
+                      triggerDelayDays: triggeredIndex - i
+                    }
                   });
-                }
+                  if (tradeResult.journalEvents.length > 0) {
+                    const limitedEvents = tradeResult.journalEvents.slice(0, 100);
+                    await tx.journal.createMany({
+                      data: limitedEvents.map(e => ({
+                        tradeId: t.id,
+                        timestamp: e.timestamp,
+                        event: e.event,
+                        details: e.details
+                      }))
+                    });
+                  }
+                  return [t];
+                });
 
                 processedTrades++;
                 blockedUntilIndex = triggeredIndex + (tradeOhlc.length - 1);
@@ -495,48 +499,50 @@ export class BacktestService {
                   'Production-aligned BtstRankingService/StbtRankingService (130pt) with historical 5m VWAP/VDU 1.5× at 15:25 IST. P&L is stock spot proxy — not option premium.',
               });
 
-              const btstTrade = await prisma.trade.create({
-                data: {
-                  backtestRunId: runId,
-                  symbol,
-                  type: btstDirection,
-                  signal: `BTST_${evaluation.classification}`,
-                  status: btstTradeResult.status,
-                  strategyMode: 'BTST_STBT_DRIVEN',
-                  entryDate: new Date(today.date),
-                  entryPrice: btstEntry,
-                  entryReason: `Stock BTST EOD (${evaluation.classification}, score ${btstScore}/${ADVANCED_SCORE.MAX})`,
-                  exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
-                  exitPrice: btstTradeResult.exitPrice,
-                  exitReason: btstTradeResult.exitReason,
-                  stopLoss: btstSl,
-                  target: btstTarget,
-                  riskAmount: btstTradeResult.riskAmount,
-                  fees: btstFees,
-                  slippage: slippage * 2 * 100,
-                  executionDelayMs: 0,
-                  rr: btstTradeResult.rr,
-                  durationDays: btstTradeResult.durationDays,
-                  positionSize: btstTradeResult.positionSize,
-                  pnl: btstNetPnl,
-                  pnlPercent: (btstNetPnl / run.capital) * 100,
-                  score: btstScore,
-                  signalsJson: btstSignalsPayload,
-                  triggerDelayDays: 0,
-                },
-              });
-
-              if (btstTradeResult.journalEvents.length > 0) {
-                const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
-                await prisma.journal.createMany({
-                  data: limitedEvents.map((e) => ({
-                    tradeId: btstTrade.id,
-                    timestamp: e.timestamp,
-                    event: e.event,
-                    details: e.details,
-                  })),
+              // M-9: Atomic trade + journal in one transaction.
+              await prisma.$transaction(async (tx) => {
+                const btstTrade = await tx.trade.create({
+                  data: {
+                    backtestRunId: runId,
+                    symbol,
+                    type: btstDirection,
+                    signal: `BTST_${evaluation.classification}`,
+                    status: btstTradeResult.status,
+                    strategyMode: 'BTST_STBT_DRIVEN',
+                    entryDate: new Date(today.date),
+                    entryPrice: btstEntry,
+                    entryReason: `Stock BTST EOD (${evaluation.classification}, score ${btstScore}/${ADVANCED_SCORE.MAX})`,
+                    exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
+                    exitPrice: btstTradeResult.exitPrice,
+                    exitReason: btstTradeResult.exitReason,
+                    stopLoss: btstSl,
+                    target: btstTarget,
+                    riskAmount: btstTradeResult.riskAmount,
+                    fees: btstFees,
+                    slippage: slippage * 2 * 100,
+                    executionDelayMs: 0,
+                    rr: btstTradeResult.rr,
+                    durationDays: btstTradeResult.durationDays,
+                    positionSize: btstTradeResult.positionSize,
+                    pnl: btstNetPnl,
+                    pnlPercent: (btstNetPnl / run.capital) * 100,
+                    score: btstScore,
+                    signalsJson: btstSignalsPayload,
+                    triggerDelayDays: 0,
+                  },
                 });
-              }
+                if (btstTradeResult.journalEvents.length > 0) {
+                  const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
+                  await tx.journal.createMany({
+                    data: limitedEvents.map((e) => ({
+                      tradeId: btstTrade.id,
+                      timestamp: e.timestamp,
+                      event: e.event,
+                      details: e.details,
+                    })),
+                  });
+                }
+              });
 
               processedTrades++;
               blockedUntilIndex = i + 1;
@@ -628,48 +634,50 @@ export class BacktestService {
                   'Production-aligned IndexRankingService (130pt) with historical 5m VWAP/liquidity at 15:25 IST. P&L is index spot proxy — not option premium.',
               });
 
-              const btstTrade = await prisma.trade.create({
-                data: {
-                  backtestRunId: runId,
-                  symbol,
-                  type: 'LONG',
-                  signal: 'INDEX_BTST_CALL',
-                  status: btstTradeResult.status,
-                  strategyMode: 'INDEX_BTST_DRIVEN',
-                  entryDate: new Date(today.date),
-                  entryPrice: btstEntry,
-                  entryReason: `Index BTST (${evaluation.classification}, score ${evaluation.score}/${INDEX_SCORE.MAX})`,
-                  exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
-                  exitPrice: btstTradeResult.exitPrice,
-                  exitReason: btstTradeResult.exitReason,
-                  stopLoss: btstSl,
-                  target: btstTarget,
-                  riskAmount: btstTradeResult.riskAmount,
-                  fees: btstFees,
-                  slippage: slippage * 2 * 100,
-                  executionDelayMs: 0,
-                  rr: btstTradeResult.rr,
-                  durationDays: btstTradeResult.durationDays,
-                  positionSize: btstTradeResult.positionSize,
-                  pnl: btstNetPnl,
-                  pnlPercent: (btstNetPnl / run.capital) * 100,
-                  score: evaluation.score ?? 0,
-                  signalsJson: btstSignalsPayload,
-                  triggerDelayDays: 0,
-                },
-              });
-
-              if (btstTradeResult.journalEvents.length > 0) {
-                const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
-                await prisma.journal.createMany({
-                  data: limitedEvents.map((e) => ({
-                    tradeId: btstTrade.id,
-                    timestamp: e.timestamp,
-                    event: e.event,
-                    details: e.details,
-                  })),
+              // M-9: Atomic trade + journal in one transaction.
+              await prisma.$transaction(async (tx) => {
+                const btstTrade = await tx.trade.create({
+                  data: {
+                    backtestRunId: runId,
+                    symbol,
+                    type: 'LONG',
+                    signal: 'INDEX_BTST_CALL',
+                    status: btstTradeResult.status,
+                    strategyMode: 'INDEX_BTST_DRIVEN',
+                    entryDate: new Date(today.date),
+                    entryPrice: btstEntry,
+                    entryReason: `Index BTST (${evaluation.classification}, score ${evaluation.score}/${INDEX_SCORE.MAX})`,
+                    exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
+                    exitPrice: btstTradeResult.exitPrice,
+                    exitReason: btstTradeResult.exitReason,
+                    stopLoss: btstSl,
+                    target: btstTarget,
+                    riskAmount: btstTradeResult.riskAmount,
+                    fees: btstFees,
+                    slippage: slippage * 2 * 100,
+                    executionDelayMs: 0,
+                    rr: btstTradeResult.rr,
+                    durationDays: btstTradeResult.durationDays,
+                    positionSize: btstTradeResult.positionSize,
+                    pnl: btstNetPnl,
+                    pnlPercent: (btstNetPnl / run.capital) * 100,
+                    score: evaluation.score ?? 0,
+                    signalsJson: btstSignalsPayload,
+                    triggerDelayDays: 0,
+                  },
                 });
-              }
+                if (btstTradeResult.journalEvents.length > 0) {
+                  const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
+                  await tx.journal.createMany({
+                    data: limitedEvents.map((e) => ({
+                      tradeId: btstTrade.id,
+                      timestamp: e.timestamp,
+                      event: e.event,
+                      details: e.details,
+                    })),
+                  });
+                }
+              });
 
               processedTrades++;
               blockedUntilIndex = i + 1;
@@ -808,45 +816,47 @@ export class BacktestService {
               const fees = (entryPrice + exitPriceForFees) * tradeResult.positionSize * 0.0003;
               const netPnl = tradeResult.pnl - fees;
 
-              const trade = await prisma.trade.create({
-                data: {
-                  backtestRunId: runId,
-                  symbol,
-                  type: direction,
-                  signal: bias === 'BULLISH' ? 'NARROW_CPR_BULLISH' : 'NARROW_CPR_BEARISH',
-                  status: tradeResult.status,
-                  entryDate: new Date(today.date),
-                  entryPrice,
-                  entryReason: 'Scanner Trigger',
-                  exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
-                  exitPrice: tradeResult.exitPrice,
-                  exitReason: tradeResult.exitReason,
-                  stopLoss: sl,
-                  target: target,
-                  riskAmount: tradeResult.riskAmount,
-                  fees,
-                  slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
-                  executionDelayMs: 0,
-                  rr: tradeResult.rr,
-                  durationDays: tradeResult.durationDays,
-                  positionSize: tradeResult.positionSize,
-                  pnl: netPnl,
-                  pnlPercent: netPnl / run.capital * 100,
-                  cprWidth: widthPct
+              // M-9: Atomic trade + journal in one transaction.
+              await prisma.$transaction(async (tx) => {
+                const trade = await tx.trade.create({
+                  data: {
+                    backtestRunId: runId,
+                    symbol,
+                    type: direction,
+                    signal: bias === 'BULLISH' ? 'NARROW_CPR_BULLISH' : 'NARROW_CPR_BEARISH',
+                    status: tradeResult.status,
+                    entryDate: new Date(today.date),
+                    entryPrice,
+                    entryReason: 'Scanner Trigger',
+                    exitDate: tradeResult.exitDate ? new Date(tradeResult.exitDate) : null,
+                    exitPrice: tradeResult.exitPrice,
+                    exitReason: tradeResult.exitReason,
+                    stopLoss: sl,
+                    target: target,
+                    riskAmount: tradeResult.riskAmount,
+                    fees,
+                    slippage: TradeEngineService.calculateSlippage(avgVolume, volatility, false) * 2 * 100,
+                    executionDelayMs: 0,
+                    rr: tradeResult.rr,
+                    durationDays: tradeResult.durationDays,
+                    positionSize: tradeResult.positionSize,
+                    pnl: netPnl,
+                    pnlPercent: netPnl / run.capital * 100,
+                    cprWidth: widthPct
+                  }
+                });
+                if (tradeResult.journalEvents.length > 0) {
+                  const limitedEvents = tradeResult.journalEvents.slice(0, 100);
+                  await tx.journal.createMany({
+                    data: limitedEvents.map(e => ({
+                      tradeId: trade.id,
+                      timestamp: e.timestamp,
+                      event: e.event,
+                      details: e.details
+                    }))
+                  });
                 }
               });
-
-              if (tradeResult.journalEvents.length > 0) {
-                const limitedEvents = tradeResult.journalEvents.slice(0, 100);
-                await prisma.journal.createMany({
-                  data: limitedEvents.map(e => ({
-                    tradeId: trade.id,
-                    timestamp: e.timestamp,
-                    event: e.event,
-                    details: e.details
-                  }))
-                });
-              }
 
               processedTrades++;
               blockedUntilIndex = i + (tradeOhlc.length - 1);

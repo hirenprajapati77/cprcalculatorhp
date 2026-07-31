@@ -170,34 +170,59 @@ export class MetricsService {
     // Thus, it represents the expected value per *decisive* trade (scratches contribute $0).
     const expectancy = (winRate / 100 * avgWin) - (lossRate / 100 * avgLoss);
     
+    // C-6: Sharpe and Sortino computed on a daily equity curve, not per-trade returns.
+    //
+    // Previous approach divided (exit - entry) / entry by durationDays and treated each trade
+    // as an independent "daily" sample. This is statistically wrong:
+    //   - Individual trade volatility >> time-weighted portfolio volatility
+    //   - Sharpe was wildly understated / random depending on trade timing
+    //   - Simultaneous trades on the same day were counted as separate "days"
+    //
+    // Correct approach (implemented below):
+    //   1. Group closed trades by exit date → daily realised P&L
+    //   2. Build a running equity curve from initialCapital
+    //   3. Compute daily period returns from the equity curve
+    //   4. Use those time-series returns for Sharpe/Sortino
+    //
     const RISK_FREE_DAILY = 0.065 / 252;
-    const closedTrades = trades.filter(t => t.status !== 'OPEN' && t.status !== 'NEVER_TRIGGERED' && t.exitPrice !== null && t.exitPrice !== undefined);
-    const dailyReturns = closedTrades.map(t => {
-      const isShort = ['SHORT', 'STBT', 'SELL', 'SHORT_SELL', 'PE'].includes((t.type ?? '').toUpperCase());
-      const tradeReturn = isShort
-        ? (t.entryPrice - (t.exitPrice as number)) / t.entryPrice
-        : ((t.exitPrice as number) - t.entryPrice) / t.entryPrice;
-      return tradeReturn / (t.durationDays || 1); // normalize by holding duration
-    });
 
-    const avgReturn = dailyReturns.reduce(
-      (a, b) => a + b, 0
-    ) / (dailyReturns.length || 1);
+    // Step 1: bucket realised P&L by exit date
+    const dailyPnlMap = new Map<string, number>();
+    for (const t of trades) {
+      if (t.status === 'OPEN' || t.status === 'NEVER_TRIGGERED') continue;
+      if (t.exitPrice === null || t.exitPrice === undefined) continue;
+      const dateKey = t.exitDate
+        ? new Date(t.exitDate).toISOString().slice(0, 10)
+        : 'UNKNOWN';
+      if (dateKey === 'UNKNOWN') continue;
+      dailyPnlMap.set(dateKey, (dailyPnlMap.get(dateKey) ?? 0) + (t.pnl ?? 0));
+    }
 
-    const variance = dailyReturns.reduce(
-      (sum, r) => sum + Math.pow(r - avgReturn, 2), 0
-    ) / (dailyReturns.length || 1);
+    // Step 2: sort dates and build equity curve
+    const sortedDates = [...dailyPnlMap.keys()].sort();
+    let runningEquity = initialCapital;
+    const dailyReturns: number[] = [];
+    for (const date of sortedDates) {
+      const prevEquity = runningEquity;
+      runningEquity += dailyPnlMap.get(date)!;
+      // Guard against degenerate equity (zero or negative) before dividing
+      if (prevEquity > 0) {
+        dailyReturns.push((runningEquity - prevEquity) / prevEquity);
+      }
+    }
 
+    // Step 3: Sharpe on daily equity-curve returns
+    const n = dailyReturns.length || 1;
+    const avgReturn = dailyReturns.reduce((a, b) => a + b, 0) / n;
+    const variance = dailyReturns.reduce((s, r) => s + Math.pow(r - avgReturn, 2), 0) / n;
     const stdDev = Math.sqrt(variance);
     const sharpe = stdDev > 0
       ? ((avgReturn - RISK_FREE_DAILY) / stdDev) * Math.sqrt(252)
       : 0;
 
-    // Sortino calculation (downside deviation only)
+    // Step 4: Sortino on daily equity-curve returns (downside deviation only)
     const downsideReturns = dailyReturns.map(r => Math.min(0, r - RISK_FREE_DAILY));
-    const downsideVariance = downsideReturns.reduce(
-      (sum, r) => sum + Math.pow(r, 2), 0
-    ) / (downsideReturns.length || 1);
+    const downsideVariance = downsideReturns.reduce((s, r) => s + Math.pow(r, 2), 0) / n;
     const downsideDev = Math.sqrt(downsideVariance);
     const sortino = downsideDev > 0
       ? ((avgReturn - RISK_FREE_DAILY) / downsideDev) * Math.sqrt(252)
