@@ -68,7 +68,9 @@ set +e
 HEALTH_PASS=0
 for i in {1..10}; do
     sleep 3
-    HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+    # H-13 hardening: unauthenticated /api/health returns { status } only.
+    # status is 'healthy' iff the DB check passed, so it is an equivalent signal.
+    HEALTH_OUTPUT=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', 'healthy' if d.get('status')=='healthy' else 'unhealthy')" 2>/dev/null)
     if [[ "$HEALTH_OUTPUT" == *"DB: healthy"* ]]; then
         HEALTH_PASS=1
         break
@@ -114,7 +116,7 @@ else
         echo "Waiting 5s for rollback to stabilize..."
         sleep 5
         set +e
-        ROLLBACK_HEALTH=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', d['checks']['database'])" 2>/dev/null)
+        ROLLBACK_HEALTH=$(curl -s http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); print('DB:', 'healthy' if d.get('status')=='healthy' else 'unhealthy')" 2>/dev/null)
         set -e
         if [[ "$ROLLBACK_HEALTH" == *"DB: healthy"* ]]; then
             echo "[OK] Rollback stabilized."
