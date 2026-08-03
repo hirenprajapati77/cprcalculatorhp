@@ -625,12 +625,14 @@ const StockRow = React.memo(({
       {visibleColumns.includes('signals') && (
         <td className={cellPadding}>
           <div className="flex flex-wrap gap-1 max-w-[180px]">
-            {row.signals.slice(0, densityMode === 'compact' ? 2 : 5).map((sig) => {
+            {row.signals.slice(0, densityMode === 'compact' ? 2 : 5).map((rawSig) => {
+              // Normalize legacy KGS_ prefix to HP_ for display
+              const sig = rawSig.replace(/^KGS_/, 'HP_');
               // Extract CPR Quality A+/A/B/C from internal tag
               if (sig.startsWith('CPR_QUALITY_')) {
                 const grade = sig.split('_')[2];
                 return (
-                  <span key={sig} className="text-[8px] font-bold px-1 rounded-sm bg-accent-blue/20 text-accent-blue border border-accent-blue/30">
+                  <span key={rawSig} className="text-[8px] font-bold px-1 rounded-sm bg-accent-blue/20 text-accent-blue border border-accent-blue/30">
                     ⭐ Q:{grade}
                   </span>
                 );
@@ -638,7 +640,7 @@ const StockRow = React.memo(({
               
               return (
               <span
-                key={sig}
+                key={rawSig}
                 className={`text-[8px] font-bold px-1 rounded-sm ${
                   sig === 'BREAKOUT' ? 'bg-accent-green/15 text-accent-green' :
                   sig === 'BULLISH' || sig === 'HIGHER_VALUE' ? 'bg-accent-blue/15 text-accent-blue' :
@@ -3544,9 +3546,11 @@ export default function ScannerClient() {
                   <div className="space-y-3 animate-fade-in">
                     <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Active Signal Breakdown</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {(drawerStock.signals || []).map(sig => (
+                      {(drawerStock.signals || []).map(rawSig => {
+                        const sig = rawSig.replace(/^KGS_/, 'HP_');
+                        return (
                         <span
-                          key={sig}
+                          key={rawSig}
                           className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getRatingColorClass(
                             sig === 'BREAKOUT' || sig === 'BULLISH' || sig === 'NARROW' ? 95 :
                             sig === 'BEARISH' || sig === 'WIDE' ? 10 : 50
@@ -3554,13 +3558,14 @@ export default function ScannerClient() {
                         >
                           {sig}
                         </span>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     <div className="border border-border-primary rounded p-3 text-[10px] space-y-2 text-text-secondary mt-2">
                       <span className="font-bold text-text-primary block uppercase">Signal Meaning</span>
                       <ul className="list-disc pl-4 space-y-1.5 leading-relaxed">
-                        {(drawerStock.signals || []).map(sig => {
+                        {(drawerStock.signals || []).map(rawSig => { const sig = rawSig.replace(/^KGS_/, 'HP_');
                           const explMap: Record<string, string> = {
                             HIGHER_VALUE: "Today CPR is above yesterday's CPR. Bullish value migration.",
                             INSIDE_VALUE: "Today CPR is fully inside yesterday's CPR band. Consolidation, await breakout.",
