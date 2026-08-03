@@ -165,7 +165,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       // If no valid option is found, the stock trade is still journaled without an
       // option leg so the underlying signal is never silently lost.
       let optionName: string | null = null;
-      let optionStrike: string | null = null;
+      let optionStrike: number | null = null;
       let optionLtp: number | null = null;
 
       try {
