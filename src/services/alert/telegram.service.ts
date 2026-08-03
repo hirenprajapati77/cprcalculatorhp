@@ -23,7 +23,13 @@ export class TelegramService {
               token = decrypt(settings.telegramToken);
             } catch (err: unknown) {
               if (err instanceof Error && err.message === 'Invalid ciphertext format.') {
-                token = settings.telegramToken; // Fallback to plain text
+                if (process.env.NODE_ENV !== 'production') {
+                  // Dev/staging only: allow plain-text token stored before encryption was enabled.
+                  token = settings.telegramToken;
+                } else {
+                  // Production: never log or use a token that failed decryption — it may be corrupt.
+                  console.error('[Telegram] Token decryption failed in production; skipping alert. Re-save token via /settings to re-encrypt.');
+                }
               } else {
                 throw err;
               }
@@ -216,7 +222,11 @@ export class TelegramService {
               token = decrypt(settings.telegramToken);
             } catch (err: unknown) {
               if (err instanceof Error && err.message === 'Invalid ciphertext format.') {
-                token = settings.telegramToken; // Fallback to plain text
+                if (process.env.NODE_ENV !== 'production') {
+                  token = settings.telegramToken;
+                } else {
+                  console.error('[Telegram] Breakout token decryption failed in production; skipping. Re-save token via /settings.');
+                }
               } else {
                 throw err;
               }

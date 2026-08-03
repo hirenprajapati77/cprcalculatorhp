@@ -7,7 +7,7 @@ export class RankingService {
    *
    * Category A — CPR Structure (max 45):
    *   NARROW: +15, HIGHER_VALUE/INSIDE_VALUE: +10, BREAKOUT/BUILD: +10,
-   *   KGS_INSIDE_CPR: +10, VIRGIN: +5, ASC+BULLISH or DESC+BEARISH: +5
+   *   HP_INSIDE_CPR: +10, VIRGIN: +5, ASC+BULLISH or DESC+BEARISH: +5
    *
    * Category B — Volume & Liquidity (max 25, Volume Ratio only):
    *   VOLUME_SPIKE or ratio >= 1.5: +15, ratio >= 1.2: +10
@@ -16,7 +16,7 @@ export class RankingService {
    *   MOMENTUM: +10, NORMAL + directional: +10
    *
    * Category D — Hot Zone & RTP (max 10):
-   *   HOT_ZONE: +5, NARROW + KGS_RTP: +5
+   *   HOT_ZONE: +5, NARROW + HP_RTP: +5
    *
    * Category E — Setup Freshness (range: -10 to +10):
    *   FRESH_SETUP  (<= 45 min since bullish state first seen): +10
@@ -32,22 +32,22 @@ export class RankingService {
    *   EMA_BEAR_ALIGN + RSI_OVERSOLD: -10   ← late short trap
    *
    * Zero Weight (Evaluated but unscored for testing/logging):
-   *   KGS_ASC_REVERSAL: 0
-   *   KGS_DESC_REVERSAL: 0
-   *   KGS_HP_RTP: 0
-   *   KGS_DIRECT_UP: 0
-   *   KGS_DIRECT_DOWN: 0
-   *   KGS_REVERSAL_UP: 0
-   *   KGS_REVERSAL_DOWN: 0
-   *   KGS_CAM_BULL_BIAS: 0
-   *   KGS_CAM_BEAR_BIAS: 0
+   *   HP_ASC_REVERSAL: 0
+   *   HP_DESC_REVERSAL: 0
+   *   HP_HP_RTP: 0
+   *   HP_DIRECT_UP: 0
+   *   HP_DIRECT_DOWN: 0
+   *   HP_REVERSAL_UP: 0
+   *   HP_REVERSAL_DOWN: 0
+   *   HP_CAM_BULL_BIAS: 0
+   *   HP_CAM_BEAR_BIAS: 0
    *   (Open Tricks & Camarilla signal families are brand-new and unvalidated — held at zero score
    *   impact across the board (DIRECT included) until backtested against a few
    *   hundred journaled trades. Signals still fire, get stored, and are visible in
    *   analytics; they just don't move the ranking number yet. Revisit per Phase E
    *   of the rollout plan once there's evidence DIRECT actually outperforms baseline.)
    *
-   * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, KGS_OUTSIDE_CPR
+   * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, HP_OUTSIDE_CPR
    */
   static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
     const { signals, volume, avgVolume } = result;

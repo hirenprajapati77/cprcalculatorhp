@@ -18,7 +18,7 @@ export function scoreVpaClimax(inputs: VpaMarketInputs): {
     return { buyingClimax: 0, sellingClimax: 0, flags: [], upperWickRatio: null, lowerWickRatio: null };
   }
 
-  const { open, high, low, close, volume, avgVolume, todayTc } = inputs;
+  const { open, high, low, close, volume, avgVolume, todayBc, todayTc } = inputs;
   const rvol = computeRvol(volume, avgVolume);
   const wicks = computeWickRatios(open, high, low, close);
   const flags: string[] = [];
@@ -47,9 +47,14 @@ export function scoreVpaClimax(inputs: VpaMarketInputs): {
     isBearishCandle(open, close) &&
     wicks.lower !== null &&
     wicks.lower >= VPA_CLIMAX.WICK_RATIO &&
-    close <= inputs.todayBc * 1.005
+    close <= todayBc * 1.005
   ) {
-    sellingClimax = VPA_CLIMAX.SELLING_REVERSAL_BONUS;
+    // Selling climax = seller exhaustion near support.
+    // For LONG: reversal opportunity → bonus.
+    // For SHORT: sellers are exhausted → bad for bearish thesis → penalty.
+    sellingClimax = inputs.direction === 'LONG'
+      ? VPA_CLIMAX.SELLING_REVERSAL_BONUS
+      : VPA_CLIMAX.BUYING_PENALTY; // reuse same penalty magnitude as buying climax
     flags.push('VPA_SELLING_CLIMAX');
   }
 

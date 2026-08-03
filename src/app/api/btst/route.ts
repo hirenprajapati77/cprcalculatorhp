@@ -5,7 +5,6 @@ import { OvernightService } from '@/services/overnight/overnight.service';
 import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 import { btstScanCacheKey } from '@/lib/btst-cache-key';
-import { shouldFreshDiscoverBtst } from '@/lib/btst-discover-gate';
 import { publicApiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
@@ -22,14 +21,18 @@ export async function GET(request: Request) {
 
     interface CachedBtstData {
       scannedAt: string;
+      scannedEpoch?: number; // epoch ms — stored for recency checks
       results: unknown[];
       insights: unknown;
       coverage?: unknown;
       engine?: string;
     }
 
+    // ── Resolve cache (used by all paths below) ──────────────────────────
+    const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
+
     if (!executionWindowOpen && !bypassQuery) {
-      const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
+      // Outside window, no bypass — serve cache or closed message.
       if (cached) {
         const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
         return NextResponse.json({
@@ -61,25 +64,19 @@ export async function GET(request: Request) {
       });
     }
 
-    // Bypass ON — serve cache if available; if no cache, fall through to a fresh discover
-    // (matches /api/overnight bypass behavior used for research outside the window).
-    const cached = await CacheService.get<CachedBtstData>(CACHE_KEY);
-    if (
-      bypassQuery &&
-      cached &&
-      !shouldFreshDiscoverBtst({
-        executionWindowOpen,
-        bypassQuery,
-        hasCache: true,
-      })
-    ) {
+    // ── Window open OR bypass active ──────────────────────────────────────
+    // Serve today's cached scan if available and the caller hasn't requested a
+    // forced refresh (bypass=true). This prevents hammering the market data
+    // provider on every UI page load during the narrow 15:20-15:30 window.
+    // Use bypass=true to trigger a fresh scan and overwrite the cache.
+    if (cached && !bypassQuery) {
       const cachedCoverage = cached.coverage as { degraded?: boolean } | undefined;
       return NextResponse.json({
         success: true,
-        executionWindowOpen: true,
+        executionWindowOpen,
         cachedResult: true,
         scannedAt: cached.scannedAt,
-        message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
+        message: `Showing scan from ${cached.scannedAt}. Use bypass=true to force a fresh scan.`,
         degraded: cachedCoverage?.degraded ?? false,
         results: cached.results,
         insights: cached.insights,
@@ -89,7 +86,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // Window open OR bypass with empty cache — same discover path as crons.
+    // No cache, OR bypass=true (force refresh) — fall through to fresh discover.
     const discovery = await BtstService.discover(universe);
     const resultsList = discovery.results;
     const insights = discovery.insights;
@@ -156,6 +153,7 @@ export async function GET(request: Request) {
 
     const cacheData = {
       scannedAt,
+      scannedEpoch: now.getTime(),
       results: resultsList,
       insights,
       coverage,
