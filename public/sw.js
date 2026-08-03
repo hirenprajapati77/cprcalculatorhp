@@ -171,7 +171,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Strategy 3: Default Network First for anything else that wasn't excluded
+  // Strategy 3: Next.js 15 App Router RSC (React Server Component) offline fallback.
+  // Client-side navigation fetches RSC JSON payloads with either a `RSC: 1` header
+  // or a `?_rsc=` query parameter. These never hit the `navigate` handler above,
+  // so without this guard they would hang or crash the React tree when offline.
+  const isRscFetch =
+    request.headers.get('RSC') === '1' ||
+    url.searchParams.has('_rsc');
+
+  if (isRscFetch) {
+    event.respondWith(
+      fetch(request).catch(() => {
+        log('Offline: RSC fetch failed, returning offline JSON:', url.pathname);
+        return new Response(
+          JSON.stringify({ error: 'offline', message: 'You are offline. Please reconnect and try again.' }),
+          {
+            status: 503,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-SW-Offline': '1',
+            },
+          }
+        );
+      })
+    );
+    return;
+  }
+
+  // Strategy 4: Default Network First for anything else that wasn't excluded
   event.respondWith(
     fetch(request).catch(() => caches.match(request))
   );

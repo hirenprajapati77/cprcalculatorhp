@@ -131,17 +131,21 @@ class CacheServiceImpl {
   }
 
   async set(key: string, value: NonNullable<unknown>, ttlSeconds: number): Promise<void> {
+    // Always write L1 (memory) so the fallback cache stays warm.
+    // Previously we returned after a successful Redis write, leaving memoryCache empty.
+    // When Redis disconnected, get() fell back to an empty memoryCache causing a
+    // thundering herd of DB queries. Now memory is always populated as a true L1.
+    memoryCache.set(key, structuredClone(value), { ttl: ttlSeconds * 1000 });
+
+    // Additionally persist to Redis (L2) when available
     if (this.isRedisConnected) {
       try {
         await this.redisClient!.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-        return;
       } catch {
-        // fallback
+        // Redis write failed — L1 memory cache already written above, so callers
+        // will still get a cache hit. Non-fatal.
       }
     }
-    // Clone on write so Redis (JSON round-trip) and memory paths share isolation
-    // semantics — consumers mutating the returned object must not poison the cache.
-    memoryCache.set(key, structuredClone(value), { ttl: ttlSeconds * 1000 });
   }
 
   async delete(key: string): Promise<void> {

@@ -49,17 +49,17 @@ async function runClaimedJob<T>(
   label: string,
   retainClaim = true
 ): Promise<void> {
-  if (!tryClaimCronRun(claimKey)) return;
+  if (!await tryClaimCronRun(claimKey)) return;
   try {
     const result = await job();
     if (shouldCompleteClaimedJob(result)) {
-      completeCronRun(claimKey, retainClaim);
+      await completeCronRun(claimKey, retainClaim);
     } else {
-      releaseCronRun(claimKey);
+      await releaseCronRun(claimKey);
     }
     console.log(`[MarketCronScheduler] ${label} completed`, summarizeResult(result));
   } catch (err) {
-    releaseCronRun(claimKey);
+    await releaseCronRun(claimKey);
     console.error(`[MarketCronScheduler] ${label} failed:`, err);
   }
 }
