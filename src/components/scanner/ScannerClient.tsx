@@ -3574,7 +3574,13 @@ export default function ScannerClient() {
                 )}
 
                 {drawerTab === 'tradeSetup' && (() => {
-                  const direction = drawerStock.direction || (drawerStock.score >= 50 ? 'LONG' : 'SHORT');
+                  const direction = drawerStock.direction || (
+                    (drawerStock.target && drawerStock.entry && drawerStock.target < drawerStock.entry) ||
+                    (drawerStock.sl && drawerStock.entry && drawerStock.sl > drawerStock.entry) ||
+                    (drawerStock.signals?.some(s => s.includes('DOWN') || s.includes('BEAR') || s.includes('SHORT')))
+                      ? 'SHORT'
+                      : 'LONG'
+                  );
                   const calculatedEntry = direction === 'LONG' ? drawerStock.tc : drawerStock.bc;
                   
                   const calculatedSL = direction === 'LONG' 
@@ -3761,7 +3767,13 @@ export default function ScannerClient() {
                               
                               return listToRender.slice(0, 6).map((stock) => {
                                 const isCurrent = stock.symbol === drawerStock.symbol;
-                                const direction = stock.direction || (stock.score >= 50 ? 'LONG' : 'SHORT');
+                                const direction = stock.direction || (
+                                  (stock.target && stock.entry && stock.target < stock.entry) ||
+                                  (stock.sl && stock.entry && stock.sl > stock.entry) ||
+                                  (stock.signals?.some(s => s.includes('DOWN') || s.includes('BEAR') || s.includes('SHORT')))
+                                    ? 'SHORT'
+                                    : 'LONG'
+                                );
                                 const bias = direction === 'LONG' ? 'BULLISH' : 'BEARISH';
                                 return (
                                   <tr 
