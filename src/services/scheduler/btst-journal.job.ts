@@ -222,9 +222,10 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       const didLog = await TradeJournalService.logSignal({
         signalType,
         symbol: signal.symbol,
-        ...(optionName && optionStrike && optionLtp !== null
-          ? { optionContract: optionName, optionStrike, optionType, entryCmp: optionLtp }
-          : {}),
+        optionContract: optionName || 'STOCK',
+        optionStrike: optionStrike ?? 0,
+        optionType,
+        entryCmp: optionLtp ?? ltp,
         score: signal.overnightScore ?? 0,
         confidence: signal.confidence ?? 0,
         signalSummary,
