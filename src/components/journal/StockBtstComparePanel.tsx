@@ -134,8 +134,12 @@ export default function StockBtstComparePanel() {
                     </span>
                   </td>
                   <td className="px-3 py-2">{row.live?.score ?? '—'}</td>
-                  <td className={`px-3 py-2 ${(row.live?.pnlPct ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-                    {row.live?.pnlPct != null ? `${row.live.pnlPct >= 0 ? '+' : ''}${row.live.pnlPct.toFixed(2)}%` : 'open'}
+                  <td className={`px-3 py-2 ${row.live === null ? 'text-text-secondary' : (row.live.pnlPct ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                    {row.live === null
+                      ? '—'
+                      : row.live.pnlPct != null
+                        ? `${row.live.pnlPct >= 0 ? '+' : ''}${row.live.pnlPct.toFixed(2)}%`
+                        : 'open'}
                   </td>
                   <td className="px-3 py-2">{row.backtest?.score ?? '—'}</td>
                   <td className={`px-3 py-2 ${(row.backtest?.spotPnlPct ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>

@@ -80,5 +80,21 @@ The deploy runbook above targets the Windows/PowerShell production workflow. For
 
 ### Lint / test / build
 - Lint: `npm run lint` (currently clean except pre-existing unused-var warnings).
-- Tests: `npm test` (Node native runner, 157 unit tests).
+- Tests: `npm test` (Node native runner, 485 unit tests; 41 fail in sandboxes without a generated Prisma client — run `prisma generate` first).
 - Build: `npm run build` (production build; dev uses `npm run dev`).
+
+---
+
+## Accepted Risk / Audit Exceptions
+
+### yahoo-finance2 → @modelcontextprotocol/sdk → @hono/node-server (moderate)
+- Advisory: GHSA-frvp-7c67-39w9 — path traversal in `serve-static` via encoded backslash (`%5C`)
+- Windows-specific attack vector; deploy target is Oracle Cloud Linux via PM2 — not exposed
+- Fix requires `yahoo-finance2` downgrade (breaking change, would affect the fallback data source)
+- Reviewed: 2026-07-31. Decision: accept, no action. Revisit if yahoo-finance2 ships a non-breaking patch.
+
+### eslint / eslint-config-next / @eslint/eslintrc chain (high) + transitive minimatch/brace-expansion
+- Advisory: GHSA-mh99-v99m-4gvg (brace-expansion DoS) and related eslint-config-array/eslintrc chain
+- All devDependencies — no runtime/production exposure
+- Fix requires eslint-config-next major downgrade (breaking, affects lint tooling only)
+- Reviewed: 2026-07-31. Decision: accept, no action.

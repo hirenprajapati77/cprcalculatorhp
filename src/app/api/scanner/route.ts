@@ -308,7 +308,7 @@ export async function GET(request: NextRequest) {
 
     for (const r of fullStats) {
       if (r.score >= 75) strongBuyCount++;
-      if (r.signalSummary.includes('BREAKOUT') && r.signalSummary.includes('NARROW')) breakoutReadyCount++;
+      if (r.score >= 60 && r.score < 75) breakoutReadyCount++;
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
     }
 

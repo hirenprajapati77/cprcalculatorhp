@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { computeWinRate } from '@/lib/win-rate';
 
 export interface SignalStats {
   signal: string;
@@ -32,27 +33,25 @@ export function aggregateSignalAnalytics(journals: JournalRow[]): AnalyticsResul
   }
 
   const baselineTrades = journals.length;
-  const baselineWins = journals.filter(j => (j.pnl ?? 0) > 0).length;
-  const baselineWinRate = (baselineWins / baselineTrades) * 100;
+  const baselineWinRate = computeWinRate(journals, j => j.pnl).winRate;
 
-  const signalMap = new Map<string, { count: number; wins: number; totalPnl: number; totalPnlPct: number }>();
+  const signalMap = new Map<string, { count: number; trades: JournalRow[]; totalPnl: number; totalPnlPct: number }>();
 
   for (const j of journals) {
     if (!j.signalSummary) continue;
 
     const pnl = j.pnl ?? 0;
     const pnlPct = j.pnlPct ?? 0;
-    const isWin = pnl > 0;
 
     const signals = j.signalSummary.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
 
     for (const sig of signals) {
       if (!signalMap.has(sig)) {
-        signalMap.set(sig, { count: 0, wins: 0, totalPnl: 0, totalPnlPct: 0 });
+        signalMap.set(sig, { count: 0, trades: [], totalPnl: 0, totalPnlPct: 0 });
       }
       const stats = signalMap.get(sig)!;
       stats.count++;
-      if (isWin) stats.wins++;
+      stats.trades.push(j);
       stats.totalPnl += pnl;
       stats.totalPnlPct += pnlPct;
     }
@@ -67,12 +66,11 @@ export function aggregateSignalAnalytics(journals: JournalRow[]): AnalyticsResul
       return !signals.includes(signal);
     });
     if (excluded.length === 0) return 0; // signal appears in every trade — no exclusive baseline possible
-    const wins = excluded.filter(j => (j.pnl ?? 0) > 0).length;
-    return (wins / excluded.length) * 100;
+    return computeWinRate(excluded, j => j.pnl).winRate;
   }
 
   for (const [signal, stats] of signalMap.entries()) {
-    const winRate = (stats.wins / stats.count) * 100;
+    const winRate = computeWinRate(stats.trades, j => j.pnl).winRate;
     const lift = winRate - baselineWinRate;
     const liftExclusive = winRate - winRateExcluding(journals, signal);
 

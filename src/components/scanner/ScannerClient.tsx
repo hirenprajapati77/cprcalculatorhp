@@ -562,8 +562,12 @@ const StockRow = React.memo(({
                   ) : (
                     <>
                       <div className="flex items-center gap-2 text-[9px]">
-                        <span className="font-bold text-accent-blue truncate max-w-[80px]" title={row.optionSuggestion.formattedName}>
-                          {row.optionSuggestion.formattedName ? row.optionSuggestion.formattedName.split(' ').slice(1).join(' ') : '—'}
+                        <span className="font-bold text-accent-blue truncate max-w-[90px]" title={row.optionSuggestion.formattedName}>
+                          {row.optionSuggestion.strike != null && row.optionSuggestion.type
+                            ? `${row.optionSuggestion.strike} ${row.optionSuggestion.type}`
+                            : row.optionSuggestion.formattedName
+                              ? row.optionSuggestion.formattedName.split(' ').slice(1).join(' ')
+                              : '—'}
                         </span>
                         <span className="font-extrabold text-text-primary">₹{fmt(row.optionSuggestion.ltp || 0)}</span>
                       </div>

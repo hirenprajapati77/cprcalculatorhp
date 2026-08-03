@@ -81,4 +81,16 @@ test('aggregateSignalAnalytics', async (t) => {
     // liftExclusive is winRate - 0 = 50% because no non-signal trades exist to form an exclusive baseline, returning 0
     assert.strictEqual(alwaysPresent.liftExclusive, 50);
   });
+
+  await t.test('excludes breakeven (pnl === 0) trades from winRate denominator', () => {
+    const withBreakeven = [
+      { pnl: 100, pnlPct: 1, signalSummary: 'NARROW' },   // win
+      { pnl: -50, pnlPct: -0.5, signalSummary: 'NARROW' }, // loss
+      { pnl: 0, pnlPct: 0, signalSummary: 'NARROW' },     // breakeven
+    ];
+    const result = aggregateSignalAnalytics(withBreakeven);
+    // 1 win / (1 win + 1 loss) = 50%, ignoring 1 breakeven trade
+    assert.strictEqual(result.baselineWinRate, 50);
+    assert.strictEqual(result.signals[0].winRate, 50);
+  });
 });
