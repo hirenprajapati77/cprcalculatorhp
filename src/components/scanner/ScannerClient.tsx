@@ -90,6 +90,34 @@ function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinut
   return { hour, minute, totalMinutes: hour * 60 + minute };
 }
 
+function getStockDirection(stock: {
+  direction?: 'LONG' | 'SHORT';
+  target?: number | null;
+  entry?: number | null;
+  sl?: number | null;
+  signals?: string[];
+  signalSummary?: string | null;
+}): 'LONG' | 'SHORT' {
+  if (stock.direction) return stock.direction;
+  
+  if (stock.target && stock.entry && stock.target !== stock.entry) {
+    return stock.target > stock.entry ? 'LONG' : 'SHORT';
+  }
+
+  if (stock.sl && stock.entry && stock.sl !== stock.entry) {
+    return stock.sl < stock.entry ? 'LONG' : 'SHORT';
+  }
+
+  const sigs = stock.signals || (stock.signalSummary ? stock.signalSummary.split(',') : []);
+  const hasDirectDown = sigs.some(s => s === 'KGS_DIRECT_DOWN' || s === 'KGS_REVERSAL_DOWN' || s.includes('BEARISH_BREAKOUT'));
+  const hasDirectUp = sigs.some(s => s === 'KGS_DIRECT_UP' || s === 'KGS_REVERSAL_UP' || s.includes('BULLISH_BREAKOUT'));
+
+  if (hasDirectDown && !hasDirectUp) return 'SHORT';
+  if (hasDirectUp && !hasDirectDown) return 'LONG';
+
+  return 'LONG';
+}
+
 function useBtstState(mode: ScannerMode = 'BTST') {
   const [now, setNow] = useState(new Date());
 
@@ -3574,13 +3602,7 @@ export default function ScannerClient() {
                 )}
 
                 {drawerTab === 'tradeSetup' && (() => {
-                  const direction = drawerStock.direction || (
-                    (drawerStock.target && drawerStock.entry && drawerStock.target < drawerStock.entry) ||
-                    (drawerStock.sl && drawerStock.entry && drawerStock.sl > drawerStock.entry) ||
-                    (drawerStock.signals?.some(s => s.includes('DOWN') || s.includes('BEAR') || s.includes('SHORT')))
-                      ? 'SHORT'
-                      : 'LONG'
-                  );
+                  const direction = getStockDirection(drawerStock);
                   const calculatedEntry = direction === 'LONG' ? drawerStock.tc : drawerStock.bc;
                   
                   const calculatedSL = direction === 'LONG' 
@@ -3767,13 +3789,7 @@ export default function ScannerClient() {
                               
                               return listToRender.slice(0, 6).map((stock) => {
                                 const isCurrent = stock.symbol === drawerStock.symbol;
-                                const direction = stock.direction || (
-                                  (stock.target && stock.entry && stock.target < stock.entry) ||
-                                  (stock.sl && stock.entry && stock.sl > stock.entry) ||
-                                  (stock.signals?.some(s => s.includes('DOWN') || s.includes('BEAR') || s.includes('SHORT')))
-                                    ? 'SHORT'
-                                    : 'LONG'
-                                );
+                                const direction = getStockDirection(stock);
                                 const bias = direction === 'LONG' ? 'BULLISH' : 'BEARISH';
                                 return (
                                   <tr 
