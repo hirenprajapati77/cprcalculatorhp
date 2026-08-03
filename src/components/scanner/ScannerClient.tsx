@@ -109,8 +109,8 @@ function getStockDirection(stock: {
   }
 
   const sigs = stock.signals || (stock.signalSummary ? stock.signalSummary.split(',') : []);
-  const hasDirectDown = sigs.some(s => s === 'KGS_DIRECT_DOWN' || s === 'KGS_REVERSAL_DOWN' || s.includes('BEARISH_BREAKOUT'));
-  const hasDirectUp = sigs.some(s => s === 'KGS_DIRECT_UP' || s === 'KGS_REVERSAL_UP' || s.includes('BULLISH_BREAKOUT'));
+  const hasDirectDown = sigs.some(s => s === 'HP_DIRECT_DOWN' || s === 'KGS_DIRECT_DOWN' || s === 'HP_REVERSAL_DOWN' || s === 'KGS_REVERSAL_DOWN' || s.includes('BEARISH_BREAKOUT'));
+  const hasDirectUp = sigs.some(s => s === 'HP_DIRECT_UP' || s === 'KGS_DIRECT_UP' || s === 'HP_REVERSAL_UP' || s === 'KGS_REVERSAL_UP' || s.includes('BULLISH_BREAKOUT'));
 
   if (hasDirectDown && !hasDirectUp) return 'SHORT';
   if (hasDirectUp && !hasDirectDown) return 'LONG';
@@ -2908,18 +2908,18 @@ export default function ScannerClient() {
                       <option value="HIGHER_VALUE">Higher Value</option>
                       <option value="LOWER_VALUE">Lower Value</option>
                       <option value="HOT_ZONE">Hot Zone</option>
-                      <option value="KGS_INSIDE_CPR">KGS Inside CPR</option>
-                      <option value="KGS_OUTSIDE_CPR">KGS Outside CPR</option>
-                      <option value="KGS_ASC_CPR">KGS Ascending CPR</option>
-                      <option value="KGS_DESC_CPR">KGS Descending CPR</option>
-                      <option value="KGS_RTP">KGS RTP (Slope Match)</option>
-                      <option value="KGS_HP_RTP">KGS HP-RTP (200 SMA Cross)</option>
-                      <option value="KGS_DIRECT_UP">KGS Direct Up</option>
-                      <option value="KGS_DIRECT_DOWN">KGS Direct Down</option>
-                      <option value="KGS_REVERSAL_UP">KGS Reversal Up</option>
-                      <option value="KGS_REVERSAL_DOWN">KGS Reversal Down</option>
-                      <option value="KGS_CAM_BULL_BIAS">KGS Camarilla Bullish Bias</option>
-                      <option value="KGS_CAM_BEAR_BIAS">KGS Camarilla Bearish Bias</option>
+                      <option value="HP_INSIDE_CPR">HP Inside CPR</option>
+                      <option value="HP_OUTSIDE_CPR">HP Outside CPR</option>
+                      <option value="HP_ASC_CPR">HP Ascending CPR</option>
+                      <option value="HP_DESC_CPR">HP Descending CPR</option>
+                      <option value="HP_RTP">HP RTP (Slope Match)</option>
+                      <option value="HP_HP_RTP">HP HP-RTP (200 SMA Cross)</option>
+                      <option value="HP_DIRECT_UP">HP Direct Up</option>
+                      <option value="HP_DIRECT_DOWN">HP Direct Down</option>
+                      <option value="HP_REVERSAL_UP">HP Reversal Up</option>
+                      <option value="HP_REVERSAL_DOWN">HP Reversal Down</option>
+                      <option value="HP_CAM_BULL_BIAS">HP Camarilla Bullish Bias</option>
+                      <option value="HP_CAM_BEAR_BIAS">HP Camarilla Bearish Bias</option>
                     </select>
                   </div>
 
@@ -3573,19 +3573,33 @@ export default function ScannerClient() {
                             VOLUME_SPIKE: "Volume > 2x average. Institutional activity.",
                             BULLISH: "Bias based on price vs yesterday TC/BC level.",
                             BEARISH: "Bias based on price vs yesterday TC/BC level.",
+                            HP_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
                             KGS_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
+                            HP_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
                             KGS_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
+                            HP_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
                             KGS_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
+                            HP_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
                             KGS_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
+                            HP_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
                             KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
+                            HP_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
                             KGS_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
+                            HP_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
                             KGS_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
+                            HP_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
                             KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
+                            HP_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
                             KGS_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
+                            HP_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
                             KGS_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
+                            HP_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
                             KGS_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
+                            HP_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
                             KGS_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
+                            HP_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
                             KGS_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
+                            HP_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance.",
                             KGS_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance."
                           };
                           const expl = explMap[sig];

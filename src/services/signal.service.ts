@@ -167,7 +167,7 @@ export class SignalService {
       : false;
     if (virginCPR) signals.push('VIRGIN');
 
-    // ── KGS Features ─────────────────────────────────────────────────────────
+    // ── HP Features ─────────────────────────────────────────────────────────
     // Ascending/Descending CPR: requires 3 distinct prior CPR periods (cprYesterday + threeDaysAgoCandle).
     if (cprYesterday && threeDaysAgoCandle) {
       const d1 = calculateCPR(
@@ -177,18 +177,18 @@ export class SignalService {
       const d2 = cprYesterday;
       const d3 = cprToday;
 
-      // KGS Rule: For Ascending CPR, "PDL will not be broken; if broken and market closes below PDL, expect trend reversal"
+      // HP Rule: For Ascending CPR, "PDL will not be broken; if broken and market closes below PDL, expect trend reversal"
       // Therefore, if today's close is below yesterday's low, the expected ASC trend is invalidated.
       if (d3.tc > d2.tc && d2.tc > d1.tc) {
         if (todayCandle.close >= yesterdayCandle.low) {
-          signals.push('KGS_ASC_CPR');
+          signals.push('HP_ASC_CPR');
         }
       }
       
       // Mirror rule: For Descending CPR, if today's close is above yesterday's high, the DESC trend is invalidated.
       if (d3.tc < d2.tc && d2.tc < d1.tc) {
         if (todayCandle.close <= yesterdayCandle.high) {
-          signals.push('KGS_DESC_CPR');
+          signals.push('HP_DESC_CPR');
         }
       }
 
@@ -203,30 +203,30 @@ export class SignalService {
         const yesterdayValidAsc = d2.tc > d1.tc && d1.tc > d0.tc && yesterdayCandle.close >= dayBeforeYesterdayCandle.low;
         // Today's rejection: close breaks below yesterday's low.
         if (yesterdayValidAsc && todayCandle.close < yesterdayCandle.low) {
-          signals.push('KGS_ASC_REVERSAL');
+          signals.push('HP_ASC_REVERSAL');
         }
 
         // Yesterday's DESC CPR was valid: 3-day falling TC sequence leading up to yesterday, and yesterday's close respected its PDH.
         const yesterdayValidDesc = d2.tc < d1.tc && d1.tc < d0.tc && yesterdayCandle.close <= dayBeforeYesterdayCandle.high;
         // Today's rejection: close breaks above yesterday's high.
         if (yesterdayValidDesc && todayCandle.close > yesterdayCandle.high) {
-          signals.push('KGS_DESC_REVERSAL');
+          signals.push('HP_DESC_REVERSAL');
         }
       }
     }
 
-    // KGS Inside/Outside CPR: requires cprYesterday.
+    // HP Inside/Outside CPR: requires cprYesterday.
     if (cprYesterday) {
       if (cprToday.tc < cprYesterday.tc && cprToday.bc > cprYesterday.bc) {
-        signals.push('KGS_INSIDE_CPR');
+        signals.push('HP_INSIDE_CPR');
       }
       if (cprToday.tc > cprYesterday.tc && cprToday.bc < cprYesterday.bc) {
-        signals.push('KGS_OUTSIDE_CPR');
+        signals.push('HP_OUTSIDE_CPR');
       }
     }
 
-    // ── KGS Camarilla + CPR Alignment ────────────────────────────────────────
-    // Source: KGS "CAMARILLA & CPR" — evaluates whether Camarilla R3 or S3 falls
+    // ── HP Camarilla + CPR Alignment ────────────────────────────────────────
+    // Source: HP "CAMARILLA & CPR" — evaluates whether Camarilla R3 or S3 falls
     // inside the today's CPR zone (between TC and BC).
     // Cam R3 inside CPR = bearish bias (favors shorts)
     // Cam S3 inside CPR = bullish bias (favors longs)
@@ -236,14 +236,14 @@ export class SignalService {
 
     // Note: cprToday.tc is already normalized to be >= cprToday.bc
     if (camR3 <= cprToday.tc && camR3 >= cprToday.bc) {
-      signals.push('KGS_CAM_BEAR_BIAS');
+      signals.push('HP_CAM_BEAR_BIAS');
     }
     if (camS3 <= cprToday.tc && camS3 >= cprToday.bc) {
-      signals.push('KGS_CAM_BULL_BIAS');
+      signals.push('HP_CAM_BULL_BIAS');
     }
 
-    // ── KGS Open Tricks (DIRECT / REVERSAL) ──────────────────────────────────
-    // Source: KGS "OPEN TRICKS" — classification is candle color at R1/S1, not an
+    // ── HP Open Tricks (DIRECT / REVERSAL) ──────────────────────────────────
+    // Source: HP "OPEN TRICKS" — classification is candle color at R1/S1, not an
     // opening-range-breakout timing rule. DIRECT = candle color confirms the pivot
     // break (green closing above R1, red closing below S1) = continuation.
     // REVERSAL = candle color contradicts the pivot touch (red after tagging R1,
@@ -260,25 +260,25 @@ export class SignalService {
     const touchedS1 = todayCandle.low <= s1;
 
     if (touchedR1 && todayCandle.close > r1 && todayIsGreen) {
-      signals.push('KGS_DIRECT_UP');
+      signals.push('HP_DIRECT_UP');
     } else if (touchedR1 && todayCandle.close < r1 && todayIsRed) {
-      signals.push('KGS_REVERSAL_DOWN');
+      signals.push('HP_REVERSAL_DOWN');
     }
 
     if (touchedS1 && todayCandle.close < s1 && todayIsRed) {
-      signals.push('KGS_DIRECT_DOWN');
+      signals.push('HP_DIRECT_DOWN');
     } else if (touchedS1 && todayCandle.close > s1 && todayIsGreen) {
-      signals.push('KGS_REVERSAL_UP');
+      signals.push('HP_REVERSAL_UP');
     }
 
-    // KGS RTP (Running Trend Pattern)
+    // HP RTP (Running Trend Pattern)
     const hasRTP =
       stock.sma20Slope !== undefined && stock.sma50Slope !== undefined &&
       stock.sma20Slope !== 0 && stock.sma50Slope !== 0 &&
       Math.sign(stock.sma20Slope) === Math.sign(stock.sma50Slope);
-    if (hasRTP) signals.push('KGS_RTP');
+    if (hasRTP) signals.push('HP_RTP');
 
-    // KGS High Probability RTP (HP-RTP)
+    // HP High Probability RTP (HP_HP_RTP)
     // 1. Guard: sma200 must be present
     if (stock.sma200 !== undefined && todayCandle && yesterdayCandle) {
       // 2. Precondition: RTP must be active
@@ -290,9 +290,9 @@ export class SignalService {
         const isBearishCross = yesterdayCandle.close >= sma200 && todayCandle.close < sma200;
 
         if (isBullishCross && stock.sma20Slope > 0) {
-          signals.push('KGS_HP_RTP');
+          signals.push('HP_HP_RTP');
         } else if (isBearishCross && stock.sma20Slope < 0) {
-          signals.push('KGS_HP_RTP');
+          signals.push('HP_HP_RTP');
         }
       }
     }

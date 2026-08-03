@@ -64,15 +64,15 @@ export class RankingService {
     if (signals.includes('BREAKOUT') || signals.includes('LONG_BUILD') || signals.includes('SHORT_BUILD')) {
       catASum += 10;
     }
-    if (signals.includes('KGS_INSIDE_CPR')) {
+    if (signals.includes('HP_INSIDE_CPR') || signals.includes('KGS_INSIDE_CPR')) {
       catASum += 10;
     }
     if (signals.includes('VIRGIN')) {
       catASum += 5;
     }
     if (
-      (signals.includes('KGS_ASC_CPR') && signals.includes('BULLISH')) ||
-      (signals.includes('KGS_DESC_CPR') && signals.includes('BEARISH'))
+      ((signals.includes('HP_ASC_CPR') || signals.includes('KGS_ASC_CPR')) && signals.includes('BULLISH')) ||
+      ((signals.includes('HP_DESC_CPR') || signals.includes('KGS_DESC_CPR')) && signals.includes('BEARISH'))
     ) {
       catASum += 5;
     }
@@ -103,7 +103,7 @@ export class RankingService {
     if (signals.includes('HOT_ZONE')) {
       catDSum += 5;
     }
-    if (signals.includes('NARROW') && signals.includes('KGS_RTP')) {
+    if (signals.includes('NARROW') && (signals.includes('HP_RTP') || signals.includes('KGS_RTP'))) {
       catDSum += 5;
     }
     const catD = Math.min(10, catDSum);
@@ -143,13 +143,13 @@ export class RankingService {
     let score = catA + catB + catC + catD + catE + catF;
 
     // Conflict Penalties (subtracted after weighted sum)
-    if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) {
+    if ((signals.includes('HP_ASC_CPR') || signals.includes('KGS_ASC_CPR')) && signals.includes('BEARISH')) {
       score -= 10;
     }
-    if (signals.includes('KGS_DESC_CPR') && signals.includes('BULLISH')) {
+    if ((signals.includes('HP_DESC_CPR') || signals.includes('KGS_DESC_CPR')) && signals.includes('BULLISH')) {
       score -= 10;
     }
-    if (signals.includes('KGS_OUTSIDE_CPR')) {
+    if (signals.includes('HP_OUTSIDE_CPR') || signals.includes('KGS_OUTSIDE_CPR')) {
       score -= 10;
     }
 

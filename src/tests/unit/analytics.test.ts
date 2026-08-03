@@ -62,7 +62,7 @@ test('aggregateSignalAnalytics', async (t) => {
   });
 
   await t.test('calculates liftExclusive correctly where signal appears in some but not all trades', () => {
-    const directUp = result.signals.find(s => s.signal === 'KGS_DIRECT_UP');
+    const directUp = result.signals.find(s => s.signal === 'HP_DIRECT_UP' || s.signal === 'KGS_DIRECT_UP');
     assert.ok(directUp);
     assert.strictEqual(directUp.lift, 50); // 100% WR - 50% baseline WR
     assert.strictEqual(directUp.liftExclusive, 100); // 100% WR - 0% exclusive WR (since non-directUp trades both lost)

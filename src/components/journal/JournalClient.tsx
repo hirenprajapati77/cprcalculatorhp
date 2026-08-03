@@ -1185,15 +1185,15 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                           const wrColor   = s.winRate >= 55 ? '#22c55e' : s.winRate >= 45 ? '#eab308' : '#ef4444';
                           const confColor = s.confidence === 'High' ? '#22c55e' : s.confidence === 'Medium' ? '#eab308' : '#64748b';
                           const confBg    = s.confidence === 'High' ? 'rgba(34,197,94,0.1)' : s.confidence === 'Medium' ? 'rgba(234,179,8,0.1)' : 'rgba(100,116,139,0.1)';
-                          const isKgs    = s.signal.startsWith('KGS_');
+                          const isHp    = s.signal.startsWith('HP_') || s.signal.startsWith('KGS_');
                           return (
                             <tr key={s.signal} className="hover:bg-white/[0.02] transition-colors">
                               <td className="px-4 py-2.5">
                                 <span
-                                  style={isKgs ? { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)' } : {}}
-                                  className={`font-mono text-[11px] font-semibold ${isKgs ? 'px-1.5 py-0.5 rounded' : 'text-slate-300'}`}
+                                  style={isHp ? { color: '#a78bfa', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.25)' } : {}}
+                                  className={`font-mono text-[11px] font-semibold ${isHp ? 'px-1.5 py-0.5 rounded' : 'text-slate-300'}`}
                                 >
-                                  {s.signal}
+                                  {s.signal.replace(/^KGS_/, 'HP_')}
                                 </span>
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono text-slate-400">{s.trades}</td>

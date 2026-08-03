@@ -238,7 +238,7 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
       s4: 95,
       width: 0,
       classification: 'NARROW' as const,
-      signals: ['NARROW', 'BREAKOUT', 'BULLISH', 'MOMENTUM', 'HIGHER_VALUE', 'HOT_ZONE', 'NORMAL', 'KGS_RTP', 'KGS_INSIDE_CPR', 'VIRGIN'],
+      signals: ['NARROW', 'BREAKOUT', 'BULLISH', 'MOMENTUM', 'HIGHER_VALUE', 'HOT_ZONE', 'NORMAL', 'HP_RTP', 'HP_INSIDE_CPR', 'VIRGIN'],
       entry: 0,
       sl: 0,
       target: 0,
@@ -254,7 +254,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
   // Use IST-aware date to match signal.service.ts candle classification logic
   const todayStr = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  await t.test('KGS_ASC_CPR fires when 3 consecutive rising TC days and PDL is respected', async () => {
+  await t.test('HP_ASC_CPR fires when 3 consecutive rising TC days and PDL is respected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASCSTOCK',
       market: 'NSE',
@@ -276,11 +276,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_ASC_CPR'));
-    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'));
+    assert.ok(scanResult.signals.includes('HP_ASC_CPR'));
+    assert.ok(!scanResult.signals.includes('HP_DESC_CPR'));
   });
 
-  await t.test('KGS_ASC_CPR is invalidated when close breaks below PDL', async () => {
+  await t.test('HP_ASC_CPR is invalidated when close breaks below PDL', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_INVALID',
       market: 'NSE',
@@ -302,10 +302,10 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be invalidated if close < PDL');
+    assert.ok(!scanResult.signals.includes('HP_ASC_CPR'), 'HP_ASC_CPR should be invalidated if close < PDL');
   });
 
-  await t.test('KGS_DESC_CPR fires when 3 consecutive falling TC days and PDH is respected', async () => {
+  await t.test('HP_DESC_CPR fires when 3 consecutive falling TC days and PDH is respected', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESCSTOCK',
       market: 'NSE',
@@ -327,11 +327,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_DESC_CPR'));
-    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'));
+    assert.ok(scanResult.signals.includes('HP_DESC_CPR'));
+    assert.ok(!scanResult.signals.includes('HP_ASC_CPR'));
   });
 
-  await t.test('KGS_DESC_CPR is invalidated when close breaks above PDH', async () => {
+  await t.test('HP_DESC_CPR is invalidated when close breaks above PDH', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESC_INVALID',
       market: 'NSE',
@@ -353,10 +353,10 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be invalidated if close > PDH');
+    assert.ok(!scanResult.signals.includes('HP_DESC_CPR'), 'HP_DESC_CPR should be invalidated if close > PDH');
   });
 
-  await t.test('KGS_ASC_REVERSAL fires when valid ASC setup yesterday is broken below PDL today', async () => {
+  await t.test('HP_ASC_REVERSAL fires when valid ASC setup yesterday is broken below PDL today', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_REV_VALID',
       market: 'NSE',
@@ -382,11 +382,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     // Today close (95) < yesterday low (98). => Reversal.
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_ASC_REVERSAL'), 'KGS_ASC_REVERSAL should fire');
-    assert.ok(!scanResult.signals.includes('KGS_ASC_CPR'), 'KGS_ASC_CPR should be mutually exclusive');
+    assert.ok(scanResult.signals.includes('HP_ASC_REVERSAL'), 'HP_ASC_REVERSAL should fire');
+    assert.ok(!scanResult.signals.includes('HP_ASC_CPR'), 'HP_ASC_CPR should be mutually exclusive');
   });
 
-  await t.test('KGS_ASC_REVERSAL does NOT fire if yesterday was only a 2-leg match', async () => {
+  await t.test('HP_ASC_REVERSAL does NOT fire if yesterday was only a 2-leg match', async () => {
     const mockStock: MarketStockData = {
       symbol: 'ASC_REV_INVALID_SETUP',
       market: 'NSE',
@@ -409,10 +409,10 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(!scanResult.signals.includes('KGS_ASC_REVERSAL'), 'Should not fire if setup was invalid');
+    assert.ok(!scanResult.signals.includes('HP_ASC_REVERSAL'), 'Should not fire if setup was invalid');
   });
 
-  await t.test('KGS_DESC_REVERSAL fires when valid DESC setup yesterday is broken above PDH today', async () => {
+  await t.test('HP_DESC_REVERSAL fires when valid DESC setup yesterday is broken above PDH today', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DESC_REV_VALID',
       market: 'NSE',
@@ -435,11 +435,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_DESC_REVERSAL'), 'KGS_DESC_REVERSAL should fire');
-    assert.ok(!scanResult.signals.includes('KGS_DESC_CPR'), 'KGS_DESC_CPR should be mutually exclusive');
+    assert.ok(scanResult.signals.includes('HP_DESC_REVERSAL'), 'HP_DESC_REVERSAL should fire');
+    assert.ok(!scanResult.signals.includes('HP_DESC_CPR'), 'HP_DESC_CPR should be mutually exclusive');
   });
 
-  await t.test('KGS_INSIDE_CPR fires when today fully inside yesterday', async () => {
+  await t.test('HP_INSIDE_CPR fires when today fully inside yesterday', async () => {
     const mockStock: MarketStockData = {
       symbol: 'INSIDECPR',
       market: 'NSE',
@@ -460,11 +460,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_INSIDE_CPR'));
-    assert.ok(!scanResult.signals.includes('KGS_OUTSIDE_CPR'));
+    assert.ok(scanResult.signals.includes('HP_INSIDE_CPR'));
+    assert.ok(!scanResult.signals.includes('HP_OUTSIDE_CPR'));
   });
 
-  await t.test('KGS_OUTSIDE_CPR fires when today fully contains yesterday', async () => {
+  await t.test('HP_OUTSIDE_CPR fires when today fully contains yesterday', async () => {
     const mockStock: MarketStockData = {
       symbol: 'OUTSIDECPR',
       market: 'NSE',
@@ -485,11 +485,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_OUTSIDE_CPR'));
-    assert.ok(!scanResult.signals.includes('KGS_INSIDE_CPR'));
+    assert.ok(scanResult.signals.includes('HP_OUTSIDE_CPR'));
+    assert.ok(!scanResult.signals.includes('HP_INSIDE_CPR'));
   });
 
-  await t.test('KGS_RTP fires when SMA20/SMA50 slopes match sign', async () => {
+  await t.test('HP_RTP fires when SMA20/SMA50 slopes match sign', async () => {
     const mockStock: MarketStockData = {
       symbol: 'RTPSTOCK',
       market: 'NSE',
@@ -508,10 +508,10 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     };
 
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_RTP'));
+    assert.ok(scanResult.signals.includes('HP_RTP'));
   });
 
-  await t.test('KGS_HP_RTP (a) valid crossing matching RTP direction fires', async () => {
+  await t.test('HP_HP_RTP (a) valid crossing matching RTP direction fires', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_STOCK', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -522,10 +522,10 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with positive RTP slope should fire');
+    assert.ok(scanResult.signals.includes('HP_HP_RTP'), 'Bullish cross with positive RTP slope should fire');
   });
 
-  await t.test('KGS_HP_RTP (b) static position above/below 200 without crossing does not fire', async () => {
+  await t.test('HP_HP_RTP (b) static position above/below 200 without crossing does not fire', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_STATIC', market: 'NSE', sector: 'Tech', open: 205, high: 220, low: 205, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -536,11 +536,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active');
-    assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Static position above 200 should not fire HP_RTP');
+    assert.ok(scanResult.signals.includes('HP_RTP'), 'RTP should be active');
+    assert.ok(!scanResult.signals.includes('HP_HP_RTP'), 'Static position above 200 should not fire HP_HP_RTP');
   });
 
-  await t.test('KGS_HP_RTP (c) crossing opposite RTP slope does not fire', async () => {
+  await t.test('HP_HP_RTP (c) crossing opposite RTP slope does not fire', async () => {
     const mockStock: MarketStockData = {
       symbol: 'HP_RTP_CONFLICT', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -551,11 +551,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_RTP'), 'RTP should be active (both negative)');
-    assert.ok(!scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with negative RTP slope should not fire');
+    assert.ok(scanResult.signals.includes('HP_RTP'), 'RTP should be active (both negative)');
+    assert.ok(!scanResult.signals.includes('HP_HP_RTP'), 'Bullish cross with negative RTP slope should not fire');
   });
 
-  await t.test('KGS_HP_RTP (d) missing sma200 or absent RTP correctly blocks it', async () => {
+  await t.test('HP_HP_RTP (d) missing sma200 or absent RTP correctly blocks it', async () => {
     const mockStockNo200: MarketStockData = {
       symbol: 'HP_RTP_NO200', market: 'NSE', sector: 'Tech', open: 190, high: 215, low: 185, close: 210,
       volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 210,
@@ -578,11 +578,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     const res1 = await ScannerService.scanStock(mockStockNo200, todayStr);
     const res2 = await ScannerService.scanStock(mockStockNoRTP, todayStr);
     
-    assert.ok(!res1.signals.includes('KGS_HP_RTP'), 'Missing sma200 should block HP_RTP');
-    assert.ok(!res2.signals.includes('KGS_HP_RTP'), 'Missing RTP should block HP_RTP');
+    assert.ok(!res1.signals.includes('HP_HP_RTP'), 'Missing sma200 should block HP_HP_RTP');
+    assert.ok(!res2.signals.includes('HP_HP_RTP'), 'Missing RTP should block HP_HP_RTP');
   });
 
-  await t.test('KGS_HP_RTP (e) fires correctly on live in-progress crossing', async () => {
+  await t.test('HP_HP_RTP (e) fires correctly on live in-progress crossing', async () => {
     const mockStockLive: MarketStockData = {
       symbol: 'HP_RTP_LIVE', market: 'NSE', sector: 'Tech', 
       open: 195, high: 215, low: 190, close: 195, // close is irrelevant for live
@@ -596,14 +596,14 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStockLive, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_HP_RTP'), 'Bullish cross with live ltp should fire');
+    assert.ok(scanResult.signals.includes('HP_HP_RTP'), 'Bullish cross with live ltp should fire');
   });
 
   // Shared yesterday candle for Open Tricks tests: H=110, L=90, C=100
   // => pivot=100, R1 = 2*100-90 = 110, S1 = 2*100-110 = 90
   const openTricksYesterday = { date: 'yesterday', open: 100, high: 110, low: 90, close: 100, volume: 100000 };
 
-  await t.test('KGS_DIRECT_UP fires on green candle closing decisively above R1', async () => {
+  await t.test('HP_DIRECT_UP fires on green candle closing decisively above R1', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DIRECT_UP', market: 'NSE', sector: 'Tech',
       open: 108, high: 115, low: 107, close: 113, // green, high>=R1(110), close>R1
@@ -611,11 +611,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: [openTricksYesterday, { date: todayStr, open: 108, high: 115, low: 107, close: 113, volume: 100000 }]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_DIRECT_UP'), 'Expected KGS_DIRECT_UP');
-    assert.ok(!scanResult.signals.includes('KGS_REVERSAL_DOWN'), 'Should not also fire REVERSAL_DOWN');
+    assert.ok(scanResult.signals.includes('HP_DIRECT_UP'), 'Expected HP_DIRECT_UP');
+    assert.ok(!scanResult.signals.includes('HP_REVERSAL_DOWN'), 'Should not also fire REVERSAL_DOWN');
   });
 
-  await t.test('KGS_DIRECT_DOWN fires on red candle closing decisively below S1', async () => {
+  await t.test('HP_DIRECT_DOWN fires on red candle closing decisively below S1', async () => {
     const mockStock: MarketStockData = {
       symbol: 'DIRECT_DOWN', market: 'NSE', sector: 'Tech',
       open: 92, high: 93, low: 85, close: 87, // red, low<=S1(90), close<S1
@@ -623,11 +623,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: [openTricksYesterday, { date: todayStr, open: 92, high: 93, low: 85, close: 87, volume: 100000 }]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_DIRECT_DOWN'), 'Expected KGS_DIRECT_DOWN');
-    assert.ok(!scanResult.signals.includes('KGS_REVERSAL_UP'), 'Should not also fire REVERSAL_UP');
+    assert.ok(scanResult.signals.includes('HP_DIRECT_DOWN'), 'Expected HP_DIRECT_DOWN');
+    assert.ok(!scanResult.signals.includes('HP_REVERSAL_UP'), 'Should not also fire REVERSAL_UP');
   });
 
-  await t.test('KGS_REVERSAL_DOWN fires on red candle rejecting R1 after tagging it', async () => {
+  await t.test('HP_REVERSAL_DOWN fires on red candle rejecting R1 after tagging it', async () => {
     const mockStock: MarketStockData = {
       symbol: 'REVERSAL_DOWN', market: 'NSE', sector: 'Tech',
       open: 112, high: 116, low: 105, close: 108, // red, high>=R1(110), close<R1
@@ -635,11 +635,11 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: [openTricksYesterday, { date: todayStr, open: 112, high: 116, low: 105, close: 108, volume: 100000 }]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_REVERSAL_DOWN'), 'Expected KGS_REVERSAL_DOWN');
-    assert.ok(!scanResult.signals.includes('KGS_DIRECT_UP'), 'Should not also fire DIRECT_UP');
+    assert.ok(scanResult.signals.includes('HP_REVERSAL_DOWN'), 'Expected HP_REVERSAL_DOWN');
+    assert.ok(!scanResult.signals.includes('HP_DIRECT_UP'), 'Should not also fire DIRECT_UP');
   });
 
-  await t.test('KGS_REVERSAL_UP fires on green candle rejecting S1 after tagging it', async () => {
+  await t.test('HP_REVERSAL_UP fires on green candle rejecting S1 after tagging it', async () => {
     const mockStock: MarketStockData = {
       symbol: 'REVERSAL_UP', market: 'NSE', sector: 'Tech',
       open: 88, high: 95, low: 84, close: 93, // green, low<=S1(90), close>S1
@@ -647,8 +647,8 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: [openTricksYesterday, { date: todayStr, open: 88, high: 95, low: 84, close: 93, volume: 100000 }]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_REVERSAL_UP'), 'Expected KGS_REVERSAL_UP');
-    assert.ok(!scanResult.signals.includes('KGS_DIRECT_DOWN'), 'Should not also fire DIRECT_DOWN');
+    assert.ok(scanResult.signals.includes('HP_REVERSAL_UP'), 'Expected HP_REVERSAL_UP');
+    assert.ok(!scanResult.signals.includes('HP_DIRECT_DOWN'), 'Should not also fire DIRECT_DOWN');
   });
 
   await t.test('Open Tricks signals do not fire when R1/S1 are not touched', async () => {
@@ -659,12 +659,12 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       history: [openTricksYesterday, { date: todayStr, open: 101, high: 104, low: 98, close: 102, volume: 100000 }]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    for (const sig of ['KGS_DIRECT_UP', 'KGS_DIRECT_DOWN', 'KGS_REVERSAL_UP', 'KGS_REVERSAL_DOWN']) {
+    for (const sig of ['HP_DIRECT_UP', 'HP_DIRECT_DOWN', 'HP_REVERSAL_UP', 'HP_REVERSAL_DOWN']) {
       assert.ok(!scanResult.signals.includes(sig), `${sig} should not fire without touching R1/S1`);
     }
   });
 
-  await t.test('RankingService does NOT score KGS_DIRECT_UP + BULLISH (zero-weight until backtested)', async () => {
+  await t.test('RankingService does NOT score HP_DIRECT_UP + BULLISH (zero-weight until backtested)', async () => {
     const baseResult = {
       symbol: 'DIRECT_SCORE_TEST',
       market: 'NSE' as const,
@@ -679,12 +679,12 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
     const withoutDirect = RankingService.calculateScore(baseResult);
     const withDirect = RankingService.calculateScore({
       ...baseResult,
-      signals: [...baseResult.signals, 'KGS_DIRECT_UP', 'KGS_CAM_BULL_BIAS'],
+      signals: [...baseResult.signals, 'HP_DIRECT_UP', 'HP_CAM_BULL_BIAS'],
     });
     assert.strictEqual(withDirect, withoutDirect, 'Zero-weight signals should not change the ranking score');
   });
 
-  await t.test('KGS_CAM_BULL_BIAS fires when Cam S3 is inside CPR zone', async () => {
+  await t.test('HP_CAM_BULL_BIAS fires when Cam S3 is inside CPR zone', async () => {
     // CPR Pivot = 100, BC = 98, TC = 102
     // We want Cam S3 between 98 and 102. Let's aim for 100.
     // Cam S3 = Close - Range * 0.275
@@ -700,8 +700,8 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_CAM_BULL_BIAS'), 'Expected KGS_CAM_BULL_BIAS to fire');
-    assert.ok(!scanResult.signals.includes('KGS_CAM_BEAR_BIAS'), 'Should not fire BEAR_BIAS');
+    assert.ok(scanResult.signals.includes('HP_CAM_BULL_BIAS'), 'Expected HP_CAM_BULL_BIAS to fire');
+    assert.ok(!scanResult.signals.includes('HP_CAM_BEAR_BIAS'), 'Should not fire BEAR_BIAS');
   });
 
   await t.test('KGS_CAM_BEAR_BIAS fires when Cam R3 is inside CPR zone', async () => {
@@ -720,8 +720,8 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       ]
     };
     const scanResult = await ScannerService.scanStock(mockStock, todayStr);
-    assert.ok(scanResult.signals.includes('KGS_CAM_BEAR_BIAS'), 'Expected KGS_CAM_BEAR_BIAS to fire');
-    assert.ok(!scanResult.signals.includes('KGS_CAM_BULL_BIAS'), 'Should not fire BULL_BIAS');
+    assert.ok(scanResult.signals.includes('HP_CAM_BEAR_BIAS'), 'Expected HP_CAM_BEAR_BIAS to fire');
+    assert.ok(!scanResult.signals.includes('HP_CAM_BULL_BIAS'), 'Should not fire BULL_BIAS');
   });
 
   await t.test('Existing INSIDE_VALUE logic remains functional and unaffected', async () => {

@@ -45,11 +45,11 @@ export class IndexIntraRankingService {
     ) {
       catASum += 10;
     }
-    if (signals.includes('KGS_INSIDE_CPR')) catASum += 10;
+    if (signals.includes('HP_INSIDE_CPR') || signals.includes('KGS_INSIDE_CPR')) catASum += 10;
     if (signals.includes('VIRGIN')) catASum += 5;
     if (
-      (signals.includes('KGS_ASC_CPR') && signals.includes('BULLISH')) ||
-      (signals.includes('KGS_DESC_CPR') && signals.includes('BEARISH'))
+      ((signals.includes('HP_ASC_CPR') || signals.includes('KGS_ASC_CPR')) && signals.includes('BULLISH')) ||
+      ((signals.includes('HP_DESC_CPR') || signals.includes('KGS_DESC_CPR')) && signals.includes('BEARISH'))
     ) {
       catASum += 5;
     }
@@ -78,14 +78,14 @@ export class IndexIntraRankingService {
     // Category D: Hot zone & RTP (max 10)
     let catDSum = 0;
     if (signals.includes('HOT_ZONE')) catDSum += 5;
-    if (signals.includes('NARROW') && signals.includes('KGS_RTP')) catDSum += 5;
+    if (signals.includes('NARROW') && (signals.includes('HP_RTP') || signals.includes('KGS_RTP'))) catDSum += 5;
     const catD = Math.min(10, catDSum);
 
     let score = catA + catB + catC + catD;
 
-    if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) score -= 10;
-    if (signals.includes('KGS_DESC_CPR') && signals.includes('BULLISH')) score -= 10;
-    if (signals.includes('KGS_OUTSIDE_CPR')) score -= 10;
+    if ((signals.includes('HP_ASC_CPR') || signals.includes('KGS_ASC_CPR')) && signals.includes('BEARISH')) score -= 10;
+    if ((signals.includes('HP_DESC_CPR') || signals.includes('KGS_DESC_CPR')) && signals.includes('BULLISH')) score -= 10;
+    if (signals.includes('HP_OUTSIDE_CPR') || signals.includes('KGS_OUTSIDE_CPR')) score -= 10;
 
     return Math.max(0, Math.min(score, INDEX_INTRA_SCORE.MAX));
   }
