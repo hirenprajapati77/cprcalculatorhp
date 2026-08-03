@@ -123,188 +123,127 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
     );
   }
 
-  for (const signal of topLongs) {
-    const stockData = await MarketService.getStockData(signal.symbol);
-    const ltp = stockData?.ltp ?? signal.entry ?? 0;
-    const entry = signal.entry ?? ltp;
-    const sl = signal.stopLoss ?? ltp * 0.98;
-    const target = signal.target ?? ltp * 1.04;
+  // ── Parallel stock processing ────────────────────────────────────────────
+  // All picks (longs + shorts) now run concurrently. Previously 3-4 sequential
+  // awaits per stock caused ~12s+ total for a 4-pick set; now ~3-4s.
+  type SignalWithDir = (typeof topLongs)[number] & { _dir: 'LONG' | 'SHORT' };
+  const allPicks: SignalWithDir[] = [
+    ...topLongs.map((s) => ({ ...s, _dir: 'LONG' as const })),
+    ...topShorts.map((s) => ({ ...s, _dir: 'SHORT' as const })),
+  ];
 
-    if (!ltp || ltp <= 0) {
-      console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping BTST log`);
-      skipped.push(`${signal.symbol}:BTST`);
-      continue;
-    }
+  const processResults = await Promise.allSettled(
+    allPicks.map(async (signal) => {
+      const dir = signal._dir;
+      const signalType = dir === 'LONG' ? 'BTST' : 'STBT';
+      const optionSide = dir === 'LONG' ? ('BULLISH' as const) : ('BEARISH' as const);
+      const optionType = dir === 'LONG' ? 'CE' : 'PE';
+      const defaultSlMul = dir === 'LONG' ? 0.98 : 1.02;
+      const defaultTargetMul = dir === 'LONG' ? 1.04 : 0.96;
+      const logTag = `${signal.symbol}:${signalType}`;
 
-    if (stockData) {
-      const ext = EntryManagerService.evaluateExtension(stockData, 'LONG');
-      if (!ext.eligible) {
-        console.warn(`[BtstJournal] ${signal.symbol} BTST skipped: ${ext.reason}`);
-        skipped.push(`${signal.symbol}:BTST:EXTENDED`);
-        continue;
+      const stockData = await MarketService.getStockData(signal.symbol);
+      const ltp = stockData?.ltp ?? signal.entry ?? 0;
+      const entry = signal.entry ?? ltp;
+      const sl = signal.stopLoss ?? ltp * defaultSlMul;
+      const target = signal.target ?? ltp * defaultTargetMul;
+
+      if (!ltp || ltp <= 0) {
+        console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping ${signalType} log`);
+        return { tag: logTag, didLog: false };
       }
-    }
 
-    const suggestion = await OptionSuggestionService.suggestOption(
-      signal.symbol,
-      ltp,
-      'BULLISH',
-      entry,
-      sl,
-      target,
-      signal.signalDate
-    );
-
-    if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
-      console.warn(
-        `[BtstJournal] No CE suggestion for ${signal.symbol}: ` +
-        (suggestion.error ?? 'missing strike or ltp')
-      );
-      skipped.push(`${signal.symbol}:BTST`);
-      continue;
-    }
-
-    let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
-    try {
       if (stockData) {
-        const v2Result = BtstService.evaluateOvernightV2(stockData);
-        v2Fields = {
-          scoreV2: v2Result.finalScore,
-          v2Breakdown: {
-            hardGates: v2Result.hardGates,
-            scoreBreakdown: v2Result.scoreBreakdown,
-            rawMetrics: v2Result.rawMetrics,
-            classification: v2Result.classification,
-            direction: v2Result.direction,
-            vpa: computeVpaShadowForJournal(stockData, 'LONG'),
-          },
-        };
+        const ext = EntryManagerService.evaluateExtension(stockData, dir);
+        if (!ext.eligible) {
+          console.warn(`[BtstJournal] ${signal.symbol} ${signalType} skipped: ${ext.reason}`);
+          return { tag: `${logTag}:EXTENDED`, didLog: false };
+        }
       }
-    } catch (v2Err) {
-      console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
-    }
 
-    const cleanSym = signal.symbol.split(':')[0].trim();
-    const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
-      `${suggestion.strike} CE`;
-    const signalSummary = [
-      signal.classification,
-      signal.qualityBucket,
-      signal.direction,
-      `REGIME_${regime.trend}`,
-    ]
-      .filter(Boolean)
-      .join(',');
+      // Option suggestion — failure no longer drops the whole entry (M4 fix).
+      // If no valid option is found, the stock trade is still journaled without an
+      // option leg so the underlying signal is never silently lost.
+      let optionName: string | null = null;
+      let optionStrike: string | null = null;
+      let optionLtp: number | null = null;
 
-    const didLog = await TradeJournalService.logSignal({
-      signalType: 'BTST',
-      symbol: signal.symbol,
-      optionContract: optionName,
-      optionStrike: suggestion.strike,
-      optionType: 'CE',
-      entryCmp: suggestion.ltp,
-      score: signal.overnightScore ?? 0,
-      confidence: signal.confidence ?? 0,
-      signalSummary,
-      overnightSignalId: signal.id,
-      ...v2Fields,
-    });
-
-    if (didLog) logged.push(`${signal.symbol}:BTST`);
-    else skipped.push(`${signal.symbol}:BTST`);
-  }
-
-  for (const signal of topShorts) {
-    const stockData = await MarketService.getStockData(signal.symbol);
-    const ltp = stockData?.ltp ?? signal.entry ?? 0;
-    const entry = signal.entry ?? ltp;
-    const sl = signal.stopLoss ?? ltp * 1.02;
-    const target = signal.target ?? ltp * 0.96;
-
-    if (!ltp || ltp <= 0) {
-      console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping STBT log`);
-      skipped.push(`${signal.symbol}:STBT`);
-      continue;
-    }
-
-    if (stockData) {
-      const ext = EntryManagerService.evaluateExtension(stockData, 'SHORT');
-      if (!ext.eligible) {
-        console.warn(`[BtstJournal] ${signal.symbol} STBT skipped: ${ext.reason}`);
-        skipped.push(`${signal.symbol}:STBT:EXTENDED`);
-        continue;
+      try {
+        const suggestion = await OptionSuggestionService.suggestOption(
+          signal.symbol, ltp, optionSide, entry, sl, target, signal.signalDate
+        );
+        if (!suggestion.error && suggestion.strike && suggestion.ltp) {
+          const cleanSym = signal.symbol.split(':')[0].trim();
+          optionName =
+            suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
+            `${suggestion.strike} ${optionType}`;
+          optionStrike = suggestion.strike;
+          optionLtp = suggestion.ltp;
+        } else {
+          console.warn(
+            `[BtstJournal] No ${optionType} for ${signal.symbol}: ` +
+            (suggestion.error ?? 'missing strike or ltp') +
+            ' — logging stock entry without option leg.'
+          );
+        }
+      } catch (optErr) {
+        console.warn(`[BtstJournal] Option lookup threw for ${signal.symbol}:`, optErr, '— logging without option.');
       }
-    }
 
-    const suggestion = await OptionSuggestionService.suggestOption(
-      signal.symbol,
-      ltp,
-      'BEARISH',
-      entry,
-      sl,
-      target,
-      signal.signalDate
-    );
-
-    if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
-      console.warn(
-        `[BtstJournal] No PE suggestion for ${signal.symbol}: ` +
-        (suggestion.error ?? 'missing strike or ltp')
-      );
-      skipped.push(`${signal.symbol}:STBT`);
-      continue;
-    }
-
-    let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
-    try {
-      if (stockData) {
-        const v2Result = BtstService.evaluateOvernightV2(stockData);
-        v2Fields = {
-          scoreV2: v2Result.finalScore,
-          v2Breakdown: {
-            hardGates: v2Result.hardGates,
-            scoreBreakdown: v2Result.scoreBreakdown,
-            rawMetrics: v2Result.rawMetrics,
-            classification: v2Result.classification,
-            direction: v2Result.direction,
-            vpa: computeVpaShadowForJournal(stockData, 'SHORT'),
-          },
-        };
+      let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
+      try {
+        if (stockData) {
+          const v2Result = BtstService.evaluateOvernightV2(stockData);
+          v2Fields = {
+            scoreV2: v2Result.finalScore,
+            v2Breakdown: {
+              hardGates: v2Result.hardGates,
+              scoreBreakdown: v2Result.scoreBreakdown,
+              rawMetrics: v2Result.rawMetrics,
+              classification: v2Result.classification,
+              direction: v2Result.direction,
+              vpa: computeVpaShadowForJournal(stockData, dir),
+            },
+          };
+        }
+      } catch (v2Err) {
+        console.warn(`[BtstJournal] V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
       }
-    } catch (v2Err) {
-      console.warn(`[BtstJournal] Simple V2 shadow scoring failed for ${signal.symbol}:`, v2Err);
+
+      const signalSummary = [
+        signal.classification,
+        signal.qualityBucket,
+        signal.direction,
+        `REGIME_${regime.trend}`,
+      ]
+        .filter(Boolean)
+        .join(',');
+
+      const didLog = await TradeJournalService.logSignal({
+        signalType,
+        symbol: signal.symbol,
+        ...(optionName && optionStrike && optionLtp !== null
+          ? { optionContract: optionName, optionStrike, optionType, entryCmp: optionLtp }
+          : {}),
+        score: signal.overnightScore ?? 0,
+        confidence: signal.confidence ?? 0,
+        signalSummary,
+        overnightSignalId: signal.id,
+        ...v2Fields,
+      });
+
+      return { tag: logTag, didLog };
+    })
+  );
+
+  for (const res of processResults) {
+    if (res.status === 'fulfilled') {
+      if (res.value.didLog) logged.push(res.value.tag);
+      else skipped.push(res.value.tag);
+    } else {
+      console.error('[BtstJournal] Unexpected processing error for pick:', res.reason);
+      skipped.push('UNKNOWN:ERROR');
     }
-
-    const cleanSymShort = signal.symbol.split(':')[0].trim();
-    const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${cleanSymShort}\\s+`), '') ||
-      `${suggestion.strike} PE`;
-    const signalSummary = [
-      signal.classification,
-      signal.qualityBucket,
-      signal.direction,
-      `REGIME_${regime.trend}`,
-    ]
-      .filter(Boolean)
-      .join(',');
-
-    const didLog = await TradeJournalService.logSignal({
-      signalType: 'STBT',
-      symbol: signal.symbol,
-      optionContract: optionName,
-      optionStrike: suggestion.strike,
-      optionType: 'PE',
-      entryCmp: suggestion.ltp,
-      score: signal.overnightScore ?? 0,
-      confidence: signal.confidence ?? 0,
-      signalSummary,
-      overnightSignalId: signal.id,
-      ...v2Fields,
-    });
-
-    if (didLog) logged.push(`${signal.symbol}:STBT`);
-    else skipped.push(`${signal.symbol}:STBT`);
   }
 
   const indexJournal = await logIndexBtstJournalEntries({

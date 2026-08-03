@@ -14,15 +14,16 @@ const log = (...args) => {
   if (IS_DEV) console.log('[ServiceWorker]', ...args);
 };
 
-// LRU Cache Trimming
+// LRU Cache Trimming — iterative while loop; prevents stack-overflow on large caches.
 const trimCache = async (cacheName, maxItems) => {
   const cache = await caches.open(cacheName);
-  const keys = await cache.keys();
-  if (keys.length > maxItems) {
+  let keys = await cache.keys();
+  while (keys.length > maxItems) {
     await cache.delete(keys[0]);
-    await trimCache(cacheName, maxItems); // Recursive trim
+    keys = await cache.keys();
   }
 };
+
 
 self.addEventListener('install', (event) => {
   log('SW Installed');
@@ -178,7 +179,9 @@ self.addEventListener('fetch', (event) => {
 
 // --- PUSH NOTIFICATIONS (Phase 5 Scaffolding) ---
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
+  // Wrap in try/catch — event.data.json() throws on plain-string or malformed payloads.
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = {}; }
   // Types: MARKET_OPEN, MARKET_CLOSE, CPR_BREAKOUT, BTST_SIGNAL, STBT_SIGNAL, INDEX_SIGNAL, TRADE_REMINDER, JOURNAL_REMINDER, SYSTEM_ALERT
   const title = data.title || 'CPR Trading Platform';
   const options = {

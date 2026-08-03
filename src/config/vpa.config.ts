@@ -10,11 +10,11 @@ import { env } from '@/config/env';
 import { ADVANCED_SCORE, VOLUME_THRESHOLDS } from '@/config/trading-constants';
 
 function envFlag(name: string, defaultTrue = true): boolean {
-  const fromProcess = process.env[name];
-  const raw =
-    fromProcess !== undefined && fromProcess !== null && String(fromProcess).trim() !== ''
-      ? fromProcess
-      : (env as Record<string, string | number | boolean | undefined>)[name];
+  // Read exclusively from the validated `env` object (env.ts) — never from
+  // process.env directly. All VPA_* keys are declared in the Zod schema with
+  // safe string defaults, so raw process.env access is unnecessary here and
+  // would bypass startup validation (e.g. 'yes'/'YES' silently disabling VPA).
+  const raw = (env as Record<string, string | number | boolean | undefined>)[name];
   if (raw === undefined || raw === null || String(raw).trim() === '') {
     return defaultTrue;
   }
