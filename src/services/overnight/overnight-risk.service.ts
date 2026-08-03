@@ -151,9 +151,21 @@ export class OvernightRiskService {
     }
 
     // Determine aggregate Risk Level
-    // Combined metric based on gapRisk, volatility, sectorRisk, and squeeze risk
-    // indexCorrelationEstimate scoring is deferred (Phase 2B optional)
-    const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2) + (shortSqueezeProb * 0.01);
+    // Combined metric based on gapRisk, volatility, sectorRisk, shortSqueezeProb, and indexCorrelationEstimate (Phase 2B).
+    //
+    // Weight and Direction Justification:
+    // - Direction: indexCorrelationEstimate (Beta vs NIFTY) measures systematic market sensitivity.
+    //   - Beta > 1.0 (High Beta): Amplifies broad-market overnight gaps/shocks, increasing holding risk.
+    //   - Beta < 1.0 (Low Beta): Less sensitive to macro market moves, reducing systematic gap risk.
+    //   - Beta = 1.0 (Market Neutral) / null (Insufficient data <60d): Represents baseline market risk (0.0 delta).
+    // - Weight (0.20): A +1.0 shift in beta (e.g. Beta 2.0 vs 1.0) adds +0.20 to riskFactor. This provides meaningful
+    //   sensitivity to market correlation without overwhelming idiosyncratic gapRisk (weight 0.4) or volatility (weight 0.4).
+    // - Threshold Neutrality: By centering beta at 1.0 baseline (delta = beta - 1.0), missing/null or 1.0-beta inputs contribute
+    //   0.0 extra risk delta. This mathematically preserves the original threshold boundaries (<1.0 LOW, >2.5 HIGH) and
+    //   ensures backwards compatibility with pre-Phase-2B risk scores.
+    const beta = indexCorrelationEstimate ?? 1.0;
+    const correlationRisk = (beta - 1.0) * 0.2;
+    const riskFactor = (gapRisk * 0.4) + (volatility * 0.4) + (sectorRisk * 0.2) + (shortSqueezeProb * 0.01) + correlationRisk;
     let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
     if (riskFactor < 1.0) {
       riskLevel = 'LOW';
