@@ -607,6 +607,10 @@ export class OvernightService {
       }
     } catch (err) {
       console.error('[Overnight] Batch upsert transaction failed — signals not saved:', err);
+      // Re-throw so the caller (API route) receives a 500 and does NOT cache
+      // an empty [] result for 9 hours, which would show "0 setups found"
+      // to all users until the cache expires at midnight.
+      throw new Error('Overnight scan persistence failed — database transaction aborted');
     }
 
     return savedSignals;
