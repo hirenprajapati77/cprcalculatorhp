@@ -6,6 +6,12 @@ import { scoreVpaClv } from '../../services/vpa/clv.service';
 import { computeClv, computeRvol } from '../../services/vpa/vpa.math';
 import { BtstRankingService } from '../../services/overnight/btst-ranking.service';
 import { VPA_LIMITS } from '../../config/vpa.config';
+import { env } from '../../config/env';
+import {
+  isVpaShadowMode,
+  isVpaLiveConfidenceEnabled,
+  isVpaLiveGatesEnabled,
+} from '../../config/vpa.config';
 
 const BASE_BTST_INPUTS = {
   volume: 300_000,
@@ -259,54 +265,41 @@ describe('BtstRankingService VPA shadow integration', () => {
 
 describe('VPA shadow master kill-switch', () => {
   const keys = ['VPA_SHADOW_MODE', 'VPA_LIVE_CONFIDENCE', 'VPA_LIVE_GATES'] as const;
+  const envRecord = env as Record<string, string | undefined>;
   const prev: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    for (const k of keys) prev[k] = process.env[k];
+    for (const k of keys) prev[k] = envRecord[k];
   });
 
   afterEach(() => {
     for (const k of keys) {
-      if (prev[k] === undefined) delete process.env[k];
-      else process.env[k] = prev[k];
+      envRecord[k] = prev[k];
     }
   });
 
   it('blocks live confidence/gates while shadow mode is on (default fail-safe)', async () => {
-    process.env.VPA_SHADOW_MODE = 'true';
-    process.env.VPA_LIVE_CONFIDENCE = 'true';
-    process.env.VPA_LIVE_GATES = 'true';
-    const {
-      isVpaShadowMode,
-      isVpaLiveConfidenceEnabled,
-      isVpaLiveGatesEnabled,
-    } = await import('../../config/vpa.config');
+    envRecord.VPA_SHADOW_MODE = 'true';
+    envRecord.VPA_LIVE_CONFIDENCE = 'true';
+    envRecord.VPA_LIVE_GATES = 'true';
     assert.equal(isVpaShadowMode(), true);
     assert.equal(isVpaLiveConfidenceEnabled(), false);
     assert.equal(isVpaLiveGatesEnabled(), false);
   });
 
   it('allows live confidence/gates only when shadow is off AND live flags are on', async () => {
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'true';
-    process.env.VPA_LIVE_GATES = 'true';
-    const {
-      isVpaShadowMode,
-      isVpaLiveConfidenceEnabled,
-      isVpaLiveGatesEnabled,
-    } = await import('../../config/vpa.config');
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'true';
+    envRecord.VPA_LIVE_GATES = 'true';
     assert.equal(isVpaShadowMode(), false);
     assert.equal(isVpaLiveConfidenceEnabled(), true);
     assert.equal(isVpaLiveGatesEnabled(), true);
   });
 
   it('keeps live paths off when shadow is off but live flags remain false', async () => {
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'false';
-    process.env.VPA_LIVE_GATES = 'false';
-    const { isVpaLiveConfidenceEnabled, isVpaLiveGatesEnabled } = await import(
-      '../../config/vpa.config'
-    );
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'false';
+    envRecord.VPA_LIVE_GATES = 'false';
     assert.equal(isVpaLiveConfidenceEnabled(), false);
     assert.equal(isVpaLiveGatesEnabled(), false);
   });
