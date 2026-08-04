@@ -224,20 +224,26 @@ describe('VpaConfirmationService.analyze', () => {
   });
 
   it('returns disabled result when VPA_ENABLED=false', () => {
-    process.env.VPA_ENABLED = 'false';
-    const result = VpaConfirmationService.analyze({
-      direction: 'SHORT',
-      open: 100,
-      high: 101,
-      low: 90,
-      close: 91,
-      volume: 300_000,
-      avgVolume: 100_000,
-      todayBc: 92,
-      todayTc: 98,
-    });
-    assert.equal(result.enabled, false);
-    assert.equal(result.adjustment, 0);
+    const envRecord = env as unknown as Record<string, string | undefined>;
+    const prev = envRecord.VPA_ENABLED;
+    envRecord.VPA_ENABLED = 'false';
+    try {
+      const result = VpaConfirmationService.analyze({
+        direction: 'SHORT',
+        open: 100,
+        high: 101,
+        low: 90,
+        close: 91,
+        volume: 300_000,
+        avgVolume: 100_000,
+        todayBc: 92,
+        todayTc: 98,
+      });
+      assert.equal(result.enabled, false);
+      assert.equal(result.adjustment, 0);
+    } finally {
+      envRecord.VPA_ENABLED = prev;
+    }
   });
 });
 
@@ -265,7 +271,7 @@ describe('BtstRankingService VPA shadow integration', () => {
 
 describe('VPA shadow master kill-switch', () => {
   const keys = ['VPA_SHADOW_MODE', 'VPA_LIVE_CONFIDENCE', 'VPA_LIVE_GATES'] as const;
-  const envRecord = env as Record<string, string | undefined>;
+  const envRecord = env as unknown as Record<string, string | undefined>;
   const prev: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -350,6 +356,7 @@ describe('VpaConfirmationService.applyConfidenceDelta', () => {
 
 describe('VpaConfirmationResult.live flag', () => {
   const keys = ['VPA_ENABLED', 'VPA_SHADOW_MODE', 'VPA_LIVE_CONFIDENCE', 'VPA_LIVE_GATES'] as const;
+  const envRecord = env as unknown as Record<string, string | undefined>;
   const prev: Record<string, string | undefined> = {};
 
   const sampleInputs = {
@@ -365,54 +372,53 @@ describe('VpaConfirmationResult.live flag', () => {
   };
 
   beforeEach(() => {
-    for (const k of keys) prev[k] = process.env[k];
-    process.env.VPA_ENABLED = 'true';
+    for (const k of keys) prev[k] = envRecord[k];
+    envRecord.VPA_ENABLED = 'true';
   });
 
   afterEach(() => {
     for (const k of keys) {
-      if (prev[k] === undefined) delete process.env[k];
-      else process.env[k] = prev[k];
+      envRecord[k] = prev[k];
     }
   });
 
   it('returns live: false under default shadow mode even if live flags are on', () => {
-    process.env.VPA_SHADOW_MODE = 'true';
-    process.env.VPA_LIVE_CONFIDENCE = 'true';
-    process.env.VPA_LIVE_GATES = 'true';
+    envRecord.VPA_SHADOW_MODE = 'true';
+    envRecord.VPA_LIVE_CONFIDENCE = 'true';
+    envRecord.VPA_LIVE_GATES = 'true';
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.live, false);
   });
 
   it('returns live: true when shadow is off AND confidence live is on', () => {
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'true';
-    process.env.VPA_LIVE_GATES = 'false';
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'true';
+    envRecord.VPA_LIVE_GATES = 'false';
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.live, true);
   });
 
   it('returns live: true when shadow is off AND gates live is on', () => {
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'false';
-    process.env.VPA_LIVE_GATES = 'true';
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'false';
+    envRecord.VPA_LIVE_GATES = 'true';
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.live, true);
   });
 
   it('returns live: false when shadow is off but both live flags remain false', () => {
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'false';
-    process.env.VPA_LIVE_GATES = 'false';
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'false';
+    envRecord.VPA_LIVE_GATES = 'false';
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.live, false);
   });
 
   it('returns live: false when VPA is disabled', () => {
-    process.env.VPA_ENABLED = 'false';
-    process.env.VPA_SHADOW_MODE = 'false';
-    process.env.VPA_LIVE_CONFIDENCE = 'true';
-    process.env.VPA_LIVE_GATES = 'true';
+    envRecord.VPA_ENABLED = 'false';
+    envRecord.VPA_SHADOW_MODE = 'false';
+    envRecord.VPA_LIVE_CONFIDENCE = 'true';
+    envRecord.VPA_LIVE_GATES = 'true';
     const result = VpaConfirmationService.analyze(sampleInputs);
     assert.equal(result.enabled, false);
     assert.equal(result.live, false);
