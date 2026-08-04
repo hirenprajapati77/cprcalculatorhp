@@ -8,15 +8,20 @@ import { CacheService } from '@/services/cache.service';
  * Set, so all workers successfully claimed the same key simultaneously,
  * causing 4× duplicate executions, DB writes, and Telegram alerts.
  *
- * Redis SET NX is atomic across all processes on the same Redis instance.
- * TTL of 90 seconds ensures the lock auto-expires if the job crashes before
- * calling completeCronRun() — preventing permanent lock-out.
+ * Two Redis keys per claim:
+ *   cron_lock:{key}  — short-lived running lock (TTL 90s). Auto-expires if the
+ *                      job crashes before complete/release.
+ *   cron_done:{key}  — retainClaim marker (TTL 24h). Written on successful
+ *                      complete(retainClaim=true) so other workers cannot
+ *                      re-claim after the running lock expires.
  *
  * Falls back to the previous in-memory approach when Redis is unavailable
  * (local dev without Redis, or unit tests).
  */
 
 const LOCK_TTL_SECONDS = 90;
+/** How long a completed retainClaim stays blocked across workers. */
+const DONE_TTL_SECONDS = 24 * 60 * 60;
 
 // In-memory fallback (single-process only — used when Redis is down)
 const memoryRunning = new Set<string>();
@@ -28,14 +33,20 @@ function memoryTryClaim(key: string): boolean {
   return true;
 }
 
+function getRedis(): import('ioredis').Redis | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (CacheService as any)['redisClient'] as import('ioredis').Redis | null;
+}
+
 export async function tryClaimCronRun(key: string): Promise<boolean> {
-  // Prefer Redis distributed lock when available
   if (CacheService.isRedisConnected) {
     try {
-      // ioredis set() with NX returns 'OK' on success, null if key exists
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const redis = (CacheService as any)['redisClient'] as import('ioredis').Redis | null;
+      const redis = getRedis();
       if (redis) {
+        // Already completed today/bucket — do not re-run.
+        const done = await redis.get(`cron_done:${key}`);
+        if (done) return false;
+
         const result = await redis.set(
           `cron_lock:${key}`,
           '1',
@@ -49,26 +60,27 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
       console.warn('[CronClaim] Redis lock attempt failed, falling back to memory:', err);
     }
   }
-  // Fallback: single-process in-memory guard
   return memoryTryClaim(key);
 }
 
 export async function completeCronRun(key: string, retainClaim = true): Promise<void> {
-  // Remove the running guard from memory fallback
   memoryRunning.delete(key);
   if (retainClaim) memoryClaimed.add(key);
 
-  // Redis lock expires automatically via TTL — no explicit delete needed.
-  // If retainClaim=false (job should be allowed to re-run in same minute),
-  // delete the Redis key explicitly so the next cron tick can re-acquire.
-  if (!retainClaim && CacheService.isRedisConnected) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const redis = (CacheService as any)['redisClient'] as import('ioredis').Redis | null;
-      if (redis) await redis.del(`cron_lock:${key}`);
-    } catch {
-      // non-fatal — lock expires on its own
+  if (!CacheService.isRedisConnected) return;
+
+  try {
+    const redis = getRedis();
+    if (!redis) return;
+
+    if (retainClaim) {
+      // Persist completion across workers for the rest of the trading day.
+      await redis.set(`cron_done:${key}`, '1', 'EX', DONE_TTL_SECONDS);
     }
+    // Drop the short running lock either way.
+    await redis.del(`cron_lock:${key}`);
+  } catch {
+    // non-fatal — lock expires on its own
   }
 }
 
@@ -76,8 +88,7 @@ export async function releaseCronRun(key: string): Promise<void> {
   memoryRunning.delete(key);
   if (CacheService.isRedisConnected) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const redis = (CacheService as any)['redisClient'] as import('ioredis').Redis | null;
+      const redis = getRedis();
       if (redis) await redis.del(`cron_lock:${key}`);
     } catch {
       // non-fatal

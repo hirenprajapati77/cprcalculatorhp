@@ -360,17 +360,29 @@ export class ScannerService {
     }
 
     // 3. Signal Quality Synergy (Max 20)
+    // Accept HP_ (current) and legacy KGS_ (pre-rename journal/history rows).
     let synergy = 0;
-    if (signals.includes('KGS_INSIDE_CPR') || signals.includes('KGS_RTP')) synergy += 10;
+    if (
+      signals.includes('HP_INSIDE_CPR') || signals.includes('KGS_INSIDE_CPR') ||
+      signals.includes('HP_RTP') || signals.includes('KGS_RTP')
+    ) synergy += 10;
     if (signals.includes('VIRGIN')) synergy += 5;
     if (signals.includes('NARROW') && signals.includes('BREAKOUT')) synergy += 5;
     confidence += Math.min(20, synergy);
 
     // 4. Conflict Penalties
     let penalties = 0;
-    if (signals.includes('KGS_ASC_CPR') && signals.includes('BEARISH')) penalties += 15;
-    if (signals.includes('KGS_DESC_CPR') && signals.includes('BULLISH')) penalties += 15;
-    if (signals.includes('KGS_OUTSIDE_CPR')) penalties += 15;
+    if (
+      (signals.includes('HP_ASC_CPR') || signals.includes('KGS_ASC_CPR')) &&
+      signals.includes('BEARISH')
+    ) penalties += 15;
+    if (
+      (signals.includes('HP_DESC_CPR') || signals.includes('KGS_DESC_CPR')) &&
+      signals.includes('BULLISH')
+    ) penalties += 15;
+    if (signals.includes('HP_OUTSIDE_CPR') || signals.includes('KGS_OUTSIDE_CPR')) {
+      penalties += 15;
+    }
 
     confidence -= penalties;
 

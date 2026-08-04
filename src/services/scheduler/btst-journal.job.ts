@@ -161,9 +161,10 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         }
       }
 
-      // Option suggestion — failure no longer drops the whole entry (M4 fix).
-      // If no valid option is found, the stock trade is still journaled without an
-      // option leg so the underlying signal is never silently lost.
+      // Option suggestion required — do not journal a fake STOCK/strike-0 row.
+      // Morning snapshots call fetchOptionCmp(strike); strike 0 poisons PnL.
+      // Alert-time journaling already records picks that had a live option quote;
+      // if both paths miss the option, skip rather than invent a stock leg.
       let optionName: string | null = null;
       let optionStrike: number | null = null;
       let optionLtp: number | null = null;
@@ -183,11 +184,17 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
           console.warn(
             `[BtstJournal] No ${optionType} for ${signal.symbol}: ` +
             (suggestion.error ?? 'missing strike or ltp') +
-            ' — logging stock entry without option leg.'
+            ' — skipping journal (no STOCK/0 fallback).'
           );
+          return { tag: `${logTag}:NO_OPTION`, didLog: false };
         }
       } catch (optErr) {
-        console.warn(`[BtstJournal] Option lookup threw for ${signal.symbol}:`, optErr, '— logging without option.');
+        console.warn(
+          `[BtstJournal] Option lookup threw for ${signal.symbol}:`,
+          optErr,
+          '— skipping journal (no STOCK/0 fallback).'
+        );
+        return { tag: `${logTag}:OPTION_ERROR`, didLog: false };
       }
 
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
@@ -222,10 +229,10 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       const didLog = await TradeJournalService.logSignal({
         signalType,
         symbol: signal.symbol,
-        optionContract: optionName || 'STOCK',
-        optionStrike: optionStrike ?? 0,
+        optionContract: optionName!,
+        optionStrike: optionStrike!,
         optionType,
-        entryCmp: optionLtp ?? ltp,
+        entryCmp: optionLtp!,
         score: signal.overnightScore ?? 0,
         confidence: signal.confidence ?? 0,
         signalSummary,
