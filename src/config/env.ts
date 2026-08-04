@@ -41,6 +41,17 @@ const envSchema = z.object({
   CACHE_PROVIDER: z.enum(['redis', 'memory', 'auto']).default('auto'),
   // Normalize to lowercase so "LIVE"/"Live" still enable real Yahoo data
   MARKET_DATA_MODE: z.string().default('live').transform((v) => v.toLowerCase()),
+
+  /**
+   * Market session profile. CONTINUOUS = exact current production clocks (default).
+   * CLOSING_AUCTION = SEBI CAS clocks (F&O cash continuous ends 15:15; official close ~15:35).
+   * CAS is exchange-live from 2026-08-03 — flip only after Production Validation checklist.
+   * Unknown values fall through to CONTINUOUS via resolveMarketProfile.
+   */
+  MARKET_PROFILE: z
+    .string()
+    .default('CONTINUOUS')
+    .transform((v) => v.trim().toUpperCase()),
   
   // Optional tuning parameters with reasonable defaults
   BTST_BYPASS_WINDOW: z.string().default('false'),
