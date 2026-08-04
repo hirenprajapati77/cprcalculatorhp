@@ -3,9 +3,15 @@ import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
-import { isMarketOpen, getISTDateString } from '@/lib/market-hours';
+import { getISTDateString } from '@/lib/market-hours';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 import { EventCalendarService } from '@/services/overnight/event.service';
+import {
+  getUniverseSymbolMeta,
+  isSymbolFrozenForScanner,
+  isUniverseLiveForScanner,
+  type ScannerUniverse,
+} from '@/lib/scanner-session';
 export const dynamic = 'force-dynamic';
 
 async function enrichWithOptionSuggestions(
@@ -45,7 +51,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const market = (searchParams.get('market') || 'NSE') as 'NSE' | 'BSE';
-    const universe = (searchParams.get('universe') || 'NIFTY50') as 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL';
+    const universe = (searchParams.get('universe') || 'NIFTY50') as ScannerUniverse;
     const mode = searchParams.get('mode') || 'ALL'; // NARROW | WIDE | BULLISH | BEARISH | BREAKOUT | etc.
     const limitParam = searchParams.get('limit') || '10';
     const isAll = limitParam === 'ALL';
@@ -83,6 +89,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')?.trim() || '';
 
     const today = getISTDateString();
+    const universeStocks = getUniverseSymbolMeta(universe);
+    const universeFnOMap = new Map(universeStocks.map((stock) => [stock.symbol, stock.isFnO]));
+    const universeLive = isUniverseLiveForScanner(universe);
 
     const useCache = searchParams.get('useCache') === 'true';
     if (useCache) {
@@ -113,9 +122,10 @@ export async function GET(request: NextRequest) {
           rr: 1.5,
         }));
 
-        if (isMarketOpen()) {
+        if (universeLive) {
           const topForOptions = formattedResults
             .filter((r) => r.score >= 75)
+            .filter((r) => !isSymbolFrozenForScanner(r.symbol, universeFnOMap.get(r.symbol) === true))
             .sort((a, b) => b.score - a.score)
             .slice(0, 10);
           const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
@@ -163,7 +173,7 @@ export async function GET(request: NextRequest) {
         })
       );
       if (todayCount === 0) {
-        if (isMarketOpen()) {
+        if (universeLive) {
           console.log("No scanner records found for today during live session. Performing auto-scan initialization...");
           await ScannerController.runFullScan('ALL', 'NSE');
           await ScannerController.runFullScan('ALL', 'BSE');
@@ -192,8 +202,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Map universe stock symbols to database keys
-    const universeStocks = MarketService.getUniverse(universe);
-    const baseSymbols = universeStocks.map((s: { symbol: string }) => s.symbol.trim());
+    const baseSymbols = universeStocks.map((s) => s.symbol.trim());
     const dbSymbols = baseSymbols.map((s: string) => market === 'NSE' ? s : `${s}:BSE`);
 
     // 3. Query MarketSnapshot for Sector and Market Cap filtering
@@ -345,7 +354,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    if (isMarketOpen()) {
+    if (universeLive) {
       const topForOptions = (formattedResults as Array<{
         symbol: string;
         ltp: number;
@@ -356,6 +365,7 @@ export async function GET(request: NextRequest) {
         score: number;
       }>)
         .filter((r) => r.score >= 75)
+        .filter((r) => !isSymbolFrozenForScanner(r.symbol, universeFnOMap.get(r.symbol) === true))
         .slice(0, 10);
       const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
       for (const r of formattedResults) {

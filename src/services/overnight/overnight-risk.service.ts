@@ -2,6 +2,8 @@ import { MarketStockData } from '../market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
 import { NiftyHistoryService } from './nifty-history.service';
+import { getISTDateString } from '@/lib/market-hours';
+import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
 
 export const CORRELATION_WINDOW = 60;
 
@@ -16,6 +18,52 @@ export interface OvernightRiskMetrics {
 }
 
 export class OvernightRiskService {
+  private static stockHistoryCache = new Map<string, OHLC[]>();
+  // Max entries to hold in the in-process history cache.
+  // 182 FNO stocks × 120-day fetch would be unbounded — cap at 60 entries
+  // (enough for one full overnight batch) and evict the oldest half when exceeded.
+  private static readonly MAX_CACHE_ENTRIES = 60;
+
+  private static parseUtcDate(dateStr: string): Date {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  private static async getExtendedStockHistory(
+    symbol: string,
+    startDate: Date,
+    endDateExclusive: Date
+  ): Promise<OHLC[]> {
+    const cleanSymbol = symbol.split(':')[0].trim();
+    const startStr = getISTDateString(startDate);
+    const endStr = getISTDateString(endDateExclusive);
+    const cacheKey = `${cleanSymbol}:${startStr}:${endStr}`;
+
+    if (this.stockHistoryCache.has(cacheKey)) {
+      return this.stockHistoryCache.get(cacheKey)!;
+    }
+
+    const history = await HistoricalProvider.getHistory(cleanSymbol, startDate, endDateExclusive);
+    this.evictIfNeeded();
+    this.stockHistoryCache.set(cacheKey, history);
+    return history;
+  }
+
+  static clearCache(): void {
+    this.stockHistoryCache.clear();
+  }
+
+  /** Evict the oldest half of entries when cache exceeds MAX_CACHE_ENTRIES. */
+  private static evictIfNeeded(): void {
+    if (this.stockHistoryCache.size < this.MAX_CACHE_ENTRIES) return;
+    const evictCount = Math.floor(this.MAX_CACHE_ENTRIES / 2);
+    const keys = this.stockHistoryCache.keys();
+    for (let i = 0; i < evictCount; i++) {
+      const key = keys.next().value;
+      if (key !== undefined) this.stockHistoryCache.delete(key);
+    }
+  }
+
   /**
    * Calculates overnight risk metrics using daily historical data.
    */
@@ -57,13 +105,38 @@ export class OvernightRiskService {
     let indexCorrelationEstimate: number | null = null;
     if (len >= 2) {
       try {
-        // Parse YYYY-MM-DD as UTC calendar days. End is exclusive next-day midnight so Yahoo
-        // period2 includes the final stock history session (midnight-of-end would truncate it).
-        const [sy, sm, sd] = history[0].date.split('-').map(Number);
-        const [ey, em, ed] = history[history.length - 1].date.split('-').map(Number);
-        const startDate = new Date(Date.UTC(sy, sm - 1, sd));
-        const endDate = new Date(Date.UTC(ey, em - 1, ed + 1));
-        const niftyHistory = await NiftyHistoryService.getNiftyHistory(startDate, endDate);
+        let stockHistoryForCorrelation = history;
+        if (len < CORRELATION_WINDOW + 1 && len >= 20) {
+          // MarketService currently returns a ~22-session slice. Pull a longer independent
+          // window only for correlation math so 60-return beta becomes reachable.
+          const latestSessionDate = OvernightRiskService.parseUtcDate(history[history.length - 1].date);
+          const startDate = new Date(Date.UTC(
+            latestSessionDate.getUTCFullYear(),
+            latestSessionDate.getUTCMonth(),
+            latestSessionDate.getUTCDate() - 120
+          ));
+          const endDateExclusive = new Date(Date.UTC(
+            latestSessionDate.getUTCFullYear(),
+            latestSessionDate.getUTCMonth(),
+            latestSessionDate.getUTCDate() + 1
+          ));
+          stockHistoryForCorrelation = await OvernightRiskService.getExtendedStockHistory(
+            stock.symbol,
+            startDate,
+            endDateExclusive
+          );
+        }
+
+        const corrStartDate = OvernightRiskService.parseUtcDate(stockHistoryForCorrelation[0].date);
+        const corrLatestDate = OvernightRiskService.parseUtcDate(
+          stockHistoryForCorrelation[stockHistoryForCorrelation.length - 1].date
+        );
+        const corrEndDateExclusive = new Date(Date.UTC(
+          corrLatestDate.getUTCFullYear(),
+          corrLatestDate.getUTCMonth(),
+          corrLatestDate.getUTCDate() + 1
+        ));
+        const niftyHistory = await NiftyHistoryService.getNiftyHistory(corrStartDate, corrEndDateExclusive);
 
         const niftyMap = new Map<string, number>();
         for (const n of niftyHistory) {
@@ -72,7 +145,7 @@ export class OvernightRiskService {
 
         const alignedStockCloses: number[] = [];
         const alignedNiftyCloses: number[] = [];
-        for (const s of history) {
+        for (const s of stockHistoryForCorrelation) {
           if (niftyMap.has(s.date)) {
             alignedStockCloses.push(s.close);
             alignedNiftyCloses.push(niftyMap.get(s.date)!);

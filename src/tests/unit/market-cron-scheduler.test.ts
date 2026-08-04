@@ -14,17 +14,17 @@ describe('cron-run-claim', () => {
     resetCronRunClaims();
   });
 
-  it('allows first claim and blocks duplicate until complete', () => {
-    assert.equal(tryClaimCronRun('btst-journal:2026-07-22'), true);
-    assert.equal(tryClaimCronRun('btst-journal:2026-07-22'), false);
-    completeCronRun('btst-journal:2026-07-22');
-    assert.equal(tryClaimCronRun('btst-journal:2026-07-22'), false);
+  it('allows first claim and blocks duplicate until complete', async () => {
+    assert.equal(await tryClaimCronRun('btst-journal:2026-07-22'), true);
+    assert.equal(await tryClaimCronRun('btst-journal:2026-07-22'), false);
+    await completeCronRun('btst-journal:2026-07-22');
+    assert.equal(await tryClaimCronRun('btst-journal:2026-07-22'), false);
   });
 
-  it('release allows retry after failure', () => {
-    assert.equal(tryClaimCronRun('cpr-journal:2026-07-22'), true);
-    releaseCronRun('cpr-journal:2026-07-22');
-    assert.equal(tryClaimCronRun('cpr-journal:2026-07-22'), true);
+  it('release allows retry after failure', async () => {
+    assert.equal(await tryClaimCronRun('cpr-journal:2026-07-22'), true);
+    await releaseCronRun('cpr-journal:2026-07-22');
+    assert.equal(await tryClaimCronRun('cpr-journal:2026-07-22'), true);
   });
 });
 

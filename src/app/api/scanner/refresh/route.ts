@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
-import { isMarketOpen } from '@/lib/market-hours';
+import { isUniverseLiveForScanner, type ScannerUniverse } from '@/lib/scanner-session';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const universe = body.universe || 'NIFTY50';
+    const universe = (body.universe || 'NIFTY50') as ScannerUniverse;
     const market = body.market || 'NSE';
 
     if (!['NIFTY50', 'NIFTY200', 'NIFTY_FNO', 'ALL'].includes(universe)) {
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const bypass = body.bypass === true;
-    const marketOpen = isMarketOpen();
+    const marketOpen = isUniverseLiveForScanner(universe);
 
     if (!marketOpen && !bypass) {
       // Outside live cash session: return frozen database results from the latest completed session

@@ -80,29 +80,29 @@ describe('runCprScanJob', () => {
 });
 
 describe('cpr-scan claim buckets (retainClaim)', () => {
-  it('same bucket key cannot re-claim after retainClaim=true', () => {
+  it('same bucket key cannot re-claim after retainClaim=true', async () => {
     resetCronRunClaims();
     const key = 'cpr-scan:2026-07-27:150';
-    assert.equal(tryClaimCronRun(key), true);
-    completeCronRun(key, true);
-    assert.equal(tryClaimCronRun(key), false);
+    assert.equal(await tryClaimCronRun(key), true);
+    await completeCronRun(key, true);
+    assert.equal(await tryClaimCronRun(key), false);
   });
 
-  it('next time-bucket key can claim again (periodic re-fire)', () => {
+  it('next time-bucket key can claim again (periodic re-fire)', async () => {
     resetCronRunClaims();
     const keyA = 'cpr-scan:2026-07-27:150';
     const keyB = 'cpr-scan:2026-07-27:151';
-    assert.equal(tryClaimCronRun(keyA), true);
-    completeCronRun(keyA, true);
-    assert.equal(tryClaimCronRun(keyB), true);
-    completeCronRun(keyB, true);
+    assert.equal(await tryClaimCronRun(keyA), true);
+    await completeCronRun(keyA, true);
+    assert.equal(await tryClaimCronRun(keyB), true);
+    await completeCronRun(keyB, true);
   });
 
-  it('retainClaim=false allows same key to reclaim after complete', () => {
+  it('retainClaim=false allows same key to reclaim after complete', async () => {
     resetCronRunClaims();
     const key = 'cpr-scan:ephemeral';
-    assert.equal(tryClaimCronRun(key), true);
-    completeCronRun(key, false);
-    assert.equal(tryClaimCronRun(key), true);
+    assert.equal(await tryClaimCronRun(key), true);
+    await completeCronRun(key, false);
+    assert.equal(await tryClaimCronRun(key), true);
   });
 });

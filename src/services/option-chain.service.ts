@@ -1,7 +1,8 @@
 import { env } from '@/config/env';
+import { MarketSessionResolver, getActiveMarketProfile } from '@/config/market-profile';
 import { FyersAuthService } from './fyers-auth.service';
 import { CacheService } from './cache.service';
-import { isMarketOpen } from '@/lib/market-hours';
+import { getSessionState } from '@/lib/market-hours';
 
 export interface OptionChainResult {
   optionsChain: Array<{
@@ -53,6 +54,15 @@ type ValidOptionChainResponse = {
 };
 
 export class OptionChainService {
+  public static getCacheTtlSeconds(symbol: string, date: Date = new Date()): number {
+    const ctx = MarketSessionResolver.resolve(symbol, {
+      isFnO: true,
+      profileId: getActiveMarketProfile().id,
+    });
+    const state = getSessionState(date, ctx);
+    return state === 'CLOSED' ? 600 : 60;
+  }
+
   public static getStrikeIncrement(symbol: string, price: number): number {
     const cleanSym = symbol.toUpperCase().trim();
     if (cleanSym.includes('BANKNIFTY')) return 100;
@@ -161,7 +171,7 @@ export class OptionChainService {
               method: 'direct'
             };
             console.log(`[OptionChain] Direct fetch succeeded for ${cleanSym}.`);
-            const ttl = isMarketOpen() ? 60 : 600;
+            const ttl = OptionChainService.getCacheTtlSeconds(cleanSym);
             await CacheService.set(cacheKey, result, ttl);
             return result;
           }
@@ -228,7 +238,7 @@ export class OptionChainService {
             method: 'proxy'
           };
           console.log(`[OptionChain] Proxy fetch succeeded for ${cleanSym}.`);
-          const ttl = isMarketOpen() ? 60 : 600;
+          const ttl = OptionChainService.getCacheTtlSeconds(cleanSym);
           await CacheService.set(cacheKey, result, ttl);
           return result;
         }

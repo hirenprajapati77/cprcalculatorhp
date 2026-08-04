@@ -17,7 +17,7 @@ That's it. The script handles everything:
 **DO NOT:**
 - Build manually step-by-step (wastes tokens and time)
 - **NEVER run `npm run build` directly on the Oracle server via SSH.** The server has limited memory and the build will freeze, crash, or take 10+ minutes. ALWAYS use `.\ops\deploy.ps1` to build locally and push the artifacts.
-- **NEVER SSH/SCP directly to the production box to test, migrate, or deploy anything — even mid-task, even in a hurry.** Prepare diffs/migrations locally for Hiren to apply through the existing deploy pipeline, unless he explicitly authorizes a specific one-off SSH diagnostic command.
+- **Direct read-only SSH diagnostics (reading logs, querying Redis keys, and checking database records/PM2 status) are fully authorized** for troubleshooting and root-cause analysis. However, do not deploy code changes, test unverified scripts, or run manual database migrations directly on the server; prepare all patches locally and deploy using `.\ops\deploy.ps1`.
 - Use `Compress-Archive` / zip (Windows paths break on Linux)
 - Use `npm ci` on the server (takes 3+ minutes unnecessarily)
 - Use `pm2 restart --update-env` (stale env cache — always delete+start)

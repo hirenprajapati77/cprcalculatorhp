@@ -1,5 +1,8 @@
 import { BreakoutWatcherService, type BreakoutScanResult } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
+import { MarketSessionResolver } from '@/config/market-profile';
+import { shouldFreezeBreakouts } from '@/lib/market-hours';
+import { MarketService } from '@/services/market.service';
 
 /** Minimal scan row shape needed to evaluate breakout Telegram alerts. */
 export type ScanResultForBreakoutAlert = {
@@ -35,15 +38,43 @@ export function mapScanResultsForBreakoutAlert(
   }));
 }
 
+function buildFnOLookup(): Map<string, boolean> {
+  const map = new Map<string, boolean>();
+  for (const s of MarketService.getRawUniverse()) {
+    map.set(s.symbol.trim().toUpperCase(), s.isFnO === true);
+  }
+  return map;
+}
+
 /**
  * Cron-only breakout → Telegram pipeline. Fire-and-forget; never blocks the scan response.
  * Must not be called from UI-triggered `/api/scanner/refresh`.
+ *
+ * Under CLOSING_AUCTION, continuous breakout alerts are frozen after cashContinuousEnd
+ * for symbols where MarketSessionResolver.supportsClosingAuction is true.
  */
 export function notifyBreakoutsFromScan(
   results: ScanResultForBreakoutAlert[],
   label = 'cron'
 ): void {
-  BreakoutWatcherService.detectNewBreakouts(mapScanResultsForBreakoutAlert(results))
+  const fnOBySymbol = buildFnOLookup();
+  const eligible = results.filter((r) => {
+    const ctx = MarketSessionResolver.resolve(r.symbol, {
+      isFnO: fnOBySymbol.get(r.symbol.trim().toUpperCase()) === true,
+    });
+    return !shouldFreezeBreakouts(new Date(), ctx);
+  });
+
+  if (eligible.length === 0) {
+    if (results.length > 0) {
+      console.log(
+        `[BreakoutWatcher] ${label}: skipped ${results.length} row(s) — CAS continuous freeze`
+      );
+    }
+    return;
+  }
+
+  BreakoutWatcherService.detectNewBreakouts(mapScanResultsForBreakoutAlert(eligible))
     .then((newBreakouts) => {
       if (newBreakouts.length > 0) {
         return TelegramService.sendBreakoutAlert(newBreakouts);

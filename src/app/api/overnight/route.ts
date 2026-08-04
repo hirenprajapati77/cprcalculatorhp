@@ -123,23 +123,13 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Bypass ON — serve cache if available; if no cache, we MUST fall through and run a fresh scan!
+      // Bypass ON — delete the existing cache so the fall-through below ALWAYS
+      // triggers a fresh OvernightService.discover(). Without this deletion,
+      // bypass=true would silently return the stale 9-hour cache, making it
+      // impossible for admins to force a fresh scan after the initial run.
       if (bypass) {
-        const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
-        if (cached) {
-          const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
-          return NextResponse.json({
-            success: true,
-            windowOpen: false,
-            cachedResult: true,
-            scannedAt: cached.scannedAt,
-            message: `[Bypass Active] Displaying scan results from ${cached.scannedAt}`,
-            results: filtered,
-            insights: cached.insights,
-            state,
-          });
-        }
-        // If no cache, we fall through to let OvernightService.discover() run a fresh scan!
+        await CacheService.delete(OVERNIGHT_KEY);
+        // Fall through to OvernightService.discover() below
       }
 
       // Discovery open — run Advanced scan and cache
