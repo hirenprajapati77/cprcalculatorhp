@@ -2,10 +2,11 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { OvernightRiskService } from '../../services/overnight/overnight-risk.service';
 import { NiftyHistoryService } from '../../services/overnight/nifty-history.service';
-import { OHLC } from '../../services/backtest/historical.provider';
+import { HistoricalProvider, OHLC } from '../../services/backtest/historical.provider';
 
 describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
   const originalGetNiftyHistory = NiftyHistoryService.getNiftyHistory;
+  const originalGetHistory = HistoricalProvider.getHistory;
 
   test('synthesizes beta_proxy correctly for known-correlated series', async () => {
     // We generate 70 days of mock trading closes.
@@ -75,6 +76,72 @@ describe('OvernightRiskService - Index Correlation (Beta Proxy)', () => {
     assert.ok(metrics.indexCorrelationEstimate !== null);
     const beta = metrics.indexCorrelationEstimate!;
     assert.ok(Math.abs(beta - 1.5) < 0.1, `Expected beta near 1.5, got ${beta}`);
+  });
+
+  test('uses extended stock-history fetch for beta when MarketService history is truncated to 22 days', async () => {
+    const niftyHistory: OHLC[] = [];
+    const fullStockHistory: OHLC[] = [];
+
+    let niftyClose = 100;
+    let stockClose = 100;
+    const baseDate = new Date('2026-04-01');
+    for (let i = 0; i < 80; i++) {
+      const currentDate = new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const niftyRet = Math.sin(i) * 2;
+      const stockRet = 1.5 * niftyRet;
+      const nextNiftyClose = niftyClose * (1 + niftyRet / 100);
+      const nextStockClose = stockClose * (1 + stockRet / 100);
+
+      niftyHistory.push({
+        date: dateStr,
+        open: niftyClose,
+        high: Math.max(niftyClose, nextNiftyClose),
+        low: Math.min(niftyClose, nextNiftyClose),
+        close: nextNiftyClose,
+        volume: 10000,
+      });
+      fullStockHistory.push({
+        date: dateStr,
+        open: stockClose,
+        high: Math.max(stockClose, nextStockClose),
+        low: Math.min(stockClose, nextStockClose),
+        close: nextStockClose,
+        volume: 10000,
+      });
+
+      niftyClose = nextNiftyClose;
+      stockClose = nextStockClose;
+    }
+
+    const truncated22 = fullStockHistory.slice(-22);
+    NiftyHistoryService.getNiftyHistory = async () => niftyHistory;
+    HistoricalProvider.getHistory = async () => fullStockHistory;
+    OvernightRiskService.clearCache();
+
+    try {
+      const metrics = await OvernightRiskService.calculateOvernightRisk({
+        symbol: 'TRUNC22',
+        market: 'NSE' as const,
+        sector: 'IT',
+        open: stockClose,
+        high: stockClose * 1.01,
+        low: stockClose * 0.99,
+        close: stockClose,
+        volume: 10000,
+        avgVolume: 10000,
+        marketCap: 5000,
+        ltp: stockClose,
+        history: truncated22,
+      });
+
+      assert.ok(metrics.indexCorrelationEstimate !== null, 'beta should be computed from extended fetched history');
+      assert.ok(Math.abs(metrics.indexCorrelationEstimate! - 1.5) < 0.15);
+    } finally {
+      NiftyHistoryService.getNiftyHistory = originalGetNiftyHistory;
+      HistoricalProvider.getHistory = originalGetHistory;
+      OvernightRiskService.clearCache();
+    }
   });
 
   test('zero-variance Nifty window returns null for beta_proxy without throwing', async () => {
