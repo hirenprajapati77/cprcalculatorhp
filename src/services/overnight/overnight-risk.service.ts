@@ -19,6 +19,10 @@ export interface OvernightRiskMetrics {
 
 export class OvernightRiskService {
   private static stockHistoryCache = new Map<string, OHLC[]>();
+  // Max entries to hold in the in-process history cache.
+  // 182 FNO stocks × 120-day fetch would be unbounded — cap at 60 entries
+  // (enough for one full overnight batch) and evict the oldest half when exceeded.
+  private static readonly MAX_CACHE_ENTRIES = 60;
 
   private static parseUtcDate(dateStr: string): Date {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -40,12 +44,24 @@ export class OvernightRiskService {
     }
 
     const history = await HistoricalProvider.getHistory(cleanSymbol, startDate, endDateExclusive);
+    this.evictIfNeeded();
     this.stockHistoryCache.set(cacheKey, history);
     return history;
   }
 
   static clearCache(): void {
     this.stockHistoryCache.clear();
+  }
+
+  /** Evict the oldest half of entries when cache exceeds MAX_CACHE_ENTRIES. */
+  private static evictIfNeeded(): void {
+    if (this.stockHistoryCache.size < this.MAX_CACHE_ENTRIES) return;
+    const evictCount = Math.floor(this.MAX_CACHE_ENTRIES / 2);
+    const keys = this.stockHistoryCache.keys();
+    for (let i = 0; i < evictCount; i++) {
+      const key = keys.next().value;
+      if (key !== undefined) this.stockHistoryCache.delete(key);
+    }
   }
 
   /**
