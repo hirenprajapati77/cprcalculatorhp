@@ -1,4 +1,9 @@
 import { BTST_WINDOWS, MARKET_SESSION } from '@/config/trading-constants';
+import {
+  clocksForContext,
+  toProfileTotalMinutes,
+  type MarketSessionContext,
+} from '@/config/market-profile';
 
 // NSE Trading Holidays mapped by year
 const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
@@ -147,11 +152,66 @@ export const BTST_WINDOW_MINUTES = {
 } as const;
 
 /**
- * True when a 5m bar's IST open minute-of-day falls in [15:15, 15:30) — the
- * canonical EOD liquidity window for BTST/STBT Rule 5.
+ * True when a 5m bar's IST open minute-of-day falls in the profile Rule5 window
+ * [rule5Start, rule5EndExclusive) — EOD liquidity for BTST/STBT Rule 5.
+ * Under CONTINUOUS this is [15:15, 15:30); under CLOSING_AUCTION [15:00, 15:15).
  */
 export function isInClosingLiquidityWindow(barOpenMinuteOfDay: number): boolean {
   return barOpenMinuteOfDay >= CLOSING_WINDOW_START_MIN && barOpenMinuteOfDay < MARKET_CLOSE_MIN;
+}
+
+/**
+ * Exchange session state (CAS-aware). Prefer this for new code.
+ * Pass MarketSessionContext so ineligible symbols keep a continuous cash day
+ * even when MARKET_PROFILE=CLOSING_AUCTION.
+ *
+ * Under CONTINUOUS (or ineligible ctx): never emits CAS / FNO_ONLY.
+ */
+export type SessionState = 'PREOPEN' | 'LIVE' | 'CAS' | 'FNO_ONLY' | 'CLOSED';
+
+export function getSessionState(
+  date: Date = new Date(),
+  ctx?: MarketSessionContext
+): SessionState {
+  const { totalMinutes, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return 'CLOSED';
+
+  const clocks = clocksForContext(ctx);
+  const preOpen = toProfileTotalMinutes(clocks.preOpen);
+  const open = toProfileTotalMinutes(clocks.cashOpen);
+  const contEnd = toProfileTotalMinutes(clocks.cashContinuousEnd);
+  const casEnd = toProfileTotalMinutes(clocks.casEnd);
+  const fnoEnd = toProfileTotalMinutes(clocks.fnoSessionEnd);
+
+  const useCasPhases =
+    clocks.id === 'CLOSING_AUCTION' && (ctx == null || ctx.supportsClosingAuction);
+
+  if (totalMinutes >= open && totalMinutes < contEnd) return 'LIVE';
+  if (totalMinutes >= preOpen && totalMinutes < open) return 'PREOPEN';
+
+  if (useCasPhases) {
+    if (totalMinutes >= contEnd && totalMinutes < casEnd) return 'CAS';
+    if (totalMinutes >= casEnd && totalMinutes < fnoEnd) return 'FNO_ONLY';
+  }
+
+  return 'CLOSED';
+}
+
+/**
+ * True when continuous breakout Telegram should be suppressed for this context.
+ * Only active under CLOSING_AUCTION for symbols with supportsClosingAuction.
+ */
+export function shouldFreezeBreakouts(
+  date: Date = new Date(),
+  ctx?: MarketSessionContext
+): boolean {
+  const clocks = clocksForContext(ctx);
+  if (!clocks.freezeBreakoutsAfterContinuousEnd) return false;
+  if (ctx && !ctx.supportsClosingAuction) return false;
+
+  const { totalMinutes, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return true;
+  return totalMinutes >= toProfileTotalMinutes(clocks.cashContinuousEnd);
 }
 
 /** IST minute-of-day for a Unix timestamp (seconds). */
