@@ -74,7 +74,7 @@ export class SignalQualityService {
     let qualityBucket: 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY' = 'TRADEABLE';
 
     if (
-      historyQuality < 20 ||
+      historyLength < 15 ||
       liquidityQuality < 50 ||
       eventRisk >= 80 ||
       conflictConfidence < 15 // Stricter than the absolute 10-point cutoff

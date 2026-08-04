@@ -694,6 +694,22 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(q5.qualityBucket, 'LOW_QUALITY');
       assert.strictEqual(q5.eventRisk, 100);
 
+      // 6. History Length = 22 (truncated production value) -> should pass to TRADEABLE
+      const q6 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 22,
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' },
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
+      );
+      assert.strictEqual(q6.qualityBucket, 'TRADEABLE');
+
+      // 7. History Length = 14 (less than 15 minimum ATR requirement) -> should fall to LOW_QUALITY
+      const q7 = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 14,
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' },
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
+      );
+      assert.strictEqual(q7.qualityBucket, 'LOW_QUALITY');
+
     } finally {
       
       
