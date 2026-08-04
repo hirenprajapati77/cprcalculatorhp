@@ -17,6 +17,7 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 - **Aesthetic Terminal UI:** Responsive dark-themed dashboard mapping raw CPR calculations alongside execution telemetry (Recharts).
 - **Resilient Fallback Design:** Database Circuit Breaker pattern with gracefully degraded cached responses, ensuring 99.9% uptime for the UI even during database outages.
 - **Strict Environment Validation:** Zod-enforced environment variable schemas fail fast at startup if configuration is invalid. **`APP_ACCESS_TOKEN` is required in production.**
+- **Market Session Profile (CAS-ready):** Timings come from `MARKET_PROFILE` (`CONTINUOUS` default = current production clocks). `CLOSING_AUCTION` is dormant until explicitly enabled — see [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).
 - **Redis First Caching:** All module-level maps replaced with TTL-managed Redis caches for horizontal scalability.
 
 ---
@@ -34,7 +35,7 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 
 The platform goes beyond raw signal generation by implementing a realistic, multi-layered execution architecture:
 
-1. **Overnight Signal Discovery**: Scans the `NSE_FNO` universe during **15:10–15:25 IST** (confirm slice 15:20–15:25). Journal cron finalizes picks at **15:25–15:30 IST**. Scoring uses VDU, narrow CPR, Higher/Lower Value, VWAP, 15m confirmation, and close strength (max 130).
+1. **Overnight Signal Discovery**: Scans the `NSE_FNO` universe during **15:10–15:25 IST** under the default `CONTINUOUS` profile (confirm slice aligned with Rule 5). Journal cron finalizes picks at **15:25–15:30 IST**. Scoring uses VDU, narrow CPR, Higher/Lower Value, VWAP, 15m confirmation, and close strength (max 130). Under `MARKET_PROFILE=CLOSING_AUCTION`, discovery/journal windows follow SEBI CAS clocks (continuous ends 15:15; official close ~15:35) for eligible symbols via `MarketSessionResolver`.
 2. **Signal Quality Gates (Phase 1)**: Evaluates raw signals against dynamic thresholds, assigning them into `TRADEABLE`, `WATCHLIST`, or `LOW_QUALITY` buckets. It incorporates:
    - **Regime Filtering**: Matches signal direction against the broader market trend (NIFTY 50 Bull/Bear) and volatility context.
    - **Liquidity & History Rules**: Requires minimum daily average volume and robust historical data (minimum 15 days) to ensure reliable ATR calculations.
@@ -49,6 +50,10 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
 ## 📜 Releases & Changelog
 For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
+
+**Recent Updates (August 2026):**
+- **Market Session Profile (CAS)**: Added `MARKET_PROFILE=CONTINUOUS|CLOSING_AUCTION` with `MarketSessionResolver` so SEBI Closing Auction Session can be enabled without rewriting scoring. Default remains current production clocks. Full analysis: [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).
+- **Aug-4 reliability fixes**: Scanner confidence accepts `HP_*` (post-rename); Redis cron retainClaim survives across workers; BTST journal skips option-miss instead of fake `STOCK`/strike-0 rows.
 
 **Recent Updates (July 2026):**
 - **Shadow VPA Confirmation Layer**: Added modular Wyckoff/Volume Price Analysis (VPA) scoring to signal metadata, viewable in the scanner/journal UI without affecting core BTST logic.
@@ -117,8 +122,10 @@ The platform is fully containerized and production-ready for controlled shadow t
    APP_VERSION="v2.0.0-production"
    APP_ACCESS_TOKEN="your_secure_app_access_token"
    CRON_SECRET="your_secure_cron_secret"
+   # Default = current production clocks. Set CLOSING_AUCTION only after CAS validation.
+   MARKET_PROFILE="CONTINUOUS"
    ```
-   Production will refuse to start without `APP_ACCESS_TOKEN`. Schedule `btst-journal` crontab inside **15:25–15:30 IST**.
+   Production will refuse to start without `APP_ACCESS_TOKEN`. Schedule `btst-journal` crontab inside **15:25–15:30 IST** (CONTINUOUS profile).
 
 ### 🔒 Gated Access Control
 To protect browser APIs and dashboard pages, the platform utilizes a session-based access gate:
