@@ -94,6 +94,9 @@ export function startMarketCronScheduler(): void {
 
     const dateKey = getISTDateString();
 
+    // Intentional: cpr-scan is NIFTY_FNO-only, so the aggregate cash-session gate
+    // from MARKET_SESSION.CLOSE is the correct clock. Under CLOSING_AUCTION this
+    // closes at 15:15 for F&O names and must not extend to 15:30.
     if (isMarketOpen()) {
       // Time-bucketed claim key: retainClaim=true blocks re-entry within the same
       // N-minute bucket; the next bucket key allows the next fire. Do NOT use
@@ -104,6 +107,9 @@ export function startMarketCronScheduler(): void {
       await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
     }
 
+    // btst-alert selects overnight/index tradable picks (F&O-only legs for stock
+    // options; index legs are derivative products). It should follow profile BTST
+    // windows (15:10–15:25 CONTINUOUS, 15:10–15:15 CLOSING_AUCTION).
     if (isBtstDiscoveryOpen()) {
       // Time-bucketed key (5-min buckets) — mirrors cpr-scan pattern so the
       // scheduler re-checks every 5 minutes across the 15:10–15:25 window.
@@ -113,10 +119,14 @@ export function startMarketCronScheduler(): void {
       await runClaimedJob(`btst-alert:${dateKey}:${btstBucket}`, runBtstAlertJob, 'btst-alert');
     }
 
+    // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
+    // separate from the scanner route's mixed-universe live recompute behavior.
     if (isCprJournalWindowOpen()) {
       await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal');
     }
 
+    // btst-journal is tied to overnight/derivatives workflow and should track
+    // profile BTST journal windows (including CAS extension profile clocks).
     if (isBtstJournalWindowOpen()) {
       await runClaimedJob(`btst-journal:${dateKey}`, runBtstJournalJob, 'btst-journal');
     }

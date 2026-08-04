@@ -5,6 +5,7 @@ import { CacheService } from '../../services/cache.service';
 import { FyersAuthService } from '../../services/fyers-auth.service';
 import { env } from '../../config/env';
 import { getISTTime } from '../../lib/market-hours';
+import { __resetActiveMarketProfileForTests } from '../../config/market-profile';
 
 test('OptionChainService fetchOptionQuote regex supports &', async (_t) => {
   let fetchedSymbol = '';
@@ -252,5 +253,20 @@ test('OptionChainService resolveRolledOverChain parses targetExpiryStr (monthly 
     CacheService.set = originalSet;
     // @ts-expect-error test mock
     OptionChainService.fetchWithRetry = originalFetchWithRetry;
+  }
+});
+
+test('OptionChainService TTL uses F&O session end in CLOSING_AUCTION', () => {
+  const istDate = (hour: number, minute: number) =>
+    new Date(Date.UTC(2026, 7, 4, hour - 5, minute - 30));
+
+  __resetActiveMarketProfileForTests('CLOSING_AUCTION');
+  try {
+    // F&O options remain "live-cache" through CAS + FNO-only extension window.
+    assert.strictEqual(OptionChainService.getCacheTtlSeconds('INFY', istDate(15, 20)), 60);
+    assert.strictEqual(OptionChainService.getCacheTtlSeconds('INFY', istDate(15, 39)), 60);
+    assert.strictEqual(OptionChainService.getCacheTtlSeconds('INFY', istDate(15, 40)), 600);
+  } finally {
+    __resetActiveMarketProfileForTests(null);
   }
 });
