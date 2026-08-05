@@ -153,7 +153,23 @@ function mockBtstRouteDeps(handlers: {
   })) as typeof RegimeService.getMarketRegime;
 
   OvernightService.discover = (handlers.discover ?? (async () => [makeTradableSignal()])) as typeof OvernightService.discover;
-  MarketService.getStockData = (async () => null) as typeof MarketService.getStockData;
+  MarketService.getStockData = (async (symbol: string) => ({
+    symbol,
+    market: 'NSE' as const,
+    sector: 'TEST_SECTOR',
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 1000000,
+    avgVolume: 900000,
+    marketCap: 100000,
+    ltp: 100,
+    history: [
+      { date: '2026-07-17', open: 98, high: 102, low: 97, close: 100, volume: 800000 },
+      { date: '2026-07-20', open: 100, high: 101, low: 99, close: 100, volume: 1000000 },
+    ],
+  })) as typeof MarketService.getStockData;
   OptionSuggestionService.suggestOptionForBtst =
     (handlers.suggestOptionForBtst ?? (async () => ({ error: 'NO_CHAIN' }))) as typeof OptionSuggestionService.suggestOptionForBtst;
 
@@ -571,6 +587,23 @@ test('BTST alert cron — alert-time journaling (alert ↔ journal parity)', asy
       assert.strictEqual(result.sent, true);
       assert.deepStrictEqual(result.logged, []);
       assert.strictEqual(mocks.journalCalls.length, 0, 'no journal write without option strike/ltp');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('missing market data fails closed (skips alert)', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+    });
+    // Explicitly override MarketService.getStockData to return null (unavailable)
+    MarketService.getStockData = (async () => null) as typeof MarketService.getStockData;
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(result.sent, false);
+      assert.strictEqual(result.reason, 'no setups');
+      assert.strictEqual(mocks.sendCalls.length, 0, 'Telegram must not be called when all symbols fail closed');
     } finally {
       mocks.restore();
     }

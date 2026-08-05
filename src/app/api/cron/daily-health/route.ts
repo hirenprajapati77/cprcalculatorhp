@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getISTTime, getISTDateString } from '@/lib/market-hours';
+import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { prisma } from '@/lib/db';
+import { tryClaimCronRun, completeCronRun, releaseCronRun } from '@/services/scheduler/cron-run-claim';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -15,6 +16,11 @@ export async function GET(req: NextRequest) {
   if (!isTradingDay) {
     const reason = isHoliday ? 'NSE Holiday' : `Weekend (${weekday})`;
     return NextResponse.json({ skipped: true, reason });
+  }
+
+  const claimKey = `daily-health:${dateString}`;
+  if (!(await tryClaimCronRun(claimKey))) {
+    return NextResponse.json({ skipped: true, reason: 'already run today' });
   }
 
   try {
@@ -45,12 +51,19 @@ export async function GET(req: NextRequest) {
     const groupChatId = settings?.telegramGroupChatId ?? undefined;
     const result = await TelegramService.sendMessage(message, groupChatId);
 
+    if (result.ok) {
+      await completeCronRun(claimKey, true);
+    } else {
+      await releaseCronRun(claimKey);
+    }
+
     return NextResponse.json({
       sent: result.ok,
       date: dateString,
       ...(result.reason ? { reason: result.reason } : {}),
     });
   } catch (error: unknown) {
+    await releaseCronRun(claimKey);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

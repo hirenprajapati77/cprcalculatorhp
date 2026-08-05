@@ -17,8 +17,12 @@ import {
   selectTradableIndexStbtPicks,
 } from '@/services/overnight/index-overnight-persist';
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
-import { getISTDateString } from '@/lib/market-hours';
+import { getISTDateString, getCompletedHistory } from '@/lib/market-hours';
 import { prisma } from '@/lib/db';
+import { BtstService } from '@/services/backtest/btst.service';
+import { VpaConfirmationService } from '@/services/vpa';
+import { calculateCPR } from '@/lib/cpr-engine';
+import { getAtrPct } from '@/lib/atr';
 
 function isUniqueConstraintError(err: unknown): boolean {
   return (
@@ -82,6 +86,24 @@ type EnrichedAlertPick = Awaited<ReturnType<typeof enrichBtstPick>>;
  * Never throws: the alert has already been sent, so journal failures must not
  * roll back claims or fail the job.
  */
+function computeVpaShadowForJournal(
+  stockData: NonNullable<Awaited<ReturnType<typeof MarketService.getStockData>>>,
+  direction: 'LONG' | 'SHORT'
+) {
+  const completed = getCompletedHistory(stockData.history || []);
+  if (completed.length < 2) return null;
+  const atrPct = getAtrPct(completed, stockData.close);
+  const yesterday = completed[completed.length - 2];
+  const todayCpr = calculateCPR(
+    { high: yesterday.high, low: yesterday.low, close: yesterday.close },
+    atrPct
+  );
+  return VpaConfirmationService.analyzeFromStock(stockData, direction, {
+    bc: todayCpr.bc,
+    tc: todayCpr.tc,
+  });
+}
+
 async function journalClaimedAlerts(
   claimedPayload: EnrichedAlertPick[],
   regimeTrend: string
@@ -123,6 +145,30 @@ async function journalClaimedAlerts(
         .filter(Boolean)
         .join(',');
 
+      let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};
+      if (!isIndex) {
+        try {
+          const stockData = await MarketService.getStockData(pick.symbol);
+          if (stockData) {
+            const dir = sig.direction as 'LONG' | 'SHORT';
+            const v2Result = BtstService.evaluateOvernightV2(stockData);
+            v2Fields = {
+              scoreV2: v2Result.finalScore,
+              v2Breakdown: {
+                hardGates: v2Result.hardGates,
+                scoreBreakdown: v2Result.scoreBreakdown,
+                rawMetrics: v2Result.rawMetrics,
+                classification: v2Result.classification,
+                direction: v2Result.direction,
+                vpa: computeVpaShadowForJournal(stockData, dir),
+              },
+            };
+          }
+        } catch (v2Err) {
+          console.warn(`[BtstAlert] V2 shadow scoring failed for ${pick.symbol}:`, v2Err);
+        }
+      }
+
       const didLog = await TradeJournalService.logSignal({
         signalType,
         symbol: pick.symbol,
@@ -134,6 +180,7 @@ async function journalClaimedAlerts(
         confidence: sig.confidence ?? sig.overnightScore ?? 0,
         signalSummary,
         overnightSignalId: sig.id,
+        ...v2Fields,
       });
 
       if (didLog) journaled.push(pick.symbol);
@@ -184,8 +231,7 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     for (const sig of signals) {
       const stockData = await MarketService.getStockData(sig.symbol);
       if (!stockData) {
-        console.warn(`[BtstAlert] ${sig.symbol} market data unavailable; bypassing extension filter`);
-        out.push(sig);
+        console.warn(`[BtstAlert] ${sig.symbol} market data unavailable; failing closed (skipping alert)`);
         continue;
       }
       const ext = EntryManagerService.evaluateExtension(stockData, direction);

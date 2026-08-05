@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
 import { CacheService } from '@/services/cache.service';
 import { notifyBreakoutsFromScan } from '@/services/alert/breakout-alert.pipeline';
-import { getISTTime, BTST_WINDOW_MINUTES } from '@/lib/market-hours';
+import { isMarketOpen } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
@@ -15,11 +15,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const universe = searchParams.get('universe') || 'NIFTY_FNO';
 
-  // Check IST time
-  const { isTradingDay, totalMinutes } = getISTTime();
-
-  // Only run during MARKET_SESSION open..close IST on trading days
-  if (!isTradingDay || totalMinutes < BTST_WINDOW_MINUTES.MARKET_OPEN || totalMinutes > BTST_WINDOW_MINUTES.MARKET_CLOSE) {
+  // Only run when market is open (handles trading days, holidays, weekends, and exact hours)
+  if (!isMarketOpen()) {
     return NextResponse.json({ message: 'Market closed' });
   }
 
