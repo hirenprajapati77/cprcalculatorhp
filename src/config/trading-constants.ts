@@ -21,6 +21,10 @@ export const BTST_SCORING = {
   CLV_CONTINUOUS_MULTIPLIER: 100,
   // Baseline static CLV multiplier
   CLV_BASE_MULTIPLIER: 75,
+  // NARROW-CPR / virgin-session weight for the simple (research) score helpers.
+  // NO_VDU is heavier because the no_vdu_weighted variant drops the +20 volume leg.
+  CPR_NARROW_WEIGHT: 15,
+  CPR_NARROW_WEIGHT_NO_VDU: 35,
 };
 
 /** Advanced Engine (OvernightService) score scale — matches BtstRankingService / StbtRankingService. */
