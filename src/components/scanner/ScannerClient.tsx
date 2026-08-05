@@ -628,16 +628,7 @@ const StockRow = React.memo(({
             {row.signals.slice(0, densityMode === 'compact' ? 2 : 5).map((rawSig) => {
               // Normalize legacy KGS_ prefix to HP_ for display
               const sig = rawSig.replace(/^KGS_/, 'HP_');
-              // Extract CPR Quality A+/A/B/C from internal tag
-              if (sig.startsWith('CPR_QUALITY_')) {
-                const grade = sig.split('_')[2];
-                return (
-                  <span key={rawSig} className="text-[8px] font-bold px-1 rounded-sm bg-accent-blue/20 text-accent-blue border border-accent-blue/30">
-                    ⭐ Q:{grade}
-                  </span>
-                );
-              }
-              
+
               return (
               <span
                 key={rawSig}
