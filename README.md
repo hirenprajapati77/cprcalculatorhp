@@ -100,6 +100,21 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+#### ⚠️ Windows Next.js Build Workaround
+On Windows environments using newer Node versions (e.g., Node v24+), running `npm run build` or `next build` may crash with a segmentation fault (`exit code 3221226505` / `0xC0000005`) during static page generation.
+
+If this occurs, you can bypass the issue by temporarily appending the following configuration to `next.config.ts` during your build:
+```typescript
+const nextConfig: NextConfig = {
+  // ... other configs
+  experimental: {
+    workerThreads: false,
+    cpus: 1,
+  },
+};
+```
+Once the build completes, you can safely revert `next.config.ts` so as not to commit environment-specific performance limiters.
+
 ---
 
 ## 🧪 Testing

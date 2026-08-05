@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hardened Deployment Script**: Improved `deploy.ps1` to use clean `npm install` and local Prisma client binary paths, making it highly robust against Windows file locks.
 
 ### Fixed
+- **no_vdu_weighted Strategy Score Alignment**: Aligned the narrow weight score calculation in the `no_vdu_weighted` strategy to use the `CPR_WEIGHT` environment variable rather than a hardcoded value of 35.
+- **ESLint Type-Casting in Tests**: Fixed a linting warning in `src/tests/unit/btst.test.ts` where environment variables were cast to `any` instead of `unknown`.
+- **Windows Build Segfault Workaround**: Documented and resolved the issue with the Next.js compiler crashing with exit code 3221226505 during local Windows builds.
 - **Stock BTST Signal Quality Gate Fix**: Resolved the bug where all F&O stock signals were classified as `LOW_QUALITY` due to history quality scoring contradictions on truncated 22-day histories. Gated the `LOW_QUALITY` bucket on raw `historyLength < 15` minimum threshold while preserving the diagnostic `historyQuality` percentage calculations.
 - **Scanner Confidence after HP_ Rename**: Restored synergy/penalty matching in `calculateConfidence` for `HP_*` signals (still accepts legacy `KGS_*`).
 - **Redis Cron Retain Claim**: Persist `cron_done:{key}` for 24h on successful `retainClaim` so other workers cannot re-claim after the 90s running lock expires.
