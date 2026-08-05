@@ -5,6 +5,7 @@ import { OvernightService } from '../../services/overnight/overnight.service';
 import { BTST_WINDOWS } from '../../config/trading-constants';
 import { BTST_CLOCK } from '../../lib/market-hours';
 import type { OvernightSignal } from '@prisma/client';
+import { env } from '../../config/env';
 
 describe('BTST Scoring Engine Tests', () => {
   const baseHistory = [
@@ -307,6 +308,36 @@ describe('BTST Scoring Engine Tests', () => {
       true,
       `Ordinary trading day during ${BTST_CLOCK.discoveryStart}-${BTST_CLOCK.discoveryEnd} IST should report window open`
     );
+  });
+
+  test('no_vdu_weighted strategyVariant honors env.CPR_WEIGHT override', () => {
+    const stock = {
+      ...baseStock,
+      high: 105,
+      low: 95,
+      ltp: 100,
+      volume: 100000,
+      avgVolume: 100000,
+      vwap: 100,
+      candle15m: { open: 100, high: 101, low: 99, close: 100, volume: 5000 }
+    };
+
+    const originalWeight = env.CPR_WEIGHT;
+    try {
+      // 1. Without env.CPR_WEIGHT set, it defaults to 35
+      (env as any).CPR_WEIGHT = undefined;
+      const resDefault = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
+      assert.strictEqual(resDefault.scoreBreakdown?.cprNarrow, 35);
+      assert.strictEqual(resDefault.longScore, 35);
+
+      // 2. With env.CPR_WEIGHT set to 25, it uses 25
+      (env as any).CPR_WEIGHT = 25;
+      const resOverride = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
+      assert.strictEqual(resOverride.scoreBreakdown?.cprNarrow, 25);
+      assert.strictEqual(resOverride.longScore, 25);
+    } finally {
+      (env as any).CPR_WEIGHT = originalWeight;
+    }
   });
 });
 
