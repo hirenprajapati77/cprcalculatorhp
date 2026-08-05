@@ -325,18 +325,18 @@ describe('BTST Scoring Engine Tests', () => {
     const originalWeight = env.CPR_WEIGHT;
     try {
       // 1. Without env.CPR_WEIGHT set, it defaults to 35
-      (env as any).CPR_WEIGHT = undefined;
+      (env as unknown as { CPR_WEIGHT: number | undefined }).CPR_WEIGHT = undefined;
       const resDefault = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
       assert.strictEqual(resDefault.scoreBreakdown?.cprNarrow, 35);
       assert.strictEqual(resDefault.longScore, 35);
 
       // 2. With env.CPR_WEIGHT set to 25, it uses 25
-      (env as any).CPR_WEIGHT = 25;
+      (env as unknown as { CPR_WEIGHT: number | undefined }).CPR_WEIGHT = 25;
       const resOverride = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
       assert.strictEqual(resOverride.scoreBreakdown?.cprNarrow, 25);
       assert.strictEqual(resOverride.longScore, 25);
     } finally {
-      (env as any).CPR_WEIGHT = originalWeight;
+      (env as unknown as { CPR_WEIGHT: number | undefined }).CPR_WEIGHT = originalWeight;
     }
   });
 });
