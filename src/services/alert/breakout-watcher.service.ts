@@ -4,6 +4,9 @@ import { env } from '@/config/env';
 
 const MIN_BREAKOUT_ALERT_SCORE = 75;
 
+/** Minimum gap between two alerts for the same symbol (default 4 hours = one intraday session). */
+const BREAKOUT_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+
 export interface BreakoutScanResult {
   symbol: string;
   signals: string[];
@@ -64,11 +67,22 @@ export class BreakoutWatcherService {
 
       if (qualifiesForAlert) {
         try {
-          // Attempt an atomic claim. If no row exists yet for the symbol, the updateMany count is 0,
-          // and we safely fall back to creating the row. If unique constraint fails during concurrent
-          // creation, we catch P2002 and run updateMany again to safely settle the claim state.
+          const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
+
+          // Attempt an atomic claim. Gate on:
+          //   - hadBreakout: false  (signal was absent last scan — true new breakout), OR
+          //   - lastAlerted is null or older than BREAKOUT_ALERT_COOLDOWN_MS
+          // This prevents re-alerting the same symbol within 4 hours even if the
+          // signal briefly dropped and reappeared (flicker dedup).
           const claim = await prisma.breakoutAlertState.updateMany({
-            where: { symbol: result.symbol, hadBreakout: false },
+            where: {
+              symbol: result.symbol,
+              hadBreakout: false,
+              OR: [
+                { lastAlerted: null },
+                { lastAlerted: { lt: cooldownCutoff } },
+              ],
+            },
             data: { hadBreakout: true, lastAlerted: new Date() },
           });
 
@@ -87,13 +101,34 @@ export class BreakoutWatcherService {
             } catch (createErr) {
               if (isUniqueConstraintError(createErr)) {
                 const retryClaim = await prisma.breakoutAlertState.updateMany({
-                  where: { symbol: result.symbol, hadBreakout: false },
+                  where: {
+                    symbol: result.symbol,
+                    hadBreakout: false,
+                    OR: [
+                      { lastAlerted: null },
+                      { lastAlerted: { lt: cooldownCutoff } },
+                    ],
+                  },
                   data: { hadBreakout: true, lastAlerted: new Date() },
                 });
                 isNewAlert = retryClaim.count === 1;
               } else {
                 throw createErr;
               }
+            }
+          }
+
+          if (!isNewAlert && qualifiesForAlert) {
+            // Check if suppressed by cooldown (for logging)
+            const state = await prisma.breakoutAlertState.findUnique({
+              where: { symbol: result.symbol },
+              select: { lastAlerted: true, hadBreakout: true },
+            });
+            if (state?.lastAlerted && state.lastAlerted > cooldownCutoff) {
+              console.log(
+                `[BreakoutWatcher] Cooldown suppressed repeat alert for ${result.symbol} ` +
+                `(last alerted ${state.lastAlerted.toISOString()}, cooldown ${BREAKOUT_ALERT_COOLDOWN_MS / 3600000}h)`
+              );
             }
           }
         } catch (err) {
