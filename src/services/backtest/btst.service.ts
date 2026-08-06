@@ -142,7 +142,7 @@ export class BtstService {
 
     // CPR Narrow weight conditionally applied
     const cprNarrowWeight = isNoVdu
-      ? (env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU)
+      ? BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU
       : BTST_SCORING.CPR_NARROW_WEIGHT;
     if (tomorrowCpr.classification === 'NARROW' || sessionVirgin) {
       score += cprNarrowWeight;
@@ -230,7 +230,7 @@ export class BtstService {
 
     // CPR Narrow weight conditionally applied
     const cprNarrowWeight = isNoVdu
-      ? (env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU)
+      ? BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU
       : BTST_SCORING.CPR_NARROW_WEIGHT;
     if (tomorrowCpr.classification === 'NARROW' || sessionVirgin) {
       score += cprNarrowWeight;
