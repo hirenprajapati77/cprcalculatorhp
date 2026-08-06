@@ -16,9 +16,13 @@ import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
 import { EntryManagerService } from './entry-manager.service';
-import { getISTTime, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, getCompletedHistory } from '@/lib/market-hours';
+import { getISTTime, getISTDateString, isTodayCandleClosed, getBtstWindowState, BTST_WINDOW_MINUTES, isInClosingLiquidityWindow, getCompletedHistory } from '@/lib/market-hours';
 import { EventCalendarService } from './event.service';
 import { parseStockIntradayMetricsFromChart } from './stock-intraday.util';
+import {
+  parseStockIntradayMetricsFromFyersCandles,
+  type FyersHistoryCandle,
+} from './fyers-intraday.util';
 import type { YahooFinanceChartResponse } from './index-intraday.util';
 import { RegimeService, RS_LOOKBACK } from './regime.service';
 import { SignalQualityService } from './signal-quality.service';
@@ -26,6 +30,7 @@ import { resolveOvernightConflict } from './overnight-conflict';
 import { isVpaLiveGatesEnabled } from '@/config/vpa.config';
 import type { VpaConfirmationResult } from '@/services/vpa';
 import { safeRatio } from '@/lib/math';
+import { FyersAuthService } from '../fyers-auth.service';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
@@ -98,6 +103,7 @@ export class OvernightService {
 
   /**
    * Fetches/simulates intraday 5m candle data to compute VWAP and 15:15–15:30 high/low.
+   * Live: Yahoo 5m first, Fyers 5m history as fallback when Yahoo flakes (Rule 5 needs this).
    */
   static async getIntradayData(stock: MarketStockData, currentTime: Date): Promise<OvernightIntradayMetrics> {
     const mode = env.HISTORICAL_MODE || 'mock';
@@ -106,7 +112,7 @@ export class OvernightService {
       const symbol = stock.symbol;
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.NS?interval=5m&range=1d`;
 
-      const fetchAndParse = async (): Promise<OvernightIntradayMetrics> => {
+      const fetchYahoo = async (): Promise<OvernightIntradayMetrics> => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 4000);
         try {
@@ -124,18 +130,24 @@ export class OvernightService {
       };
 
       try {
-        return await fetchAndParse();
+        return await fetchYahoo();
       } catch (err) {
         console.warn(
-          `[Overnight] Intraday fetch failed for ${stock.symbol} — retrying once:`,
+          `[Overnight] Yahoo intraday failed for ${stock.symbol} — trying Fyers 5m:`,
           err instanceof Error ? err.message : err
         );
         try {
-          await new Promise((r) => setTimeout(r, 1000));
-          return await fetchAndParse();
+          await new Promise((r) => setTimeout(r, 400));
+          const fyers = await this.fetchFyersIntradayMetrics(stock, currentTime);
+          if (fyers?.hasIntraday) {
+            console.log(`[Overnight] Fyers 5m fallback OK for ${stock.symbol}`);
+            return fyers;
+          }
+          // One Yahoo retry after Fyers miss
+          return await fetchYahoo();
         } catch (retryErr) {
           console.error(
-            `[Overnight] Intraday fetch retry also failed for ${stock.symbol} — excluding from scan:`,
+            `[Overnight] Intraday Yahoo+Fyers failed for ${stock.symbol} — excluding from scan:`,
             retryErr instanceof Error ? retryErr.message : retryErr
           );
           return { vwap: null, intradayVolume: null, last15mHigh: null, last15mLow: null, hasIntraday: false };
@@ -182,6 +194,64 @@ export class OvernightService {
         last15mLow: closingBarCount > 0 && closingLow !== Infinity ? closingLow : null,
         hasIntraday: activeCandles.length > 0
       };
+    }
+  }
+
+  /** Fyers 5m history for overnight Rule 5 when Yahoo chart is unavailable. */
+  private static async fetchFyersIntradayMetrics(
+    stock: MarketStockData,
+    currentTime: Date
+  ): Promise<OvernightIntradayMetrics | null> {
+    try {
+      const token = await FyersAuthService.getAccessToken();
+      if (!token) return null;
+      const { appId } = FyersAuthService.getCredentials();
+      const market = stock.market === 'BSE' ? 'BSE' : 'NSE';
+      const clean = stock.symbol.split(':')[0].trim();
+      const fyersSymbol = market === 'NSE' ? `NSE:${clean}-EQ` : `BSE:${clean}-EQ`;
+      const rangeDay = getISTDateString(currentTime);
+
+      const historyUrl =
+        `https://api-t1.fyers.in/data/history?` +
+        new URLSearchParams({
+          symbol: fyersSymbol,
+          resolution: '5',
+          date_format: '1',
+          range_from: rangeDay,
+          range_to: rangeDay,
+          cont_flag: '1',
+        }).toString();
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), env.FYERS_REQUEST_TIMEOUT_MS || 10000);
+      try {
+        const res = await fetch(historyUrl, {
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: {
+            Authorization: `${appId}:${token}`,
+            Accept: 'application/json',
+          },
+        });
+        if (!res.ok) {
+          console.warn(`[Overnight] Fyers 5m HTTP ${res.status} for ${fyersSymbol}`);
+          return null;
+        }
+        const json = (await res.json()) as { s?: string; candles?: FyersHistoryCandle[]; message?: string };
+        if (json.s !== 'ok' || !Array.isArray(json.candles) || json.candles.length === 0) {
+          console.warn(`[Overnight] Fyers 5m empty for ${fyersSymbol}: ${json.message ?? json.s}`);
+          return null;
+        }
+        return parseStockIntradayMetricsFromFyersCandles(json.candles, currentTime);
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      console.warn(
+        `[Overnight] Fyers 5m fetch error for ${stock.symbol}:`,
+        err instanceof Error ? err.message : err
+      );
+      return null;
     }
   }
 

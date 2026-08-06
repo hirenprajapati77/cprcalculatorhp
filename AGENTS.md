@@ -44,7 +44,7 @@ Production runs on a **956 MB** VM. Next.js standalone alone uses ~330–470 MB 
 
 **Permanent safeguards (do not remove):**
 - `ops/ecosystem.config.cjs` — PM2 starts with `--max-old-space-size=384` and `max_memory_restart: 450M`
-- `ops/mem_watchdog.sh` — crontab every 5 min: flushes Redis at 75% RAM, fresh PM2 restart at 85% (uses `delete + start`, never `--update-env`)
+- `ops/mem_watchdog.sh` — crontab every 5 min: **outside** NSE cash session (09:15–15:30 IST) flushes Redis at 75% RAM and flush+restart at 85%; **during** market hours skips FLUSHDB (preserves `cron_done` / unlock rate-limit keys) and may still restart PM2 at 85%
 - Cache layer stores data in **Redis only** when connected (no duplicate L1 in Node heap)
 - Cron jobs call `purgeInProcessCaches()` after auto-scan and BTST alert
 
@@ -54,7 +54,7 @@ When Redis is connected, `CacheService.set()` writes **Redis only**. The in-proc
 
 This **reverses** the earlier always-write-L1 warm-cache behavior (added to prevent thundering-herd DB hits after Redis disconnects). On the 1 GB Oracle VM, mirroring ~700 keys into Node heap permanently cost more RAM than we could afford (~90% host usage).
 
-**Known failure mode:** `mem_watchdog` flushes Redis at 75% RAM → L1 was never warm either → next scan/API batch miss-storms upstream/DB → short CPU/RAM spike. Accepted: a transient miss burst after a flush is cheaper than carrying 2× cache residency forever.
+**Known failure mode:** Outside market hours, `mem_watchdog` may flush Redis at 75% RAM → L1 was never warm either → next scan/API batch miss-storms upstream/DB → short CPU/RAM spike. During 09:15–15:30 IST, FLUSHDB is skipped so cron claims / unlock rate limits survive. Accepted: a transient miss burst after an off-hours flush is cheaper than carrying 2× cache residency forever.
 
 **Implication for new features:** do **not** store durable product state (direction hysteresis, alert claims, cooldowns) in Redis alone — it is intentionally disposable under memory pressure. Prefer Postgres (same pattern as `breakoutAlertState` / `btstAlertState`) or a small in-process Map that is explicitly OK to lose on PM2 restart.
 
@@ -70,10 +70,10 @@ This **reverses** the earlier always-write-L1 warm-cache behavior (added to prev
    `prisma-setup.js` silently switches it to `sqlite` locally. Always check before building.
 
 2. **`NEXT_PUBLIC_BASE_URL` is inlined at BUILD time**  
-   Must be `http://129.159.230.41` when building for production. `deploy.ps1` handles this automatically.
+   Production build must use `https://129-159-230-41.nip.io` (see `ops/deploy.ps1`). Prefer that HTTPS URL in the browser — not bare `http://IP` — so Secure session cookies stick.
 
 3. **Cookie `Secure` flag must NOT use `NODE_ENV === 'production'`**  
-   The server runs plain HTTP. Use `NEXT_PUBLIC_BASE_URL.startsWith('https://')` instead.
+   Use request HTTPS / `X-Forwarded-Proto` / `NEXT_PUBLIC_BASE_URL.startsWith('https://')` (`src/lib/auth-cookie.ts`). Nginx TLS terminates at nip.io; Node still listens on localhost HTTP behind the proxy.
 
 4. **Redis errors during `npm run build` are normal** — no local Redis, it falls back to memory.
 

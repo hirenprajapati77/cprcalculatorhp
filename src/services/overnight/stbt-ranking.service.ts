@@ -1,4 +1,4 @@
-import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
+import { VOLUME_THRESHOLDS, ADVANCED_SCORE } from '@/config/trading-constants';
 import type { AdvancedScoreBreakdown } from './btst-ranking.service';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled } from '@/config/vpa.config';
@@ -152,9 +152,9 @@ export class StbtRankingService {
    */
   static getClassification(score: number | null): 'STRONG_STBT' | 'STBT_READY' | 'WATCH' | 'IGNORE' {
     if (score === null) return 'IGNORE';
-    if (score >= 100) return 'STRONG_STBT';
-    if (score >= 85) return 'STBT_READY';
-    if (score >= 70) return 'WATCH';
+    if (score >= ADVANCED_SCORE.STRONG) return 'STRONG_STBT';
+    if (score >= ADVANCED_SCORE.READY) return 'STBT_READY';
+    if (score >= ADVANCED_SCORE.WATCH) return 'WATCH';
     return 'IGNORE';
   }
 }

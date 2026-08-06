@@ -1,11 +1,9 @@
-import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
+import { cookieSecureFromRequest } from '@/lib/auth-cookie';
 
 export async function POST(req: NextRequest) {
   const res = NextResponse.json({ success: true });
-  const secure =
-    req.nextUrl.protocol === 'https:' ||
-    Boolean(env.NEXT_PUBLIC_BASE_URL?.startsWith('https://'));
+  const secure = cookieSecureFromRequest(req);
 
   // Mirror unlock cookie attributes so browsers reliably clear the session.
   res.cookies.set('app_access_token', '', {

@@ -27,6 +27,23 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
 
 export async function GET(req: NextRequest) {
   const detailed = await isAuthorized(req);
+
+  // Public probes: cheap DB ping only. Heavy overnight/regime/queue work is auth-gated
+  // so unauthenticated scrapers cannot amplify Yahoo/DB load on the 1GB VM.
+  if (!detailed) {
+    let dbOk = false;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbOk = true;
+    } catch (err) {
+      console.error('[Health Check Error] Database is unreachable:', err);
+    }
+    return NextResponse.json(
+      { status: dbOk ? 'healthy' : 'degraded' },
+      { status: dbOk ? 200 : 503 }
+    );
+  }
+
   const queueStatus = await QueueService.getQueueStatus();
   const queueList = Object.values(queueStatus.queues || {});
 
@@ -88,17 +105,12 @@ export async function GET(req: NextRequest) {
     console.error('[Health Check Error] Regime check failed:', err);
   }
 
+  const redisOk = CacheService.isRedisConnected;
   const isHealthy = dbStatus === 'healthy';
 
   const publicBody = {
-    status: isHealthy ? 'healthy' : 'degraded',
+    status: isHealthy ? (redisOk ? 'healthy' : 'degraded') : 'degraded',
   };
-
-  if (!detailed) {
-    // Unauthenticated callers get status only — version/build/environment/checks
-    // are reconnaissance aids for an internet-exposed endpoint.
-    return NextResponse.json(publicBody, { status: isHealthy ? 200 : 503 });
-  }
 
   return NextResponse.json(
     {
@@ -112,7 +124,7 @@ export async function GET(req: NextRequest) {
       executionMode,
       checks: {
         database: dbStatus,
-        redis: CacheService.isRedisConnected ? 'connected' : 'disconnected',
+        redis: redisOk ? 'connected' : 'disconnected',
         signals: signalsHealth,
         events: eventsHealth,
         regime: regimeHealth,

@@ -38,10 +38,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const result = await runJournalSnapshotJob(slot);
-
-  return NextResponse.json({
-    ...result,
-    istTime: `${hour}:${String(minute).padStart(2, '0')}`,
-  });
+  try {
+    const result = await runJournalSnapshotJob(slot);
+    return NextResponse.json({
+      ...result,
+      istTime: `${hour}:${String(minute).padStart(2, '0')}`,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[JournalSnapshot] cron failed:', error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

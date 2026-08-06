@@ -9,8 +9,9 @@ import { CacheService } from '@/services/cache.service';
  * causing 4× duplicate executions, DB writes, and Telegram alerts.
  *
  * Two Redis keys per claim:
- *   cron_lock:{key}  — short-lived running lock (TTL 90s). Auto-expires if the
- *                      job crashes before complete/release.
+ *   cron_lock:{key}  — short-lived running lock (TTL 10m). Auto-expires if the
+ *                      job crashes before complete/release. Must exceed worst-case
+ *                      full F&O auto-scan so a 60s scheduler tick cannot re-claim.
  *   cron_done:{key}  — retainClaim marker (TTL 24h). Written on successful
  *                      complete(retainClaim=true) so other workers cannot
  *                      re-claim after the running lock expires.
@@ -19,7 +20,7 @@ import { CacheService } from '@/services/cache.service';
  * (local dev without Redis, or unit tests).
  */
 
-const LOCK_TTL_SECONDS = 90;
+const LOCK_TTL_SECONDS = 600;
 /** How long a completed retainClaim stays blocked across workers. */
 const DONE_TTL_SECONDS = 24 * 60 * 60;
 

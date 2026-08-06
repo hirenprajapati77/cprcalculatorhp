@@ -132,5 +132,6 @@ Ok "Local tarballs cleaned up"
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green
 Write-Host "  DEPLOY COMPLETE" -ForegroundColor Green
-Write-Host "  http://129.159.230.41" -ForegroundColor Green
+Write-Host "  $PROD_URL" -ForegroundColor Green
+Write-Host "  (use HTTPS nip.io — not bare http://IP — for Secure cookies)" -ForegroundColor Green
 Write-Host "================================================" -ForegroundColor Green

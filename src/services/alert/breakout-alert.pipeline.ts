@@ -74,13 +74,24 @@ export function notifyBreakoutsFromScan(
     return;
   }
 
+  let claimedSymbols: string[] = [];
   BreakoutWatcherService.detectNewBreakouts(mapScanResultsForBreakoutAlert(eligible))
-    .then((newBreakouts) => {
-      if (newBreakouts.length > 0) {
-        return TelegramService.sendBreakoutAlert(newBreakouts);
+    .then(async (newBreakouts) => {
+      if (newBreakouts.length === 0) return;
+      claimedSymbols = newBreakouts.map((b) => b.symbol);
+      const result = await TelegramService.sendBreakoutAlert(newBreakouts);
+      if (!result.ok) {
+        console.error(
+          `[BreakoutWatcher] ${label} Telegram send failed (${result.reason ?? 'unknown'}) — releasing claims`
+        );
+        await BreakoutWatcherService.releaseClaims(claimedSymbols);
+        claimedSymbols = [];
       }
     })
-    .catch((err) => {
+    .catch(async (err) => {
       console.error(`[BreakoutWatcher] ${label} alert pipeline failed:`, err);
+      if (claimedSymbols.length > 0) {
+        await BreakoutWatcherService.releaseClaims(claimedSymbols);
+      }
     });
 }

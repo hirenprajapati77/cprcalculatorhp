@@ -10,6 +10,12 @@ export interface MarketRegime {
   volatility: 'HIGH' | 'LOW';
   score: number; // 0 to 100 representing trend strength
   niftyReturn5d?: number; // % return over last 5 trading candles, for RS calculations
+  /**
+   * false when Nifty history was missing/failed. Callers must fail closed
+   * (suppress both BTST and STBT alerts) — do not treat as neutral CHOPPY.
+   * undefined/true = reliable.
+   */
+  reliable?: boolean;
 }
 
 export class RegimeService {
@@ -34,8 +40,9 @@ export class RegimeService {
       const history = await NiftyHistoryService.getNiftyHistory(startDateObj, endDateObj);
       
       if (!history || history.length < 21) {
-        // Fallback if data is missing
-        return this.getDefaultRegime();
+        // Insufficient data — fail closed (not "CHOPPY = allow both sides")
+        console.warn(`[RegimeService] Insufficient NIFTY history (${history?.length ?? 0}) for ${date} — unreliable`);
+        return this.getUnreliableRegime();
       }
 
       const latest = history[history.length - 1];
@@ -72,7 +79,7 @@ export class RegimeService {
       // Nifty typically ranges 0.5% to 1.5% daily. > 1.2% is high volatility.
       const volatility: 'HIGH' | 'LOW' = atrPct > 1.2 ? 'HIGH' : 'LOW';
 
-      const regime = { trend, volatility, score, niftyReturn5d };
+      const regime: MarketRegime = { trend, volatility, score, niftyReturn5d, reliable: true };
 
       this.regimeByDate.set(date, regime);
       if (this.regimeByDate.size > this.MAX_REGIME_CACHE) {
@@ -84,12 +91,13 @@ export class RegimeService {
       return regime;
     } catch (error) {
       console.error(`[RegimeService] Error fetching NIFTY 50 regime:`, error);
-      return this.getDefaultRegime();
+      return this.getUnreliableRegime();
     }
   }
 
-  private static getDefaultRegime(): MarketRegime {
-    return { trend: 'CHOPPY', volatility: 'LOW', score: 50, niftyReturn5d: 0 };
+  /** Fail-closed placeholder — trend label is CHOPPY but reliable=false suppresses both alert sides. */
+  private static getUnreliableRegime(): MarketRegime {
+    return { trend: 'CHOPPY', volatility: 'LOW', score: 50, niftyReturn5d: 0, reliable: false };
   }
 
   static clearCache(): void {

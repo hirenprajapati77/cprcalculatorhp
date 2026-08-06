@@ -5,6 +5,7 @@
 import type { OvernightSignal } from '@prisma/client';
 import type { BtstScoreResultEnriched } from '@/services/backtest/btst.service';
 import { MarketService } from '@/services/market.service';
+import { ADVANCED_SCORE } from '@/config/trading-constants';
 
 const LONG_READY = ['STRONG_BTST', 'BTST_READY'];
 const SHORT_READY = ['STRONG_STBT', 'STBT_READY'];
@@ -101,7 +102,7 @@ export function buildInsightsFromOvernight(signals: OvernightSignal[]) {
       continue;
     }
     if (LONG_READY.includes(sig.classification) || SHORT_READY.includes(sig.classification) || INDEX_READY_CLS.includes(sig.classification)) {
-      if (score >= 100 || sig.classification.startsWith('STRONG_') || sig.classification === 'INDEX_STRONG') {
+      if (score >= ADVANCED_SCORE.STRONG || sig.classification.startsWith('STRONG_') || sig.classification === 'INDEX_STRONG') {
         strongSignal++;
       } else {
         breakoutReady++;
@@ -174,7 +175,7 @@ export function selectTradableOvernightPicks(
     suppressLong?: boolean;
   } = {}
 ) {
-  const minScore = opts.minScore ?? 85;
+  const minScore = opts.minScore ?? ADVANCED_SCORE.READY;
   const take = opts.take ?? 5;
 
   const longs = opts.suppressLong
