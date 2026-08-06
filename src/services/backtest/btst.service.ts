@@ -417,7 +417,7 @@ export class BtstService {
 
     if (strategyVariant === 'no_vdu_weighted') {
       vduPoints = 0;
-      const cprWeight = env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : 35;
+      const cprWeight = BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU;
       cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? cprWeight : 0;
     }
 
