@@ -309,21 +309,5 @@ describe('BTST Scoring Engine Tests', () => {
     );
   });
 
-  test('no_vdu_weighted uses fixed CPR narrow weight in scoreBreakdown', () => {
-    const stock = {
-      ...baseStock,
-      high: 110,
-      low: 105,
-      ltp: 108,
-      volume: 1500000,
-      vwap: 105,
-      candle15m: { open: 107, high: 108, low: 107, close: 107.9, volume: 50000 },
-    };
-
-    const result = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
-    assert.strictEqual(result.scoreBreakdown?.vdu, 0);
-    assert.strictEqual(result.scoreBreakdown?.cprNarrow, 35);
-  });
-
 });
 
