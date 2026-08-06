@@ -51,10 +51,14 @@ echo "=== Synchronizing Prisma Client ==="
 npx prisma generate
 
 echo "=== Restarting PM2 fresh (delete + start; never restart --update-env) ==="
-cd $APP/.next/standalone
-# Rulebook: PM2 caches env at process creation â€” delete then start so .env is reloaded.
+# Rulebook: PM2 caches env at process creation — delete then start so .env is reloaded.
 pm2 delete cpr-platform || true
-pm2 start server.js --name cpr-platform
+if [ -f /home/ubuntu/ecosystem.config.cjs ]; then
+  pm2 start /home/ubuntu/ecosystem.config.cjs
+else
+  cd $APP/.next/standalone
+  NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 450M
+fi
 pm2 save
 
 echo "=== Flushing PM2 logs to clear historical spam ==="
@@ -108,9 +112,13 @@ else
         mv $BACKUP_DIR $APP/.next/standalone
         
         echo "Restarting PM2 with rolled-back release (delete + start)..."
-        cd $APP/.next/standalone
         pm2 delete cpr-platform || true
-        pm2 start server.js --name cpr-platform
+        if [ -f /home/ubuntu/ecosystem.config.cjs ]; then
+          pm2 start /home/ubuntu/ecosystem.config.cjs
+        else
+          cd $APP/.next/standalone
+          NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 450M
+        fi
         pm2 save
         
         echo "Waiting 5s for rollback to stabilize..."

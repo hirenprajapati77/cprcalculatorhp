@@ -107,7 +107,7 @@ Ok "NEXT_PUBLIC_BASE_URL restored to $LOCAL_URL"
 
 # ── 6. UPLOAD ────────────────────────────────────────────────
 Log "Uploading to server (~15-20s)..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh ops/merge_env.sh "${SERVER}:/home/ubuntu/"
+scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh ops/merge_env.sh ops/ecosystem.config.cjs ops/mem_watchdog.sh "${SERVER}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { Err "SCP upload failed" }
 
 Log "Merging .env.server into production .env (keeps server-only keys)..."
@@ -121,7 +121,7 @@ Ok "Upload complete"
 
 # ── 7. EXTRACT + RESTART ON SERVER ───────────────────────────
 Log "Extracting and restarting PM2 on server..."
-ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh && bash /home/ubuntu/deploy_extract.sh"
+ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh /home/ubuntu/mem_watchdog.sh && chmod +x /home/ubuntu/mem_watchdog.sh && bash /home/ubuntu/deploy_extract.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
 # ── 8. CLEANUP LOCAL TARBALLS ────────────────────────────────

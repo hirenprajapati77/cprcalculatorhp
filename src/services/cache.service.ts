@@ -19,10 +19,13 @@ export function shouldKeepRedisRetrying(nodeEnv: string, redisUrl?: string): boo
   return nodeEnv === 'production' || Boolean(redisUrl);
 }
 
-// LRU Memory Cache fallback
+// LRU Memory Cache — fallback when Redis is down. On production Redis stays in Redis
+// only so we don't duplicate ~700 market keys in Node heap (~1 GB Oracle VM).
+const MEMORY_CACHE_MAX = 200;
+
 const memoryCache = new LRUCache<string, NonNullable<unknown>>({
-  max: 1000, // max keys to prevent memory leak
-  ttl: 1000 * 60 * 60, // max 1 hour default TTL
+  max: MEMORY_CACHE_MAX,
+  ttl: 1000 * 60 * 60,
   updateAgeOnGet: false,
   updateAgeOnHas: false,
 });
@@ -109,7 +112,7 @@ class CacheServiceImpl {
 
   async get<T>(key: string): Promise<T | null> {
     let result: T | null = null;
-    
+
     if (this.isRedisConnected) {
       try {
         const data = await this.redisClient!.get(key);
@@ -126,26 +129,21 @@ class CacheServiceImpl {
     } else {
       this.misses++;
     }
-    
+
     return result;
   }
 
   async set(key: string, value: NonNullable<unknown>, ttlSeconds: number): Promise<void> {
-    // Always write L1 (memory) so the fallback cache stays warm.
-    // Previously we returned after a successful Redis write, leaving memoryCache empty.
-    // When Redis disconnected, get() fell back to an empty memoryCache causing a
-    // thundering herd of DB queries. Now memory is always populated as a true L1.
-    memoryCache.set(key, structuredClone(value), { ttl: ttlSeconds * 1000 });
-
-    // Additionally persist to Redis (L2) when available
     if (this.isRedisConnected) {
       try {
         await this.redisClient!.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+        return;
       } catch {
-        // Redis write failed — L1 memory cache already written above, so callers
-        // will still get a cache hit. Non-fatal.
+        // Redis write failed — fall through to memory fallback below.
       }
     }
+
+    memoryCache.set(key, structuredClone(value), { ttl: ttlSeconds * 1000 });
   }
 
   async delete(key: string): Promise<void> {

@@ -206,6 +206,10 @@ export class IndexDiscoverService {
   >();
   private static readonly YAHOO_5M_MEMO_MS = 10_000;
 
+  static clearRequestMemo(): void {
+    this.yahoo5mChartMemo.clear();
+  }
+
   /**
    * Shared Yahoo 5m chart fetch — one HTTP call per symbol per request path.
    * getLiveIndexSession + getIntradayMetrics both need the same payload.
