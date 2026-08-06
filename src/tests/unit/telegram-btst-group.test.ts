@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { env } from '../../config/env';
 import { prisma } from '../../lib/db';
-import { TelegramService } from '../../services/alert/telegram.service';
+import { TelegramService, escapeTelegramHtml } from '../../services/alert/telegram.service';
+
+test('escapeTelegramHtml', () => {
+  assert.strictEqual(escapeTelegramHtml('L&T <CE>'), 'L&amp;T &lt;CE&gt;');
+  assert.strictEqual(escapeTelegramHtml('score < 85'), 'score &lt; 85');
+});
 
 /** Minimal qualifying LONG payload (STRONG_ classification forces the send path). */
 function makeAlertPayload() {
@@ -48,9 +53,11 @@ function withMocks(opts: {
   prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
 
   const sentChatIds: string[] = [];
+  const sentBodies: string[] = [];
   global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body)) as { chat_id: string };
+    const body = JSON.parse(String(init?.body)) as { chat_id: string; text: string };
     sentChatIds.push(body.chat_id);
+    sentBodies.push(body.text);
     const behavior = opts.fetchBehavior?.(body.chat_id) ?? { ok: true };
     return {
       ok: behavior.ok,
@@ -61,6 +68,7 @@ function withMocks(opts: {
 
   return {
     sentChatIds,
+    sentBodies,
     restore: () => {
       global.fetch = originalFetch;
       prisma.appSettings.findUnique = originalFindUnique;
@@ -117,6 +125,37 @@ test('sendBtstAlert group-only delivery', async (t) => {
       assert.strictEqual(result.sent, true);
       assert.strictEqual(result.reason, 'no setups');
       assert.deepStrictEqual(mocks.sentChatIds, ['group-chat']);
+      assert.match(mocks.sentBodies[0], /score &lt; \d+/);
+      assert.doesNotMatch(mocks.sentBodies[0], /score < \d+/);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('escapes HTML in symbol and option fields', async () => {
+    const mocks = withMocks({ personal: 'dm-chat', group: 'group-chat' });
+    try {
+      const payload = [
+        {
+          tag: 'LONG',
+          longScore: 120,
+          shortScore: 0,
+          symbol: 'L&T',
+          entry: 100,
+          sl: 98,
+          target: 104,
+          rr: '1:2',
+          signals: ['BULLISH'],
+          classification: 'STRONG_BTST',
+          optionSuggestion: { formattedName: 'AUG 2026 <100> CE', ltp: 10 },
+        },
+      ] as unknown as Parameters<typeof TelegramService.sendBtstAlert>[0];
+      const result = await TelegramService.sendBtstAlert(payload);
+      assert.strictEqual(result.sent, true);
+      const body = mocks.sentBodies[0];
+      assert.match(body, /L&amp;T/);
+      assert.match(body, /AUG 2026 &lt;100&gt; CE/);
+      assert.doesNotMatch(body, /<100>/);
     } finally {
       mocks.restore();
     }
