@@ -3,6 +3,7 @@ import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
 
 export class NiftyHistoryService {
   private static memoryCache = new Map<string, OHLC[]>();
+  private static readonly MAX_CACHE_ENTRIES = 10;
 
   /**
    * Fetches NIFTY 50 (^NSEI) history for the given date range.
@@ -22,6 +23,10 @@ export class NiftyHistoryService {
 
     const history = await HistoricalProvider.getHistory('^NSEI', startDate, endDate);
     this.memoryCache.set(cacheKey, history);
+    if (this.memoryCache.size > this.MAX_CACHE_ENTRIES) {
+      const oldest = this.memoryCache.keys().next().value;
+      if (oldest) this.memoryCache.delete(oldest);
+    }
     return history;
   }
 

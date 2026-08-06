@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { CacheService } from '@/services/cache.service';
+import { getProcessMemorySnapshot } from '@/lib/process-memory';
 import { QueueService } from '@/services/queue.service';
 import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
@@ -127,6 +128,10 @@ export async function GET(req: NextRequest) {
         regime: regimeHealth === 'error' ? 'Regime check failed' : null,
       },
       cache: await CacheService.getMetrics(),
+      memory: {
+        process: getProcessMemorySnapshot(),
+        l1: CacheService.getMemoryUsage(),
+      },
       queue: {
         depth: queueList.reduce((sum, q) => sum + q.waiting, 0),
         active: queueList.reduce((sum, q) => sum + q.active, 0),

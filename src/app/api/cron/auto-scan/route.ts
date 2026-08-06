@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ScannerController } from '@/services/scanner-controller';
 import { CacheService } from '@/services/cache.service';
 import { notifyBreakoutsFromScan } from '@/services/alert/breakout-alert.pipeline';
+import { purgeInProcessCaches } from '@/services/in-process-cache';
 import { isMarketOpen } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 
@@ -36,5 +37,7 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    purgeInProcessCaches('auto-scan');
   }
 }

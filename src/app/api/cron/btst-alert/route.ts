@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isBtstDiscoveryOpen, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { runBtstAlertJob } from '@/services/scheduler/btst-alert.job';
+import { purgeInProcessCaches } from '@/services/in-process-cache';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -28,5 +29,7 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    purgeInProcessCaches('btst-alert');
   }
 }

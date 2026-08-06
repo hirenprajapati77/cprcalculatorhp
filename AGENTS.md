@@ -38,6 +38,22 @@ That's it. The script handles everything:
 
 ---
 
+## Memory (Oracle Free Tier — ~1 GB RAM)
+
+Production runs on a **956 MB** VM. Next.js standalone alone uses ~330–470 MB RSS at steady state; **55–70% RAM usage is normal**.
+
+**Permanent safeguards (do not remove):**
+- `ops/ecosystem.config.cjs` — PM2 starts with `--max-old-space-size=384` and `max_memory_restart: 450M`
+- `ops/mem_watchdog.sh` — crontab every 5 min: flushes Redis at 75% RAM, fresh PM2 restart at 85% (uses `delete + start`, never `--update-env`)
+- Cache layer stores data in **Redis only** when connected (no duplicate L1 in Node heap)
+- Cron jobs call `purgeInProcessCaches()` after auto-scan and BTST alert
+
+**Check memory:** authenticated `GET /api/health` → `memory.process.rssMb` and `memory.l1.size`
+
+**If RAM stays >85% after deploy:** confirm `pm2 show cpr-platform` lists `max memory restart: 471859200` (450M).
+
+---
+
 ## Common Pitfalls (Read Before Touching Anything)
 
 1. **`prisma/schema.prisma` must always be `provider = "postgresql"`**  

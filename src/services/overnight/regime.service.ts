@@ -15,6 +15,7 @@ export interface MarketRegime {
 export class RegimeService {
   /** Multi-date memo — backtests walk many dates and the previous single-entry cache thrashed every call. */
   private static regimeByDate = new Map<string, MarketRegime>();
+  private static readonly MAX_REGIME_CACHE = 30;
 
   /**
    * Fetches the broad market regime based on NIFTY 50 (^NSEI) history.
@@ -72,9 +73,13 @@ export class RegimeService {
       const volatility: 'HIGH' | 'LOW' = atrPct > 1.2 ? 'HIGH' : 'LOW';
 
       const regime = { trend, volatility, score, niftyReturn5d };
-      
+
       this.regimeByDate.set(date, regime);
-      
+      if (this.regimeByDate.size > this.MAX_REGIME_CACHE) {
+        const oldest = this.regimeByDate.keys().next().value;
+        if (oldest) this.regimeByDate.delete(oldest);
+      }
+
       console.log(`[RegimeService] NIFTY 50 Regime for ${date}: ${trend} / ${volatility} (ATR%: ${atrPct.toFixed(2)}%)`);
       return regime;
     } catch (error) {
@@ -85,6 +90,10 @@ export class RegimeService {
 
   private static getDefaultRegime(): MarketRegime {
     return { trend: 'CHOPPY', volatility: 'LOW', score: 50, niftyReturn5d: 0 };
+  }
+
+  static clearCache(): void {
+    this.regimeByDate.clear();
   }
 
   private static calculateEMA(prices: number[], period: number): number[] {
