@@ -9,6 +9,14 @@ import { decrypt } from '../../lib/crypto';
 
 const MIN_BTST_ALERT_SCORE = ADVANCED_SCORE.READY;
 
+/** Escape dynamic text for Telegram parse_mode=HTML (<, >, & must be entity-encoded). */
+export function escapeTelegramHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export class TelegramService {
   static async sendMessage(text: string, chatId?: string, overrideToken?: string): Promise<{ ok: boolean; reason?: string }> {
     let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
@@ -144,7 +152,7 @@ export class TelegramService {
       const result = await this.sendMessage(
         `📊 <b>CPR PRO — BTST/STBT SCAN</b>\n` +
         `📅 ${dateStr}\n\n` +
-        `<i>No qualifying setups found today (score < ${MIN_BTST_ALERT_SCORE}).\n` +
+        `<i>No qualifying setups found today (score &lt; ${MIN_BTST_ALERT_SCORE}).\n` +
         `Scanner ran successfully.</i>`,
         targetChatId
       );
@@ -160,12 +168,14 @@ export class TelegramService {
       const entry = r.entry.toFixed(2);
       const sl = r.sl.toFixed(2);
       const target = r.target.toFixed(2);
-      const rr = r.rr;
+      const rr = escapeTelegramHtml(String(r.rr));
       const score = Math.max(r.longScore, r.shortScore);
-      const optionStr = r.optionSuggestion && r.optionSuggestion.formattedName 
-        ? `\n  🎯 Option: <b>${r.optionSuggestion.formattedName}</b>` 
+      const symbol = escapeTelegramHtml(r.symbol);
+      const signals = escapeTelegramHtml((r.signals || []).join(', '));
+      const optionStr = r.optionSuggestion?.formattedName
+        ? `\n  🎯 Option: <b>${escapeTelegramHtml(r.optionSuggestion.formattedName)}</b>`
         : '';
-      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}${optionStr}\n\n`;
+      text += `• <b>${symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${signals}${optionStr}\n\n`;
     });
 
     text += `🔴 <b>SHORT SETUPS (${shorts.length})</b>\n`;
@@ -174,12 +184,14 @@ export class TelegramService {
       const entry = r.entry.toFixed(2);
       const sl = r.sl.toFixed(2);
       const target = r.target.toFixed(2);
-      const rr = r.rr;
+      const rr = escapeTelegramHtml(String(r.rr));
       const score = Math.max(r.longScore, r.shortScore);
-      const optionStr = r.optionSuggestion && r.optionSuggestion.formattedName 
-        ? `\n  🎯 Option: <b>${r.optionSuggestion.formattedName}</b>` 
+      const symbol = escapeTelegramHtml(r.symbol);
+      const signals = escapeTelegramHtml((r.signals || []).join(', '));
+      const optionStr = r.optionSuggestion?.formattedName
+        ? `\n  🎯 Option: <b>${escapeTelegramHtml(r.optionSuggestion.formattedName)}</b>`
         : '';
-      text += `• <b>${r.symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${(r.signals || []).join(', ')}${optionStr}\n\n`;
+      text += `• <b>${symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${signals}${optionStr}\n\n`;
     });
 
     text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;
@@ -262,17 +274,18 @@ export class TelegramService {
             ));
           if (suggestion && !suggestion.error && suggestion.formattedName) {
             const priceText = suggestion.ltp ? ` @ ₹${suggestion.ltp.toFixed(2)}` : '';
-            optionText = `\n   🎯 Option: <b>${suggestion.formattedName}${priceText}</b>`;
+            const optionLabel = escapeTelegramHtml(suggestion.formattedName);
+            optionText = `\n   🎯 Option: <b>${optionLabel}${priceText}</b>`;
           }
         } catch {
           // Fallback gracefully if option lookup fails
         }
 
         return (
-          `🚀 <b>${s.symbol}</b> (${s.sector})\n` +
+          `🚀 <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
           `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
           `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}\n` +
-          `   RR: ${s.rr}${optionText}`
+          `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
         );
       })
     );
