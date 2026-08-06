@@ -19,8 +19,23 @@ export function shouldKeepRedisRetrying(nodeEnv: string, redisUrl?: string): boo
   return nodeEnv === 'production' || Boolean(redisUrl);
 }
 
-// LRU Memory Cache — fallback when Redis is down. On production Redis stays in Redis
-// only so we don't duplicate ~700 market keys in Node heap (~1 GB Oracle VM).
+/**
+ * In-process LRU — Redis-down fallback only (max 200 keys).
+ *
+ * INTENTIONAL TRADE-OFF (Oracle ~1 GB VM, PR #89):
+ * When Redis is connected, CacheService.set() writes Redis ONLY and does NOT
+ * mirror into this L1. That reverses the earlier "always write L1" warm-cache
+ * fix, which duplicated ~700 market/scanner keys in Node heap and pushed host
+ * RAM toward 90%.
+ *
+ * Accepted failure mode under mem_watchdog (flush Redis at 75% RAM):
+ * both Redis and L1 are cold → next request batch miss-storms DB/upstream.
+ * We accept that burst because permanent 2× cache residency is worse on this
+ * RAM budget than a transient miss spike after a flush/restart.
+ *
+ * Do NOT reintroduce always-write L1 without revisiting VM size or reducing
+ * the Redis key footprint first. See AGENTS.md → Memory.
+ */
 const MEMORY_CACHE_MAX = 200;
 
 const memoryCache = new LRUCache<string, NonNullable<unknown>>({
@@ -134,6 +149,7 @@ class CacheServiceImpl {
   }
 
   async set(key: string, value: NonNullable<unknown>, ttlSeconds: number): Promise<void> {
+    // Redis-connected path: Redis only (no L1 mirror). See MEMORY_CACHE_MAX trade-off.
     if (this.isRedisConnected) {
       try {
         await this.redisClient!.set(key, JSON.stringify(value), 'EX', ttlSeconds);

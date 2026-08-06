@@ -48,6 +48,16 @@ Production runs on a **956 MB** VM. Next.js standalone alone uses ~330–470 MB 
 - Cache layer stores data in **Redis only** when connected (no duplicate L1 in Node heap)
 - Cron jobs call `purgeInProcessCaches()` after auto-scan and BTST alert
 
+### Cache trade-off (documented — not a silent regression)
+
+When Redis is connected, `CacheService.set()` writes **Redis only**. The in-process LRU is populated only when Redis is down or a Redis write fails.
+
+This **reverses** the earlier always-write-L1 warm-cache behavior (added to prevent thundering-herd DB hits after Redis disconnects). On the 1 GB Oracle VM, mirroring ~700 keys into Node heap permanently cost more RAM than we could afford (~90% host usage).
+
+**Known failure mode:** `mem_watchdog` flushes Redis at 75% RAM → L1 was never warm either → next scan/API batch miss-storms upstream/DB → short CPU/RAM spike. Accepted: a transient miss burst after a flush is cheaper than carrying 2× cache residency forever.
+
+**Implication for new features:** do **not** store durable product state (direction hysteresis, alert claims, cooldowns) in Redis alone — it is intentionally disposable under memory pressure. Prefer Postgres (same pattern as `breakoutAlertState` / `btstAlertState`) or a small in-process Map that is explicitly OK to lose on PM2 restart.
+
 **Check memory:** authenticated `GET /api/health` → `memory.process.rssMb` and `memory.l1.size`
 
 **If RAM stays >85% after deploy:** confirm `pm2 show cpr-platform` lists `max memory restart: 471859200` (450M).
