@@ -14,15 +14,31 @@ export async function GET(request: NextRequest) {
         take: 10,
       });
 
-      const formatted = results.map((r: ScannerResult) => ({
-        id: r.id,
-        date: r.date,
-        score: r.score,
-        tag: r.score >= 70 ? 'LONG' : r.score <= 30 ? 'SHORT' : 'NEUTRAL',
-        signalSummary: r.signalSummary,
-        width: r.width,
-        ltp: r.ltp,
-      }));
+      const formatted = results.map((r: ScannerResult) => {
+        const signals = (r.signalSummary || '')
+          .split(/[,\s|]+/)
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean);
+        const bearish = signals.some((s) =>
+          s.includes('BEARISH') || s.includes('SHORT') || s === 'MP_DIRECT_DOWN' || s === 'MP_REVERSAL_DOWN'
+        );
+        const bullish = signals.some((s) =>
+          s.includes('BULLISH') || s.includes('LONG') || s === 'MP_DIRECT_UP' || s === 'BREAKOUT'
+        );
+        let tag: 'LONG' | 'SHORT' | 'NEUTRAL' = 'NEUTRAL';
+        if (bearish && !bullish) tag = 'SHORT';
+        else if (bullish && !bearish) tag = 'LONG';
+
+        return {
+          id: r.id,
+          date: r.date,
+          score: r.score,
+          tag,
+          signalSummary: r.signalSummary,
+          width: r.width,
+          ltp: r.ltp,
+        };
+      });
 
       return NextResponse.json({
         success: true,

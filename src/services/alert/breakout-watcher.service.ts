@@ -162,6 +162,26 @@ export class BreakoutWatcherService {
     return newBreakouts;
   }
 
+  /**
+   * Undo claims when Telegram delivery fails so the next scan can re-alert.
+   * Mirrors BTST alert claim rollback — without this, a failed send silences
+   * the symbol for the full cooldown window.
+   */
+  static async releaseClaims(symbols: string[]): Promise<void> {
+    if (symbols.length === 0) return;
+    try {
+      await prisma.breakoutAlertState.updateMany({
+        where: { symbol: { in: symbols } },
+        data: { hadBreakout: false, lastAlerted: null },
+      });
+    } catch (err) {
+      console.error(
+        `[BreakoutWatcher] Failed to release claims for ${symbols.join(',')}:`,
+        err
+      );
+    }
+  }
+
   static async resetDailyState(): Promise<void> {
     const { isMarketOpen } = await import('@/lib/market-hours');
     if (isMarketOpen()) {

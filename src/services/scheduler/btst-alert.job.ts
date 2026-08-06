@@ -215,8 +215,14 @@ async function buildEnrichedPicks(picks: OvernightSignal[], direction: 'LONG' | 
 export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const signalDate = getISTDateString();
   const regime = await RegimeService.getMarketRegime(signalDate);
-  const suppressStbt = regime.trend === 'BULL';
-  const suppressBtst = regime.trend === 'BEAR';
+  const regimeUnknown = regime.reliable === false;
+  if (regimeUnknown) {
+    console.warn(
+      `[BtstAlert] Regime unreliable for ${signalDate} — suppressing BOTH BTST and STBT alerts (fail-closed)`
+    );
+  }
+  const suppressStbt = regime.trend === 'BULL' || regimeUnknown;
+  const suppressBtst = regime.trend === 'BEAR' || regimeUnknown;
 
   const overnightSignals = await OvernightService.discover('BOTH');
   const { longs, shorts } = selectTradableOvernightPicks(overnightSignals, {

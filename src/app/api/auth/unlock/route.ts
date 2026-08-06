@@ -2,13 +2,7 @@ import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { cache } from '@/lib/redis';
 import { hashToken, timingSafeEqual } from '@/lib/auth-token';
-
-function cookieSecure(req: NextRequest): boolean {
-  return (
-    req.nextUrl.protocol === 'https:' ||
-    Boolean(env.NEXT_PUBLIC_BASE_URL?.startsWith('https://'))
-  );
-}
+import { cookieSecureFromRequest } from '@/lib/auth-cookie';
 
 async function checkUnlockRateLimit(request: NextRequest): Promise<boolean> {
   // Prefer nginx's X-Real-IP (always the direct peer). Only when TRUST_PROXY is
@@ -71,7 +65,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       sameSite: 'strict',
       path: '/',
-      secure: cookieSecure(req),
+      secure: cookieSecureFromRequest(req),
       maxAge: 60 * 60 * 24 * 7, // 7 days
     });
 
