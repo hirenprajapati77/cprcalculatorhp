@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VPA CLV Scoring Unit Tests**: Added direct unit tests validating `scoreVpaClv` thresholds under neutral, bullish, and bearish directions for both LONG and SHORT setups.
 
 ### Changed
+- **Redis-only cache on connected path (Oracle 1 GB trade-off)**: `CacheService.set()` no longer mirrors every Redis write into the in-process L1 LRU when Redis is healthy. This deliberately reverses the prior always-write-L1 warm-cache fix to avoid duplicating ~700 keys in Node heap. Accepted side effect: after `mem_watchdog` flushes Redis at 75% RAM, both layers are cold and the next request batch can miss-storm; that transient burst is preferred over permanent 2× memory. See `cache.service.ts` comment and AGENTS.md → Memory. Durable product state (hysteresis, claims) must not rely on Redis alone.
 - **Fyers Primary Data Provider**: Upgraded the live data pipeline to use the Fyers API as the primary data provider, eliminating the 1-2 minute price delay experienced with Yahoo Finance. Yahoo Finance is now maintained strictly as a reliable outage fallback.
 - **CPR Journal Cron Window**: Adjusted the CPR journal cron job start time to 15:20 IST (ends 15:24 under `CONTINUOUS` to avoid overlapping BTST journal).
 - **BTST/STBT Group-Only Telegram Alerts**: Routed BTST/STBT alert signals strictly to Telegram group chats (falling back to personal chat only if group ID is unconfigured).
