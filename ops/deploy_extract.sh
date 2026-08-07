@@ -57,7 +57,7 @@ if [ -f /home/ubuntu/ecosystem.config.cjs ]; then
   pm2 start /home/ubuntu/ecosystem.config.cjs
 else
   cd $APP/.next/standalone
-  NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 550M
+  NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 650M
 fi
 pm2 save
 
@@ -117,7 +117,7 @@ else
           pm2 start /home/ubuntu/ecosystem.config.cjs
         else
           cd $APP/.next/standalone
-          NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 550M
+          NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 650M
         fi
         pm2 save
         
