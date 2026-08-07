@@ -444,30 +444,32 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
 });
 
 test('MarketService Fyers Rate Limit Circuit Breaker', async (t) => {
+  // Private static field — typed escape hatch for unit tests (avoid `any`).
+  const fyersRl = MarketService as unknown as { fyersRateLimitedUntilMs: number };
+
   await t.test('429 status triggers 60s cooldown', async () => {
-    // Clear any prior state
-    (MarketService as any).fyersRateLimitedUntilMs = 0;
+    fyersRl.fyersRateLimitedUntilMs = 0;
 
     MarketService.noteFyersHttpFailure(429);
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), true);
-    
+
     // Manually expire the cooldown to simulate 60s passing
-    (MarketService as any).fyersRateLimitedUntilMs = Date.now() - 1000;
+    fyersRl.fyersRateLimitedUntilMs = Date.now() - 1000;
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), false);
   });
 
   await t.test('message/code match triggers cooldown without 429', async () => {
-    (MarketService as any).fyersRateLimitedUntilMs = 0;
+    fyersRl.fyersRateLimitedUntilMs = 0;
 
     MarketService.noteFyersHttpFailure(200, 'rate limit exceeded', 429);
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), true);
 
-    (MarketService as any).fyersRateLimitedUntilMs = Date.now() - 1000;
+    fyersRl.fyersRateLimitedUntilMs = Date.now() - 1000;
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), false);
   });
-  
+
   await t.test('non-rate-limit failure does NOT trigger cooldown', async () => {
-    (MarketService as any).fyersRateLimitedUntilMs = 0;
+    fyersRl.fyersRateLimitedUntilMs = 0;
 
     MarketService.noteFyersHttpFailure(500, 'internal server error');
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), false);
