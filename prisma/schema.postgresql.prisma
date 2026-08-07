@@ -60,6 +60,7 @@ model ScannerResult {
   sl             Float    @default(0)
   target         Float    @default(0)
   rr             String   @default("1:2.0")
+  vpaBreakdown   Json?
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])

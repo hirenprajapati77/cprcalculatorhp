@@ -184,6 +184,7 @@ export class ScannerController {
                 sl: r.sl,
                 target: r.target,
                 rr: r.rr,
+                vpaBreakdown: (r.vpaBreakdown as unknown as object) ?? null,
               },
               create: {
                 symbol: dbSymbol,
@@ -210,6 +211,7 @@ export class ScannerController {
                 sl: r.sl,
                 target: r.target,
                 rr: r.rr,
+                vpaBreakdown: (r.vpaBreakdown as unknown as object) ?? null,
               },
             });
 
