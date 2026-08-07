@@ -34,11 +34,10 @@ import { FyersAuthService } from '../fyers-auth.service';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
- * 15 balances wall-clock speed (~7 rounds for ~100 F&O symbols) against Yahoo
- * rate-limit risk from a single IP — wide enough to cut sequential latency,
- * small enough to avoid a full-universe burst.
+ * Kept modest on Oracle 1GB + Fyers 429 pressure (was 15; live scans already
+ * hit RSS near the old PM2 cap).
  */
-const STOCK_DATA_PREFETCH_CHUNK = 15;
+const STOCK_DATA_PREFETCH_CHUNK = 8;
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Kolkata',
