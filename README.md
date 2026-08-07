@@ -52,6 +52,7 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (August 2026):**
+- **VPA Shadow Breakdown Persistence**: Persisted `vpaBreakdown` JSON metrics directly into `ScannerResult` in PostgreSQL to accumulate historical shadow analysis for false breakout evaluation.
 - **Stock BTST Signal Quality Gate Fix**: Resolved the bug where all F&O stock signals were classified as `LOW_QUALITY` due to history quality scoring contradictions on truncated 22-day histories. Gated the `LOW_QUALITY` bucket on raw `historyLength < 15` minimum threshold while preserving the diagnostic `historyQuality` percentage calculations.
 - **Market Session Profile (CAS)**: Added `MARKET_PROFILE=CONTINUOUS|CLOSING_AUCTION` with `MarketSessionResolver` so SEBI Closing Auction Session can be enabled without rewriting scoring. Default remains current production clocks. Full analysis: [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).
 - **Aug-4 reliability fixes**: Scanner confidence accepts `HP_*` (post-rename); Redis cron retainClaim survives across workers; BTST journal skips option-miss instead of fake `STOCK`/strike-0 rows.
