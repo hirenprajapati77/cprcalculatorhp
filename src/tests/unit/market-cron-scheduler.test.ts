@@ -40,10 +40,25 @@ describe('resolveJournalSnapshotSlot', () => {
 });
 
 describe('shouldCompleteClaimedJob', () => {
-  it('releases retryable soft failures', () => {
-    assert.equal(shouldCompleteClaimedJob({ success: false, message: 'No CPR signals' }), false);
-    assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'no setups' }), false);
+  it('releases only true retryable soft failures', () => {
+    assert.equal(shouldCompleteClaimedJob({ success: false, message: 'DB timeout' }), false);
     assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'telegram_api_error' }), false);
+  });
+
+  it('retains claim for terminal empty outcomes (no overnight re-run storm)', () => {
+    assert.equal(
+      shouldCompleteClaimedJob({ success: false, message: 'No CPR signals with score >= 75 today' }),
+      true
+    );
+    assert.equal(shouldCompleteClaimedJob({ sent: false, reason: 'no setups', count: 0 }), true);
+    assert.equal(
+      shouldCompleteClaimedJob({
+        success: false,
+        overnightEnsured: true,
+        logged: [],
+      }),
+      true
+    );
   });
 
   it('completes successful or non-retryable results', () => {

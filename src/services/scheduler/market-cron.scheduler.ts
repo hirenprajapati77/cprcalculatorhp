@@ -22,13 +22,38 @@ import {
 } from '@/services/scheduler/cron-run-claim';
 
 let started = false;
+/** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
+let tickInFlight = false;
 
+/**
+ * Decide whether a claimed cron job should retain its claim (done) or release for retry.
+ *
+ * Terminal empty outcomes must retainClaim — previously success:false / sent:false+"no setups"
+ * released the lock every 60s and re-ran OvernightService.discover (full F&O), which OOM'd
+ * the 1GB Oracle box and caused nginx 502s during the close window.
+ */
 export function shouldCompleteClaimedJob(result: unknown): boolean {
   if (!result || typeof result !== 'object') return true;
   const r = result as Record<string, unknown>;
 
+  // Journal finished its overnight ensure + selection even if nothing was logged.
+  if (r.overnightEnsured === true) return true;
+
+  // Alert window: no tradable setups is terminal for this claim key (next 5m bucket is a new key).
+  if (r.sent === false && r.reason === 'no setups') return true;
+  if (r.sent === false && r.reason === 'already sent today') return true;
+
+  // CPR journal: empty board is terminal for the day — retrying won't create score>=75 rows.
+  if (
+    r.success === false &&
+    typeof r.message === 'string' &&
+    /no cpr signals/i.test(r.message)
+  ) {
+    return true;
+  }
+
   if (r.success === false) return false;
-  if (r.sent === false && r.reason !== 'already sent today') return false;
+  if (r.sent === false) return false;
 
   return true;
 }
@@ -89,55 +114,67 @@ export function startMarketCronScheduler(): void {
   started = true;
 
   const tick = async () => {
-    const istTime = getISTTime();
-    if (!istTime.isTradingDay) return;
-
-    const dateKey = getISTDateString();
-
-    // Intentional: cpr-scan is NIFTY_FNO-only, so the aggregate cash-session gate
-    // from MARKET_SESSION.CLOSE is the correct clock. Under CLOSING_AUCTION this
-    // closes at 15:15 for F&O names and must not extend to 15:30.
-    if (isMarketOpen()) {
-      // Time-bucketed claim key: retainClaim=true blocks re-entry within the same
-      // N-minute bucket; the next bucket key allows the next fire. Do NOT use
-      // retainClaim=false here — that would re-run on every 60s poll tick.
-      const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
-      const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
-      const cprScanKey = `cpr-scan:${dateKey}:${timeBucket}`;
-      await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
+    if (tickInFlight) {
+      console.warn('[MarketCronScheduler] Previous tick still running — skipping overlapping poll');
+      return;
     }
+    tickInFlight = true;
+    try {
+      const istTime = getISTTime();
+      if (!istTime.isTradingDay) return;
 
-    // btst-alert selects overnight/index tradable picks (F&O-only legs for stock
-    // options; index legs are derivative products). It should follow profile BTST
-    // windows (15:10–15:25 CONTINUOUS, 15:10–15:15 CLOSING_AUCTION).
-    if (isBtstDiscoveryOpen()) {
-      // Time-bucketed key (5-min buckets) — mirrors cpr-scan pattern so the
-      // scheduler re-checks every 5 minutes across the 15:10–15:25 window.
-      // Double-send is prevented by BtstAlertState DB unique constraint inside
-      // runBtstAlertJob itself (returns sent:false, reason:'already sent today').
-      const btstBucket = Math.floor(istTime.totalMinutes / 5);
-      await runClaimedJob(`btst-alert:${dateKey}:${btstBucket}`, runBtstAlertJob, 'btst-alert');
-    }
+      const dateKey = getISTDateString();
+      const inCloseWorkflow =
+        isBtstDiscoveryOpen() || isBtstJournalWindowOpen() || isCprJournalWindowOpen();
 
-    // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
-    // separate from the scanner route's mixed-universe live recompute behavior.
-    if (isCprJournalWindowOpen()) {
-      await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal');
-    }
+      // Intentional: cpr-scan is NIFTY_FNO-only, so the aggregate cash-session gate
+      // from MARKET_SESSION.CLOSE is the correct clock. Under CLOSING_AUCTION this
+      // closes at 15:15 for F&O names and must not extend to 15:30.
+      // Skip during BTST/CPR close workflow so overnight discover + scan never stack on 1GB.
+      if (isMarketOpen() && !inCloseWorkflow) {
+        // Time-bucketed claim key: retainClaim=true blocks re-entry within the same
+        // N-minute bucket; the next bucket key allows the next fire. Do NOT use
+        // retainClaim=false here — that would re-run on every 60s poll tick.
+        const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
+        const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
+        const cprScanKey = `cpr-scan:${dateKey}:${timeBucket}`;
+        await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
+      }
 
-    // btst-journal is tied to overnight/derivatives workflow and should track
-    // profile BTST journal windows (including CAS extension profile clocks).
-    if (isBtstJournalWindowOpen()) {
-      await runClaimedJob(`btst-journal:${dateKey}`, runBtstJournalJob, 'btst-journal');
-    }
+      // btst-alert selects overnight/index tradable picks (F&O-only legs for stock
+      // options; index legs are derivative products). It should follow profile BTST
+      // windows (15:10–15:25 CONTINUOUS, 15:10–15:15 CLOSING_AUCTION).
+      if (isBtstDiscoveryOpen()) {
+        // Time-bucketed key (5-min buckets) — mirrors cpr-scan pattern so the
+        // scheduler re-checks every 5 minutes across the 15:10–15:25 window.
+        // Double-send is prevented by BtstAlertState DB unique constraint inside
+        // runBtstAlertJob itself (returns sent:false, reason:'already sent today').
+        const btstBucket = Math.floor(istTime.totalMinutes / 5);
+        await runClaimedJob(`btst-alert:${dateKey}:${btstBucket}`, runBtstAlertJob, 'btst-alert');
+      }
 
-    const snapshotSlot = resolveJournalSnapshotSlot();
-    if (snapshotSlot) {
-      await runClaimedJob(
-        `journal-snapshot:${snapshotSlot}:${dateKey}`,
-        () => runJournalSnapshotJob(snapshotSlot),
-        `journal-snapshot-${snapshotSlot}`
-      );
+      // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
+      // separate from the scanner route's mixed-universe live recompute behavior.
+      if (isCprJournalWindowOpen()) {
+        await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal');
+      }
+
+      // btst-journal is tied to overnight/derivatives workflow and should track
+      // profile BTST journal windows (including CAS extension profile clocks).
+      if (isBtstJournalWindowOpen()) {
+        await runClaimedJob(`btst-journal:${dateKey}`, runBtstJournalJob, 'btst-journal');
+      }
+
+      const snapshotSlot = resolveJournalSnapshotSlot();
+      if (snapshotSlot) {
+        await runClaimedJob(
+          `journal-snapshot:${snapshotSlot}:${dateKey}`,
+          () => runJournalSnapshotJob(snapshotSlot),
+          `journal-snapshot-${snapshotSlot}`
+        );
+      }
+    } finally {
+      tickInFlight = false;
     }
   };
 

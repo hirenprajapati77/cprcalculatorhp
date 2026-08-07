@@ -43,7 +43,7 @@ That's it. The script handles everything:
 Production runs on a **956 MB** VM. Next.js standalone alone uses ~330–470 MB RSS at steady state; **55–70% RAM usage is normal**.
 
 **Permanent safeguards (do not remove):**
-- `ops/ecosystem.config.cjs` — PM2 starts with `--max-old-space-size=384` and `max_memory_restart: 550M` (450M caused mid-scan restart loops; heap stays 384)
+- `ops/ecosystem.config.cjs` — PM2 starts with `--max-old-space-size=384` and `max_memory_restart: 650M` (450M/550M caused mid-scan/overnight restart loops; heap stays 384)
 - `ops/mem_watchdog.sh` — crontab every 5 min: **outside** NSE cash session (09:15–15:30 IST) flushes Redis at 75% RAM and flush+restart at 85%; **during** market hours skips FLUSHDB (preserves `cron_done` / unlock rate-limit keys) and may still restart PM2 at 85%
 - Cache layer stores data in **Redis only** when connected (no duplicate L1 in Node heap)
 - Cron jobs call `purgeInProcessCaches()` after auto-scan and BTST alert
@@ -60,7 +60,7 @@ This **reverses** the earlier always-write-L1 warm-cache behavior (added to prev
 
 **Check memory:** authenticated `GET /api/health` → `memory.process.rssMb` and `memory.l1.size`
 
-**If RAM stays >85% after deploy:** confirm `pm2 show cpr-platform` lists `max memory restart: 576716800` (550M).
+**If RAM stays >85% after deploy:** confirm `pm2 show cpr-platform` lists `max memory restart: 681574400` (650M).
 
 ---
 
