@@ -21,3 +21,16 @@ test('parseStockIntradayMetricsFromFyersCandles returns empty for no candles', (
   assert.equal(m.hasIntraday, false);
   assert.equal(m.vwap, null);
 });
+
+test('parseStockIntradayMetricsFromFyersCandles handles zero-volume fallback correctly', () => {
+  const base = Date.UTC(2026, 7, 6, 3, 45, 0) / 1000;
+  const candles: [number, number, number, number, number, number][] = [
+    [base, 100, 101, 99, 100, 0],
+    [base + 300, 100.5, 102, 100, 101, 0],
+  ];
+  const asOf = new Date(Date.UTC(2026, 7, 6, 4, 0, 0));
+  const m = parseStockIntradayMetricsFromFyersCandles(candles, asOf);
+  assert.equal(m.hasIntraday, true);
+  assert.equal(m.vwap, 100.5); // Average of close prices (100 + 101) / 2
+  assert.equal(m.intradayVolume, 0); // Must be 0, not candle count
+});
