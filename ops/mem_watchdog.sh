@@ -17,7 +17,7 @@ restart_pm2_fresh() {
     pm2 start "$ECOSYSTEM" || return 1
   elif [ -f "$APP/server.js" ]; then
     cd "$APP" || return 1
-    NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 450M || return 1
+    NODE_OPTIONS='--max-old-space-size=384' pm2 start server.js --name cpr-platform --max-memory-restart 550M || return 1
   else
     echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Cannot restart — missing $ECOSYSTEM and $APP/server.js" >> "$LOG"
     return 1

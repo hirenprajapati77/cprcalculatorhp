@@ -91,8 +91,8 @@ export class ScannerController {
     const symbols = stocks.map(s => s.symbol.trim());
     const eventRisks = await EventCalendarService.getBulkEventRisk(symbols, today);
 
-    // Parallel fetch with batching to avoid API rate limits (batches of 10)
-    const batchSize = 10;
+    // Parallel fetch with batching — keep small on Oracle 1GB (RSS + Fyers 429 pressure).
+    const batchSize = 5;
     for (let i = 0; i < stocks.length; i += batchSize) {
       const batch = stocks.slice(i, i + batchSize);
       
