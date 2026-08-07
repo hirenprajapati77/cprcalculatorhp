@@ -27,10 +27,37 @@ const DONE_TTL_SECONDS = 24 * 60 * 60;
 // In-memory fallback (single-process only — used when Redis is down)
 const memoryRunning = new Set<string>();
 const memoryClaimed = new Set<string>();
+/** Active running lock keys tracked for process exit cleanup */
+const activeRunningLocks = new Set<string>();
+
+async function cleanupLocksOnProcessExit(): Promise<void> {
+  if (activeRunningLocks.size === 0) return;
+  const keys = Array.from(activeRunningLocks);
+  activeRunningLocks.clear();
+  try {
+    const redis = getRedis();
+    if (redis && CacheService.isRedisConnected) {
+      const redisKeys = keys.map((k) => `cron_lock:${k}`);
+      await redis.del(...redisKeys);
+      console.log(`[CronClaim] Released ${keys.length} orphaned cron lock(s) on process exit.`);
+    }
+  } catch (err) {
+    console.warn('[CronClaim] Failed to release cron locks on exit:', err);
+  }
+}
+
+if (typeof process !== 'undefined') {
+  const handleExitSignal = async () => {
+    await cleanupLocksOnProcessExit();
+  };
+  process.once('SIGINT', handleExitSignal);
+  process.once('SIGTERM', handleExitSignal);
+}
 
 function memoryTryClaim(key: string): boolean {
   if (memoryClaimed.has(key) || memoryRunning.has(key)) return false;
   memoryRunning.add(key);
+  activeRunningLocks.add(key);
   return true;
 }
 
@@ -55,7 +82,11 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
           LOCK_TTL_SECONDS,
           'NX'
         );
-        return result === 'OK';
+        if (result === 'OK') {
+          activeRunningLocks.add(key);
+          return true;
+        }
+        return false;
       }
     } catch (err) {
       console.warn('[CronClaim] Redis lock attempt failed, falling back to memory:', err);
@@ -66,6 +97,7 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
 
 export async function completeCronRun(key: string, retainClaim = true): Promise<void> {
   memoryRunning.delete(key);
+  activeRunningLocks.delete(key);
   if (retainClaim) memoryClaimed.add(key);
 
   if (!CacheService.isRedisConnected) return;
@@ -87,6 +119,7 @@ export async function completeCronRun(key: string, retainClaim = true): Promise<
 
 export async function releaseCronRun(key: string): Promise<void> {
   memoryRunning.delete(key);
+  activeRunningLocks.delete(key);
   if (CacheService.isRedisConnected) {
     try {
       const redis = getRedis();
@@ -101,4 +134,5 @@ export async function releaseCronRun(key: string): Promise<void> {
 export function resetCronRunClaims(): void {
   memoryClaimed.clear();
   memoryRunning.clear();
+  activeRunningLocks.clear();
 }

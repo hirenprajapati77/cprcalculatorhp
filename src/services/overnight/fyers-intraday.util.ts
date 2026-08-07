@@ -71,7 +71,7 @@ export function parseStockIntradayMetricsFromFyersCandles(
     }
     return {
       vwap: count > 0 ? sumClose / count : null,
-      intradayVolume: count > 0 ? count : null,
+      intradayVolume: 0,
       last15mHigh,
       last15mLow,
       hasIntraday: count > 0,
