@@ -203,6 +203,9 @@ export class OvernightService {
     currentTime: Date
   ): Promise<OvernightIntradayMetrics | null> {
     try {
+      if (MarketService.isFyersTemporarilyUnavailable()) {
+        return null;
+      }
       const token = await FyersAuthService.getAccessToken();
       if (!token) return null;
       const { appId } = FyersAuthService.getCredentials();
@@ -234,11 +237,13 @@ export class OvernightService {
           },
         });
         if (!res.ok) {
+          MarketService.noteFyersHttpFailure(res.status);
           console.warn(`[Overnight] Fyers 5m HTTP ${res.status} for ${fyersSymbol}`);
           return null;
         }
-        const json = (await res.json()) as { s?: string; candles?: FyersHistoryCandle[]; message?: string };
+        const json = (await res.json()) as { s?: string; code?: number; candles?: FyersHistoryCandle[]; message?: string };
         if (json.s !== 'ok' || !Array.isArray(json.candles) || json.candles.length === 0) {
+          MarketService.noteFyersHttpFailure(res.status, json.message, json.code);
           console.warn(`[Overnight] Fyers 5m empty for ${fyersSymbol}: ${json.message ?? json.s}`);
           return null;
         }

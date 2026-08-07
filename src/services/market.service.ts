@@ -342,10 +342,41 @@ export class MarketService {
   private static providerErrorLastLoggedAtMs = new Map<string, number>();
   /** Account-level Data API permission block (403). Global — not per-symbol. */
   private static fyersPermissionBlockedUntilMs = 0;
+  /** Account-level rate-limit block (HTTP 429). Global — skip Fyers until cooldown. */
+  private static fyersRateLimitedUntilMs = 0;
 
   /** Clears the Fyers Data API permission cooldown (e.g. after re-login or successful probe). */
   static clearFyersPermissionBlock(): void {
     this.fyersPermissionBlockedUntilMs = 0;
+  }
+
+  /** True while permission or rate-limit cooldown is active — callers should use Yahoo. */
+  static isFyersTemporarilyUnavailable(): boolean {
+    const now = Date.now();
+    return this.fyersPermissionBlockedUntilMs > now || this.fyersRateLimitedUntilMs > now;
+  }
+
+  private static markFyersRateLimited(status: number, message?: string, code?: number): boolean {
+    const msg = typeof message === 'string' ? message.toLowerCase() : '';
+    const hit =
+      status === 429 ||
+      code === 429 ||
+      msg.includes('request limit') ||
+      msg.includes('rate limit') ||
+      msg.includes('too many requests');
+    if (!hit) return false;
+    this.fyersRateLimitedUntilMs = Date.now() + 60_000;
+    if (this.shouldLogProviderError('fyers-rate-limit-cooldown')) {
+      console.warn(
+        `[LiveFeed] Fyers rate limited (${message ?? `HTTP ${status}`}). Skipping Fyers for 60s; Yahoo fallback active.`
+      );
+    }
+    return true;
+  }
+
+  /** Public hook for other services (overnight 5m) to share the global Fyers cooldown. */
+  static noteFyersHttpFailure(status: number, message?: string, code?: number): void {
+    if (this.markFyersRateLimited(status, message, code)) return;
   }
 
   private static shouldLogProviderError(key: string): boolean {
@@ -877,6 +908,10 @@ export class MarketService {
       return null;
     }
 
+    if (this.fyersRateLimitedUntilMs > Date.now()) {
+      return null;
+    }
+
     const token = await FyersAuthService.getAccessToken();
     if (!token) {
       if (this.shouldLogProviderError(`fyers-not-connected:${cleanSymbol}`)) {
@@ -977,6 +1012,9 @@ export class MarketService {
       };
 
       if (!quotesRes.ok || quotesJson.s !== 'ok' || !Array.isArray(quotesJson.d) || quotesJson.d.length === 0) {
+        if (this.markFyersRateLimited(quotesRes.status, quotesJson.message, quotesJson.code)) {
+          return null;
+        }
         markPermissionCooldown(quotesRes.status, quotesJson.message);
         if (this.shouldLogProviderError(`fyers-quotes:${fyersSymbol}:${quotesRes.status}:${quotesJson.code ?? 'na'}`)) {
           console.warn(
@@ -1019,6 +1057,9 @@ export class MarketService {
       };
 
       if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
+        if (this.markFyersRateLimited(res.status, data.message, data.code)) {
+          return null;
+        }
         markPermissionCooldown(res.status, data.message);
         if (this.shouldLogProviderError(`fyers-history:${fyersSymbol}:${res.status}:${data.code ?? 'na'}`)) {
           console.warn(
