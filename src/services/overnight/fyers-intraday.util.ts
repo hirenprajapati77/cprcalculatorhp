@@ -32,9 +32,6 @@ export function parseStockIntradayMetricsFromFyersCandles(
   let closingLow = Infinity;
   let closingBarCount = 0;
 
-  const lastTs = candles[candles.length - 1]?.[0] ?? 0;
-  const isLastCandleForming = currentTimestampSec - lastTs < 300;
-
   for (const row of candles) {
     const [ts, , high, low, close, volume] = row;
     if (ts > currentTimestampSec) continue;
@@ -48,8 +45,8 @@ export function parseStockIntradayMetricsFromFyersCandles(
 
     const barOpenMin = istMinuteOfDayFromUnixSec(ts);
     const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
-    const isFormingBar = isLastCandleForming && ts === lastTs;
-    if (inClosingWindow && !isFormingBar) {
+    // Include forming closing-window bar — Rule 5 must be live from ~15:15 IST.
+    if (inClosingWindow) {
       closingHigh = Math.max(closingHigh, high);
       closingLow = Math.min(closingLow, low);
       closingBarCount++;
@@ -85,4 +82,70 @@ export function parseStockIntradayMetricsFromFyersCandles(
     last15mLow,
     hasIntraday,
   };
+}
+
+export type Fyers15mCandle = {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+/**
+ * Session VWAP + last 15m OHLC from Fyers 15-minute history candles.
+ * Used by MarketService Fyers primary so candle15m / VWAP match Yahoo fallback parity.
+ */
+export function parseFyers15mVwapAndCandle(
+  candles: FyersHistoryCandle[] | null | undefined,
+  asOfTime: Date = new Date()
+): { vwap: number | null; candle15m: Fyers15mCandle | null } {
+  if (!candles || candles.length === 0) {
+    return { vwap: null, candle15m: null };
+  }
+
+  const currentTimestampSec = Math.floor(asOfTime.getTime() / 1000);
+  let sumPriceVol = 0;
+  let sumVol = 0;
+  let lastValid: Fyers15mCandle | null = null;
+
+  for (const row of candles) {
+    if (!Array.isArray(row) || row.length < 6) continue;
+    const [ts, open, high, low, close, volume] = row;
+    if (typeof ts !== 'number' || ts > currentTimestampSec) continue;
+    if (![open, high, low, close].every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0)) {
+      continue;
+    }
+
+    const vol = typeof volume === 'number' && Number.isFinite(volume) && volume > 0 ? volume : 0;
+    const typical = (high + low + close) / 3;
+    sumPriceVol += typical * vol;
+    sumVol += vol;
+
+    lastValid = {
+      open,
+      high,
+      low,
+      close,
+      volume: typeof volume === 'number' && Number.isFinite(volume) && volume >= 0 ? volume : 0,
+    };
+  }
+
+  let vwap: number | null = sumVol > 0 ? sumPriceVol / sumVol : null;
+  if (vwap == null && lastValid) {
+    // Zero-volume session: unweighted close average of valid bars
+    let sumClose = 0;
+    let count = 0;
+    for (const row of candles) {
+      if (!Array.isArray(row) || row.length < 6) continue;
+      const [ts, , , , close] = row;
+      if (typeof ts !== 'number' || ts > currentTimestampSec) continue;
+      if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue;
+      sumClose += close;
+      count++;
+    }
+    vwap = count > 0 ? sumClose / count : null;
+  }
+
+  return { vwap, candle15m: lastValid };
 }

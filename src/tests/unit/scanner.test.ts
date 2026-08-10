@@ -40,10 +40,61 @@ test('Scanner Service Signals Evaluation', async (t) => {
       avgVolume: 100000, // volumeRatio = 1.5
       marketCap: 120000,
       ltp: 99, // LTP < BC => BREAKDOWN
+      // 15m close below BC confirms without waiting for reclaim hold
+      candle15m: { open: 100.5, high: 101, low: 98.5, close: 99, volume: 5000 },
     };
 
     const scanResult = await ScannerService.scanStock(mockStock);
     assert.ok(scanResult.signals.includes('BREAKDOWN'), 'Missing BREAKDOWN signal');
+  });
+
+  await t.test('rejects gap-above-TC BREAKOUT flicker without 15m close or hold', async () => {
+    // Prior day CPR: TC≈100.67. Today gapped above and never traded TC.
+    const mockStock: MarketStockData = {
+      symbol: 'FLICKER1',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 101.5,
+      high: 102,
+      low: 101.2,
+      close: 101.8,
+      previousClose: 101,
+      volume: 150000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 101.8,
+      history: [
+        { date: '2026-08-07', open: 100, high: 105, low: 95, close: 101, volume: 100000 },
+      ],
+    };
+
+    const scanResult = await ScannerService.scanStock(mockStock, '2026-08-10');
+    assert.ok(scanResult.signals.includes('BULLISH'));
+    assert.ok(!scanResult.signals.includes('BREAKOUT'), 'gap flicker must not be BREAKOUT');
+  });
+
+  await t.test('confirms BREAKOUT when 15m closes above TC', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'HOLD15M',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 101.5,
+      high: 102,
+      low: 101.2,
+      close: 101.8,
+      previousClose: 101,
+      volume: 150000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 101.8,
+      candle15m: { open: 101.5, high: 102, low: 101.3, close: 101.7, volume: 10000 },
+      history: [
+        { date: '2026-08-07', open: 100, high: 105, low: 95, close: 101, volume: 100000 },
+      ],
+    };
+
+    const scanResult = await ScannerService.scanStock(mockStock, '2026-08-10');
+    assert.ok(scanResult.signals.includes('BREAKOUT'), '15m close above TC should confirm BREAKOUT');
   });
 
   await t.test('Scanner Dynamic Shift Bias (P0) — live market partial candle does not override yesterday CPR', async () => {
@@ -131,7 +182,7 @@ test('Scanner Service Signals Evaluation', async (t) => {
 
 test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async (t) => {
   await t.test('calculates correct trade setups for BULLISH bias', async () => {
-    // BULLISH: LTP > TC. Entry = TC, SL = min(dayLow, entry×0.995), Target = entry + 2×slDist, RR = 1:2.0
+    // BULLISH: LTP > TC. Entry = today's TC, SL = min(dayLow, entry×0.995)
     const mockStock: MarketStockData = {
       symbol: 'BULLSTOCK',
       market: 'NSE',
@@ -148,10 +199,10 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
 
     const result = await ScannerService.scanStock(mockStock);
 
-    // Entry = tomorrow's TC (approx 101.33)
-    assert.ok(Math.abs(result.entry - 101.33) < 0.05, 'entry should be tomorrow TC');
+    // Entry = today's TC (approx 100.67)
+    assert.ok(Math.abs(result.entry - 100.67) < 0.05, 'entry should be today TC');
 
-    // SL = min(dayLow=95, entry×0.995=100.67×0.995≈100.17) → dayLow=95 wins
+    // SL = min(dayLow=95, entry×0.995≈100.17) → dayLow=95 wins
     assert.strictEqual(result.sl, 95);
 
     assert.ok(result.target > result.entry, 'target should be above entry for BULLISH');
@@ -161,7 +212,7 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
   });
 
   await t.test('calculates correct trade setups for BEARISH bias', async () => {
-    // BEARISH: LTP < BC. Entry = BC, SL = max(dayHigh, entry×1.005), Target = entry - 2×slDist, RR = 1:2.0
+    // BEARISH: LTP < BC. Entry = today's BC, SL = max(dayHigh, entry×1.005)
     const mockStock: MarketStockData = {
       symbol: 'BEARSTOCK',
       market: 'NSE',
@@ -178,10 +229,10 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
 
     const result = await ScannerService.scanStock(mockStock);
 
-    // Entry = tomorrow's BC (approx 98.67)
-    assert.ok(Math.abs(result.entry - 98.67) < 0.05, 'entry should be tomorrow BC');
+    // Entry = today's BC (approx 100)
+    assert.ok(Math.abs(result.entry - 100) < 0.05, 'entry should be today BC');
 
-    // SL = max(dayHigh=105, entry×1.005=100×1.005=100.5) → dayHigh=105 wins
+    // SL = max(dayHigh=105, entry×1.005=100.5) → dayHigh=105 wins
     assert.strictEqual(result.sl, 105);
 
     assert.ok(result.target < result.entry, 'target should be below entry for BEARISH');

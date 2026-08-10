@@ -339,8 +339,16 @@ export async function GET(request: NextRequest) {
         symbol: cleanSymbol,
         market,
         sector: snap ? snap.sector : 'Other',
-        open: snap ? snap.price : r.ltp,
-        price: snap ? snap.price : r.ltp,
+        // sessionOpen = exchange open; price/previousClose = prior close for day %
+        open: snap
+          ? (snap.sessionOpen > 0 ? snap.sessionOpen : snap.price)
+          : r.ltp,
+        price: snap
+          ? (snap.previousClose > 0 ? snap.previousClose : snap.price)
+          : r.ltp,
+        previousClose: snap
+          ? (snap.previousClose > 0 ? snap.previousClose : snap.price)
+          : undefined,
         avgVolume: snap ? snap.avgVolume : r.volume,
         marketCap: snap ? snap.marketCap : 50000,
         signals: r.signalSummary ? r.signalSummary.split(',') : [],

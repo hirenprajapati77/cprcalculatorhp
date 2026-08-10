@@ -69,11 +69,11 @@ export class BreakoutWatcherService {
         try {
           const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
 
-          // Attempt an atomic claim. Gate on:
-          //   - hadBreakout: false  (signal was absent last scan — true new breakout), OR
-          //   - lastAlerted is null or older than BREAKOUT_ALERT_COOLDOWN_MS
-          // This prevents re-alerting the same symbol within 4 hours even if the
-          // signal briefly dropped and reappeared (flicker dedup).
+          // Edge-trigger claim: alert only when hadBreakout is currently false
+          // (signal was absent last scan — true new breakout episode). Continuous
+          // BREAKOUT while hadBreakout stays true does NOT re-alert, even after the
+          // 4h cooldown. Cooldown only applies when the signal dropped (hadBreakout
+          // cleared) and then reappears — preventing flicker spam within 4 hours.
           const claim = await prisma.breakoutAlertState.updateMany({
             where: {
               symbol: result.symbol,

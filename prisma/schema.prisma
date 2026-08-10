@@ -71,14 +71,19 @@ model ScannerResult {
 }
 
 model MarketSnapshot {
-  id        String   @id @default(cuid())
-  symbol    String   @unique
-  price     Float // Open price
-  volume    Float // Daily volume
-  avgVolume Float // 5-day average volume
-  marketCap Float // Market cap in INR Crores
-  sector    String
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  symbol         String   @unique
+  /// Legacy field: stores previousClose for day-% baseline (UI uses `price` as prior close).
+  price          Float
+  /// Today's session open (exchange open).
+  sessionOpen    Float    @default(0)
+  /// Prior session close — canonical day-% denominator.
+  previousClose  Float    @default(0)
+  volume         Float // Daily volume
+  avgVolume      Float // 5-day average volume
+  marketCap      Float // Market cap in INR Crores
+  sector         String
+  updatedAt      DateTime @updatedAt
 }
 
 model ScanHistory {
@@ -296,6 +301,20 @@ model BreakoutAlertState {
   hadBreakout Boolean   @default(false)
   lastAlerted DateTime?
   updatedAt   DateTime  @updatedAt
+}
+
+/// Durable first-seen BULLISH/BEARISH setup age (survives Redis flush / PM2 restart).
+/// Used for FRESH_SETUP / STALE_SETUP scoring — must NOT live in Redis alone.
+model DirectionSetupState {
+  id          Int      @id @default(autoincrement())
+  symbol      String
+  date        String // IST YYYY-MM-DD
+  type        String // BULLISH | BEARISH
+  firstSeenAt DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@unique([symbol, date])
+  @@index([date])
 }
 
 model BtstAlertState {

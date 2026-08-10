@@ -64,24 +64,12 @@ export class ScannerController {
       (execMode === 'queue' || (execMode === 'auto' && stocks.length >= queueThreshold));
 
     if (shouldQueue) {
-      // Import here to avoid circular dependency issues if any
-      const { QueueService } = await import('./queue.service');
-      if (QueueService.isEnabled && QueueService.scannerQueue) {
-        console.log(`Offloading scan to queue (threshold ${queueThreshold} exceeded by ${stocks.length} symbols).`);
-        try {
-          await Promise.race([
-            QueueService.scannerQueue.add('full-scan', { universeName, market, stocks }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-          ]);
-          // No BullMQ worker is wired in this repo for full-scan. Falling through to
-          // inline execution avoids refresh/cron reporting success with an empty result.
-          console.warn('[ScannerController] Queue job enqueued but no worker exists; executing scan inline.');
-        } catch (error) {
-          console.warn(`[${universeName}] Queue add timed out or failed. Falling back to sync scan. Note: If this was a timeout, the job might eventually enqueue as a duplicate once BullMQ reconnects (accepted tradeoff). Error: ${error}`);
-        }
-      } else {
-        console.warn('Queue is disabled or unavailable. Falling back to sync execution.');
-      }
+      // No BullMQ worker is wired for full-scan — never enqueue (avoids Redis noise
+      // and duplicate jobs if a worker is added later without updating this path).
+      console.warn(
+        `[ScannerController] Queue mode requested (threshold ${queueThreshold}, ` +
+          `${stocks.length} symbols) but no worker exists; executing scan inline.`
+      );
     }
 
     const today = getISTDateString();
@@ -215,11 +203,16 @@ export class ScannerController {
               },
             });
 
-            // 2. Upsert MarketSnapshot (Real-time metadata cache)
+            // 2. Upsert MarketSnapshot (metadata cache)
+            // `price` stays previousClose for legacy day-% UI; sessionOpen is real open.
+            const previousClose = r.previousClose || r.open || r.ltp;
+            const sessionOpen = r.open || r.ltp;
             await prisma.marketSnapshot.upsert({
               where: { symbol: dbSymbol },
               update: {
-                price: r.previousClose || r.open || r.ltp,
+                price: previousClose,
+                sessionOpen,
+                previousClose,
                 volume: r.volume,
                 avgVolume: r.avgVolume,
                 marketCap: r.marketCap,
@@ -227,7 +220,9 @@ export class ScannerController {
               },
               create: {
                 symbol: dbSymbol,
-                price: r.previousClose || r.open || r.ltp,
+                price: previousClose,
+                sessionOpen,
+                previousClose,
                 volume: r.volume,
                 avgVolume: r.avgVolume,
                 marketCap: r.marketCap,

@@ -180,6 +180,18 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
         });
       }
       if (url.includes('api-t1.fyers.in/data/history') && url.includes('NSE%3ALTM-EQ')) {
+        if (url.includes('resolution=15')) {
+          const t0 = Math.floor(Date.UTC(2026, 7, 10, 3, 45) / 1000); // ~09:15 IST
+          const candles15: Array<[number, number, number, number, number, number]> = [
+            [t0, 210, 212, 209, 211, 1000],
+            [t0 + 900, 211, 214, 210, 213, 2000],
+            [t0 + 1800, 213, 216, 212, 215, 3000],
+          ];
+          return new Response(JSON.stringify({ s: 'ok', code: 200, message: '', candles: candles15 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         return new Response(JSON.stringify({ s: 'ok', code: 200, message: '', candles }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -196,8 +208,11 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.ok(data!.history!.length <= 22, 'history should be truncated to ~22 for CPR/ATR');
       assert.strictEqual(data!.ltp, 215.5, 'ltp must come from quotes lp, not history close');
       assert.strictEqual(data!.previousClose, 208, 'previousClose from quote prev_close_price');
-      assert.strictEqual(data!.vwap, 212.3, 'vwap prefers quote atp');
-      assert.strictEqual(data!.candle15m, null);
+      // 15m VWAP from typical*(vol): ~213.056 (not quote atp 212.3)
+      assert.ok(data!.vwap != null && Math.abs(data!.vwap - 213.05555555555557) < 1e-9,
+        'vwap prefers Fyers 15m session VWAP over quote atp');
+      assert.ok(data!.candle15m, 'Fyers primary should populate candle15m from 15m history');
+      assert.strictEqual(data!.candle15m!.close, 215);
       assert.ok(typeof data!.sma50Slope === 'number');
       assert.ok(
         data!.previousClose != null && (data!.previousClose as number) !== (data!.ltp as number),

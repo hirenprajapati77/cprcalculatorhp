@@ -3,6 +3,7 @@ import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { FyersAuthService } from './fyers-auth.service';
+import { parseFyers15mVwapAndCandle } from './overnight/fyers-intraday.util';
 
 export interface HistoricalCandle {
   date: string;
@@ -884,7 +885,8 @@ export class MarketService {
   /**
    * Fyers primary live feed (Connected-only).
    * Quotes API for true LTP (`lp`) + daily history for ATR/CPR windows.
-   * Skips Yahoo 15m enrichment; uses quote `atp` for VWAP when present.
+   * Enriches with Fyers 15m history for VWAP + candle15m (Yahoo parity); falls back
+   * to quote `atp` / typical price when 15m is unavailable.
    * Returns null if not logged in, on auth/symbol errors, or if remap fails
    * so the caller can fall through to Yahoo Fallback.
    */
@@ -1152,7 +1154,65 @@ export class MarketService {
           : volume;
 
       const typical = (high + low + close) / 3;
-      const vwap = isPositivePrice(qv.atp) ? qv.atp : typical;
+      let vwap = isPositivePrice(qv.atp) ? qv.atp : typical;
+      let candle15m: MarketStockData['candle15m'] = null;
+
+      // ── 15m history: VWAP + candle15m (parity with Yahoo fallback path) ──
+      // Soft-fail: daily quotes+history already succeeded; missing 15m must not
+      // discard the primary feed (ATP/typical VWAP remains).
+      try {
+        const history15Url =
+          `https://api-t1.fyers.in/data/history?` +
+          new URLSearchParams({
+            symbol: fyersSymbol,
+            resolution: '15',
+            date_format: '1',
+            range_from: todayStr,
+            range_to: todayStr,
+            cont_flag: '1',
+          }).toString();
+
+        const res15 = await this.fetchWithTimeout(history15Url, {
+          cache: 'no-store',
+          headers: authHeaders,
+        }, env.FYERS_REQUEST_TIMEOUT_MS);
+
+        if (res15.status === 401) {
+          if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
+            console.warn(`[LiveFeed] Fyers 401 on 15m for ${fyersSymbol}; clearing token (keeping daily quote)`);
+          }
+          await FyersAuthService.clearToken();
+          // Keep daily primary result; next calls fall to Yahoo until reconnect.
+        } else if (res15.ok) {
+          const data15 = (await res15.json()) as {
+            s?: string;
+            code?: number;
+            message?: string;
+            candles?: Array<[number, number, number, number, number, number]>;
+          };
+          if (data15.s === 'ok' && Array.isArray(data15.candles) && data15.candles.length > 0) {
+            const parsed15 = parseFyers15mVwapAndCandle(data15.candles, new Date());
+            if (parsed15.vwap != null && Number.isFinite(parsed15.vwap) && parsed15.vwap > 0) {
+              vwap = parsed15.vwap;
+            }
+            if (parsed15.candle15m) {
+              candle15m = parsed15.candle15m;
+            }
+          } else {
+            this.markFyersRateLimited(res15.status, data15.message, data15.code);
+            markPermissionCooldown(res15.status, data15.message);
+          }
+        } else {
+          this.markFyersRateLimited(res15.status, undefined, undefined);
+          markPermissionCooldown(res15.status, undefined);
+        }
+      } catch (err15) {
+        if (this.shouldLogProviderError(`fyers-15m:${fyersSymbol}`)) {
+          console.warn(
+            `[LiveFeed] Fyers 15m enrichment failed for ${fyersSymbol}: ${this.summarizeProviderError(err15)}`
+          );
+        }
+      }
 
       const resultData: MarketStockData = {
         symbol: cleanSymbol,
@@ -1169,7 +1229,7 @@ export class MarketService {
         ltp,
         history,
         vwap,
-        candle15m: null,
+        candle15m,
         sma20Slope,
         sma50Slope,
       };

@@ -19,6 +19,7 @@ export type ScanResultForBreakoutAlert = {
   score?: number | null;
   sector?: string | null;
   eventRiskScore?: number | null;
+  degenerateData?: boolean | null;
 };
 
 export function mapScanResultsForBreakoutAlert(
@@ -59,6 +60,8 @@ export function notifyBreakoutsFromScan(
 ): void {
   const fnOBySymbol = buildFnOLookup();
   const eligible = results.filter((r) => {
+    if (r.degenerateData) return false;
+    if (r.signals?.includes('DEGENERATE_DATA')) return false;
     const ctx = MarketSessionResolver.resolve(r.symbol, {
       isFnO: fnOBySymbol.get(r.symbol.trim().toUpperCase()) === true,
     });

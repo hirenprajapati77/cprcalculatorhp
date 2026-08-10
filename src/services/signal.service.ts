@@ -7,6 +7,7 @@ import { safeRatio } from '@/lib/math';
 import { getISTDateString, isTodayCandleClosed, getISTTime, getCompletedHistory } from '@/lib/market-hours';
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
+import { applyBreakoutSignals } from '@/lib/breakout-confirm';
 
 export interface SignalResult {
   signals: string[];
@@ -330,9 +331,15 @@ export class SignalService {
     // ── Volume Spike ──────────────────────────────────────────────────────────
     if (volumeRatio >= VOLUME_THRESHOLDS.SPIKE_RATIO) signals.push('VOLUME_SPIKE');
 
-    // ── Breakout / Breakdown ──────────────────────────────────────────────────
-    if (volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO && ltp > tc) signals.push('BREAKOUT');
-    if (volumeRatio >= VOLUME_THRESHOLDS.BREAKOUT_RATIO && ltp < bc) signals.push('BREAKDOWN');
+    // ── Breakout / Breakdown — 15m close only here; session/time hold applied in ScannerService
+    applyBreakoutSignals(signals, volumeRatio, ltp, tc, bc, {
+      open: stock.open,
+      high: stock.high,
+      low: stock.low,
+      candle15m: stock.candle15m,
+      holdMinutes: null,
+      allowSessionReclaim: false,
+    });
 
     // ── Momentum ──────────────────────────────────────────────────────────────
     if (ltp > cprToday.r1 || ltp < cprToday.s1) signals.push('MOMENTUM');

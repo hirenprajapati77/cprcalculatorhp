@@ -16,6 +16,14 @@ export const VOLUME_THRESHOLDS = {
   STRONG_RATIO: 1.2,
 };
 
+/** Intraday BREAKOUT/BREAKDOWN confirmation (see src/lib/breakout-confirm.ts). */
+export const BREAKOUT_CONFIRMATION = {
+  /** Gap continuation (never traded TC/BC) must hold this long. */
+  HOLD_MINUTES: 10,
+  /** Session reclaim (traded through level) must still hold this long — anti-flicker. */
+  RECLAIM_HOLD_MINUTES: 5,
+} as const;
+
 export const BTST_SCORING = {
   // Original continuous CLV multiplier
   CLV_CONTINUOUS_MULTIPLIER: 100,
@@ -76,6 +84,8 @@ export const BTST_WINDOWS = {
   DISCOVERY_START: activeProfile.discoveryStart,
   /** EOD liquidity / Rule 5 window start (profile Rule5 window). */
   CLOSING_WINDOW_START: activeProfile.rule5Start,
+  /** Exclusive end of Rule 5 / closing-liquidity window (must match profile.rule5EndExclusive). */
+  RULE5_END_EXCLUSIVE: activeProfile.rule5EndExclusive,
   /** Confirmation / entry slice (ranking Rule 5 + journal primary). */
   CONFIRM_START: activeProfile.confirmStart,
   /** Exclusive end of discovery + confirm (freeze). */

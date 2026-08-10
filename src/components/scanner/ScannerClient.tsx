@@ -413,7 +413,11 @@ const StockRow = React.memo(({
   onOpenDrawer: (stock: ScannedStock) => void;
   onChartRedirect: (stock: ScannedStock) => void;
 }) => {
-  const openPrice = row.price || row.open || row.ltp;
+  const openPrice =
+    (row as { previousClose?: number }).previousClose ||
+    row.price ||
+    row.open ||
+    row.ltp;
   const priceDiff = row.ltp - openPrice;
   const pctDiff = openPrice > 0 ? (priceDiff / openPrice) * 100 : 0;
   const distTC = ((row.ltp - row.tc) / row.tc) * 100;
