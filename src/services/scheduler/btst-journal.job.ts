@@ -247,15 +247,17 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
     })
   );
 
-  for (const res of processResults) {
+  allPicks.forEach((signal, i) => {
+    const res = processResults[i];
+    const signalType = signal._dir === 'LONG' ? 'BTST' : 'STBT';
     if (res.status === 'fulfilled') {
       if (res.value.didLog) logged.push(res.value.tag);
       else skipped.push(res.value.tag);
     } else {
-      console.error('[BtstJournal] Unexpected processing error for pick:', res.reason);
-      skipped.push('UNKNOWN:ERROR');
+      console.error(`[BtstJournal] Unexpected processing error for pick ${signal.symbol}:${signalType}:`, res.reason);
+      skipped.push(`${signal.symbol}:${signalType}:UNCAUGHT_ERROR`);
     }
-  }
+  });
 
   const indexJournal = await logIndexBtstJournalEntries({
     signalDate,
