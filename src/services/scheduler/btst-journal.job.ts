@@ -21,9 +21,11 @@ function computeVpaShadowForJournal(
   direction: 'LONG' | 'SHORT'
 ) {
   const completed = getCompletedHistory(stockData.history || []);
-  if (completed.length < 2) return null;
+  // After stripping today's open candle, last bar is yesterday — today's CPR
+  // is calculated from that bar (not length-2 = day-before-yesterday).
+  if (completed.length < 1) return null;
   const atrPct = getAtrPct(completed, stockData.close);
-  const yesterday = completed[completed.length - 2];
+  const yesterday = completed[completed.length - 1];
   const todayCpr = calculateCPR(
     { high: yesterday.high, low: yesterday.low, close: yesterday.close },
     atrPct
@@ -164,10 +166,8 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         return { tag: `${logTag}:EXTENDED`, didLog: false };
       }
 
-      // Option suggestion required — do not journal a fake STOCK/strike-0 row.
-      // Morning snapshots call fetchOptionCmp(strike); strike 0 poisons PnL.
-      // Alert-time journaling already records picks that had a live option quote;
-      // if both paths miss the option, skip rather than invent a stock leg.
+      // Prefer a live option quote; if unavailable, journal the underlying so the
+      // signal is not lost. Snapshots for UNDERLYING legs use stock LTP (not strike 0).
       let optionName: string | null = null;
       let optionStrike: number | null = null;
       let optionLtp: number | null = null;
@@ -187,17 +187,21 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
           console.warn(
             `[BtstJournal] No ${optionType} for ${signal.symbol}: ` +
             (suggestion.error ?? 'missing strike or ltp') +
-            ' — skipping journal (no STOCK/0 fallback).'
+            ' — journaling UNDERLYING stock LTP.'
           );
-          return { tag: `${logTag}:NO_OPTION`, didLog: false };
+          optionName = TradeJournalService.underlyingOptionContract(optionType);
+          optionStrike = 0;
+          optionLtp = ltp;
         }
       } catch (optErr) {
         console.warn(
           `[BtstJournal] Option lookup threw for ${signal.symbol}:`,
           optErr,
-          '— skipping journal (no STOCK/0 fallback).'
+          '— journaling UNDERLYING stock LTP.'
         );
-        return { tag: `${logTag}:OPTION_ERROR`, didLog: false };
+        optionName = TradeJournalService.underlyingOptionContract(optionType);
+        optionStrike = 0;
+        optionLtp = ltp;
       }
 
       let v2Fields: { scoreV2: number; v2Breakdown: Record<string, unknown> } | Record<string, never> = {};

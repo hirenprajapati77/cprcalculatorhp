@@ -1,6 +1,6 @@
 import { ScannerController } from '@/services/scanner-controller';
 import * as breakoutPipeline from '@/services/alert/breakout-alert.pipeline';
-import { CacheService } from '@/services/cache.service';
+import { CacheService, autoScanResultCacheKey } from '@/services/cache.service';
 import type { ScannerSignalResult } from '@/services/scanner.service';
 
 export type CprScanJobResult = {
@@ -26,7 +26,7 @@ export async function runCprScanJob(
   try {
     const results = await ScannerController.runFullScan(universe, market);
     await CacheService.set(
-      'AUTO_SCAN_RESULT',
+      autoScanResultCacheKey(universe, market),
       { data: results, timestamp: new Date().toISOString() },
       5 * 60
     );

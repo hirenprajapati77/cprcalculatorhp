@@ -208,9 +208,32 @@ export async function logIndexBtstJournalEntries(params: {
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
       console.warn(
         `[BtstJournal] No index CE suggestion for ${signal.symbol}: ` +
-        (suggestion.error ?? 'missing strike or ltp')
+        (suggestion.error ?? 'missing strike or ltp') +
+        ' — journaling UNDERLYING index LTP.'
       );
-      skipped.push(`${signal.symbol}:INDEX_BTST`);
+      const didLogUnderlying = await TradeJournalService.logSignal({
+        signalType: 'BTST',
+        symbol: signal.symbol,
+        optionContract: TradeJournalService.underlyingOptionContract('CE'),
+        optionStrike: 0,
+        optionType: 'CE',
+        entryCmp: entry,
+        score: signal.overnightScore ?? 0,
+        confidence: signal.confidence ?? signal.overnightScore ?? 0,
+        signalSummary: [
+          signal.classification,
+          signal.qualityBucket,
+          signal.direction,
+          'INDEX',
+          'NO_OPTION',
+          `REGIME_${regimeTrend}`,
+        ]
+          .filter(Boolean)
+          .join(','),
+        overnightSignalId: signal.id,
+      });
+      if (didLogUnderlying) logged.push(`${signal.symbol}:INDEX_BTST`);
+      else skipped.push(`${signal.symbol}:INDEX_BTST`);
       continue;
     }
 
@@ -311,9 +334,32 @@ export async function logIndexStbtJournalEntries(params: {
     if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
       console.warn(
         `[BtstJournal] No index PE suggestion for ${signal.symbol}: ` +
-        (suggestion.error ?? 'missing strike or ltp')
+        (suggestion.error ?? 'missing strike or ltp') +
+        ' — journaling UNDERLYING index LTP.'
       );
-      skipped.push(`${signal.symbol}:INDEX_STBT`);
+      const didLogUnderlying = await TradeJournalService.logSignal({
+        signalType: 'STBT',
+        symbol: signal.symbol,
+        optionContract: TradeJournalService.underlyingOptionContract('PE'),
+        optionStrike: 0,
+        optionType: 'PE',
+        entryCmp: entry,
+        score: signal.overnightScore ?? 0,
+        confidence: signal.confidence ?? signal.overnightScore ?? 0,
+        signalSummary: [
+          signal.classification,
+          signal.qualityBucket,
+          signal.direction,
+          'INDEX',
+          'NO_OPTION',
+          `REGIME_${regimeTrend}`,
+        ]
+          .filter(Boolean)
+          .join(','),
+        overnightSignalId: signal.id,
+      });
+      if (didLogUnderlying) logged.push(`${signal.symbol}:INDEX_STBT`);
+      else skipped.push(`${signal.symbol}:INDEX_STBT`);
       continue;
     }
 

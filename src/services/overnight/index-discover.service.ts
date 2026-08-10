@@ -106,7 +106,7 @@ export interface IndexSessionCandles {
 
 
 export interface IndiaVixState {
-  /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG forced IGNORE. */
+  /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG (BTST) forced IGNORE; STBT still scores (+25 elevated pts). */
   elevated: boolean;
   /**
    * true → award Rule 1 calm pts; false → scoreable but no calm pts;
@@ -448,8 +448,8 @@ export class IndexDiscoverService {
 
   /**
    * India VIX regime for overnight LONG gating / Rule 1 calm points.
-   * - elevated (close >= 25): discover forces IGNORE
-   * - calm (close < 20): award 25 pts
+   * - elevated (close >= 25): discover forces LONG/BTST IGNORE; SHORT/STBT still scores (elevated awards +25)
+   * - calm (close < 20): award 25 pts on LONG Rule 1
    * - otherwise: scoreable, calm=false (no calm pts)
    * - mock / unavailable: vixCalm null → score-safety INVALID
    */
@@ -506,30 +506,9 @@ export class IndexDiscoverService {
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
-        // Elevated VIX: force IGNORE with null score/levels — do not invent setups.
-        if (vixState.elevated) {
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'LONG',
-              buildBtstReasons(null, true, longRegime),
-              longRegime
-            )
-          );
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'SHORT',
-              buildStbtReasons(null, shortRegime),
-              shortRegime
-            )
-          );
-          continue;
-        }
+        // Elevated VIX: LONG/BTST IGNORE only (STBT still scores with +25 elevated pts).
+        // Applied after session resolve so we do not double-emit with OHLC-unavailable IGNORE.
+        const skipLongForElevatedVix = vixState.elevated;
 
         const endDateObj = new Date(currentTime);
         const startDateObj = new Date(currentTime);
@@ -604,7 +583,18 @@ export class IndexDiscoverService {
           atrPct
         );
 
-        if (isIndexBtstRedSession(sessionChangePct)) {
+        if (skipLongForElevatedVix) {
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              buildBtstReasons(null, true, longRegime),
+              longRegime
+            )
+          );
+        } else if (isIndexBtstRedSession(sessionChangePct)) {
           results.push(
             this.ignoreResult(
               instrument.symbol,
@@ -636,29 +626,46 @@ export class IndexDiscoverService {
           const cls = IndexRankingService.getClassification(details.score);
           const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
           const risk = todayCandle.close - sl;
-          const target = risk > 0 ? todayCandle.close + risk * 2 : null;
-          const reasons = buildBtstReasons(details.breakdown, false, longRegime);
-          if (usesLiveSession) {
-            reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
-          }
+          // risk <= 0 ⇒ SL at/through entry — invalid geometry; IGNORE (do not
+          // persist a null target that the journal layer silently drops).
+          if (risk <= 0) {
+            results.push(
+              this.ignoreResult(
+                instrument.symbol,
+                dateStr,
+                timeStr,
+                'LONG',
+                [
+                  `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${sl.toFixed(2)}) — invalid BTST geometry`,
+                ],
+                longRegime
+              )
+            );
+          } else {
+            const target = todayCandle.close + risk * 2;
+            const reasons = buildBtstReasons(details.breakdown, false, longRegime);
+            if (usesLiveSession) {
+              reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
+            }
 
-          results.push(
-            this.buildSignalResult({
-              symbol: instrument.symbol,
-              signalDate: dateStr,
-              signalTime: timeStr,
-              direction: 'LONG',
-              score: details.score,
-              classification: cls,
-              entry: details.score !== null ? todayCandle.close : null,
-              stopLoss: details.score !== null ? sl : null,
-              target: details.score !== null ? target : null,
-              scoreBreakdown: details.breakdown,
-              reasons,
-              regime: longRegime,
-              maxScore: INDEX_SCORE.MAX,
-            })
-          );
+            results.push(
+              this.buildSignalResult({
+                symbol: instrument.symbol,
+                signalDate: dateStr,
+                signalTime: timeStr,
+                direction: 'LONG',
+                score: details.score,
+                classification: cls,
+                entry: details.score !== null ? todayCandle.close : null,
+                stopLoss: details.score !== null ? sl : null,
+                target: details.score !== null ? target : null,
+                scoreBreakdown: details.breakdown,
+                reasons,
+                regime: longRegime,
+                maxScore: INDEX_SCORE.MAX,
+              })
+            );
+          }
         }
 
         if (isIndexStbtGreenSession(sessionChangePct)) {
@@ -694,29 +701,44 @@ export class IndexDiscoverService {
           const shortCls = IndexRankingService.getShortClassification(shortDetails.score);
           const shortSl = Math.max(todayCandle.high, tomorrowCpr.tc);
           const shortRisk = shortSl - todayCandle.close;
-          const shortTarget = shortRisk > 0 ? todayCandle.close - shortRisk * 2 : null;
-          const shortReasons = buildStbtReasons(shortDetails.breakdown, shortRegime);
-          if (usesLiveSession) {
-            shortReasons.unshift('Live session OHLC used for STBT scoring (close = LTP)');
-          }
+          if (shortRisk <= 0) {
+            results.push(
+              this.ignoreResult(
+                instrument.symbol,
+                dateStr,
+                timeStr,
+                'SHORT',
+                [
+                  `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${shortSl.toFixed(2)}) — invalid STBT geometry`,
+                ],
+                shortRegime
+              )
+            );
+          } else {
+            const shortTarget = todayCandle.close - shortRisk * 2;
+            const shortReasons = buildStbtReasons(shortDetails.breakdown, shortRegime);
+            if (usesLiveSession) {
+              shortReasons.unshift('Live session OHLC used for STBT scoring (close = LTP)');
+            }
 
-          results.push(
-            this.buildSignalResult({
-              symbol: instrument.symbol,
-              signalDate: dateStr,
-              signalTime: timeStr,
-              direction: 'SHORT',
-              score: shortDetails.score,
-              classification: shortCls,
-              entry: shortDetails.score !== null ? todayCandle.close : null,
-              stopLoss: shortDetails.score !== null ? shortSl : null,
-              target: shortDetails.score !== null ? shortTarget : null,
-              scoreBreakdown: shortDetails.breakdown,
-              reasons: shortReasons,
-              regime: shortRegime,
-              maxScore: INDEX_SCORE.MAX,
-            })
-          );
+            results.push(
+              this.buildSignalResult({
+                symbol: instrument.symbol,
+                signalDate: dateStr,
+                signalTime: timeStr,
+                direction: 'SHORT',
+                score: shortDetails.score,
+                classification: shortCls,
+                entry: shortDetails.score !== null ? todayCandle.close : null,
+                stopLoss: shortDetails.score !== null ? shortSl : null,
+                target: shortDetails.score !== null ? shortTarget : null,
+                scoreBreakdown: shortDetails.breakdown,
+                reasons: shortReasons,
+                regime: shortRegime,
+                maxScore: INDEX_SCORE.MAX,
+              })
+            );
+          }
         }
       } catch (err) {
         console.error(`[IndexDiscover] Error scanning ${instrument.symbol}:`, err instanceof Error ? err.message : err);

@@ -6,7 +6,7 @@ import {
 } from '../../services/overnight/index-intra-ranking.service';
 
 describe('IndexIntraRankingService', () => {
-  it('awards LOWER_VALUE points (symmetric with HIGHER_VALUE)', () => {
+  it('awards LOWER_VALUE points for SHORT (direction-aligned)', () => {
     const withLower = IndexIntraRankingService.calculateScore(
       ['BEARISH', 'LOWER_VALUE', 'NARROW'],
       'SHORT',
@@ -18,6 +18,34 @@ describe('IndexIntraRankingService', () => {
       -0.008
     );
     assert.equal(withLower - withoutLower, 10);
+  });
+
+  it('does not award HIGHER_VALUE points on SHORT setups', () => {
+    const withHigher = IndexIntraRankingService.calculateScore(
+      ['BEARISH', 'HIGHER_VALUE', 'NARROW'],
+      'SHORT',
+      -0.008
+    );
+    const withoutHigher = IndexIntraRankingService.calculateScore(
+      ['BEARISH', 'NARROW'],
+      'SHORT',
+      -0.008
+    );
+    assert.equal(withHigher, withoutHigher);
+  });
+
+  it('does not award LOWER_VALUE points on LONG setups', () => {
+    const withLower = IndexIntraRankingService.calculateScore(
+      ['BULLISH', 'LOWER_VALUE', 'NARROW'],
+      'LONG',
+      0.008
+    );
+    const withoutLower = IndexIntraRankingService.calculateScore(
+      ['BULLISH', 'NARROW'],
+      'LONG',
+      0.008
+    );
+    assert.equal(withLower, withoutLower);
   });
 
   it('awards session-move points for aligned bearish move', () => {

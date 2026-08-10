@@ -83,6 +83,16 @@ function normalizeSymbolForJoin(symbol: string): string {
   return sym;
 }
 
+/** Split `SYMBOL_YYYY-MM-DD` on the date suffix so symbols with `_` stay intact. */
+function splitSymbolDateKey(key: string): { symbol: string; signalDate: string } {
+  const m = key.match(/_(\d{4}-\d{2}-\d{2})$/);
+  if (m && m.index !== undefined) {
+    return { symbol: key.slice(0, m.index), signalDate: m[1] };
+  }
+  const sep = key.lastIndexOf('_');
+  return { symbol: key.slice(0, sep), signalDate: key.slice(sep + 1) };
+}
+
 async function resolveBacktestRun(backtestRunId?: string) {
   if (backtestRunId) {
     return prisma.backtestRun.findUnique({ where: { id: backtestRunId } });
@@ -137,9 +147,7 @@ export async function getStockBtstCompare(
   const rows: StockBtstCompareRow[] = [];
 
   for (const key of [...allKeys].sort().reverse()) {
-    const sep = key.indexOf('_');
-    const symbol = key.slice(0, sep);
-    const signalDate = key.slice(sep + 1);
+    const { symbol, signalDate } = splitSymbolDateKey(key);
     const live = liveByKey.get(key) ?? null;
     const bt = btByKey.get(key) ?? null;
 

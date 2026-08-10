@@ -10,6 +10,15 @@ import { computeWinRate } from '@/lib/win-rate';
 
 export class TradeJournalService {
 
+  /** Sentinel contract when option quote was unavailable — snapshots use underlying LTP. */
+  static underlyingOptionContract(optionType: 'CE' | 'PE'): string {
+    return `UNDERLYING ${optionType}`;
+  }
+
+  static isUnderlyingJournalLeg(optionContract: string): boolean {
+    return optionContract.startsWith('UNDERLYING');
+  }
+
   /**
    * Called at signal time (3:20–3:30 PM) by BTST/CPR crons.
    * Fetches live option CMP via OptionChainService and persists entry.
@@ -232,20 +241,28 @@ export class TradeJournalService {
 
       if (entries.length === 0) {
         console.log(`[TradeJournal] No entries need ${timeSlot} snapshot`);
-        return;
       }
 
       for (const entry of entries) {
-        const firstToken = entry.optionContract ? entry.optionContract.split(' ')[0] : undefined;
-        const tradeExpiry = (firstToken && firstToken !== String(entry.optionStrike)) ? firstToken : undefined;
+        let cmp: number | null = null;
 
-        const cmp = await TradeJournalService.fetchOptionCmp(
-          entry.symbol,
-          entry.optionStrike,
-          entry.optionType as 'CE' | 'PE',
-          entry.id,
-          tradeExpiry
-        );
+        if (TradeJournalService.isUnderlyingJournalLeg(entry.optionContract)) {
+          // Option quote never arrived — track underlying so the signal is not lost.
+          const { MarketService } = await import('@/services/market.service');
+          const stockData = await MarketService.getStockData(entry.symbol);
+          cmp = stockData?.ltp && stockData.ltp > 0 ? stockData.ltp : null;
+        } else {
+          const firstToken = entry.optionContract ? entry.optionContract.split(' ')[0] : undefined;
+          const tradeExpiry = (firstToken && firstToken !== String(entry.optionStrike)) ? firstToken : undefined;
+
+          cmp = await TradeJournalService.fetchOptionCmp(
+            entry.symbol,
+            entry.optionStrike,
+            entry.optionType as 'CE' | 'PE',
+            entry.id,
+            tradeExpiry
+          );
+        }
 
         if (!cmp) {
           console.warn(
@@ -298,6 +315,40 @@ export class TradeJournalService {
 
         if (autoClosed) {
            await TradeJournalService.classifyExecutionOutcome(entry.id);
+        }
+      }
+
+      // 9:45 orphan recovery: if a prior run wrote cmp945 then crashed before
+      // exitCmp, the null-snapshot query above never sees them again. Close any
+      // still-open trades that already have cmp945.
+      if (timeSlot === '945') {
+        const orphans = await prisma.tradeJournal.findMany({
+          where: {
+            tradeDate: signalDate,
+            cmp945: { not: null },
+            exitCmp: null,
+          },
+        });
+        for (const orphan of orphans) {
+          const cmp = orphan.cmp945;
+          if (cmp == null) continue;
+          const { pnl, pnlPct } = computeOptionPnl(orphan.entryCmp, cmp);
+          const closeWrite = await prisma.tradeJournal.updateMany({
+            where: { id: orphan.id, exitCmp: null },
+            data: {
+              exitCmp: cmp,
+              exitTime: new Date(),
+              pnl,
+              pnlPct,
+            },
+          });
+          if (closeWrite.count > 0) {
+            console.log(
+              `[TradeJournal] 945 orphan auto-close: ` +
+              `${orphan.symbol} ${orphan.optionContract} @ ₹${cmp}`
+            );
+            await TradeJournalService.classifyExecutionOutcome(orphan.id);
+          }
         }
       }
     } catch (err) {
@@ -499,9 +550,12 @@ export class TradeJournalService {
       let outcome = 'MODEL_VALID'; // Default assumed good
       const pnlPct = trade.pnlPct ?? 0;
   
-      // Adverse Gap checks (Comparing 9:16 vs entry)
-      if (trade.signalType !== 'CPR' && trade.cmp916) {
-        const gapPct = ((trade.cmp916 - trade.entryCmp) / trade.entryCmp) * 100;
+      // Adverse gap: prefer 9:16, else earliest available morning mark (incl. early
+      // manual exit before cmp916 was written — previously skipped GAP_FAILURE).
+      const gapRef =
+        trade.cmp916 ?? trade.cmp930 ?? trade.cmp945 ?? trade.exitCmp;
+      if (trade.signalType !== 'CPR' && gapRef != null && trade.entryCmp) {
+        const gapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
         // Severe adverse gap blow-through in options is usually -15% or worse overnight
         if (gapPct < -15) {
           outcome = 'GAP_FAILURE';

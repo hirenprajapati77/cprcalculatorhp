@@ -91,9 +91,11 @@ function computeVpaShadowForJournal(
   direction: 'LONG' | 'SHORT'
 ) {
   const completed = getCompletedHistory(stockData.history || []);
-  if (completed.length < 2) return null;
+  // After stripping today's open candle, last bar is yesterday — today's CPR
+  // is calculated from that bar (not length-2 = day-before-yesterday).
+  if (completed.length < 1) return null;
   const atrPct = getAtrPct(completed, stockData.close);
-  const yesterday = completed[completed.length - 2];
+  const yesterday = completed[completed.length - 1];
   const todayCpr = calculateCPR(
     { high: yesterday.high, low: yesterday.low, close: yesterday.close },
     atrPct
@@ -116,11 +118,40 @@ async function journalClaimedAlerts(
       const suggestion = pick.optionSuggestion;
 
       if (!suggestion?.strike || !suggestion?.ltp) {
-        // Alert went out without option data — leave it to the 15:25 journal
-        // job, which fetches its own suggestion.
+        // Alert went out without option data — still journal underlying so alert↔journal
+        // parity holds; morning snapshots use stock/index LTP for UNDERLYING legs.
         console.warn(
-          `[BtstAlert] ${pick.symbol} alerted without option suggestion; deferring journal to btst-journal job`
+          `[BtstAlert] ${pick.symbol} alerted without option suggestion; journaling UNDERLYING`
         );
+        const signalType = sig.direction === 'SHORT' ? 'STBT' : 'BTST';
+        const optionType = sig.direction === 'SHORT' ? 'PE' : 'CE';
+        const isIndex = sig.instrumentType === 'INDEX';
+        const signalSummary = [
+          sig.classification,
+          sig.qualityBucket,
+          sig.direction,
+          isIndex ? 'INDEX' : null,
+          'NO_OPTION',
+          `REGIME_${regimeTrend}`,
+        ]
+          .filter(Boolean)
+          .join(',');
+        const entryCmp = pick.ltp > 0 ? pick.ltp : (sig.entry ?? 0);
+        if (entryCmp > 0) {
+          const didLog = await TradeJournalService.logSignal({
+            signalType,
+            symbol: pick.symbol,
+            optionContract: TradeJournalService.underlyingOptionContract(optionType),
+            optionStrike: 0,
+            optionType,
+            entryCmp,
+            score: sig.overnightScore ?? 0,
+            confidence: sig.confidence ?? sig.overnightScore ?? 0,
+            signalSummary,
+            overnightSignalId: sig.id,
+          });
+          if (didLog) journaled.push(pick.symbol);
+        }
         continue;
       }
 
@@ -336,16 +367,22 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     };
   }
 
-  // Prefer first occurrence (discover order already score-sorted); drop dups
-  // so LONG+SHORT for the same ticker cannot double-claim / double-list.
-  const seenSymbols = new Set<string>();
+  // Prefer first occurrence (discover order already score-sorted). Dedup by
+  // symbol+direction so LONG and SHORT for the same ticker can both alert/claim.
+  const alertDirection = (s: EnrichedAlertPick): 'LONG' | 'SHORT' =>
+    s.sourceSignal.direction === 'SHORT' ? 'SHORT' : 'LONG';
+  const alertClaimKey = (s: EnrichedAlertPick): string =>
+    `${s.symbol}:${alertDirection(s)}`;
+
+  const seenKeys = new Set<string>();
   const dedupedPayload = alertPayload.filter((s) => {
-    if (seenSymbols.has(s.symbol)) return false;
-    seenSymbols.add(s.symbol);
+    const key = alertClaimKey(s);
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 
-  const newPayload = dedupedPayload.filter((s) => !alreadySentSet.has(s.symbol));
+  const newPayload = dedupedPayload.filter((s) => !alreadySentSet.has(alertClaimKey(s)));
 
   if (newPayload.length === 0) {
     return {
@@ -380,23 +417,24 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   };
 
   try {
-    // Claim all new symbols before sending (skip any that race-insert first)
+    // Claim all new symbol:direction keys before sending (skip any that race-insert first)
     for (const stock of newPayload) {
+      const claimKey = alertClaimKey(stock);
       try {
         await prisma.btstAlertState.create({
-          data: { date: signalDate, symbol: stock.symbol, sentAt: new Date() },
+          data: { date: signalDate, symbol: claimKey, sentAt: new Date() },
         });
-        claimedSymbols.push(stock.symbol);
+        claimedSymbols.push(claimKey);
       } catch (err) {
         if (isUniqueConstraintError(err)) {
-          console.log(`[BtstAlert] ${stock.symbol} already claimed by concurrent run; skipping`);
+          console.log(`[BtstAlert] ${claimKey} already claimed by concurrent run; skipping`);
         } else {
           throw err;
         }
       }
     }
 
-    const claimedPayload = newPayload.filter((s) => claimedSymbols.includes(s.symbol));
+    const claimedPayload = newPayload.filter((s) => claimedSymbols.includes(alertClaimKey(s)));
 
     if (claimedPayload.length === 0) {
       return {
@@ -417,10 +455,10 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
     const claimedSet = new Set(claimedSymbols);
     const resultStats = {
       count: claimedPayload.length,
-      longs: enrichedLongs.filter((s) => claimedSet.has(s.symbol)).length,
-      shorts: enrichedShorts.filter((s) => claimedSet.has(s.symbol)).length,
-      indexLongs: enrichedIndexLongs.filter((s) => claimedSet.has(s.symbol)).length,
-      indexShorts: enrichedIndexShorts.filter((s) => claimedSet.has(s.symbol)).length,
+      longs: enrichedLongs.filter((s) => claimedSet.has(alertClaimKey(s))).length,
+      shorts: enrichedShorts.filter((s) => claimedSet.has(alertClaimKey(s))).length,
+      indexLongs: enrichedIndexLongs.filter((s) => claimedSet.has(alertClaimKey(s))).length,
+      indexShorts: enrichedIndexShorts.filter((s) => claimedSet.has(alertClaimKey(s))).length,
       engine: 'advanced' as const,
       regime,
       suppressStbt,
