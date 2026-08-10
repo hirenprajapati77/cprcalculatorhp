@@ -5,7 +5,7 @@ import {
   VPA_LIMITS,
 } from '@/config/vpa.config';
 import { scoreVpaBreakoutConfirm } from './breakout-confirm.service';
-import { shouldRejectBuyingClimax, scoreVpaClimax } from './climax.service';
+import { shouldRejectBuyingClimax, shouldRejectSellingClimax, scoreVpaClimax } from './climax.service';
 import { scoreVpaClv } from './clv.service';
 import { scoreVpaEffortResult } from './effort-result.service';
 import { shouldRejectNoDemand, scoreVpaNoDemandSupply } from './no-demand-supply.service';
@@ -63,16 +63,20 @@ export class VpaConfirmationService {
     const rawTotal = sumBreakdown(breakdown);
     const adjustment = clampAdjustment(rawTotal, VPA_LIMITS.MAX_ADJUSTMENT);
 
-    const rejectForClimax = shouldRejectBuyingClimax(inputs.direction, flags);
+    const rejectBuyingClimax = shouldRejectBuyingClimax(inputs.direction, flags);
+    const rejectSellingClimax = shouldRejectSellingClimax(inputs.direction, flags);
+    const rejectForClimax = rejectBuyingClimax || rejectSellingClimax;
     const rejectForNoDemand = shouldRejectNoDemand(inputs.direction, flags);
     const rejectRecommended = rejectForClimax || rejectForNoDemand;
-    const rejectReason = rejectForClimax
+    const rejectReason = rejectBuyingClimax
       ? 'Buying climax detected — volume not confirming sustainable breakout'
-      : rejectForNoDemand
-        ? inputs.direction === 'LONG'
-          ? 'No demand — up candle on low volume / narrow spread'
-          : 'No supply — down candle on low volume / narrow spread'
-        : null;
+      : rejectSellingClimax
+        ? 'Selling climax detected — volume not confirming sustainable breakdown'
+        : rejectForNoDemand
+          ? inputs.direction === 'LONG'
+            ? 'No demand — up candle on low volume / narrow spread'
+            : 'No supply — down candle on low volume / narrow spread'
+          : null;
 
     const hardRejectActive = isVpaLiveGatesEnabled() && rejectRecommended;
     const live = isVpaLiveConfidenceEnabled() || isVpaLiveGatesEnabled();

@@ -95,7 +95,11 @@ export const VPA_CLIMAX = {
   /** Upper/lower wick must be at least this fraction of day range. */
   WICK_RATIO: 0.4,
   BUYING_PENALTY: -8,
+  /** Buyer exhaustion near resistance — reverse bonus for SHORT. */
+  BUYING_REVERSAL_BONUS: 3,
   SELLING_REVERSAL_BONUS: 3,
+  /** Seller exhaustion near support — continuation penalty for SHORT (same magnitude as BUYING_PENALTY). */
+  SELLING_SHORT_PENALTY: -8,
 } as const;
 
 export const VPA_NO_DEMAND_SUPPLY = {
@@ -103,6 +107,8 @@ export const VPA_NO_DEMAND_SUPPLY = {
   /** Narrow spread: range/close below this fraction. */
   NARROW_SPREAD_PCT: 0.008,
   NO_DEMAND_PENALTY: -5,
+  /** Lack of buyers on an up-tick — continuation bonus for SHORT. */
+  NO_DEMAND_SHORT_BONUS: 3,
   NO_SUPPLY_BULL_BONUS: 3,
   NO_SUPPLY_SHORT_PENALTY: -5,
 } as const;
