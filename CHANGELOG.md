@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Deep-Review Bug Squashing (August 2026)**: Addressed multiple critical and high-severity logic edge-cases uncovered during an automated deep-level code review (PR #101), including:
+  - **VPA CPR Shadow Fix**: Corrected historical indexing so today's VPA shadow is accurately evaluated against today's CPR rather than yesterday's.
+  - **STBT Elevated VIX Conflict**: Fixed the Index overnight discovery logic where elevated VIX was mistakenly hard-blocking STBT signals instead of correctly boosting their scores.
+  - **9:45 AM Auto-Close Orphans**: Decoupled the 9:45 AM auto-close snapshot logic so crashed cron jobs can successfully retry and close the trade.
+  - **ATR Off-by-One**: Fixed the array slicing offset in CPR stats so `calculateATR` computes over the mathematically correct `period + 1` length.
+  - **INTRA Score Directionality**: `HIGHER_VALUE` and `LOWER_VALUE` points now properly enforce `LONG` and `SHORT` alignments respectively to avoid inflating counter-trend STBT setups.
+  - **Underscore Symbol Parsing**: Journal symbol splitting now safely parses the last underscore (`_`) before the date to accommodate custom or F&O underscore symbols.
+  - **Early Exit Gap Classification**: Adverse gap evaluation now gracefully falls back to `exitCmp` if a manual API exit occurs prior to the `cmp916` snapshot.
 - **Degenerate CPR gating**: Empty or single-candle history rows tagged `DEGENERATE_DATA` and excluded from breakout alerts and setup-freshness scoring.
 - **BTST Rule 5 closing window**: Include forming closing-window bar; use `rule5EndExclusive` for window bounds.
 - **Dual auto-scan storm / 502**: Shared cron claim prevents crontab + in-process scheduler from running concurrent full scans.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { VpaConfirmationService } from '../../services/vpa/vpa-confirmation.service';
 import { scoreVpaBreakoutConfirm } from '../../services/vpa/breakout-confirm.service';
 import { scoreVpaClv } from '../../services/vpa/clv.service';
-import { computeClv, computeRvol } from '../../services/vpa/vpa.math';
+import { computeClv, computeRvol, buildVpaInputs } from '../../services/vpa/vpa.math';
 import { BtstRankingService } from '../../services/overnight/btst-ranking.service';
 import { VPA_LIMITS } from '../../config/vpa.config';
 import { env } from '../../config/env';
@@ -45,6 +45,25 @@ describe('VPA math helpers', () => {
   it('computeRvol uses avgVolume denominator safely', () => {
     assert.equal(computeRvol(200_000, 100_000), 2);
     assert.equal(computeRvol(100, 0), null);
+    assert.equal(computeRvol(Number.NaN, 100_000), null);
+    assert.equal(computeRvol(100_000, Number.NaN), null);
+  });
+
+  it('buildVpaInputs rejects non-finite volume / avgVolume', () => {
+    const stock = {
+      open: 100,
+      high: 110,
+      low: 90,
+      close: 105,
+      volume: Number.NaN,
+      avgVolume: 100_000,
+    };
+    assert.equal(buildVpaInputs('LONG', stock, { bc: 98, tc: 102 }), null);
+    assert.equal(
+      buildVpaInputs('LONG', { ...stock, volume: 100_000, avgVolume: Number.NaN }, { bc: 98, tc: 102 }),
+      null
+    );
+    assert.ok(buildVpaInputs('LONG', { ...stock, volume: 100_000 }, { bc: 98, tc: 102 }));
   });
 });
 
@@ -221,6 +240,93 @@ describe('VpaConfirmationService.analyze', () => {
     });
     assert.ok(result.flags.includes('VPA_NO_DEMAND'));
     assert.ok(result.breakdown.noDemand < 0);
+  });
+
+  it('awards no-demand bonus for SHORT on narrow up-day (lack of buyers)', () => {
+    const result = VpaConfirmationService.analyze({
+      direction: 'SHORT',
+      open: 100,
+      high: 100.5,
+      low: 99.9,
+      close: 100.3,
+      volume: 70_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 101,
+    });
+    assert.ok(result.flags.includes('VPA_NO_DEMAND'));
+    assert.ok(result.breakdown.noDemand > 0);
+    assert.equal(result.rejectRecommended, false);
+  });
+
+  it('rejects SHORT on no-supply (weak down-tick) and does not reject on no-demand', () => {
+    const noSupply = VpaConfirmationService.analyze({
+      direction: 'SHORT',
+      open: 100.3,
+      high: 100.5,
+      low: 99.9,
+      close: 100.0,
+      volume: 70_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 101,
+    });
+    assert.ok(noSupply.flags.includes('VPA_NO_SUPPLY'));
+    assert.ok(noSupply.breakdown.noSupply < 0);
+    assert.equal(noSupply.rejectRecommended, true);
+    assert.match(noSupply.rejectReason ?? '', /No supply/);
+  });
+
+  it('awards buying-climax reversal bonus for SHORT near resistance', () => {
+    const result = VpaConfirmationService.analyze({
+      direction: 'SHORT',
+      open: 100,
+      high: 112,
+      low: 99,
+      close: 106,
+      volume: 300_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 105,
+    });
+    assert.ok(result.flags.includes('VPA_BUYING_CLIMAX'));
+    assert.ok(result.breakdown.buyingClimax > 0);
+    assert.equal(result.rejectRecommended, false);
+  });
+
+  it('rejects SHORT on selling climax near support', () => {
+    const result = VpaConfirmationService.analyze({
+      direction: 'SHORT',
+      open: 100,
+      high: 101,
+      low: 85,
+      close: 94,
+      volume: 300_000,
+      avgVolume: 100_000,
+      todayBc: 95,
+      todayTc: 102,
+    });
+    assert.ok(result.flags.includes('VPA_SELLING_CLIMAX'));
+    assert.ok(result.breakdown.sellingClimax < 0);
+    assert.equal(result.rejectRecommended, true);
+    assert.match(result.rejectReason ?? '', /Selling climax/);
+  });
+
+  it('maps climax bands correctly when CPR inputs are inverted', () => {
+    // todayTc < todayBc — resistance must still be Math.max
+    const result = VpaConfirmationService.analyze({
+      direction: 'LONG',
+      open: 100,
+      high: 112,
+      low: 99,
+      close: 106,
+      volume: 300_000,
+      avgVolume: 100_000,
+      todayBc: 105,
+      todayTc: 98,
+    });
+    assert.ok(result.flags.includes('VPA_BUYING_CLIMAX'));
+    assert.ok(result.breakdown.buyingClimax < 0);
   });
 
   it('returns disabled result when VPA_ENABLED=false', () => {

@@ -9,6 +9,7 @@ export function computeClv(close: number, high: number, low: number): number | n
 }
 
 export function computeRvol(volume: number, avgVolume: number): number | null {
+  if (!Number.isFinite(volume) || !Number.isFinite(avgVolume)) return null;
   if (avgVolume <= 0 || volume < 0) return null;
   return volume / avgVolume;
 }
@@ -66,7 +67,9 @@ export function buildVpaInputs(
     close <= 0 ||
     !Number.isFinite(effectiveHigh) ||
     !Number.isFinite(effectiveLow) ||
-    effectiveHigh < effectiveLow
+    effectiveHigh < effectiveLow ||
+    !Number.isFinite(stock.volume) ||
+    !Number.isFinite(stock.avgVolume)
   ) {
     return null;
   }
