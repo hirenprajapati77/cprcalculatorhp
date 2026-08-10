@@ -52,6 +52,7 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (August 2026):**
+- **PR #98 — tradable scanner hardening (deployed)**: Today's-CPR entry/SL/target/RR (owner-approved option a), breakout hold/reclaim/15m confirmation, `DirectionSetupState` in Postgres, shared auto-scan cron claim, Fyers 15m VWAP enrichment, degenerate-history gating, PM2 650M headroom. Entry-basis decision: [`docs/decisions/cpr-entry-basis-2026-08-10.md`](docs/decisions/cpr-entry-basis-2026-08-10.md).
 - **VPA Shadow Breakdown Persistence**: Persisted `vpaBreakdown` JSON metrics directly into `ScannerResult` in PostgreSQL to accumulate historical shadow analysis for false breakout evaluation.
 - **Stock BTST Signal Quality Gate Fix**: Resolved the bug where all F&O stock signals were classified as `LOW_QUALITY` due to history quality scoring contradictions on truncated 22-day histories. Gated the `LOW_QUALITY` bucket on raw `historyLength < 15` minimum threshold while preserving the diagnostic `historyQuality` percentage calculations.
 - **Market Session Profile (CAS)**: Added `MARKET_PROFILE=CONTINUOUS|CLOSING_AUCTION` with `MarketSessionResolver` so SEBI Closing Auction Session can be enabled without rewriting scoring. Default remains current production clocks. Full analysis: [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).

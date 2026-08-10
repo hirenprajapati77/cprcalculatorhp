@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **DirectionSetupState (Postgres)**: Durable FRESH/MATURE/STALE setup-age tracking for scanner direction bias — survives PM2 restarts and Redis flushes (`DirectionSetupState` table, `bullish-state.service.ts`).
+- **Breakout hold/reclaim confirmation**: 15m close, 5m reclaim hold, and 10m gap-continuation gates before tagging `BREAKOUT` / `BREAKDOWN` (`breakout-confirm.ts`).
+- **Shared auto-scan cron claim**: Crontab and in-process scheduler share `cpr-scan:{date}:{bucket}` so duplicate scan runs cannot double-fire (`cron-run-claim.ts`).
+- **Fyers 15m enrichment on primary path**: VWAP and `candle15m` on the Fyers data path for parity with Yahoo fallback (`market.service.ts`).
 - **Market Session Profile (CAS future-proofing)**: Configurable `MARKET_PROFILE` (`CONTINUOUS` default | `CLOSING_AUCTION`) with `MarketSessionResolver` / `MarketSessionContext`. SEBI Closing Auction Session clocks stay dormant until explicitly enabled — production behaviour unchanged under `CONTINUOUS`. See [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).
 - **Volume Price Analysis (VPA) Confirmation Layer**: Built an advanced mathematical layer evaluating Close Location Value (CLV) and Relative Volume (RVOL) to validate breakouts and weed out low-conviction CPR crosses.
 - **VPA Master Kill-Switch & Shadow Mode**: Introduced `VPA_SHADOW_MODE` environment variable as a true master kill-switch. Added explicit Live/Shadow UX badges on the scanner UI to ensure transparency into whether VPA heavily gates production scores or merely runs side-by-side in research mode.
@@ -26,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VPA Shadow Breakdown Persistence**: Added `vpaBreakdown` JSONB column to `ScannerResult` table and updated `ScannerController` to persist VPA confirmation outputs on every scan for historical false breakout analysis.
 
 ### Changed
+- **Scanner entry basis — today's CPR (owner-approved)**: Trade Setup V3 entry/SL/target/RR now use `cprToday.*` (same session as bias), not tomorrow's projected CPR. Governance comment locks this behind owner approval — see [`docs/decisions/cpr-entry-basis-2026-08-10.md`](docs/decisions/cpr-entry-basis-2026-08-10.md). Deployed with PR #98 (`9395ef5` / `615d769`).
+- **MarketSnapshot fields**: Separate `sessionOpen` and `previousClose` for clearer live vs prior-session semantics.
 - **Redis-only cache on connected path (Oracle 1 GB trade-off)**: `CacheService.set()` no longer mirrors every Redis write into the in-process L1 LRU when Redis is healthy. This deliberately reverses the prior always-write-L1 warm-cache fix to avoid duplicating ~700 keys in Node heap. Accepted side effect: after `mem_watchdog` flushes Redis at 75% RAM, both layers are cold and the next request batch can miss-storm; that transient burst is preferred over permanent 2× memory. See `cache.service.ts` comment and AGENTS.md → Memory. Durable product state (hysteresis, claims) must not rely on Redis alone.
 - **Fyers Primary Data Provider**: Upgraded the live data pipeline to use the Fyers API as the primary data provider, eliminating the 1-2 minute price delay experienced with Yahoo Finance. Yahoo Finance is now maintained strictly as a reliable outage fallback.
 - **CPR Journal Cron Window**: Adjusted the CPR journal cron job start time to 15:20 IST (ends 15:24 under `CONTINUOUS` to avoid overlapping BTST journal).
@@ -42,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Degenerate CPR gating**: Empty or single-candle history rows tagged `DEGENERATE_DATA` and excluded from breakout alerts and setup-freshness scoring.
+- **BTST Rule 5 closing window**: Include forming closing-window bar; use `rule5EndExclusive` for window bounds.
+- **Dual auto-scan storm / 502**: Shared cron claim prevents crontab + in-process scheduler from running concurrent full scans.
+- **PM2 memory headroom**: `max_memory_restart` raised to 650M (`ops/ecosystem.config.cjs`) — fixes mid-scan restart loops on 1 GB Oracle VM.
+- **CPR journal pipeline hardening**: Claim-lock on cron route, overnight ensure, BTST "No market data" skip, stale-run guard.
 - **Breakout Alert Dedupe Claim Rollback**: Breakout alert Telegram-send-failure now releases the dedupe claim so the symbol can re-alert on the next scan (`breakout-watcher.service.ts`, `breakout-alert.pipeline.ts`).
 - **Telegram Alert HTML Escaping**: Escaped dynamic fields in Telegram alerts to prevent `parse_mode=HTML` from rejecting messages containing special characters (fixes 400 errors).
 - **Windows Build Segfault Workaround**: Documented and resolved the issue with the Next.js compiler crashing with exit code 3221226505 during local Windows builds.
