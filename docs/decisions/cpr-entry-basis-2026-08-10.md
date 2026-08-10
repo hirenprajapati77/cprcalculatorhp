@@ -251,7 +251,7 @@ $ grep CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log
 
 `[CPRJournal] KAYNES not triggered: LTP 3725 < Entry 3852.5`
 
-`runCprJournalJob` is **LONG / CE only** — it always calls `OptionSuggestionService.suggestOptionForBtst(..., 'LONG', ...)` and logs `optionType: 'CE'`; there is **no bearish/short branch** in this job as of today's deploy (`cpr-journal.job.ts` lines 92–120). The skip is the normal long trigger gate: `if (signal.ltp < signal.entry)` — LTP had not yet reached the long entry trigger (3852.50 on the scanner row; today's-CPR entry basis post-#98).
+`runCprJournalJob` is **LONG / CE only** — it always calls `OptionSuggestionService.suggestOptionForBtst(..., 'LONG', ...)` and logs `optionType: 'CE'`; there is **no bearish/short branch** in this job as of today's deploy (`cpr-journal.job.ts` lines 92–120). The skip is the normal long trigger gate: `if (signal.ltp < signal.entry)` — LTP had not yet reached the long entry at **today's CPR TC** (3852.50 on the scanner row; post-#98 entry basis).
 
 **Journaled count — inference vs hard count**
 
