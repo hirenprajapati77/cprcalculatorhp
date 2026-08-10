@@ -32,11 +32,15 @@ export class IndexIntraRankingService {
     direction: 'LONG' | 'SHORT',
     sessionMovePct: number
   ): number {
-    // Category A: CPR Structure (max 45)
+    // Category A: CPR Structure (max 45) — value tags are direction-aligned
     let catASum = 0;
     if (signals.includes('NARROW')) catASum += 15;
-    if (signals.includes('HIGHER_VALUE') || signals.includes('INSIDE_VALUE')) catASum += 10;
-    if (signals.includes('LOWER_VALUE')) catASum += 10;
+    if (direction === 'LONG' && (signals.includes('HIGHER_VALUE') || signals.includes('INSIDE_VALUE'))) {
+      catASum += 10;
+    }
+    if (direction === 'SHORT' && signals.includes('LOWER_VALUE')) {
+      catASum += 10;
+    }
     if (
       signals.includes('BREAKOUT') ||
       signals.includes('LONG_BUILD') ||

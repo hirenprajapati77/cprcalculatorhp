@@ -91,9 +91,11 @@ function computeVpaShadowForJournal(
   direction: 'LONG' | 'SHORT'
 ) {
   const completed = getCompletedHistory(stockData.history || []);
-  if (completed.length < 2) return null;
+  // After stripping today's open candle, last bar is yesterday — today's CPR
+  // is calculated from that bar (not length-2 = day-before-yesterday).
+  if (completed.length < 1) return null;
   const atrPct = getAtrPct(completed, stockData.close);
-  const yesterday = completed[completed.length - 2];
+  const yesterday = completed[completed.length - 1];
   const todayCpr = calculateCPR(
     { high: yesterday.high, low: yesterday.low, close: yesterday.close },
     atrPct

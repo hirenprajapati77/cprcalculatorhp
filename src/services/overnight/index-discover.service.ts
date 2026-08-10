@@ -106,7 +106,7 @@ export interface IndexSessionCandles {
 
 
 export interface IndiaVixState {
-  /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG forced IGNORE. */
+  /** True when latest VIX close >= INDIA_VIX_ELEVATED_MIN — overnight LONG (BTST) forced IGNORE; STBT still scores (+25 elevated pts). */
   elevated: boolean;
   /**
    * true → award Rule 1 calm pts; false → scoreable but no calm pts;
@@ -448,8 +448,8 @@ export class IndexDiscoverService {
 
   /**
    * India VIX regime for overnight LONG gating / Rule 1 calm points.
-   * - elevated (close >= 25): discover forces IGNORE
-   * - calm (close < 20): award 25 pts
+   * - elevated (close >= 25): discover forces LONG/BTST IGNORE; SHORT/STBT still scores (elevated awards +25)
+   * - calm (close < 20): award 25 pts on LONG Rule 1
    * - otherwise: scoreable, calm=false (no calm pts)
    * - mock / unavailable: vixCalm null → score-safety INVALID
    */
@@ -506,30 +506,9 @@ export class IndexDiscoverService {
 
     for (const instrument of INDEX_INSTRUMENTS) {
       try {
-        // Elevated VIX: force IGNORE with null score/levels — do not invent setups.
-        if (vixState.elevated) {
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'LONG',
-              buildBtstReasons(null, true, longRegime),
-              longRegime
-            )
-          );
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'SHORT',
-              buildStbtReasons(null, shortRegime),
-              shortRegime
-            )
-          );
-          continue;
-        }
+        // Elevated VIX: LONG/BTST IGNORE only (STBT still scores with +25 elevated pts).
+        // Applied after session resolve so we do not double-emit with OHLC-unavailable IGNORE.
+        const skipLongForElevatedVix = vixState.elevated;
 
         const endDateObj = new Date(currentTime);
         const startDateObj = new Date(currentTime);
@@ -604,7 +583,18 @@ export class IndexDiscoverService {
           atrPct
         );
 
-        if (isIndexBtstRedSession(sessionChangePct)) {
+        if (skipLongForElevatedVix) {
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              buildBtstReasons(null, true, longRegime),
+              longRegime
+            )
+          );
+        } else if (isIndexBtstRedSession(sessionChangePct)) {
           results.push(
             this.ignoreResult(
               instrument.symbol,

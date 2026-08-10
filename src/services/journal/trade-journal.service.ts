@@ -232,7 +232,6 @@ export class TradeJournalService {
 
       if (entries.length === 0) {
         console.log(`[TradeJournal] No entries need ${timeSlot} snapshot`);
-        return;
       }
 
       for (const entry of entries) {
@@ -298,6 +297,40 @@ export class TradeJournalService {
 
         if (autoClosed) {
            await TradeJournalService.classifyExecutionOutcome(entry.id);
+        }
+      }
+
+      // 9:45 orphan recovery: if a prior run wrote cmp945 then crashed before
+      // exitCmp, the null-snapshot query above never sees them again. Close any
+      // still-open trades that already have cmp945.
+      if (timeSlot === '945') {
+        const orphans = await prisma.tradeJournal.findMany({
+          where: {
+            tradeDate: signalDate,
+            cmp945: { not: null },
+            exitCmp: null,
+          },
+        });
+        for (const orphan of orphans) {
+          const cmp = orphan.cmp945;
+          if (cmp == null) continue;
+          const { pnl, pnlPct } = computeOptionPnl(orphan.entryCmp, cmp);
+          const closeWrite = await prisma.tradeJournal.updateMany({
+            where: { id: orphan.id, exitCmp: null },
+            data: {
+              exitCmp: cmp,
+              exitTime: new Date(),
+              pnl,
+              pnlPct,
+            },
+          });
+          if (closeWrite.count > 0) {
+            console.log(
+              `[TradeJournal] 945 orphan auto-close: ` +
+              `${orphan.symbol} ${orphan.optionContract} @ ₹${cmp}`
+            );
+            await TradeJournalService.classifyExecutionOutcome(orphan.id);
+          }
         }
       }
     } catch (err) {

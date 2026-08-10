@@ -1,6 +1,6 @@
 import { HistoricalProvider } from './backtest/historical.provider';
 import { calculateCPR } from '@/lib/cpr-engine';
-import { getAtrPct } from '@/lib/atr';
+import { DEFAULT_ATR_PERIOD, getAtrPct } from '@/lib/atr';
 
 export interface CprWidthStats {
   symbol: string;
@@ -17,19 +17,24 @@ export interface CprWidthStats {
   historicalPercentile: number;
 }
 
+/** Candles needed for a full DEFAULT_ATR_PERIOD average (period TRs need period+1 bars). */
+const ATR_WINDOW_BARS = DEFAULT_ATR_PERIOD + 1;
+
 export class CprStatsService {
   static async getWidthStats(symbol: string, lookback: 90 | 180 | 365 = 90): Promise<CprWidthStats> {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - (lookback + 30)); // Extra days to cover weekends
+    // Calendar padding for weekends/holidays + ATR warmup trading days.
+    startDate.setDate(endDate.getDate() - (lookback + 30 + ATR_WINDOW_BARS));
 
     const ohlc = await HistoricalProvider.getHistory(symbol, startDate, endDate);
     if (ohlc.length < 2) {
       throw new Error(`Insufficient historical data for ${symbol}`);
     }
 
-    // We only need the last `lookback` trading days
-    const recentOhlc = ohlc.slice(-lookback - 1); 
+    // Keep lookback CPR days plus ATR warmup bars so early classifications
+    // are not forced onto the 2% ATR fallback.
+    const recentOhlc = ohlc.slice(-(lookback + ATR_WINDOW_BARS));
 
     let narrowDays = 0, normalDays = 0, wideDays = 0;
     let narrowTrend = 0, normalTrend = 0, wideTrend = 0;
@@ -40,13 +45,15 @@ export class CprStatsService {
     
     const allWidths: number[] = [];
 
+    // First index that contributes to lookback stats (prior bars are ATR warmup only).
+    const firstStatsIdx = Math.max(1, recentOhlc.length - lookback);
+
     for (let i = 1; i < recentOhlc.length; i++) {
       const yesterday = recentOhlc[i - 1];
       const today = recentOhlc[i];
 
-      // Rolling ATR% using up to the 14 candles prior to `today`, so each day's
-      // classification only uses information available at that point in time.
-      const atrWindow = recentOhlc.slice(Math.max(0, i - 14), i);
+      // Rolling ATR% — need period+1 bars for a full period-TR average.
+      const atrWindow = recentOhlc.slice(Math.max(0, i - ATR_WINDOW_BARS), i);
       const atrPct = getAtrPct(atrWindow, yesterday.close);
 
       const cpr = calculateCPR({
@@ -56,6 +63,12 @@ export class CprStatsService {
       }, atrPct);
 
       const widthPct = (Math.abs(cpr.tc - cpr.bc) / cpr.pivot) * 100;
+
+      // Warmup-only bars: compute ATR path but do not include in stats rates.
+      if (i < firstStatsIdx) {
+        continue;
+      }
+
       allWidths.push(widthPct);
 
       const isNarrow = cpr.classification === 'NARROW';
@@ -86,8 +99,9 @@ export class CprStatsService {
 
     // Calculate percentiles
     allWidths.sort((a, b) => a - b);
-    const index = allWidths.findIndex(w => w >= currentWidth);
-    const historicalPercentile = Math.round((index / allWidths.length) * 100);
+    const index = allWidths.length === 0 ? 0 : allWidths.findIndex(w => w >= currentWidth);
+    const historicalPercentile =
+      allWidths.length === 0 ? 50 : Math.round((Math.max(0, index) / allWidths.length) * 100);
 
     return {
       symbol,
@@ -101,7 +115,7 @@ export class CprStatsService {
       avgNarrowWidth: narrowDays > 0 ? totalNarrowWidth / narrowDays : 0,
       currentWidth,
       currentClassification,
-      historicalPercentile
+      historicalPercentile,
     };
   }
 }

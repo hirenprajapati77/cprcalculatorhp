@@ -89,7 +89,7 @@ export const INDIA_VIX_CALM_MAX = 20;
 
 /**
  * Discover treats latest India VIX close at or above this as elevated —
- * overnight LONG is forced to IGNORE (score-invalid; no invented setups).
+ * overnight LONG/BTST is forced to IGNORE; SHORT/STBT still scores (+25 elevated pts).
  */
 export const INDIA_VIX_ELEVATED_MIN = 25;
 
