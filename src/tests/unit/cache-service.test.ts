@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import { CacheService, getRedisReconnectDelay, shouldKeepRedisRetrying } from '../../services/cache.service';
+import { CacheService, getRedisReconnectDelay, shouldKeepRedisRetrying, autoScanResultCacheKey } from '../../services/cache.service';
+
+test('autoScanResultCacheKey is universe+market scoped', () => {
+  assert.strictEqual(autoScanResultCacheKey('NIFTY_FNO', 'NSE'), 'AUTO_SCAN_RESULT:NIFTY_FNO:NSE');
+  assert.strictEqual(autoScanResultCacheKey('ALL_NSE'), 'AUTO_SCAN_RESULT:ALL_NSE:NSE');
+  assert.notEqual(
+    autoScanResultCacheKey('NIFTY_FNO', 'NSE'),
+    autoScanResultCacheKey('ALL_NSE', 'NSE')
+  );
+});
 
 test('CacheService Falsy values', async (_t) => {
   const metricsBefore = await CacheService.getMetrics();

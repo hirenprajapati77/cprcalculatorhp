@@ -48,10 +48,10 @@ async function enrichWithOptionSuggestions(
 }
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const market = (searchParams.get('market') || 'NSE') as 'NSE' | 'BSE';
+  const universe = (searchParams.get('universe') || 'NIFTY50') as ScannerUniverse;
   try {
-    const { searchParams } = new URL(request.url);
-    const market = (searchParams.get('market') || 'NSE') as 'NSE' | 'BSE';
-    const universe = (searchParams.get('universe') || 'NIFTY50') as ScannerUniverse;
     const mode = searchParams.get('mode') || 'ALL'; // NARROW | WIDE | BULLISH | BEARISH | BREAKOUT | etc.
     const limitParam = searchParams.get('limit') || '10';
     const isAll = limitParam === 'ALL';
@@ -95,8 +95,8 @@ export async function GET(request: NextRequest) {
 
     const useCache = searchParams.get('useCache') === 'true';
     if (useCache) {
-      const { CacheService } = await import('@/services/cache.service');
-      const cached = await CacheService.get('AUTO_SCAN_RESULT');
+      const { CacheService, autoScanResultCacheKey } = await import('@/services/cache.service');
+      const cached = await CacheService.get(autoScanResultCacheKey(universe, market));
       if (cached && typeof cached === 'object' && 'data' in cached) {
         // Type the cached items — they come from AutoScanResult which always
         // has symbol, ltp, score, tc, bc, r1 at minimum.
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
     // DB query sites below (auto-init count/latest, marketSnapshot.findMany,
     // scannerResult batch, topForOptions findMany, scannedAt lookups) are reached.
     if (DatabaseCircuitBreaker.isOpen()) {
-      return await serveDegradedScannerCache();
+      return await serveDegradedScannerCache(universe, market);
     }
 
     // 1. Auto-initialize today's database records if empty (LIVE SESSION ONLY)
@@ -433,7 +433,7 @@ export async function GET(request: NextRequest) {
     // Forced DB failure in any wrapped query trips the breaker and throws
     // CIRCUIT_OPEN — fall back to cache the same way the isOpen() early-return does.
     if (err instanceof Error && err.message === 'CIRCUIT_OPEN') {
-      return await serveDegradedScannerCache();
+      return await serveDegradedScannerCache(universe, market);
     }
     console.error('Error fetching V2 scanner data:', err);
     return NextResponse.json(
@@ -444,9 +444,16 @@ export async function GET(request: NextRequest) {
 }
 
 /** Shared degraded response for isOpen() early-return and CIRCUIT_OPEN catch. */
-async function serveDegradedScannerCache(): Promise<NextResponse> {
-  const { CacheService } = await import('@/services/cache.service');
-  const cached = await CacheService.get('AUTO_SCAN_RESULT');
+async function serveDegradedScannerCache(
+  universe = 'NIFTY_FNO',
+  market = 'NSE'
+): Promise<NextResponse> {
+  const { CacheService, autoScanResultCacheKey } = await import('@/services/cache.service');
+  const primary = await CacheService.get(autoScanResultCacheKey(universe, market));
+  const cached =
+    primary && typeof primary === 'object' && 'data' in primary
+      ? primary
+      : await CacheService.get(autoScanResultCacheKey('NIFTY_FNO', 'NSE'));
   if (cached && typeof cached === 'object' && 'data' in cached) {
     const cachedData = cached as { data: unknown[]; timestamp?: string };
     return NextResponse.json({

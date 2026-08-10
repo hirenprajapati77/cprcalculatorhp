@@ -251,7 +251,7 @@ export class ScannerController {
       console.error('Error persisting scanner results to DB:', dbErr);
     }
 
-    // Cache the filtered list for 5 minutes — aligns with AUTO_SCAN_RESULT TTL
+    // Cache the filtered list for 5 minutes — aligns with autoScanResultCacheKey TTL
     const cacheKey = `list:${universeName}:${market}`;
     await CacheService.set(cacheKey, filtered, 5 * 60);
 

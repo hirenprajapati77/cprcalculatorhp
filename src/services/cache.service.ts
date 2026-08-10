@@ -19,6 +19,14 @@ export function shouldKeepRedisRetrying(nodeEnv: string, redisUrl?: string): boo
   return nodeEnv === 'production' || Boolean(redisUrl);
 }
 
+/** Per-universe auto-scan cache key — avoids NIFTY_FNO / ALL_NSE collisions. */
+export function autoScanResultCacheKey(
+  universe: string,
+  market: string = 'NSE'
+): string {
+  return `AUTO_SCAN_RESULT:${universe}:${market}`;
+}
+
 /**
  * In-process LRU — Redis-down fallback only (max 200 keys).
  *
