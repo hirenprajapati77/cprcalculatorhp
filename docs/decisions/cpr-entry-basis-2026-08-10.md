@@ -1,6 +1,6 @@
 # Decision memo: CPR scanner entry basis (today vs tomorrow CPR)
 
-**Status:** AWAITING OWNER SIGN-OFF  
+**Status:** Owner sign-off (a) — 2026-08-10  
 **Date:** 2026-08-10  
 **Scope:** Investigation + documentation only (no scoring / entry-logic code changes in this change set)  
 **Related:** PR #98 / commit `9395ef5` (`fix/tradable-hardening-breakout-fyers15m`), merged to `main` as `4b99ec3`
@@ -173,9 +173,98 @@ PR #98 is not in the running standalone (see deploy fingerprint above). DB rows 
 
 ## Decision
 
-**AWAITING OWNER SIGN-OFF**
+**Owner sign-off recorded 2026-08-10**
 
-- [ ] (a) Keep today’s-CPR entries + governance comment  
+- [x] (a) Keep today’s-CPR entries + governance comment  
 - [ ] (b) Revert to tomorrow’s-CPR entries pending further review  
 
-Owner: ______________________  Date: __________
+Owner: Hiren  Date: 2026-08-10
+
+---
+
+## Post-deploy baseline (2026-08-10)
+
+**Probe time:** 2026-08-10 ~15:02 IST (`2026-08-10T09:32:37Z` server UTC)  
+**PR #98 deploy:** `2026-08-10T09:28:50Z` = **14:58:50 IST** (`pm2 show cpr-platform` `created at`)  
+**Standalone `BUILD_ID` at deploy:** `Z8XSr5igFteey0tn-TrIM` (post-#98 bundle; see deploy log same day)
+
+### Did today's CPR journal window run?
+
+**No — not yet at probe time.**
+
+CPR journal cron window is **15:20–15:24 IST**. Probe occurred ~18 minutes **before** that window. PM2 logs were flushed at deploy restart; no journal activity has been written since.
+
+**Raw PM2 log evidence:**
+
+```
+$ grep -c CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log
+0
+0
+
+$ grep CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log | tail -30
+(no output)
+
+$ date -u
+Mon Aug 10 09:32:37 UTC 2026
+
+$ pm2 show cpr-platform | grep created
+│ created at         │ 2026-08-10T09:28:50.416Z                                        │
+```
+
+### Skip-rate numbers (first post-#98 production data point)
+
+**Not available yet.** No `[CPRJournal] … not triggered` lines exist in the post-deploy log slice, and the 15:20–15:24 IST window had not executed at probe time. Do not use pre-deploy `ScannerResult` rows from earlier today as a post-#98 baseline — those were written by the **pre-#98** entry writer (tomorrow-CPR) before the `09:28:50Z` deploy.
+
+**Next capture (after one journal run post-deploy):**
+
+1. Re-run `grep -c "not triggered" /home/ubuntu/.pm2/logs/cpr-platform-out.log` (or count `[CPRJournal] … not triggered:` lines for 2026-08-10).
+2. Count successful journal lines for the same date.
+3. Cross-check `ScannerResult` (`score >= 75`, today's `scannedAt` date) — spot-check 2–3 symbols that `entry` sits near **today's** TC/BC given OHLC, not a materially different projected level.
+
+**Status:** Baseline placeholder only — real post-#98 skip-rate TBD after first 15:20–15:24 IST journal run completes.
+
+### First post-#98 journal run (15:20–15:24 IST, 2026-08-10)
+
+**Capture time:** 2026-08-10 ~15:24 IST (`2026-08-10T09:54:28Z` server UTC), after the CPR journal cron window.
+
+**Raw PM2 log evidence:**
+
+```
+$ grep -c CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log
+2
+
+$ grep CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log
+[CPRJournal] 4 qualifying signal(s) cut by CPR_JOURNAL_MAX_SIGNALS=5 (9 qualified today)
+[CPRJournal] KAYNES not triggered: LTP 3725 < Entry 3852.5
+```
+
+**First post-#98 production baseline (real numbers, not projected):**
+
+| Metric | Count |
+|--------|------:|
+| Qualified today (score ≥ 75) | **9** |
+| Cut by `CPR_JOURNAL_MAX_SIGNALS=5` | **4** |
+| Not-triggered skips | **1** |
+| Journaled successfully (hard count) | **4** |
+
+**Not-triggered skip detail — KAYNES**
+
+`[CPRJournal] KAYNES not triggered: LTP 3725 < Entry 3852.5`
+
+`runCprJournalJob` is **LONG / CE only** — it always calls `OptionSuggestionService.suggestOptionForBtst(..., 'LONG', ...)` and logs `optionType: 'CE'`; there is **no bearish/short branch** in this job as of today's deploy (`cpr-journal.job.ts` lines 92–120). The skip is the normal long trigger gate: `if (signal.ltp < signal.entry)` — LTP had not yet reached the long entry at **today's CPR TC** (3852.50 on the scanner row; post-#98 entry basis).
+
+**Journaled count — inference vs hard count**
+
+- **Inferred from logs:** `CPR_JOURNAL_MAX_SIGNALS=5` → at most 5 symbols processed; 1 not-triggered skip → **~4** successes if all others passed option suggest + `TradeJournalService.logSignal`. `logSignal` success/failure is **not** logged per symbol in this job.
+- **Hard count (TradeJournal DB):** query `signalType = 'CPR'` with `entryTime` in the 15:20–15:24 IST window (`2026-08-10T09:50:07Z`–`09:50:27Z`) → **4 rows**: BSE, PAYTM, TITAN, POWERINDIA. Matches the inference.
+
+```sql
+-- Hard count query (production, 2026-08-10)
+SELECT symbol, "entryTime", round("entryCmp"::numeric,2)
+FROM "TradeJournal"
+WHERE "signalType" = 'CPR'
+  AND "entryTime" >= '2026-08-10 09:50:00+00'
+  AND "entryTime" <  '2026-08-10 09:51:00+00'
+ORDER BY "entryTime";
+-- → 4 rows: BSE, PAYTM, TITAN, POWERINDIA
+```
