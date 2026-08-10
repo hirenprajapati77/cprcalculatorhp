@@ -198,9 +198,11 @@ export class ScannerService {
     const cprCompression = await CprCompressionService.getStats(stock);
     const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
 
-    // 4. Trade Setup V3 — Entry, SL, Target, RR from TODAY's CPR (intraday actionable)
-    // Bias is LTP vs today's band; levels must be the same session's CPR — not tomorrow's.
-    // (Tomorrow CPR remains available via overnight/BTST paths.)
+    // 4. Trade Setup V3 — Entry, SL, Target, RR (bias/entry/sl/target/rr)
+    // INTENTIONALLY uses cprToday.* for entry/sl/target/rr — not cprTomorrow.*.
+    // Bias is LTP vs today's band; trade levels must match the same session's CPR.
+    // Do NOT revert to cprTomorrow.* without explicit owner approval —
+    // see docs/decisions/cpr-entry-basis-2026-08-10.md (PR #98 / 9395ef5).
     let entry = 0;
     let sl = 0;
     let target = 0;

@@ -68,9 +68,9 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     // on that filter to stay correct.
     const cleanSym = signal.symbol.split(':')[0].trim();
 
-    // Entry is the LONG breakout-continuation trigger (tomorrow's projected TC,
-    // see scanner.service.ts entry = cprTomorrow.tc). If price hasn't reached it
-    // yet, this signal was never actually triggerable — don't fabricate a fill.
+    // Entry is the breakout-continuation trigger at today's CPR band edge
+    // (cprToday.tc for bullish, cprToday.bc for bearish — see scanner.service.ts).
+    // If price hasn't reached it yet, this signal was never actually triggerable — don't fabricate a fill.
     if (signal.ltp < signal.entry) {
       console.log(
         `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} < Entry ${signal.entry}`
