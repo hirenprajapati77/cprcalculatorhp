@@ -68,12 +68,20 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     // on that filter to stay correct.
     const cleanSym = signal.symbol.split(':')[0].trim();
 
-    // Entry is the breakout-continuation trigger at today's CPR band edge
-    // (cprToday.tc for bullish, cprToday.bc for bearish — see scanner.service.ts).
-    // If price hasn't reached it yet, this signal was never actually triggerable — don't fabricate a fill.
-    if (signal.ltp < signal.entry) {
+    // Direction: entry is pinned to today's TC (bullish) or BC (bearish) by the
+    // bias branch in scanner.service.ts. tc/bc/entry are all toFixed(2) from the
+    // same raw cprToday value, so exact equality is safe here. RANGE-case
+    // entry (=pivot) matches neither, so it falls back to bullish/CE.
+    const isBearish = signal.entry === signal.bc && signal.bc !== signal.tc;
+    const tag: 'LONG' | 'SHORT' = isBearish ? 'SHORT' : 'LONG';
+
+    // Entry is the breakout-continuation trigger at today's CPR band edge.
+    // Bullish must hold ABOVE entry (TC); bearish must hold BELOW entry (BC).
+    // If price hasn't reached/held it, this signal was never actually triggerable — don't fabricate a fill.
+    const triggered = isBearish ? signal.ltp <= signal.entry : signal.ltp >= signal.entry;
+    if (!triggered) {
       console.log(
-        `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} < Entry ${signal.entry}`
+        `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} vs Entry ${signal.entry} (${tag})`
       );
       skipped.push(signal.symbol);
       continue;
@@ -92,7 +100,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     const suggestion = await OptionSuggestionService.suggestOptionForBtst(
       cleanSym,
       signal.ltp,
-      'LONG',
+      tag,
       signal.entry,
       signal.sl,
       signal.target,
@@ -117,7 +125,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       symbol: signal.symbol,
       optionContract: optionName,
       optionStrike: suggestion.strike,
-      optionType: 'CE',
+      optionType: suggestion.type ?? (isBearish ? 'PE' : 'CE'),
       entryCmp: suggestion.ltp,
       score: signal.score,
       confidence: signal.confidence,

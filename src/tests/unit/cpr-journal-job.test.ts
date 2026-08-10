@@ -15,6 +15,8 @@ type ScannerRow = {
   score: number;
   confidence: number;
   signalSummary: string;
+  tc?: number;
+  bc?: number;
 };
 
 function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
@@ -27,6 +29,8 @@ function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
     score: 80,
     confidence: 85,
     signalSummary: 'BULLISH,ABOVE_TC',
+    tc: 100,
+    bc: 98,
     ...overrides,
   };
 }
@@ -34,6 +38,7 @@ function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
 type Mocks = {
   restore: () => void;
   suggestCalls: string[];
+  suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT' }>;
   logCalls: unknown[];
   findManyArgs: unknown[];
 };
@@ -45,6 +50,7 @@ function mockJobDeps(rows: ScannerRow[]): Mocks {
   const originalLog = TradeJournalService.logSignal;
 
   const suggestCalls: string[] = [];
+  const suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT' }> = [];
   const logCalls: unknown[] = [];
   const findManyArgs: unknown[] = [];
 
@@ -55,9 +61,15 @@ function mockJobDeps(rows: ScannerRow[]): Mocks {
     return rows.slice(0, take);
   }) as unknown as typeof prisma.scannerResult.findMany;
 
-  OptionSuggestionService.suggestOptionForBtst = (async (symbol: string) => {
+  OptionSuggestionService.suggestOptionForBtst = (async (
+    symbol: string,
+    ltp: number,
+    direction: 'LONG' | 'SHORT'
+  ) => {
     suggestCalls.push(symbol);
-    return { strike: 100, ltp: 5.5, formattedName: `${symbol} 100 CE` };
+    suggestArgs.push({ symbol, direction });
+    const optionType = direction === 'SHORT' ? 'PE' : 'CE';
+    return { strike: 100, ltp: 5.5, formattedName: `${symbol} 100 ${optionType}` };
   }) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
 
   TradeJournalService.logSignal = (async (params: unknown) => {
@@ -73,6 +85,7 @@ function mockJobDeps(rows: ScannerRow[]): Mocks {
       TradeJournalService.logSignal = originalLog;
     },
     suggestCalls,
+    suggestArgs,
     logCalls,
     findManyArgs,
   };
@@ -113,6 +126,30 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['LEGACY']);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('bearish signal checks trigger correctly and log PE options', async (t) => {
+    const mocks = mockJobDeps([
+      makeSignal({ symbol: 'BEARTRIG', ltp: 97, entry: 98, bc: 98, tc: 100 }),
+      makeSignal({ symbol: 'BEARSKIP', ltp: 99, entry: 98, bc: 98, tc: 100 }),
+    ]);
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['BEARSKIP']);
+      assert.deepStrictEqual(result.logged, ['BEARTRIG']);
+
+      const targetCall = mocks.suggestArgs.find(c => c.symbol === 'BEARTRIG');
+      assert.ok(targetCall);
+      assert.strictEqual(targetCall.direction, 'SHORT');
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logCall = mocks.logCalls.find((c: any) => c.symbol === 'BEARTRIG') as any;
+      assert.ok(logCall);
+      assert.strictEqual(logCall.optionType, 'PE');
+      assert.strictEqual(logCall.optionContract, '100 PE');
     } finally {
       mocks.restore();
     }

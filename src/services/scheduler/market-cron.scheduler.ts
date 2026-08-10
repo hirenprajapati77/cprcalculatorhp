@@ -20,6 +20,7 @@ import {
   completeCronRun,
   releaseCronRun,
 } from '@/services/scheduler/cron-run-claim';
+import { EarningsPopulatorService } from '@/services/earnings-populator.service';
 
 let started = false;
 /** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
@@ -66,6 +67,14 @@ function isCprJournalWindowOpen(date: Date = new Date()): boolean {
     timeValue >= CPR_JOURNAL_WINDOW.START_HHMM &&
     timeValue <= CPR_JOURNAL_WINDOW.END_HHMM
   );
+}
+
+function isEarningsPopulateWindowOpen(date: Date = new Date()): boolean {
+  const { hour, minute, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return false;
+  const timeValue = hour * 100 + minute;
+  // 14:15 - 14:25 IST window (matches the OS-level 14:15 IST / 08:45 UTC cron)
+  return timeValue >= 1415 && timeValue <= 1425;
 }
 
 async function runClaimedJob<T>(
@@ -173,6 +182,14 @@ export function startMarketCronScheduler(): void {
           `journal-snapshot-${snapshotSlot}`
         );
       }
+
+      if (isEarningsPopulateWindowOpen()) {
+        await runClaimedJob(
+          `earnings-populate:${dateKey}`,
+          () => EarningsPopulatorService.populate(),
+          'earnings-populate'
+        );
+      }
     } finally {
       tickInFlight = false;
     }
@@ -186,6 +203,7 @@ export function startMarketCronScheduler(): void {
 
   console.log(
     `[MarketCronScheduler] Started (60s poll): cpr-scan (every ${env.CPR_SCAN_INTERVAL_MINUTES || 5}m), ` +
-    'btst-alert 15:10–15:25, cpr-journal 15:20–15:24, btst-journal 15:25–15:30, snapshots 09:16/09:30/09:45 IST'
+    'btst-alert 15:10–15:25, cpr-journal 15:20–15:24, btst-journal 15:25–15:30, ' +
+    'snapshots 09:16/09:30/09:45 IST, earnings-populate 14:15–14:25 IST'
   );
 }
