@@ -137,17 +137,21 @@ export function applyBreakoutSignals(
   const candidate = getBreakoutCandidate(volumeRatio, ltp, tc, bc);
   if (!candidate) return;
 
-  const confirmed = isBreakoutConfirmed({
+  const confirmInput: BreakoutConfirmInput = {
     direction: candidate,
     ltp,
     level: candidate === 'UP' ? tc : bc,
     open: session.open,
     high: session.high,
     low: session.low,
-    candle15m: session.candle15m,
-    holdMinutes: session.holdMinutes,
-    allowSessionReclaim: session.allowSessionReclaim,
-  });
+  };
+  if (session.candle15m !== undefined) confirmInput.candle15m = session.candle15m;
+  if (session.holdMinutes !== undefined) confirmInput.holdMinutes = session.holdMinutes;
+  if (session.allowSessionReclaim !== undefined) {
+    confirmInput.allowSessionReclaim = session.allowSessionReclaim;
+  }
+
+  const confirmed = isBreakoutConfirmed(confirmInput);
 
   if (!confirmed) return;
 
