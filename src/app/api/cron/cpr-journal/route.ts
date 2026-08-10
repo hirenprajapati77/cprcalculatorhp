@@ -3,6 +3,7 @@ import { getISTTime } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { CPR_JOURNAL_WINDOW } from '@/config/trading-constants';
 import { runCprJournalJob } from '@/services/scheduler/cpr-journal.job';
+import { tryClaimCronRun, completeCronRun, releaseCronRun } from '@/services/scheduler/cron-run-claim';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { hour, minute, isTradingDay } = getISTTime();
+  const { hour, minute, isTradingDay, dateString } = getISTTime();
 
   if (!isTradingDay) {
     return NextResponse.json({ message: 'Market closed today (Weekend or Holiday)' });
@@ -23,13 +24,30 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const claimKey = `cpr-journal:${dateString}`;
+  if (!(await tryClaimCronRun(claimKey))) {
+    return NextResponse.json({ skipped: true, reason: 'already run or in progress' });
+  }
+
   try {
     const result = await runCprJournalJob();
+    const isNoSignals =
+      !result.success &&
+      typeof result.message === 'string' &&
+      /no cpr signals/i.test(result.message);
+
+    if (result.success || isNoSignals) {
+      await completeCronRun(claimKey, true);
+    } else {
+      await releaseCronRun(claimKey);
+    }
+
     if (result.message && result.logged.length === 0) {
       return NextResponse.json({ message: result.message });
     }
     return NextResponse.json(result);
   } catch (err) {
+    await releaseCronRun(claimKey);
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

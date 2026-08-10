@@ -10,7 +10,10 @@ export type CprJournalJobResult = {
   message?: string;
 };
 
-/** Shared CPR journal pipeline for cron route and in-process scheduler. */
+/**
+ * Shared CPR journal pipeline for cron route and in-process scheduler.
+ * Note: Claim lock is handled at the caller/entry point (route/scheduler) to prevent double-locking.
+ */
 export async function runCprJournalJob(): Promise<CprJournalJobResult> {
   const todayStr = new Date().toLocaleDateString('en-CA', {
     timeZone: 'Asia/Kolkata',
