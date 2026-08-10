@@ -67,9 +67,6 @@ export function parseIndexIntradayMetricsFromChart(
     let closingLow = Number.POSITIVE_INFINITY;
     let closingBarCount = 0;
 
-    const lastTimestamp = seriesLen > 0 ? timestamps[seriesLen - 1] : 0;
-    const isLastCandleForming = currentTimestampSec - lastTimestamp < 300;
-
     for (let i = 0; i < seriesLen; i++) {
       const ts = timestamps[i];
       if (ts > currentTimestampSec) continue;
@@ -86,8 +83,8 @@ export function parseIndexIntradayMetricsFromChart(
 
       const barOpenMin = istMinuteOfDayFromUnixSec(ts);
       const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
-      const isFormingBar = isLastCandleForming && ts === lastTimestamp;
-      if (inClosingWindow && !isFormingBar) {
+      // Include forming closing-window bar — Rule 5 scoreable from ~15:15 IST.
+      if (inClosingWindow) {
         closingHigh = Math.max(closingHigh, high);
         closingLow = Math.min(closingLow, low);
         closingBarCount++;

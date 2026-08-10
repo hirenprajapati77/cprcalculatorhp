@@ -121,6 +121,10 @@ const CLOSING_WINDOW_START_MIN = toTotalMinutes(
   BTST_WINDOWS.CLOSING_WINDOW_START.hour,
   BTST_WINDOWS.CLOSING_WINDOW_START.minute
 );
+const RULE5_END_EXCLUSIVE_MIN = toTotalMinutes(
+  BTST_WINDOWS.RULE5_END_EXCLUSIVE.hour,
+  BTST_WINDOWS.RULE5_END_EXCLUSIVE.minute
+);
 const CONFIRM_START_MIN = toTotalMinutes(
   BTST_WINDOWS.CONFIRM_START.hour,
   BTST_WINDOWS.CONFIRM_START.minute
@@ -155,9 +159,10 @@ export const BTST_WINDOW_MINUTES = {
  * True when a 5m bar's IST open minute-of-day falls in the profile Rule5 window
  * [rule5Start, rule5EndExclusive) — EOD liquidity for BTST/STBT Rule 5.
  * Under CONTINUOUS this is [15:15, 15:30); under CLOSING_AUCTION [15:00, 15:15).
+ * Uses RULE5_END_EXCLUSIVE (not MARKET_CLOSE) so CAS profile cutover stays correct.
  */
 export function isInClosingLiquidityWindow(barOpenMinuteOfDay: number): boolean {
-  return barOpenMinuteOfDay >= CLOSING_WINDOW_START_MIN && barOpenMinuteOfDay < MARKET_CLOSE_MIN;
+  return barOpenMinuteOfDay >= CLOSING_WINDOW_START_MIN && barOpenMinuteOfDay < RULE5_END_EXCLUSIVE_MIN;
 }
 
 /**

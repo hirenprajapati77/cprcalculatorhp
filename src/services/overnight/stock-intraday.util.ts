@@ -49,9 +49,6 @@ export function parseStockIntradayMetricsFromChart(
     let closingLow = Infinity;
     let closingBarCount = 0;
 
-    const lastTimestamp = seriesLen > 0 ? timestamps[seriesLen - 1] : 0;
-    const isLastCandleForming = currentTimestampSec - lastTimestamp < 300;
-
     for (let i = 0; i < seriesLen; i++) {
       const ts = timestamps[i];
       if (ts > currentTimestampSec) continue;
@@ -69,8 +66,9 @@ export function parseStockIntradayMetricsFromChart(
 
       const barOpenMin = istMinuteOfDayFromUnixSec(ts);
       const inClosingWindow = isInClosingLiquidityWindow(barOpenMin);
-      const isFormingBar = isLastCandleForming && ts === lastTimestamp;
-      if (inClosingWindow && !isFormingBar) {
+      // Include the forming closing-window bar so Rule 5 is scoreable from
+      // ~15:15 IST (first 5m bar of the window) instead of waiting ~15:20 for settle.
+      if (inClosingWindow) {
         closingHigh = Math.max(closingHigh, high);
         closingLow = Math.min(closingLow, low);
         closingBarCount++;

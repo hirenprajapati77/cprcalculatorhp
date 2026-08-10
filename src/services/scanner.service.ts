@@ -12,6 +12,7 @@ import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled, isVpaLiveConfidenceEnabled } from '@/config/vpa.config';
 import type { VpaDirection } from '@/services/vpa';
 import type { EventRiskResult } from './overnight/event.service';
+import { applyBreakoutSignals, BREAKOUT_CONFIRM } from '@/lib/breakout-confirm';
 
 export interface ScannerSignalResult extends MarketStockData {
   pivot: number;
@@ -64,7 +65,11 @@ export class ScannerService {
     let isLastToday = false;
     let isTodayCandleFinal = false;
     let degenerateData = false;
-    if (stock.history && stock.history.length > 0) {
+    if (!stock.history || stock.history.length === 0) {
+      // No daily history — fabricating CPR from live quote alone is not tradable.
+      console.warn(`[ScannerService] Degenerate CPR for ${stock.symbol} (empty history).`);
+      degenerateData = true;
+    } else if (stock.history.length > 0) {
       const lastCandle = stock.history[stock.history.length - 1];
       isLastToday = lastCandle.date === todayStr;
       
@@ -80,6 +85,7 @@ export class ScannerService {
         yesterdayCandle = stock.history.length >= 2
           ? stock.history[stock.history.length - 2]
           : lastCandle;
+        if (stock.history.length < 2) degenerateData = true;
       } else {
         todayCandle = isTodayCandleFinal ? lastCandle : {
           high: stock.high,
@@ -87,7 +93,7 @@ export class ScannerService {
           close: stock.ltp
         };
         
-        if (isTodayCandleFinal && stock.history.length < 2) {
+        if (stock.history.length < 2) {
           console.warn(`[ScannerService] Degenerate CPR for ${stock.symbol} (history length: ${stock.history.length}). Computed against itself.`);
           degenerateData = true;
         }
@@ -111,17 +117,9 @@ export class ScannerService {
       close: yesterdayCandle.close,
     }, atrPct);
 
-    // Calculate Tomorrow's CPR using today's OHLC
-    const cprTomorrow = calculateCPR({
-      high: todayCandle.high,
-      low: todayCandle.low,
-      close: todayCandle.close,
-    }, atrPct);
-
     const tc = cprToday.tc;
     const bc = cprToday.bc;
     const ltp = stock.ltp;
-    const _volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
 
     // 2. Fetch Advanced Signals
     const signalData = SignalService.getSignals(stock, asOfDate);
@@ -134,8 +132,9 @@ export class ScannerService {
     let crossAgeMinutes: number | undefined;
     let setupFreshness: 'FRESH' | 'MATURE' | 'STALE' | undefined;
 
-    // Only track during a live trading session (skip backtests / asOfDate runs)
-    if (!asOfDate) {
+    // Only track during a live trading session with real history (skip backtests /
+    // asOfDate runs and degenerate quote-only rows — freshness must not inflate score).
+    if (!asOfDate && !degenerateData) {
       const ltpBias = ltp > tc ? 'BULLISH' : ltp < bc ? 'BEARISH' : null;
       if (ltpBias) {
         const stateEntry = await BullishStateService.recordState(stock.symbol, ltpBias);
@@ -149,6 +148,26 @@ export class ScannerService {
         // Price is inside the CPR band — clear any stored directional state
         await BullishStateService.clearState(stock.symbol);
       }
+    } else if (degenerateData) {
+      signals.push('DEGENERATE_DATA');
+    }
+
+    // Time/session breakout path after setup age is known (15m already applied in SignalService).
+    // asOfDate (historical): grant reclaim-hold minutes so same-day structure can confirm;
+    // gap continuation still needs the longer HOLD_MINUTES (not granted here).
+    if (!degenerateData) {
+      const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
+      const holdForBreakout = asOfDate
+        ? BREAKOUT_CONFIRM.RECLAIM_HOLD_MINUTES
+        : (crossAgeMinutes ?? 0);
+      applyBreakoutSignals(signals, volumeRatio, ltp, tc, bc, {
+        open: stock.open,
+        high: stock.high,
+        low: stock.low,
+        candle15m: stock.candle15m,
+        holdMinutes: holdForBreakout,
+        allowSessionReclaim: true,
+      });
     }
 
     // 3. Calculate Quant Score & Classification (uses cprToday values)
@@ -179,7 +198,9 @@ export class ScannerService {
     const cprCompression = await CprCompressionService.getStats(stock);
     const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
 
-    // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
+    // 4. Trade Setup V3 — Entry, SL, Target, RR from TODAY's CPR (intraday actionable)
+    // Bias is LTP vs today's band; levels must be the same session's CPR — not tomorrow's.
+    // (Tomorrow CPR remains available via overnight/BTST paths.)
     let entry = 0;
     let sl = 0;
     let target = 0;
@@ -191,8 +212,8 @@ export class ScannerService {
     else if (ltp < cprToday.bc) bias = 'BEARISH';
 
     if (bias === 'BULLISH') {
-      // LONG SETUP: entry at tomorrow's TC
-      entry = cprTomorrow.tc;
+      // LONG SETUP: pullback/hold entry at today's TC
+      entry = cprToday.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
       const dayLowSL = stock.low;
       const minSL = entry * 0.995;
@@ -201,7 +222,7 @@ export class ScannerService {
 
       if (risk > 0) {
         // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
-        const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
+        const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
         let chosenTarget = entry + risk * 1.5; // fallback
         for (const t of targets) {
           if (t > entry && (t - entry) / risk >= 1.5) {
@@ -216,8 +237,8 @@ export class ScannerService {
         rr = '1:2.0';
       }
     } else if (bias === 'BEARISH') {
-      // SHORT SETUP: entry at tomorrow's BC
-      entry = cprTomorrow.bc;
+      // SHORT SETUP: bounce/hold entry at today's BC
+      entry = cprToday.bc;
       // SL = day high OR minimum 0.5% above entry (whichever is higher)
       const dayHighSL = stock.high;
       const maxSL = entry * 1.005;
@@ -226,7 +247,7 @@ export class ScannerService {
 
       if (risk > 0) {
         // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
-        const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
+        const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
         let chosenTarget = entry - risk * 1.5; // fallback
         for (const t of targets) {
           if (t < entry && (entry - t) / risk >= 1.5) {
@@ -241,15 +262,15 @@ export class ScannerService {
         rr = '1:2.0';
       }
     } else {
-      // RANGE SETUP
-      entry = cprTomorrow.pivot;
-      const isLongRange = ltp >= cprTomorrow.pivot;
+      // RANGE SETUP — fade/mean-revert around today's pivot
+      entry = cprToday.pivot;
+      const isLongRange = ltp >= cprToday.pivot;
 
       if (isLongRange) {
         sl = entry * 0.995;
         const risk = entry - sl;
         if (risk > 0) {
-          const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
+          const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
           let chosenTarget = entry + risk * 1.5; // fallback
           for (const t of targets) {
             if (t > entry && (t - entry) / risk >= 1.5) {
@@ -267,7 +288,7 @@ export class ScannerService {
         sl = entry * 1.005;
         const risk = sl - entry;
         if (risk > 0) {
-          const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
+          const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
           let chosenTarget = entry - risk * 1.5; // fallback
           for (const t of targets) {
             if (t < entry && (entry - t) / risk >= 1.5) {

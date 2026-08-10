@@ -53,7 +53,7 @@ describe('stock-intraday.util', () => {
     assert.ok((m.intradayVolume ?? 0) > 0);
   });
 
-  it('parseStockIntradayMetricsFromChart excludes the latest forming closing-window bar', () => {
+  it('parseStockIntradayMetricsFromChart includes the latest forming closing-window bar', () => {
     const t1515 = Math.floor(new Date('2026-04-01T09:45:00.000Z').getTime() / 1000);
     const t1520 = Math.floor(new Date('2026-04-01T09:50:00.000Z').getTime() / 1000);
     const chart = {
@@ -78,8 +78,9 @@ describe('stock-intraday.util', () => {
     const asOf = new Date('2026-04-01T09:52:00.000Z');
     const m = parseStockIntradayMetricsFromChart(chart, asOf);
 
-    assert.equal(m.last15mHigh, 105);
-    assert.equal(m.last15mLow, 101);
+    // Forming 15:20 bar included so Rule 5 works during 15:15–15:20 alert window
+    assert.equal(m.last15mHigh, 120);
+    assert.equal(m.last15mLow, 100);
   });
 });
 

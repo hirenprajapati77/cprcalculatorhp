@@ -46,7 +46,7 @@ describe('index-intraday.util', () => {
     assert.equal(m.last15mHigh, 110);
   });
 
-  it('parseIndexIntradayMetricsFromChart excludes the latest forming closing-window bar', () => {
+  it('parseIndexIntradayMetricsFromChart includes the latest forming closing-window bar', () => {
     const t1515 = Math.floor(new Date('2026-04-01T09:45:00.000Z').getTime() / 1000);
     const t1520 = Math.floor(new Date('2026-04-01T09:50:00.000Z').getTime() / 1000);
     const chart = {
@@ -71,7 +71,7 @@ describe('index-intraday.util', () => {
     const asOf = new Date('2026-04-01T09:52:00.000Z');
     const m = parseIndexIntradayMetricsFromChart(chart, asOf);
 
-    assert.equal(m.last15mHigh, 105);
+    assert.equal(m.last15mHigh, 120);
   });
 });
 

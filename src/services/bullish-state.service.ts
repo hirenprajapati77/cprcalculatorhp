@@ -1,4 +1,6 @@
+import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
+import { getISTDateString } from '@/lib/market-hours';
 
 /**
  * BullishStateService — Cross-Age Tracker
@@ -11,9 +13,9 @@ import { cache } from '@/lib/redis';
  *  - Tag MATURE_SETUP (45-90 min) → moderate confidence
  *  - Tag STALE_SETUP  (> 90 min)  → caution, much of the move may be done
  *
- * Storage: Redis key `cpr:bullish_state:{SYMBOL}` with EOD TTL (28800 s = 8 h).
- *
- * Works with or without Redis (falls back to in-process memory via cache utility).
+ * Storage: Postgres `DirectionSetupState` (durable across Redis flush / PM2 restart).
+ * Redis key `cpr:bullish_state:{SYMBOL}` is a short-lived L1 mirror only — never
+ * the source of truth (Oracle mem_watchdog may FLUSHDB off-hours).
  *
  * Design note: The caller (scanner.service.ts) determines direction via LTP vs today's
  * CPR bands (ltp > tc = BULLISH, ltp < bc = BEARISH). This service only
@@ -29,26 +31,55 @@ export interface BullishStateEntry {
 }
 
 const KEY_PREFIX = 'cpr:bullish_state:';
-/** 8 hours — covers a full trading session. Keys auto-expire at night. */
-const TTL_SECONDS = 28800;
+/** Short L1 mirror — safe to lose; Postgres is authoritative. */
+const REDIS_TTL_SECONDS = 3600;
 
 export class BullishStateService {
-  /**
-   * Returns the Redis/memory cache key for a given symbol.
-   */
-  private static key(symbol: string): string {
-    return `${KEY_PREFIX}${symbol.trim()}`;
+  private static key(symbol: string, date: string): string {
+    return `${KEY_PREFIX}${date}:${symbol.trim()}`;
+  }
+
+  private static normalizeType(type: string): 'BULLISH' | 'BEARISH' | null {
+    if (type === 'BULLISH' || type === 'BEARISH') return type;
+    return null;
   }
 
   /**
    * Retrieves the stored bullish/bearish state entry for a symbol, or null if none.
    */
-  static async getState(symbol: string): Promise<BullishStateEntry | null> {
-    const raw = await cache.get(this.key(symbol));
-    if (!raw) return null;
+  static async getState(symbol: string, date = getISTDateString()): Promise<BullishStateEntry | null> {
+    const sym = symbol.trim();
+    const redisKey = this.key(sym, date);
+
     try {
-      return JSON.parse(raw) as BullishStateEntry;
+      const raw = await cache.get(redisKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as BullishStateEntry;
+        if (this.normalizeType(parsed.type) && parsed.firstSeenAt) return parsed;
+      }
     } catch {
+      // fall through to Postgres
+    }
+
+    try {
+      const row = await prisma.directionSetupState.findUnique({
+        where: { symbol_date: { symbol: sym, date } },
+      });
+      if (!row) return null;
+      const type = this.normalizeType(row.type);
+      if (!type) return null;
+      const entry: BullishStateEntry = {
+        firstSeenAt: row.firstSeenAt.toISOString(),
+        type,
+      };
+      try {
+        await cache.set(redisKey, JSON.stringify(entry), REDIS_TTL_SECONDS);
+      } catch {
+        // non-fatal
+      }
+      return entry;
+    } catch (err) {
+      console.warn(`[BullishState] Postgres get failed for ${sym}:`, err);
       return null;
     }
   }
@@ -63,27 +94,57 @@ export class BullishStateService {
    */
   static async recordState(
     symbol: string,
-    type: 'BULLISH' | 'BEARISH'
+    type: 'BULLISH' | 'BEARISH',
+    date = getISTDateString()
   ): Promise<BullishStateEntry> {
-    const existing = await this.getState(symbol);
+    const sym = symbol.trim();
+    const existing = await this.getState(sym, date);
     if (existing && existing.type === type) {
-      // Same direction — preserve the original first-seen time (don't overwrite).
       return existing;
     }
-    // New state or direction flip — record now.
+
+    const firstSeenAt = new Date();
     const entry: BullishStateEntry = {
-      firstSeenAt: new Date().toISOString(),
+      firstSeenAt: firstSeenAt.toISOString(),
       type,
     };
-    await cache.set(this.key(symbol), JSON.stringify(entry), TTL_SECONDS);
+
+    try {
+      await prisma.directionSetupState.upsert({
+        where: { symbol_date: { symbol: sym, date } },
+        update: { type, firstSeenAt },
+        create: { symbol: sym, date, type, firstSeenAt },
+      });
+    } catch (err) {
+      console.warn(`[BullishState] Postgres upsert failed for ${sym}:`, err);
+    }
+
+    try {
+      await cache.set(this.key(sym, date), JSON.stringify(entry), REDIS_TTL_SECONDS);
+    } catch {
+      // non-fatal
+    }
+
     return entry;
   }
 
   /**
    * Clears the stored state (e.g., when condition becomes neutral / INSIDE CPR).
    */
-  static async clearState(symbol: string): Promise<void> {
-    await cache.del(this.key(symbol));
+  static async clearState(symbol: string, date = getISTDateString()): Promise<void> {
+    const sym = symbol.trim();
+    try {
+      await prisma.directionSetupState.deleteMany({
+        where: { symbol: sym, date },
+      });
+    } catch (err) {
+      console.warn(`[BullishState] Postgres clear failed for ${sym}:`, err);
+    }
+    try {
+      await cache.del(this.key(sym, date));
+    } catch {
+      // non-fatal
+    }
   }
 
   /**
