@@ -117,6 +117,13 @@ export class ScannerService {
       close: yesterdayCandle.close,
     }, atrPct);
 
+    // Calculate Tomorrow's CPR using today's OHLC
+    const cprTomorrow = calculateCPR({
+      high: todayCandle.high,
+      low: todayCandle.low,
+      close: todayCandle.close,
+    }, atrPct);
+
     const tc = cprToday.tc;
     const bc = cprToday.bc;
     const ltp = stock.ltp;
@@ -198,9 +205,9 @@ export class ScannerService {
     const cprCompression = await CprCompressionService.getStats(stock);
     const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
 
-    // 4. Trade Setup V3 — Entry, SL, Target, RR from TODAY's CPR (intraday actionable)
-    // Bias is LTP vs today's band; levels must be the same session's CPR — not tomorrow's.
-    // (Tomorrow CPR remains available via overnight/BTST paths.)
+    // 4. Trade Setup V3 — Entry, SL, Target, RR (CPR Resistance/Support Targets)
+    // Entry-basis reverted to tomorrow's CPR per docs/decisions/cpr-entry-basis-2026-08-10.md option (b), pending further review.
+    // Bias remains LTP vs today's band (unchanged from PR #98).
     let entry = 0;
     let sl = 0;
     let target = 0;
@@ -212,8 +219,8 @@ export class ScannerService {
     else if (ltp < cprToday.bc) bias = 'BEARISH';
 
     if (bias === 'BULLISH') {
-      // LONG SETUP: pullback/hold entry at today's TC
-      entry = cprToday.tc;
+      // LONG SETUP: entry at tomorrow's TC
+      entry = cprTomorrow.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
       const dayLowSL = stock.low;
       const minSL = entry * 0.995;
@@ -222,7 +229,7 @@ export class ScannerService {
 
       if (risk > 0) {
         // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
-        const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
+        const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
         let chosenTarget = entry + risk * 1.5; // fallback
         for (const t of targets) {
           if (t > entry && (t - entry) / risk >= 1.5) {
@@ -237,8 +244,8 @@ export class ScannerService {
         rr = '1:2.0';
       }
     } else if (bias === 'BEARISH') {
-      // SHORT SETUP: bounce/hold entry at today's BC
-      entry = cprToday.bc;
+      // SHORT SETUP: entry at tomorrow's BC
+      entry = cprTomorrow.bc;
       // SL = day high OR minimum 0.5% above entry (whichever is higher)
       const dayHighSL = stock.high;
       const maxSL = entry * 1.005;
@@ -247,7 +254,7 @@ export class ScannerService {
 
       if (risk > 0) {
         // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
-        const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
+        const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
         let chosenTarget = entry - risk * 1.5; // fallback
         for (const t of targets) {
           if (t < entry && (entry - t) / risk >= 1.5) {
@@ -262,15 +269,15 @@ export class ScannerService {
         rr = '1:2.0';
       }
     } else {
-      // RANGE SETUP — fade/mean-revert around today's pivot
-      entry = cprToday.pivot;
-      const isLongRange = ltp >= cprToday.pivot;
+      // RANGE SETUP
+      entry = cprTomorrow.pivot;
+      const isLongRange = ltp >= cprTomorrow.pivot;
 
       if (isLongRange) {
         sl = entry * 0.995;
         const risk = entry - sl;
         if (risk > 0) {
-          const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
+          const targets = [cprTomorrow.r1, cprTomorrow.r2, cprTomorrow.r3, cprTomorrow.r4];
           let chosenTarget = entry + risk * 1.5; // fallback
           for (const t of targets) {
             if (t > entry && (t - entry) / risk >= 1.5) {
@@ -288,7 +295,7 @@ export class ScannerService {
         sl = entry * 1.005;
         const risk = sl - entry;
         if (risk > 0) {
-          const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
+          const targets = [cprTomorrow.s1, cprTomorrow.s2, cprTomorrow.s3, cprTomorrow.s4];
           let chosenTarget = entry - risk * 1.5; // fallback
           for (const t of targets) {
             if (t < entry && (entry - t) / risk >= 1.5) {
