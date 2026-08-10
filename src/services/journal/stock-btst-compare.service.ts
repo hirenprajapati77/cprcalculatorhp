@@ -83,9 +83,9 @@ function normalizeSymbolForJoin(symbol: string): string {
   return sym;
 }
 
-/** Split `SYMBOL_YYYY-MM-DD` on the date suffix so symbols with `_` stay intact. */
+/** Split `SYMBOL_YYYY-MM-DD` or `SYMBOL_YYYY-MM-DD_LONG|SHORT` on the date suffix. */
 function splitSymbolDateKey(key: string): { symbol: string; signalDate: string } {
-  const m = key.match(/_(\d{4}-\d{2}-\d{2})$/);
+  const m = key.match(/_(\d{4}-\d{2}-\d{2})(?:_(?:LONG|SHORT))?$/);
   if (m && m.index !== undefined) {
     return { symbol: key.slice(0, m.index), signalDate: m[1] };
   }
@@ -110,7 +110,7 @@ export async function getStockBtstCompare(
 
   const liveEntries = await prisma.tradeJournal.findMany({
     where: {
-      signalType: 'BTST',
+      signalType: { in: ['BTST', 'STBT'] },
       NOT: { signalSummary: { contains: 'INDEX' } },
     },
     orderBy: { tradeDate: 'desc' },
@@ -127,20 +127,20 @@ export async function getStockBtstCompare(
       })
     : [];
 
-  // Safe to key live rows by symbol + date: TradeJournal enforces
-  // @@unique([symbol, tradeDate, signalType]), so there can be at most one
-  // BTST journal entry per stock/day.
+  // Key by symbol + date + direction so LONG (BTST) and SHORT (STBT) coexist.
   const liveByKey = new Map<string, (typeof liveEntries)[number]>();
   for (const e of liveEntries) {
     if (!isStockBtstJournalEntry(e.signalSummary)) continue;
     const normSym = normalizeSymbolForJoin(e.symbol);
-    liveByKey.set(`${normSym}_${journalDateKey(e.tradeDate)}`, e);
+    const dir = e.signalType === 'STBT' ? 'SHORT' : 'LONG';
+    liveByKey.set(`${normSym}_${journalDateKey(e.tradeDate)}_${dir}`, e);
   }
 
   const btByKey = new Map<string, (typeof backtestTrades)[number]>();
   for (const t of backtestTrades) {
     const normSym = normalizeSymbolForJoin(t.symbol);
-    btByKey.set(`${normSym}_${backtestDateKey(t.entryDate)}`, t);
+    const dir = t.type === 'SHORT' ? 'SHORT' : 'LONG';
+    btByKey.set(`${normSym}_${backtestDateKey(t.entryDate)}_${dir}`, t);
   }
 
   const allKeys = new Set([...liveByKey.keys(), ...btByKey.keys()]);

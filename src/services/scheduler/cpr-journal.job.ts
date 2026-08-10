@@ -11,6 +11,37 @@ export type CprJournalJobResult = {
 };
 
 /**
+ * Infer CPR journal direction from persisted ScannerResult levels.
+ * TC entry → LONG, BC entry → SHORT, RANGE (pivot) → SL/target geometry
+ * (sl > entry or target < entry → SHORT). Legacy entry≤0 → LONG.
+ */
+export function inferCprJournalDirection(signal: {
+  entry: number | null;
+  bc: number | null;
+  tc: number | null;
+  sl: number | null;
+  target: number | null;
+}): 'LONG' | 'SHORT' {
+  const entry = signal.entry ?? 0;
+  if (entry <= 0) return 'LONG';
+
+  const bc = signal.bc ?? 0;
+  const tc = signal.tc ?? 0;
+
+  // Bias branch pins entry to today's TC (bullish) or BC (bearish).
+  // tc/bc/entry are toFixed(2) from the same raw cprToday value.
+  if (entry === bc && bc !== tc) return 'SHORT';
+  if (entry === tc && bc !== tc) return 'LONG';
+
+  // RANGE: entry = pivot. Short mean-revert has SL above entry / target below.
+  const sl = signal.sl;
+  if (sl != null && sl > entry) return 'SHORT';
+  const target = signal.target;
+  if (target != null && target < entry) return 'SHORT';
+  return 'LONG';
+}
+
+/**
  * Shared CPR journal pipeline for cron route and in-process scheduler.
  * Note: Claim lock is handled at the caller/entry point (route/scheduler) to prevent double-locking.
  */
@@ -68,16 +99,11 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     // on that filter to stay correct.
     const cleanSym = signal.symbol.split(':')[0].trim();
 
-    // Direction: entry is pinned to today's TC (bullish) or BC (bearish) by the
-    // bias branch in scanner.service.ts. tc/bc/entry are all toFixed(2) from the
-    // same raw cprToday value, so exact equality is safe here. RANGE-case
-    // entry (=pivot) matches neither, so it falls back to bullish/CE.
-    const isBearish = signal.entry === signal.bc && signal.bc !== signal.tc;
-    const tag: 'LONG' | 'SHORT' = isBearish ? 'SHORT' : 'LONG';
+    const tag = inferCprJournalDirection(signal);
+    const isBearish = tag === 'SHORT';
 
-    // Entry is the breakout-continuation trigger at today's CPR band edge.
-    // Bullish must hold ABOVE entry (TC); bearish must hold BELOW entry (BC).
-    // If price hasn't reached/held it, this signal was never actually triggerable — don't fabricate a fill.
+    // Entry is the breakout-continuation / mean-revert trigger.
+    // Bullish must hold ABOVE entry; bearish must hold BELOW entry.
     const triggered = isBearish ? signal.ltp <= signal.entry : signal.ltp >= signal.entry;
     if (!triggered) {
       console.log(
@@ -116,16 +142,17 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       continue;
     }
 
+    const optionType = suggestion.type ?? (isBearish ? 'PE' : 'CE');
     const optionName =
       suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
-      `${suggestion.strike} CE`;
+      `${suggestion.strike} ${optionType}`;
 
     const didLog = await TradeJournalService.logSignal({
       signalType: 'CPR',
       symbol: signal.symbol,
       optionContract: optionName,
       optionStrike: suggestion.strike,
-      optionType: suggestion.type ?? (isBearish ? 'PE' : 'CE'),
+      optionType,
       entryCmp: suggestion.ltp,
       score: signal.score,
       confidence: signal.confidence,

@@ -6,6 +6,7 @@ import {
 } from '../../services/overnight/index-intraday.util';
 import {
   evaluateIndexBtstDay,
+  evaluateIndexStbtDay,
   resolveIndexVixCalm,
 } from '../../services/backtest/index-btst-backtest.helper';
 import { INDEX_SCORE } from '../../services/overnight/index-ranking.service';
@@ -168,5 +169,33 @@ describe('index-btst-backtest.helper', () => {
     });
     assert.equal(r.tradable, false);
     assert.match(r.skipReason ?? '', /BEAR/);
+  });
+
+  it('suppresses SHORT in BULL regime (live alert/journal path)', () => {
+    const r = evaluateIndexStbtDay({
+      yesterday,
+      today,
+      historyForAtr: [yesterday],
+      vixClose: 15,
+      suppressShortBull: true,
+      chartJson: null,
+      asOfTime: indexBtstDiscoveryAsOfUtc(today.date),
+    });
+    assert.equal(r.tradable, false);
+    assert.match(r.skipReason ?? '', /BULL/);
+  });
+
+  it('does not hard-skip SHORT on elevated VIX (awards path, not IGNORE)', () => {
+    const r = evaluateIndexStbtDay({
+      yesterday,
+      today: { ...today, close: 98, high: 99, low: 96 },
+      historyForAtr: [yesterday],
+      vixClose: 28,
+      suppressShortBull: false,
+      chartJson: null,
+      asOfTime: indexBtstDiscoveryAsOfUtc(today.date),
+    });
+    // Missing intraday → score invalid, but must NOT be the elevated-VIX LONG-style hard skip
+    assert.ok(!(r.skipReason ?? '').includes('VIX elevated'));
   });
 });
