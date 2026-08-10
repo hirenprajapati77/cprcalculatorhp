@@ -18,7 +18,29 @@ After `9395ef5`, bias **and** entry/SL/target/RR all use **today’s CPR** (`cpr
 
 The change was framed as making same-session levels “actionable” (pullback-to-today-TC / bounce-to-today-BC). It shipped inside a larger hardening PR and was **not** called out for separate owner sign-off the way the intentional `CPR_WEIGHT` score-breakdown divergence was.
 
-**Important:** production deploy HEAD at investigation time was still `b4e742a` (PR #92 era). `9395ef5` / PR #98 was **on GitHub `main` but not yet running on the Oracle box**, so live DB rows for 2026-08-10 still reflect the **pre-change (tomorrow-CPR entry)** writer.
+**Important — deploy fingerprint (corrected 2026-08-10 ~13:50 IST):**
+
+Do **not** equate `/home/ubuntu/cpr-calculator-platform` `git rev-parse HEAD` with the running app. Deploy extracts a standalone tarball; the server git checkout can lag.
+
+Verified on Oracle at investigation time:
+
+| Probe | Result |
+|-------|--------|
+| `pm2 show cpr-platform` `created at` | `2026-08-10T06:03:37.508Z` = **11:33:37 IST** (restart around claimed deploy window) |
+| `pm2` `max memory restart` | **681574400** (650M) — memory-headroom fix is in the **running** process |
+| `pm2` `restarts` / `uptime` | `0` / ~2h at 13:47 IST |
+| Standalone `BUILD_ID` | `38qdpiWkoODHk-fUF2GDM` (mtime `2026-08-10 06:01:56 UTC`) |
+| Server `git rev-parse HEAD` | `b4e742a` — **stale checkout only**, not the running binary |
+| Disk `src/.../scanner.service.ts` | still “entry at tomorrow's TC” (mtime Aug 4) — **not what Node loads** |
+| Disk `ops/ecosystem.config.cjs` | still `450M` string — **not** what PM2 is running |
+| `#98` markers in standalone (`DirectionSetupState`, `breakout-confirm`, auto-scan bucket claim phrase) | **absent** |
+| Journal-era markers in standalone | **present**: `cpr-journal:${date}` claim in `cpr-journal/route.js`; BTST `No market data for … skipping`; `Previous tick still running`; `overnightEnsured` |
+
+So: **running prod is post–journal-hardening / 650M era (consistent with ~`8eba16a` deploy), not `b4e742a`.**  
+**PR #98 (today-CPR entry / DirectionSetupState) is on GitHub `main` but not in the running standalone.**  
+Live `ScannerResult` rows for 2026-08-10 therefore still reflect the **tomorrow-CPR entry** writer.
+
+PM2 out-log timestamps from `ls` are **UTC** (server `date` = UTC). `08:16 UTC` ≈ `13:46 IST` — logs **were** advancing during market hours; earlier “5h silent” reading treated UTC as IST.
 
 ---
 
@@ -117,7 +139,7 @@ CPR journal cron window is **15:20–15:24 IST**. At investigation time that win
 | 2026-08-03 | 11 | 3 |
 
 **Before/after delta for `9395ef5`:** **not available.**  
-All rows above were written by the **pre-deploy** binary (`b4e742a`, tomorrow-CPR entry). There is no post-`9395ef5` production scan population to compare against yet.
+PR #98 is not in the running standalone (see deploy fingerprint above). DB rows above were written by the **pre-#98** entry writer (tomorrow-CPR). There is no post-`9395ef5` production scan population to compare against yet.
 
 ---
 
