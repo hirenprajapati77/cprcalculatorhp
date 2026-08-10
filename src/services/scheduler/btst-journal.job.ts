@@ -143,7 +143,12 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       const logTag = `${signal.symbol}:${signalType}`;
 
       const stockData = await MarketService.getStockData(signal.symbol);
-      const ltp = stockData?.ltp ?? signal.entry ?? 0;
+      if (!stockData) {
+        console.warn(`[BtstJournal] No market data for ${signal.symbol}; skipping ${signalType} log`);
+        return { tag: `${signal.symbol}:NO_MARKET_DATA`, didLog: false };
+      }
+
+      const ltp = stockData.ltp ?? signal.entry ?? 0;
       const entry = signal.entry ?? ltp;
       const sl = signal.stopLoss ?? ltp * defaultSlMul;
       const target = signal.target ?? ltp * defaultTargetMul;
@@ -153,12 +158,10 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         return { tag: logTag, didLog: false };
       }
 
-      if (stockData) {
-        const ext = EntryManagerService.evaluateExtension(stockData, dir);
-        if (!ext.eligible) {
-          console.warn(`[BtstJournal] ${signal.symbol} ${signalType} skipped: ${ext.reason}`);
-          return { tag: `${logTag}:EXTENDED`, didLog: false };
-        }
+      const ext = EntryManagerService.evaluateExtension(stockData, dir);
+      if (!ext.eligible) {
+        console.warn(`[BtstJournal] ${signal.symbol} ${signalType} skipped: ${ext.reason}`);
+        return { tag: `${logTag}:EXTENDED`, didLog: false };
       }
 
       // Option suggestion required — do not journal a fake STOCK/strike-0 row.
