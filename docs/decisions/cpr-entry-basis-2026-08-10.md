@@ -179,3 +179,46 @@ PR #98 is not in the running standalone (see deploy fingerprint above). DB rows 
 - [ ] (b) Revert to tomorrow’s-CPR entries pending further review  
 
 Owner: ______________________  Date: __________
+
+---
+
+## Post-deploy baseline (2026-08-10)
+
+**Probe time:** 2026-08-10 ~15:02 IST (`2026-08-10T09:32:37Z` server UTC)  
+**PR #98 deploy:** `2026-08-10T09:28:50Z` = **14:58:50 IST** (`pm2 show cpr-platform` `created at`)  
+**Standalone `BUILD_ID` at deploy:** `Z8XSr5igFteey0tn-TrIM` (post-#98 bundle; see deploy log same day)
+
+### Did today's CPR journal window run?
+
+**No — not yet at probe time.**
+
+CPR journal cron window is **15:20–15:24 IST**. Probe occurred ~18 minutes **before** that window. PM2 logs were flushed at deploy restart; no journal activity has been written since.
+
+**Raw PM2 log evidence:**
+
+```
+$ grep -c CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log
+0
+0
+
+$ grep CPRJournal /home/ubuntu/.pm2/logs/cpr-platform-out.log | tail -30
+(no output)
+
+$ date -u
+Mon Aug 10 09:32:37 UTC 2026
+
+$ pm2 show cpr-platform | grep created
+│ created at         │ 2026-08-10T09:28:50.416Z                                        │
+```
+
+### Skip-rate numbers (first post-#98 production data point)
+
+**Not available yet.** No `[CPRJournal] … not triggered` lines exist in the post-deploy log slice, and the 15:20–15:24 IST window had not executed at probe time. Do not use pre-deploy `ScannerResult` rows from earlier today as a post-#98 baseline — those were written by the **pre-#98** entry writer (tomorrow-CPR) before the `09:28:50Z` deploy.
+
+**Next capture (after one journal run post-deploy):**
+
+1. Re-run `grep -c "not triggered" /home/ubuntu/.pm2/logs/cpr-platform-out.log` (or count `[CPRJournal] … not triggered:` lines for 2026-08-10).
+2. Count successful journal lines for the same date.
+3. Cross-check `ScannerResult` (`score >= 75`, today's `scannedAt` date) — spot-check 2–3 symbols that `entry` sits near **today's** TC/BC given OHLC, not a materially different projected level.
+
+**Status:** Baseline placeholder only — real post-#98 skip-rate TBD after first 15:20–15:24 IST journal run completes.
