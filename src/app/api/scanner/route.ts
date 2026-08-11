@@ -467,6 +467,8 @@ export async function GET(request: NextRequest) {
         sl: r.sl,
         target: r.target,
         rr: r.rr,
+        target2: r.target2,
+        rr2: r.rr2,
         eventRiskScore: risk ? risk.severity : 0,
         eventRiskReason: risk ? risk.reason : null,
       };

@@ -34,6 +34,8 @@ export interface ScannerSignalResult extends MarketStockData {
   sl: number;
   target: number;
   rr: string; // Risk-Reward ratio, e.g. "1:2.5"
+  target2?: number | null;
+  rr2?: string | null;
   confidence: number; // Trade confidence percentage
   tomorrowCPRProvisional?: boolean;
   degenerateData?: boolean;
@@ -207,12 +209,13 @@ export class ScannerService {
     let sl = 0;
     let target = 0;
     let rr = '1:2.0';
-
+    let target2: number | null = null;
+    let rr2: string | null = null;
+ 
     // Determine bias from LTP vs TODAY's CPR band
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
     if (ltp > cprToday.tc) bias = 'BULLISH';
     else if (ltp < cprToday.bc) bias = 'BEARISH';
-
     let isLongRange = false;
     if (bias === 'BULLISH') {
       // LONG SETUP: pullback/hold entry at today's TC
@@ -222,14 +225,19 @@ export class ScannerService {
       const minSL = entry * 0.995;
       sl = Math.min(dayLowSL, minSL);
       const risk = entry - sl;
-
+ 
       if (risk > 0) {
         // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
         const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
         let chosenTarget = entry + risk * 1.5; // fallback
-        for (const t of targets) {
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
           if (t > entry && (t - entry) / risk >= 1.5) {
             chosenTarget = t;
+            if (i + 1 < targets.length) {
+              target2 = targets[i + 1];
+              rr2 = `1:${((target2 - entry) / risk).toFixed(1)}`;
+            }
             break;
           }
         }
@@ -247,14 +255,19 @@ export class ScannerService {
       const maxSL = entry * 1.005;
       sl = Math.max(dayHighSL, maxSL);
       const risk = sl - entry;
-
+ 
       if (risk > 0) {
         // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
         const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
         let chosenTarget = entry - risk * 1.5; // fallback
-        for (const t of targets) {
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
           if (t < entry && (entry - t) / risk >= 1.5) {
             chosenTarget = t;
+            if (i + 1 < targets.length) {
+              target2 = targets[i + 1];
+              rr2 = `1:${((entry - target2) / risk).toFixed(1)}`;
+            }
             break;
           }
         }
@@ -268,16 +281,20 @@ export class ScannerService {
       // RANGE SETUP — fade/mean-revert around today's pivot
       entry = cprToday.pivot;
       isLongRange = ltp >= cprToday.pivot;
-
       if (isLongRange) {
         sl = entry * 0.995;
         const risk = entry - sl;
         if (risk > 0) {
           const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
           let chosenTarget = entry + risk * 1.5; // fallback
-          for (const t of targets) {
+          for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
             if (t > entry && (t - entry) / risk >= 1.5) {
               chosenTarget = t;
+              if (i + 1 < targets.length) {
+                target2 = targets[i + 1];
+                rr2 = `1:${((target2 - entry) / risk).toFixed(1)}`;
+              }
               break;
             }
           }
@@ -293,9 +310,14 @@ export class ScannerService {
         if (risk > 0) {
           const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
           let chosenTarget = entry - risk * 1.5; // fallback
-          for (const t of targets) {
+          for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
             if (t < entry && (entry - t) / risk >= 1.5) {
               chosenTarget = t;
+              if (i + 1 < targets.length) {
+                target2 = targets[i + 1];
+                rr2 = `1:${((entry - target2) / risk).toFixed(1)}`;
+              }
               break;
             }
           }
@@ -307,10 +329,10 @@ export class ScannerService {
         }
       }
     }
-
+ 
     // 5. Confidence Score Calculation
     let confidence = this.calculateConfidence(tempResult);
-
+ 
     let vpaBreakdown: import('@/services/vpa').VpaConfirmationResult | undefined;
     if (isVpaEnabled()) {
       // Align VPA with Trade Setup V3 geometry (incl. RANGE short mean-revert).
@@ -337,7 +359,7 @@ export class ScannerService {
         }
       }
     }
-
+ 
     return {
       ...tempResult,
       score,
@@ -346,6 +368,8 @@ export class ScannerService {
       sl: Number(sl.toFixed(2)),
       target: Number(target.toFixed(2)),
       rr,
+      target2: target2 !== null ? Number(target2.toFixed(2)) : null,
+      rr2,
       tomorrowCPRProvisional: isTradingSession && !isTodayCandleFinal,
       degenerateData,
       distPivot: Number(distPivot.toFixed(2)),

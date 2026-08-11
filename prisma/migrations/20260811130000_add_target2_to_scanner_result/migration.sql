@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "ScannerResult" ADD COLUMN "target2" DOUBLE PRECISION,
+ADD COLUMN "rr2" TEXT;
