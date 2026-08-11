@@ -14,7 +14,7 @@ export async function loadWarmScanCache(
   const autoKey = autoScanResultCacheKey(universe, market);
   const autoCached = await CacheService.get<{ data: unknown[]; timestamp?: string }>(autoKey);
   if (autoCached && typeof autoCached === 'object' && Array.isArray(autoCached.data)) {
-    return { data: autoCached.data, timestamp: autoCached.timestamp, source: 'auto_scan' };
+    return { data: autoCached.data, ...(autoCached.timestamp && { timestamp: autoCached.timestamp }), source: 'auto_scan' };
   }
 
   const listCached = await CacheService.get<unknown[]>(`list:${universe}:${market}`);
