@@ -301,6 +301,7 @@ model BreakoutAlertState {
   id          Int       @id @default(autoincrement())
   symbol      String    @unique
   hadBreakout Boolean   @default(false)
+  missCount   Int       @default(0)
   lastAlerted DateTime?
   updatedAt   DateTime  @updatedAt
 }

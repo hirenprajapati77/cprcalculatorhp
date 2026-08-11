@@ -215,6 +215,8 @@ export class TelegramService {
       rr2?: string | null;
       score: number;
       sector: string;
+      alertKind?: 'BREAKOUT' | 'BREAKDOWN';
+      signals?: string[];
     }>,
     overrideChatId?: string,
     overrideToken?: string
@@ -306,11 +308,29 @@ export class TelegramService {
       month: 'short'
     });
 
+    const hasBreakdown = stocks.some(
+      (s) => s.alertKind === 'BREAKDOWN' || s.signals?.includes('BREAKDOWN')
+    );
+    const hasBreakout = stocks.some(
+      (s) => s.alertKind === 'BREAKOUT' || s.signals?.includes('BREAKOUT') || !s.alertKind
+    );
+    const headline =
+      hasBreakout && hasBreakdown
+        ? 'NEW BREAKOUT / BREAKDOWN SIGNALS'
+        : hasBreakdown
+          ? `NEW BREAKDOWN SIGNAL${stocks.length > 1 ? 'S' : ''}`
+          : `NEW BREAKOUT SIGNAL${stocks.length > 1 ? 'S' : ''}`;
+    const footnote = hasBreakdown && !hasBreakout
+      ? '⚠️ NARROW CPR + Volume Spike + Price < BC. Verify before trading.'
+      : hasBreakout && hasBreakdown
+        ? '⚠️ NARROW CPR + Volume Spike at CPR band edge. Verify before trading.'
+        : '⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.';
+
     const message =
-      `⚡ <b>NEW BREAKOUT SIGNAL${stocks.length > 1 ? 'S' : ''}</b>\n` +
+      `⚡ <b>${headline}</b>\n` +
       `📅 ${timeStr} IST\n\n` +
       `${lines}\n\n` +
-      `⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.`;
+      footnote;
 
     return await this.sendMessage(message, chatId, overrideToken);
   }

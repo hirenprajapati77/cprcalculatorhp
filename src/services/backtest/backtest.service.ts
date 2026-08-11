@@ -14,6 +14,7 @@ import { INDEX_SCORE } from '../overnight/index-ranking.service';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 import {
   evaluateIndexBtstDay,
+  evaluateIndexStbtDay,
   INDEX_BACKTEST_AVG_VOLUME,
 } from './index-btst-backtest.helper';
 import {
@@ -565,121 +566,147 @@ export class BacktestService {
               await new Promise((r) => setTimeout(r, 200));
 
               indexSetupEvaluated++;
-              const evaluation = evaluateIndexBtstDay({
+              const sharedCtx = {
                 yesterday,
                 today,
                 historyForAtr: ohlc.slice(0, i),
                 vixClose: vixClose ?? null,
-                suppressLongBear: regime.trend === 'BEAR',
                 chartJson,
                 asOfTime: indexBtstDiscoveryAsOfUtc(today.date),
+              };
+              const longEval = evaluateIndexBtstDay({
+                ...sharedCtx,
+                suppressLongBear: regime.trend === 'BEAR',
+              });
+              const shortEval = evaluateIndexStbtDay({
+                ...sharedCtx,
+                suppressShortBull: regime.trend === 'BULL',
               });
 
-              if (!evaluation.tradable || evaluation.entry == null || evaluation.stopLoss == null || evaluation.target == null) {
-                continue;
+              const indexLegs: Array<{
+                dir: 'LONG' | 'SHORT';
+                evaluation: typeof longEval;
+                signal: string;
+              }> = [
+                { dir: 'LONG', evaluation: longEval, signal: 'INDEX_BTST_CALL' },
+                { dir: 'SHORT', evaluation: shortEval, signal: 'INDEX_STBT_PUT' },
+              ];
+
+              let placedAny = false;
+              for (const leg of indexLegs) {
+                const evaluation = leg.evaluation;
+                if (!evaluation.tradable || evaluation.entry == null || evaluation.stopLoss == null || evaluation.target == null) {
+                  continue;
+                }
+
+                indexSetupTradable++;
+                tagDistribution[leg.dir]++;
+
+                const slippage = TradeEngineService.calculateSlippage(
+                  INDEX_BACKTEST_AVG_VOLUME,
+                  volatility,
+                  false
+                );
+                const rawEntry = evaluation.entry;
+                const btstEntry =
+                  leg.dir === 'LONG' ? rawEntry * (1 + slippage) : rawEntry * (1 - slippage);
+                const btstSl = evaluation.stopLoss;
+                const risk = leg.dir === 'LONG' ? btstEntry - btstSl : btstSl - btstEntry;
+                if (risk <= 0) continue;
+                const btstTarget =
+                  leg.dir === 'LONG' ? btstEntry + risk * 2.0 : btstEntry - risk * 2.0;
+
+                const btstTradeOhlc = ohlc.slice(i + 1, i + 2);
+                const btstTradeResult = TradeEngineService.simulateTrade(
+                  leg.dir,
+                  btstEntry,
+                  btstSl,
+                  btstTarget,
+                  btstTradeOhlc,
+                  {
+                    capital: run.capital,
+                    riskModel: run.riskModel,
+                    riskValue: run.riskValue ?? 1,
+                    executionMode: 'conservative',
+                    avgVolume: INDEX_BACKTEST_AVG_VOLUME,
+                    volatility,
+                    entryDate: today.date,
+                  }
+                );
+
+                const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
+                const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+                const btstNetPnl = btstTradeResult.pnl - btstFees;
+
+                const btstSignalsPayload = JSON.stringify({
+                  signals: [leg.signal],
+                  scoreBreakdown: evaluation.breakdown,
+                  classification: evaluation.classification,
+                  longScore: leg.dir === 'LONG' ? evaluation.score : 0,
+                  shortScore: leg.dir === 'SHORT' ? evaluation.score : 0,
+                  tag: leg.dir,
+                  context: {
+                    vixClose: vixClose ?? null,
+                    vixBand: classifyVixBand(vixClose),
+                    regimeTrend: regime.trend,
+                    regimeVolatility: regime.volatility,
+                    classification: evaluation.classification,
+                  },
+                  _backtestNote:
+                    'Production-aligned IndexRankingService (130pt) with historical 5m VWAP/liquidity at 15:25 IST. P&L is index spot proxy — not option premium.',
+                });
+
+                await prisma.$transaction(async (tx) => {
+                  const btstTrade = await tx.trade.create({
+                    data: {
+                      backtestRunId: runId,
+                      symbol,
+                      type: leg.dir,
+                      signal: leg.signal,
+                      status: btstTradeResult.status,
+                      strategyMode: 'INDEX_BTST_DRIVEN',
+                      entryDate: new Date(today.date),
+                      entryPrice: btstEntry,
+                      entryReason: `Index ${leg.dir === 'LONG' ? 'BTST' : 'STBT'} (${evaluation.classification}, score ${evaluation.score}/${INDEX_SCORE.MAX})`,
+                      exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
+                      exitPrice: btstTradeResult.exitPrice,
+                      exitReason: btstTradeResult.exitReason,
+                      stopLoss: btstSl,
+                      target: btstTarget,
+                      riskAmount: btstTradeResult.riskAmount,
+                      fees: btstFees,
+                      slippage: slippage * 2 * 100,
+                      executionDelayMs: 0,
+                      rr: btstTradeResult.rr,
+                      durationDays: btstTradeResult.durationDays,
+                      positionSize: btstTradeResult.positionSize,
+                      pnl: btstNetPnl,
+                      pnlPercent: (btstNetPnl / run.capital) * 100,
+                      score: evaluation.score ?? 0,
+                      signalsJson: btstSignalsPayload,
+                      triggerDelayDays: 0,
+                    },
+                  });
+                  if (btstTradeResult.journalEvents.length > 0) {
+                    const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
+                    await tx.journal.createMany({
+                      data: limitedEvents.map((e) => ({
+                        tradeId: btstTrade.id,
+                        timestamp: e.timestamp,
+                        event: e.event,
+                        details: e.details,
+                      })),
+                    });
+                  }
+                });
+
+                processedTrades++;
+                placedAny = true;
               }
 
-              indexSetupTradable++;
-              tagDistribution['LONG']++;
-
-              const slippage = TradeEngineService.calculateSlippage(
-                INDEX_BACKTEST_AVG_VOLUME,
-                volatility,
-                false
-              );
-              const btstEntry = evaluation.entry * (1 + slippage);
-              const btstSl = evaluation.stopLoss;
-              const risk = btstEntry - btstSl;
-              if (risk <= 0) continue;
-              const btstTarget = btstEntry + risk * 2.0;
-
-              const btstTradeOhlc = ohlc.slice(i + 1, i + 2);
-              const btstTradeResult = TradeEngineService.simulateTrade(
-                'LONG',
-                btstEntry,
-                btstSl,
-                btstTarget,
-                btstTradeOhlc,
-                {
-                  capital: run.capital,
-                  riskModel: run.riskModel,
-                  riskValue: run.riskValue ?? 1,
-                  executionMode: 'conservative',
-                  avgVolume: INDEX_BACKTEST_AVG_VOLUME,
-                  volatility,
-                  entryDate: today.date,
-                }
-              );
-
-              const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-              const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
-              const btstNetPnl = btstTradeResult.pnl - btstFees;
-
-              const btstSignalsPayload = JSON.stringify({
-                signals: ['INDEX_BTST_CALL'],
-                scoreBreakdown: evaluation.breakdown,
-                classification: evaluation.classification,
-                longScore: evaluation.score,
-                shortScore: 0,
-                tag: 'LONG',
-                context: {
-                  vixClose: vixClose ?? null,
-                  vixBand: classifyVixBand(vixClose),
-                  regimeTrend: regime.trend,
-                  regimeVolatility: regime.volatility,
-                  classification: evaluation.classification,
-                },
-                _backtestNote:
-                  'Production-aligned IndexRankingService (130pt) with historical 5m VWAP/liquidity at 15:25 IST. P&L is index spot proxy — not option premium.',
-              });
-
-              // M-9: Atomic trade + journal in one transaction.
-              await prisma.$transaction(async (tx) => {
-                const btstTrade = await tx.trade.create({
-                  data: {
-                    backtestRunId: runId,
-                    symbol,
-                    type: 'LONG',
-                    signal: 'INDEX_BTST_CALL',
-                    status: btstTradeResult.status,
-                    strategyMode: 'INDEX_BTST_DRIVEN',
-                    entryDate: new Date(today.date),
-                    entryPrice: btstEntry,
-                    entryReason: `Index BTST (${evaluation.classification}, score ${evaluation.score}/${INDEX_SCORE.MAX})`,
-                    exitDate: btstTradeResult.exitDate ? new Date(btstTradeResult.exitDate) : null,
-                    exitPrice: btstTradeResult.exitPrice,
-                    exitReason: btstTradeResult.exitReason,
-                    stopLoss: btstSl,
-                    target: btstTarget,
-                    riskAmount: btstTradeResult.riskAmount,
-                    fees: btstFees,
-                    slippage: slippage * 2 * 100,
-                    executionDelayMs: 0,
-                    rr: btstTradeResult.rr,
-                    durationDays: btstTradeResult.durationDays,
-                    positionSize: btstTradeResult.positionSize,
-                    pnl: btstNetPnl,
-                    pnlPercent: (btstNetPnl / run.capital) * 100,
-                    score: evaluation.score ?? 0,
-                    signalsJson: btstSignalsPayload,
-                    triggerDelayDays: 0,
-                  },
-                });
-                if (btstTradeResult.journalEvents.length > 0) {
-                  const limitedEvents = btstTradeResult.journalEvents.slice(0, 100);
-                  await tx.journal.createMany({
-                    data: limitedEvents.map((e) => ({
-                      tradeId: btstTrade.id,
-                      timestamp: e.timestamp,
-                      event: e.event,
-                      details: e.details,
-                    })),
-                  });
-                }
-              });
-
-              processedTrades++;
-              blockedUntilIndex = i + 1;
+              if (placedAny) {
+                blockedUntilIndex = i + 1;
+              }
 
             } else {
               const validHistory = ohlc.slice(0, i);

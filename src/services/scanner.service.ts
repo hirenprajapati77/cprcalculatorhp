@@ -216,7 +216,7 @@ export class ScannerService {
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
     if (ltp > cprToday.tc) bias = 'BULLISH';
     else if (ltp < cprToday.bc) bias = 'BEARISH';
- 
+    let isLongRange = false;
     if (bias === 'BULLISH') {
       // LONG SETUP: pullback/hold entry at today's TC
       entry = cprToday.tc;
@@ -280,8 +280,7 @@ export class ScannerService {
     } else {
       // RANGE SETUP — fade/mean-revert around today's pivot
       entry = cprToday.pivot;
-      const isLongRange = ltp >= cprToday.pivot;
- 
+      isLongRange = ltp >= cprToday.pivot;
       if (isLongRange) {
         sl = entry * 0.995;
         const risk = entry - sl;
@@ -336,8 +335,11 @@ export class ScannerService {
  
     let vpaBreakdown: import('@/services/vpa').VpaConfirmationResult | undefined;
     if (isVpaEnabled()) {
+      // Align VPA with Trade Setup V3 geometry (incl. RANGE short mean-revert).
       const vpaDirection: VpaDirection =
-        ltp < bc || signals.includes('BEARISH') ? 'SHORT' : 'LONG';
+        bias === 'BEARISH' || (bias === 'RANGE' && !isLongRange) || signals.includes('BEARISH')
+          ? 'SHORT'
+          : 'LONG';
       const vpaInputs = buildVpaInputs(
         vpaDirection,
         {
@@ -416,7 +418,7 @@ export class ScannerService {
       signals.includes('HP_RTP') || signals.includes('KGS_RTP')
     ) synergy += 10;
     if (signals.includes('VIRGIN')) synergy += 5;
-    if (signals.includes('NARROW') && signals.includes('BREAKOUT')) synergy += 5;
+    if (signals.includes('NARROW') && (signals.includes('BREAKOUT') || signals.includes('BREAKDOWN'))) synergy += 5;
     confidence += Math.min(20, synergy);
 
     // 4. Conflict Penalties
