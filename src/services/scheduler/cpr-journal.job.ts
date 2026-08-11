@@ -123,37 +123,60 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       continue;
     }
 
-    const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-      cleanSym,
-      signal.ltp,
-      tag,
-      signal.entry,
-      signal.sl,
-      signal.target,
-      todayStr
-    );
+    const fallbackOptionType = isBearish ? 'PE' : 'CE';
+    let optionName: string;
+    let optionStrike: number;
+    let optionType: 'CE' | 'PE';
+    let entryCmp: number;
 
-    if (suggestion.error || !suggestion.strike || !suggestion.ltp) {
-      console.warn(
-        `[CPRJournal] No option suggestion for ${signal.symbol}: ` +
-        (suggestion.error ?? 'missing strike or ltp')
+    try {
+      const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+        cleanSym,
+        signal.ltp,
+        tag,
+        signal.entry,
+        signal.sl,
+        signal.target,
+        todayStr
       );
-      skipped.push(signal.symbol);
-      continue;
-    }
 
-    const optionType = suggestion.type ?? (isBearish ? 'PE' : 'CE');
-    const optionName =
-      suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
-      `${suggestion.strike} ${optionType}`;
+      if (!suggestion.error && suggestion.strike && suggestion.ltp) {
+        optionType = suggestion.type ?? fallbackOptionType;
+        optionName =
+          suggestion.formattedName?.replace(new RegExp(`^${cleanSym}\\s+`), '') ||
+          `${suggestion.strike} ${optionType}`;
+        optionStrike = suggestion.strike;
+        entryCmp = suggestion.ltp;
+      } else {
+        console.warn(
+          `[CPRJournal] No option suggestion for ${signal.symbol}: ` +
+          (suggestion.error ?? 'missing strike or ltp') +
+          ' — journaling UNDERLYING stock LTP.'
+        );
+        optionType = fallbackOptionType;
+        optionName = TradeJournalService.underlyingOptionContract(optionType);
+        optionStrike = 0;
+        entryCmp = signal.ltp;
+      }
+    } catch (optErr) {
+      console.warn(
+        `[CPRJournal] Option lookup threw for ${signal.symbol}:`,
+        optErr,
+        '— journaling UNDERLYING stock LTP.'
+      );
+      optionType = fallbackOptionType;
+      optionName = TradeJournalService.underlyingOptionContract(optionType);
+      optionStrike = 0;
+      entryCmp = signal.ltp;
+    }
 
     const didLog = await TradeJournalService.logSignal({
       signalType: 'CPR',
       symbol: signal.symbol,
       optionContract: optionName,
-      optionStrike: suggestion.strike,
+      optionStrike,
       optionType,
-      entryCmp: suggestion.ltp,
+      entryCmp,
       score: signal.score,
       confidence: signal.confidence,
       signalSummary: signal.signalSummary,

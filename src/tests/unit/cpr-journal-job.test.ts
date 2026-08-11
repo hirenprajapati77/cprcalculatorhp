@@ -192,6 +192,44 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     }
   });
 
+  await t.test('journals UNDERLYING stock LTP when option chain is unavailable', async () => {
+    const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 105, entry: 100 })]);
+    OptionSuggestionService.suggestOptionForBtst = (async () => ({
+      error: 'NO_CHAIN',
+    })) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['NOCHAIN']);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logCall = mocks.logCalls[0] as any;
+      assert.strictEqual(logCall.optionContract, 'UNDERLYING CE');
+      assert.strictEqual(logCall.optionStrike, 0);
+      assert.strictEqual(logCall.entryCmp, 105);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('UNDERLYING fallback uses PE for bearish CPR signals', async () => {
+    const mocks = mockJobDeps([
+      makeSignal({ symbol: 'NOCHAINBEAR', ltp: 97, entry: 98, bc: 98, tc: 100 }),
+    ]);
+    OptionSuggestionService.suggestOptionForBtst = (async () => ({
+      error: 'NO_CHAIN',
+    })) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['NOCHAINBEAR']);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logCall = mocks.logCalls[0] as any;
+      assert.strictEqual(logCall.optionContract, 'UNDERLYING PE');
+      assert.strictEqual(logCall.optionType, 'PE');
+      assert.strictEqual(logCall.entryCmp, 97);
+    } finally {
+      mocks.restore();
+    }
+  });
+
   await t.test('SECTOR_DIVERGENCE skips journaling only in live filter mode', async () => {
     const divergent = makeSignal({
       symbol: 'DIVERGED',
