@@ -1603,6 +1603,14 @@ export default function ScannerClient() {
           setResults([]);
           setTotal(0);
         }
+        
+        // On failure, fall back to the local telemetry clock so we don't get stuck in the pre-session state
+        if (scannerMode === 'CPR') {
+          setExecutionWindowOpen(isMarketOpen());
+        } else if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
+          setExecutionWindowOpen(isBtstDiscoveryOpen());
+        }
+        
         showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
       }
     } finally {
