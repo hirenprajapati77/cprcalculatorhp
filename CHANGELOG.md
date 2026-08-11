@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **CPR Scanner subtitle copy**: Corrected the CPR mode description from "Auto-scans indices" to "Auto-scans NSE F&O universe", eliminating misleading language that implied the intraday CPR scanner operates on index instruments.
+- **Heatmap vs KPI count divergence (scope transparency)**: Added a subtitle disclaimer to the "Market Sector Concentration Heatmap" card ("Counts reflect the current page view. KPI tiles above count the full filtered universe.") so users understand why the heatmap column totals differ from the global KPI tiles — the heatmap aggregates the current paginated result set while the server-side KPI counts span the entire filtered universe.
+- **Card `subtitle` prop**: Extended `Card` component (`src/components/ui/Card.tsx`) with an optional `subtitle` prop rendered as muted micro-text below the title, used by the heatmap scope disclaimer.
+
 - **Deep-Review Bug Squashing (August 2026)**: Addressed multiple critical and high-severity logic edge-cases uncovered during an automated deep-level code review (PR #101 & PR #102), including:
   - **VPA SHORT Asymmetries**: Mirrored SHORT scoring and live gates for 'No Demand' and 'Climax' scenarios, ensuring valid SHORT setups receive reversal bonuses rather than being incorrectly penalized under LONG rules.
   - **VPA Math Safety**: Bound climax bands safely for inverted CPR days, and hardened RVOL calculation against `NaN` inputs.

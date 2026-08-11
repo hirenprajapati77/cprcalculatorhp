@@ -2272,7 +2272,7 @@ export default function ScannerClient() {
             <p className="text-xs text-text-secondary max-w-2xl leading-relaxed">
               {isOvernightMode(scannerMode)
                 ? 'Auto-scans indices, evaluates 6 critical price-action rules for overnight momentum, and ranks targets dynamically using V3 scoring calibrations.'
-                : 'Auto-scans indices, evaluates 11 critical CPR rules, and ranks targets dynamically using dynamic filters, heatmap matrixes, and V3 scoring calibrations.'}
+                : 'Auto-scans NSE F\u0026O universe, evaluates 11 critical CPR rules, and ranks targets dynamically using dynamic filters, heatmap matrixes, and V3 scoring calibrations.'}
             </p>
           </div>
           {isDegraded && (
@@ -2513,7 +2513,11 @@ export default function ScannerClient() {
 
       {/* Sector Signal Heatmap Grid — stock/CPR only; INDEX has no sector universe */}
       {scannerMode !== 'INDEX' && (
-      <Card title="Market Sector Concentration Heatmap" icon={<LayoutGrid size={14} className="text-accent-blue" />}>
+      <Card
+        title="Market Sector Concentration Heatmap"
+        subtitle="Counts reflect the current page view. KPI tiles above count the full filtered universe."
+        icon={<LayoutGrid size={14} className="text-accent-blue" />}
+      >
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center font-mono select-none">
             <LayoutGrid size={32} className="text-accent-blue/30 mb-2 animate-pulse" />
