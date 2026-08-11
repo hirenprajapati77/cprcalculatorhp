@@ -17,6 +17,7 @@ That's it. The script handles everything:
 **DO NOT:**
 - Build manually step-by-step (wastes tokens and time)
 - **NEVER run `npm run build` directly on the Oracle server via SSH.** The server has limited memory and the build will freeze, crash, or take 10+ minutes. ALWAYS use `.\ops\deploy.ps1` to build locally and push the artifacts.
+- **NEVER run `npx prisma generate` on the Oracle server during deploy.** `deploy_extract.sh` must not call it — the local Windows build already embeds `debian-openssl-3.0.x` engines (`binaryTargets` in `schema.prisma`). Generate on the 1GB VM can OOM mid-deploy. Keep `prisma migrate deploy` on the server (Postgres is localhost-only; laptop cannot reach it without an SSH tunnel).
 - **Direct read-only SSH diagnostics (reading logs, querying Redis keys, and checking database records/PM2 status) are fully authorized** for troubleshooting and root-cause analysis. However, do not deploy code changes, test unverified scripts, or run manual database migrations directly on the server; prepare all patches locally and deploy using `.\ops\deploy.ps1`.
 - Use `Compress-Archive` / zip (Windows paths break on Linux)
 - Use `npm ci` on the server (takes 3+ minutes unnecessarily)

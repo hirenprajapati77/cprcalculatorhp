@@ -66,12 +66,14 @@ Log "Setting NEXT_PUBLIC_BASE_URL to production..."
 Ok "NEXT_PUBLIC_BASE_URL = $PROD_URL"
 
 # ── 3. BUILD ─────────────────────────────────────────────────
+# Prisma client (+ debian-openssl-3.0.x engine) is generated locally here.
+# Server deploy_extract.sh must NOT run `prisma generate` (OOM on 1GB VM).
 Log "Installing dependencies..."
 $ErrorActionPreference = "Continue"
-$build = & npm install 2>&1
+$build = & npm install --prefer-offline --no-audit --no-fund 2>&1
 $exitCode = $LASTEXITCODE
 if ($exitCode -eq 0) {
-    Log "Generating Prisma client..."
+    Log "Generating Prisma client (native + debian-openssl-3.0.x for prod)..."
     $build = & node node_modules/prisma/build/index.js generate 2>&1
     $exitCode = $LASTEXITCODE
 }
