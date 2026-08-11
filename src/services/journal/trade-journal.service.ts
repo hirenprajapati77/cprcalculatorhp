@@ -252,8 +252,20 @@ export class TradeJournalService {
           const stockData = await MarketService.getStockData(entry.symbol);
           cmp = stockData?.ltp && stockData.ltp > 0 ? stockData.ltp : null;
         } else {
-          const firstToken = entry.optionContract ? entry.optionContract.split(' ')[0] : undefined;
-          const tradeExpiry = (firstToken && firstToken !== String(entry.optionStrike)) ? firstToken : undefined;
+          // Robustly extract expiry from contract name, handling both formats:
+          //   Monthly: "JUL 2026 4000 CE"  → tradeExpiry = "JUL 2026"
+          //   Weekly:  "30 JUL 2026 4000 CE" → tradeExpiry = "30 JUL 2026"
+          // The old firstToken approach failed because:
+          //   - Monthly first token = "JUL" → new Date("JUL") = Invalid Date
+          //   - Weekly first token  = "30"  → new Date("30")  = Invalid Date
+          // Both caused OptionChainService to silently fall back to current expiry.
+          const weeklyMatch = entry.optionContract?.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+          const monthlyMatch = entry.optionContract?.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+          const tradeExpiry = weeklyMatch
+            ? `${weeklyMatch[1]} ${weeklyMatch[2]} ${weeklyMatch[3]}`
+            : monthlyMatch
+            ? `${monthlyMatch[1]} ${monthlyMatch[2]}`
+            : undefined;
 
           cmp = await TradeJournalService.fetchOptionCmp(
             entry.symbol,
