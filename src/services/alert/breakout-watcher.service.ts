@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
+import type { OptionSuggestion } from '../option-suggestion.service';
 
 const MIN_BREAKOUT_ALERT_SCORE = 75;
 
@@ -26,6 +27,8 @@ export interface BreakoutScanResult {
   eventRiskScore?: number;
   /** Which signal triggered this alert row (set by detectNewBreakouts). */
   alertKind?: BreakoutAlertKind;
+  /** Pre-fetched by breakout-alert.pipeline before Telegram send (optional). */
+  optionSuggestion?: OptionSuggestion;
 }
 
 function isUniqueConstraintError(err: unknown): boolean {
