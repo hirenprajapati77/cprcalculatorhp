@@ -564,7 +564,7 @@ const StockRow = React.memo(({
                     <span className="font-bold text-accent-red">₹{fmt(row.sl)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-text-tertiary">Target</span>
+                    <span className="text-text-tertiary">Target 1</span>
                     <span className="font-bold text-accent-green">₹{fmt(row.target)}</span>
                   </div>
                   {row.target2 != null && row.target2 > 0 && (
@@ -581,7 +581,7 @@ const StockRow = React.memo(({
                 </>
               ) : (
                 <div className="flex items-center gap-2 text-[9px] text-text-secondary">
-                  <span>T: ₹{fmt(row.target)}</span>
+                  <span>T1: ₹{fmt(row.target)}</span>
                   {row.target2 != null && row.target2 > 0 && (
                     <>
                       <span className="opacity-50">|</span>
