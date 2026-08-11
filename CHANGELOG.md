@@ -49,6 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Dependency Bumps**: npm audit dependency lockfile bumps (ip-address, fast-uri, nanoid, hono, @hono/node-server).
+- **CPR Journal Bearish Fix**: `runCprJournalJob` was LONG/CE-only with a backwards trigger condition for bearish signals; now correctly processes SHORT/PE directions.
+- **Earnings Cron Lock**: Added claim-lock guard and in-process scheduler fallback to the earnings-populate cron job.
+- **Breakdown Telegram Alerts (PR #103)**: Breakout Telegram alerts were BREAKOUT-only — BREAKDOWN (bearish) setups never alerted at all regardless of score. Now uses per-symbol+kind claim keys so both directions alert independently.
+- **RANGE-CPR Journal Direction (PR #103)**: RANGE-CPR journal direction is now inferred from SL/target geometry instead of defaulting to LONG when entry is the pivot.
+- **RankingService Parity (PR #103)**: Bear-structure parity fix in RankingService.
+- **Index Backtest STBT (PR #103)**: Index backtest engine can now evaluate STBT (short) — previously only LONG/BTST was backtestable for indices.
+- **Compare Views (PR #103)**: Stock and index Live-vs-Backtest Compare views were silently BTST-only, excluding all STBT trades — now include both.
+- **Breakout Alert Debounce (PR #107)**: Signal must be absent for 2 consecutive scan cycles (not 1) before alert state clears, fixing the Patanjali flicker re-alert issue.
+- **UNDERLYING Option Fallback Fix**: CPR journal signals were being silently dropped when option-chain lookup failed; now falls back to stock LTP with UNDERLYING CE/PE.
 - **CPR Scanner subtitle copy**: Corrected the CPR mode description from "Auto-scans indices" to "Auto-scans NSE F&O universe", eliminating misleading language that implied the intraday CPR scanner operates on index instruments.
 - **Card `subtitle` prop**: Extended `Card` component (`src/components/ui/Card.tsx`) with an optional `subtitle` prop rendered as muted micro-text below the title.
 - **Full-Universe Heatmap Aggregation**: Fixed the "Market Sector Concentration Heatmap" grid to aggregate over the entire filtered universe (server-computed via `insights.heatmapSectors` in `route.ts`) rather than being client-side bound to the 10 paginated `results` rows. Verified parity between global KPI tiles and heatmap totals, and added a regression unit test.
