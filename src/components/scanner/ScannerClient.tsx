@@ -2631,7 +2631,7 @@ export default function ScannerClient() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto lg:overflow-visible">
             <table className="w-full text-left border-collapse font-mono text-[10px] select-none text-center whitespace-nowrap">
               <thead>
                 <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary uppercase">
