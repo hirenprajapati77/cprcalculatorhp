@@ -40,15 +40,16 @@ echo "=== Recording pre-deploy migration state ==="
 PRE_DEPLOY_MIGRATIONS=$(psql "$DATABASE_URL" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at;" 2>/dev/null | sed '/^\s*$/d')
 
 echo "=== Running Database Migrations ==="
+# Keep migrate on the server: Postgres listens on 127.0.0.1 only (not reachable from
+# the deploy laptop without an SSH tunnel). Do NOT run `prisma generate` here —
+# the Windows build already embeds debian-openssl-3.0.x engines via binaryTargets,
+# and generate on this 1GB VM risks OOM during deploy.
 cd $APP
 npx prisma migrate deploy
 
 echo "=== Recording post-deploy migration state ==="
 POST_DEPLOY_MIGRATIONS=$(psql "$DATABASE_URL" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at;" 2>/dev/null | sed '/^\s*$/d')
 NEW_MIGRATIONS=$(comm -13 <(echo "$PRE_DEPLOY_MIGRATIONS" | sort) <(echo "$POST_DEPLOY_MIGRATIONS" | sort))
-
-echo "=== Synchronizing Prisma Client ==="
-npx prisma generate
 
 echo "=== Restarting PM2 fresh (delete + start; never restart --update-env) ==="
 # Rulebook: PM2 caches env at process creation — delete then start so .env is reloaded.
