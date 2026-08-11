@@ -1023,6 +1023,24 @@ export default function ScannerClient() {
     avoid: 0,
   });
 
+  // Server-side full-universe heatmap sector breakdown (from insights.heatmapSectors).
+  // When populated this replaces the page-limited client-side aggregation in heatmapGridData.
+  interface ServerHeatmapCell {
+    count: number;
+    avgScore: number;
+    symbols: string[];
+    topStock: string;
+    topStockScore: number;
+  }
+  const [serverHeatmap, setServerHeatmap] = useState<Record<string, {
+    strongBuy: ServerHeatmapCell;
+    breakout: ServerHeatmapCell;
+    bullish: ServerHeatmapCell;
+    bearish: ServerHeatmapCell;
+    watch: ServerHeatmapCell;
+    total: ServerHeatmapCell;
+  }> | null>(null);
+
   // persistent scan runs log
   const [scanHistoryLog, setScanHistoryLog] = useState<HistoryLog[]>([]);
   const [showLogsList, setShowLogsList] = useState<boolean>(false);
@@ -1459,6 +1477,9 @@ export default function ScannerClient() {
             breakoutReady: data.insights.breakoutReady || 0,
             avoid: data.insights.avoid || 0,
           });
+          if (data.insights.heatmapSectors) {
+            setServerHeatmap(data.insights.heatmapSectors);
+          }
         }
 
         setResults(mapped);
@@ -1506,6 +1527,9 @@ export default function ScannerClient() {
         setIsDegraded(!!data.degraded);
         if (data.insights) {
           setInsightCounts(data.insights);
+          if (data.insights.heatmapSectors) {
+            setServerHeatmap(data.insights.heatmapSectors);
+          }
         }
         let items = data.results as ScannedStock[];
 
@@ -2027,27 +2051,90 @@ export default function ScannerClient() {
   };
 
   // Heatmap Aggregator with Row and Column Totals
+  //
+  // Primary path: if the API returned insights.heatmapSectors (full-universe, server-computed),
+  // project that directly into the same grid/colTotals shape the JSX expects — ensuring the
+  // heatmap Breakout column total == the KPI tile's breakoutReady count on every page.
+  //
+  // Fallback path: build from the paginated `results` array (old behaviour, kept for
+  // cache-served responses or any code path that does not yet return heatmapSectors).
   const heatmapGridData = useMemo(() => {
-    const grid: Record<string, Record<string, { count: number; avgScore: number; symbols: string[]; topStock: string; topStockScore: number }>> = {};
-    const colTotals: Record<string, { count: number; avgScore: number; symbols: string[]; topStock: string; topStockScore: number }> = {
-      'Strong Buy': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-      'Breakout': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-      'Bullish': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-      'Bearish': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-      'Watch': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-    };
+    const SIGNAL_KEYS = ['Strong Buy', 'Breakout', 'Bullish', 'Bearish', 'Watch'] as const;
+    type CellKey = typeof SIGNAL_KEYS[number];
+    type Cell = { count: number; avgScore: number; symbols: string[]; topStock: string; topStockScore: number };
 
-    SECTORS_LIST.forEach(sec => {
-      grid[sec] = {
-        'Strong Buy': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-        'Breakout': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-        'Bullish': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-        'Bearish': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-        'Watch': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 },
-        'Total': { count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 }
-      };
+    const makeCell = (): Cell => ({ count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 });
+    const makeRow = (): Record<string, Cell> => ({
+      'Strong Buy': makeCell(),
+      'Breakout': makeCell(),
+      'Bullish': makeCell(),
+      'Bearish': makeCell(),
+      'Watch': makeCell(),
+      'Total': makeCell(),
     });
 
+    const grid: Record<string, Record<string, Cell>> = {};
+    SECTORS_LIST.forEach(sec => { grid[sec] = makeRow(); });
+    const colTotals: Record<string, Cell> = {
+      'Strong Buy': makeCell(),
+      'Breakout': makeCell(),
+      'Bullish': makeCell(),
+      'Bearish': makeCell(),
+      'Watch': makeCell(),
+    };
+
+    // ── Server path (full universe) ───────────────────────────────────────────
+    if (serverHeatmap) {
+      const serverKeyMap: Record<CellKey, 'strongBuy' | 'breakout' | 'bullish' | 'bearish' | 'watch'> = {
+        'Strong Buy': 'strongBuy',
+        'Breakout': 'breakout',
+        'Bullish': 'bullish',
+        'Bearish': 'bearish',
+        'Watch': 'watch',
+      };
+
+      for (const [sec, sectorData] of Object.entries(serverHeatmap)) {
+        const gridSec = SECTORS_LIST.includes(sec) ? sec : 'Other';
+        if (!grid[gridSec]) continue;
+        const row = grid[gridSec];
+
+        for (const cellKey of SIGNAL_KEYS) {
+          const serverKey = serverKeyMap[cellKey];
+          const cellData = sectorData[serverKey];
+          if (!cellData || cellData.count === 0) continue;
+
+          row[cellKey].count = cellData.count;
+          row[cellKey].avgScore = cellData.avgScore;
+          row[cellKey].symbols = cellData.symbols || [];
+          row[cellKey].topStock = cellData.topStock || '';
+          row[cellKey].topStockScore = cellData.topStockScore || 0;
+
+          // Column Totals Accumulation
+          const colTotal = colTotals[cellKey];
+          colTotal.count += cellData.count;
+          colTotal.avgScore = (colTotal.avgScore * (colTotal.count - cellData.count) + cellData.avgScore * cellData.count) / colTotal.count;
+          colTotal.symbols = [...colTotal.symbols, ...(cellData.symbols || [])];
+          if (cellData.topStockScore > colTotal.topStockScore) {
+            colTotal.topStock = cellData.topStock;
+            colTotal.topStockScore = cellData.topStockScore;
+          }
+        }
+        
+        // Handle Row Total for 'Total'
+        const serverTotalCell = sectorData.total;
+        if (serverTotalCell) {
+          row['Total'].count = serverTotalCell.count;
+          row['Total'].avgScore = serverTotalCell.avgScore || 0;
+          row['Total'].symbols = serverTotalCell.symbols || [];
+          row['Total'].topStock = serverTotalCell.topStock || '';
+          row['Total'].topStockScore = serverTotalCell.topStockScore || 0;
+        }
+      }
+
+      return { grid, colTotals };
+    }
+
+    // ── Client fallback path (current page only) ──────────────────────────────
     results.forEach(item => {
       const sec = SECTORS_LIST.includes(item.sector) ? item.sector : 'Other';
       if (!grid[sec]) return;
@@ -2107,7 +2194,7 @@ export default function ScannerClient() {
     });
 
     return { grid, colTotals };
-  }, [results, scannerMode, thresholds.strong, thresholds.ready, thresholds.watch]);
+  }, [serverHeatmap, results, scannerMode, thresholds.strong, thresholds.ready, thresholds.watch]);
 
   // V2 Scanner Insights
   const strongBuyCount = insightCounts.strongBuy;
@@ -2513,11 +2600,7 @@ export default function ScannerClient() {
 
       {/* Sector Signal Heatmap Grid — stock/CPR only; INDEX has no sector universe */}
       {scannerMode !== 'INDEX' && (
-      <Card
-        title="Market Sector Concentration Heatmap"
-        subtitle="Counts reflect the current page view. KPI tiles above count the full filtered universe."
-        icon={<LayoutGrid size={14} className="text-accent-blue" />}
-      >
+      <Card title="Market Sector Concentration Heatmap" icon={<LayoutGrid size={14} className="text-accent-blue" />}>
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center font-mono select-none">
             <LayoutGrid size={32} className="text-accent-blue/30 mb-2 animate-pulse" />

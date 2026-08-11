@@ -307,18 +307,128 @@ export async function GET(request: NextRequest) {
       prisma.scannerResult.count({ where }),
       prisma.scannerResult.findMany({
         where,
-        select: { score: true, signalSummary: true }
+        select: { symbol: true, score: true, signalSummary: true }
       })
     ]));
-
     let strongBuyCount = 0;
     let breakoutReadyCount = 0;
     let avoidCount = 0;
+
+    interface TempStock {
+      symbol: string;
+      score: number;
+    }
+
+    interface TempCell {
+      count: number;
+      scoreSum: number;
+      stocks: TempStock[];
+      topStock: string;
+      topStockScore: number;
+    }
+
+    const initTempCell = (): TempCell => ({
+      count: 0,
+      scoreSum: 0,
+      stocks: [],
+      topStock: '',
+      topStockScore: -1
+    });
+
+    const initTempSector = () => ({
+      strongBuy: initTempCell(),
+      breakout: initTempCell(),
+      bullish: initTempCell(),
+      bearish: initTempCell(),
+      watch: initTempCell(),
+      total: initTempCell()
+    });
+
+    const tempHeatmapSectors: Record<string, ReturnType<typeof initTempSector>> = {};
+
+    // snapshotMap is built early here to resolve sectors from snapshots during the loop
+    const snapshotMapEarly = new Map(matchingSnapshots.map((s: MarketSnapshot) => [s.symbol, s]));
 
     for (const r of fullStats) {
       if (r.score >= 75) strongBuyCount++;
       if (r.score >= 60 && r.score < 75) breakoutReadyCount++;
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
+
+      const cleanSymbol = r.symbol.split(':')[0];
+      const snap = snapshotMapEarly.get(r.symbol);
+      const sec: string = (snap && snap.sector) ? snap.sector : 'Other';
+
+      if (!tempHeatmapSectors[sec]) {
+        tempHeatmapSectors[sec] = initTempSector();
+      }
+      const sector = tempHeatmapSectors[sec];
+      const signals = r.signalSummary ? r.signalSummary.split(',') : [];
+
+      let matched = false;
+
+      const addToCell = (cell: TempCell) => {
+        cell.count += 1;
+        cell.scoreSum += r.score;
+        cell.stocks.push({ symbol: cleanSymbol, score: r.score });
+        if (r.score > cell.topStockScore) {
+          cell.topStock = cleanSymbol;
+          cell.topStockScore = r.score;
+        }
+        matched = true;
+      };
+
+      if (r.score >= 75) {
+        addToCell(sector.strongBuy);
+      }
+      if (r.score >= 60 && r.score < 75) {
+        addToCell(sector.breakout);
+      }
+      if (signals.includes('BULLISH') || signals.includes('ABOVE_VWAP')) {
+        addToCell(sector.bullish);
+      }
+      if (signals.includes('BEARISH') || signals.includes('BELOW_VWAP')) {
+        addToCell(sector.bearish);
+      }
+      if (r.score >= 40 && r.score < 60) {
+        addToCell(sector.watch);
+      }
+      
+      if (matched) {
+        addToCell(sector.total);
+      }
+    }
+
+    // Convert temp cells to final cells with sorted & capped symbol arrays
+    interface HeatmapCell {
+      count: number;
+      avgScore: number;
+      symbols: string[];
+      topStock: string;
+      topStockScore: number;
+    }
+
+    const heatmapSectors: Record<string, Record<string, HeatmapCell>> = {};
+
+    for (const [sec, sectorData] of Object.entries(tempHeatmapSectors)) {
+      const convertCell = (tempCell: TempCell): HeatmapCell => {
+        const sortedStocks = tempCell.stocks.sort((a, b) => b.score - a.score);
+        return {
+          count: tempCell.count,
+          avgScore: tempCell.count > 0 ? tempCell.scoreSum / tempCell.count : 0,
+          symbols: sortedStocks.slice(0, 15).map(s => s.symbol),
+          topStock: tempCell.topStock || '',
+          topStockScore: tempCell.topStockScore >= 0 ? tempCell.topStockScore : 0
+        };
+      };
+
+      heatmapSectors[sec] = {
+        strongBuy: convertCell(sectorData.strongBuy),
+        breakout: convertCell(sectorData.breakout),
+        bullish: convertCell(sectorData.bullish),
+        bearish: convertCell(sectorData.bearish),
+        watch: convertCell(sectorData.watch),
+        total: convertCell(sectorData.total)
+      };
     }
 
     // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
@@ -427,6 +537,7 @@ export async function GET(request: NextRequest) {
         strongBuy: strongBuyCount,
         breakoutReady: breakoutReadyCount,
         avoid: avoidCount,
+        heatmapSectors,
       }
     }, { status: 200 });
   } catch (err) {
