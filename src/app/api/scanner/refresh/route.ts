@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ScannerController } from '@/services/scanner-controller';
+import { ScannerController, isScanInProgress } from '@/services/scanner-controller';
 import { isUniverseLiveForScanner, type ScannerUniverse } from '@/lib/scanner-session';
 
 export async function POST(request: NextRequest) {
@@ -40,7 +40,16 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
 
-    // UI / page-load refresh: recompute scanner data only.
+    // Do not queue a second full scan while cron/UI refresh is already running.
+    if (isScanInProgress()) {
+      return NextResponse.json({
+        success: true,
+        inProgress: true,
+        message: 'Scan already in progress. Poll GET /api/scanner for updated rows.',
+      }, { status: 202 });
+    }
+
+    // UI manual refresh: recompute scanner data only.
     // Telegram breakout alerts are cron-only (cpr-scan job + /api/cron/auto-scan).
     const results = await ScannerController.runFullScan(universe, market);
 

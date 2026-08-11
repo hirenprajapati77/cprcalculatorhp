@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
-import { ScannerController } from '@/services/scanner-controller';
 import { MarketService } from '@/services/market.service';
+import { isScanInProgress } from '@/services/scanner-controller';
 import { getISTDateString } from '@/lib/market-hours';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 import { EventCalendarService } from '@/services/overnight/event.service';
+import { loadWarmScanCache } from '@/lib/scanner-cache-read';
 import {
   getUniverseSymbolMeta,
   isSymbolFrozenForScanner,
@@ -15,30 +16,30 @@ import {
 export const dynamic = 'force-dynamic';
 
 async function enrichWithOptionSuggestions(
-  results: Array<{ symbol: string; ltp: number; signalSummary?: string | null; entry?: number | null; sl?: number | null; target?: number | null; score: number }>
+  results: Array<{ symbol: string; ltp: number; signalSummary?: string | null; entry?: number | null; sl?: number | null; target?: number | null; score: number }>,
+  maxSymbols = 3
 ): Promise<Map<string, unknown>> {
   const suggestionMap = new Map<string, unknown>();
+  if (results.length === 0) return suggestionMap;
+  if (isScanInProgress() || MarketService.isFyersTemporarilyUnavailable()) {
+    return suggestionMap;
+  }
+
   try {
     const { OptionSuggestionService } = await import(
       '@/services/option-suggestion.service'
     );
-    const enrichmentPromises = results.map(async (r) => {
-      const bias: 'BULLISH' | 'BEARISH' = 
+    // Sequential lookups — avoid option-chain stampede during market hours.
+    for (const r of results.slice(0, maxSymbols)) {
+      const bias: 'BULLISH' | 'BEARISH' =
         r.signalSummary?.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
       try {
         const suggestion = await OptionSuggestionService.suggestOption(
           r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0, getISTDateString()
         );
-        return { symbol: r.symbol, suggestion };
+        if (suggestion) suggestionMap.set(r.symbol, suggestion);
       } catch (e) {
         console.warn(`[OptionSuggestion] Failed for ${r.symbol}:`, e);
-        return { symbol: r.symbol, suggestion: { error: 'FETCH_EXCEPTION' } };
-      }
-    });
-    const settled = await Promise.allSettled(enrichmentPromises);
-    for (const res of settled) {
-      if (res.status === 'fulfilled' && res.value?.suggestion) {
-        suggestionMap.set(res.value.symbol, res.value.suggestion);
       }
     }
   } catch (err) {
@@ -127,8 +128,8 @@ export async function GET(request: NextRequest) {
             .filter((r) => r.score >= 75)
             .filter((r) => !isSymbolFrozenForScanner(r.symbol, universeFnOMap.get(r.symbol) === true))
             .sort((a, b) => b.score - a.score)
-            .slice(0, 10);
-          const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+            .slice(0, 3);
+          const suggestionMap = await enrichWithOptionSuggestions(topForOptions, 3);
           for (const r of formattedResults) {
             if (suggestionMap.has(r.symbol)) {
               (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
@@ -164,8 +165,18 @@ export async function GET(request: NextRequest) {
       return await serveDegradedScannerCache(universe, market);
     }
 
-    // 1. Auto-initialize today's database records if empty (LIVE SESSION ONLY)
+    if (isScanInProgress()) {
+      const warm = await loadWarmScanCache(universe, market);
+      if (warm) {
+        console.log(
+          `[ScannerAPI] Scan in progress — serving warm ${warm.source} cache (${warm.data.length} rows).`
+        );
+      }
+    }
+
+    // 1. Resolve target date — never run a full scan on GET (cron owns writes).
     let targetDate = today;
+    let scanPendingToday = false;
     try {
       const todayCount = await DatabaseCircuitBreaker.execute(() =>
         prisma.scannerResult.count({
@@ -174,20 +185,19 @@ export async function GET(request: NextRequest) {
       );
       if (todayCount === 0) {
         if (universeLive) {
-          console.log("No scanner records found for today during live session. Performing auto-scan initialization...");
-          await ScannerController.runFullScan('ALL', 'NSE');
-          await ScannerController.runFullScan('ALL', 'BSE');
-        } else {
-          // Outside live session: serve frozen results from the latest available date
-          const latestRecord = await DatabaseCircuitBreaker.execute(() =>
-            prisma.scannerResult.findFirst({
-              orderBy: { date: 'desc' },
-              select: { date: true },
-            })
+          scanPendingToday = true;
+          console.log(
+            '[ScannerAPI] No scanner rows for today — serving latest available date; cpr-scan cron populates.'
           );
-          if (latestRecord) {
-            targetDate = latestRecord.date;
-          }
+        }
+        const latestRecord = await DatabaseCircuitBreaker.execute(() =>
+          prisma.scannerResult.findFirst({
+            orderBy: { date: 'desc' },
+            select: { date: true },
+          })
+        );
+        if (latestRecord) {
+          targetDate = latestRecord.date;
         }
       }
     } catch (dbErr) {
@@ -486,8 +496,8 @@ export async function GET(request: NextRequest) {
       }>)
         .filter((r) => r.score >= 75)
         .filter((r) => !isSymbolFrozenForScanner(r.symbol, universeFnOMap.get(r.symbol) === true))
-        .slice(0, 10);
-      const suggestionMap = await enrichWithOptionSuggestions(topForOptions);
+        .slice(0, 3);
+      const suggestionMap = await enrichWithOptionSuggestions(topForOptions, 3);
       for (const r of formattedResults) {
         if (suggestionMap.has(r.symbol)) {
           (r as Record<string, unknown>).optionSuggestion = suggestionMap.get(r.symbol);
@@ -534,6 +544,7 @@ export async function GET(request: NextRequest) {
       totalReturned: formattedResults.length,
       filteredOut: universeStocks.length - formattedResults.length,
       scannedAt,
+      ...(scanPendingToday ? { scanPendingToday: true, dataDate: targetDate } : {}),
       results: formattedResults,
       insights: {
         strongBuy: strongBuyCount,

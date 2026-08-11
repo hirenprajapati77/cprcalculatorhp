@@ -124,6 +124,13 @@ Log "Extracting and restarting PM2 on server..."
 ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh /home/ubuntu/mem_watchdog.sh && chmod +x /home/ubuntu/mem_watchdog.sh && bash /home/ubuntu/deploy_extract.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
+Log "Verifying PM2 memory limit on server..."
+$pm2Max = (ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER 'pm2 show cpr-platform 2>/dev/null | grep "max memory restart" | awk "{print \$NF}"').Trim()
+if ($pm2Max -ne "681574400") {
+    Err "PM2 max_memory_restart is '$pm2Max' (expected 681574400 / 650M). Check /home/ubuntu/ecosystem.config.cjs"
+}
+Ok "PM2 max_memory_restart = 650M (681574400)"
+
 # ── 8. CLEANUP LOCAL TARBALLS ────────────────────────────────
 Remove-Item -Force deploy_standalone.tar.gz, deploy_static.tar.gz, deploy_public.tar.gz, deploy_prisma.tar.gz -ErrorAction SilentlyContinue
 Ok "Local tarballs cleaned up"

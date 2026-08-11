@@ -2,7 +2,7 @@ import { env } from '@/config/env';
 import { BtstScoreResultEnriched } from '../backtest/btst.service';
 import { OptionSuggestion } from '../option-suggestion.service';
 import { prisma } from '../../lib/db';
-import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
+import { BTST_CLOCK } from '@/lib/market-hours';
 import { ADVANCED_SCORE } from '@/config/trading-constants';
 
 import { decrypt } from '../../lib/crypto';
@@ -259,46 +259,23 @@ export class TelegramService {
       return { ok: false, reason: 'missing_config' };
     }
 
-    const { OptionSuggestionService } = await import('../option-suggestion.service');
+    const lines = stocks.map((s) => {
+      const isBreakdown =
+        s.alertKind === 'BREAKDOWN' || s.signals?.includes('BREAKDOWN');
+      const icon = isBreakdown ? '📉' : '🚀';
 
-    const enrichedLines = await Promise.all(
-      stocks.map(async (s) => {
-        let optionText = '';
-        try {
-          const suggestion =
-            (s as { optionSuggestion?: OptionSuggestion }).optionSuggestion ||
-            (await OptionSuggestionService.suggestOption(
-              s.symbol,
-              s.ltp,
-              'BULLISH',
-              s.entry,
-              s.sl,
-              s.target,
-              getISTDateString()
-            ));
-          if (suggestion && !suggestion.error && suggestion.formattedName) {
-            const priceText = suggestion.ltp ? ` @ ₹${suggestion.ltp.toFixed(2)}` : '';
-            const optionLabel = escapeTelegramHtml(suggestion.formattedName);
-            optionText = `\n   🎯 Option: <b>${optionLabel}${priceText}</b>`;
-          }
-        } catch {
-          // Fallback gracefully if option lookup fails
-        }
-
-        const target2Line = (s.target2 !== undefined && s.target2 !== null)
+      const target2Line =
+        s.target2 !== undefined && s.target2 !== null
           ? `\n   Target 2: ₹${s.target2.toFixed(2)} (RR: ${escapeTelegramHtml(s.rr2 ?? '')})`
           : '';
 
-        return (
-          `🚀 <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
-          `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
-          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target 1: ₹${s.target.toFixed(2)}${target2Line}\n` +
-          `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
-        );
-      })
-    );
-
-    const lines = enrichedLines.join('\n\n');
+      return (
+        `${icon} <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
+        `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
+        `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target 1: ₹${s.target.toFixed(2)}${target2Line}\n` +
+        `   RR: ${escapeTelegramHtml(s.rr)}`
+      );
+    }).join('\n\n');
 
     const timeStr = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -321,10 +298,10 @@ export class TelegramService {
           ? `NEW BREAKDOWN SIGNAL${stocks.length > 1 ? 'S' : ''}`
           : `NEW BREAKOUT SIGNAL${stocks.length > 1 ? 'S' : ''}`;
     const footnote = hasBreakdown && !hasBreakout
-      ? '⚠️ NARROW CPR + Volume Spike + Price < BC. Verify before trading.'
+      ? escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike + Price < BC. Verify before trading.')
       : hasBreakout && hasBreakdown
-        ? '⚠️ NARROW CPR + Volume Spike at CPR band edge. Verify before trading.'
-        : '⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.';
+        ? escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike at CPR band edge. Verify before trading.')
+        : escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.');
 
     const message =
       `⚡ <b>${headline}</b>\n` +

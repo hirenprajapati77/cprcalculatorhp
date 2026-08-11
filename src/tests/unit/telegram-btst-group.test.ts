@@ -161,3 +161,46 @@ test('sendBtstAlert group-only delivery', async (t) => {
     }
   });
 });
+
+test('sendBreakoutAlert escapes HTML in footnote', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalGroupChatId = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'unit-test-token';
+  env.TELEGRAM_GROUP_CHAT_ID = 'group-chat';
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  const sentBodies: string[] = [];
+  global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { text: string };
+    sentBodies.push(body.text);
+    return { ok: true, text: async () => '', json: async () => ({ ok: true }) };
+  }) as unknown as typeof global.fetch;
+
+  try {
+    const result = await TelegramService.sendBreakoutAlert([
+      {
+        symbol: 'TEST',
+        ltp: 100,
+        entry: 101,
+        sl: 99,
+        target: 103,
+        rr: '1:1.5',
+        score: 80,
+        sector: 'IT',
+        alertKind: 'BREAKDOWN',
+        signals: ['BREAKDOWN'],
+      },
+    ]);
+    assert.strictEqual(result.ok, true);
+    assert.match(sentBodies[0], /Price &lt; BC/);
+    assert.doesNotMatch(sentBodies[0], /Price < BC/);
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
+  }
+});
