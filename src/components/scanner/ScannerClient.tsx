@@ -285,7 +285,9 @@ interface ScannedStock {
   entry: number;
   sl: number;
   target: number;
+  target2?: number | null;
   rr: string;
+  rr2?: string | null;
   eventRiskScore?: number;
   eventRiskReason?: string | null;
   signalTime?: string;
@@ -565,16 +567,35 @@ const StockRow = React.memo(({
                     <span className="text-text-tertiary">Target</span>
                     <span className="font-bold text-accent-green">₹{fmt(row.target)}</span>
                   </div>
+                  {row.target2 != null && row.target2 > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-text-tertiary">Target 2</span>
+                      <span className="font-bold text-accent-green">₹{fmt(row.target2)}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 pt-0.5 mt-0.5">
                     <span className="text-text-tertiary">RR</span>
                     <span className="font-bold text-accent-blue">{row.rr}</span>
+                    {row.rr2 && <span className="font-bold text-accent-blue ml-1 opacity-80">(T2: {row.rr2})</span>}
                   </div>
                 </>
               ) : (
                 <div className="flex items-center gap-2 text-[9px] text-text-secondary">
                   <span>T: ₹{fmt(row.target)}</span>
+                  {row.target2 != null && row.target2 > 0 && (
+                    <>
+                      <span className="opacity-50">|</span>
+                      <span>T2: ₹{fmt(row.target2)}</span>
+                    </>
+                  )}
                   <span className="opacity-50">|</span>
                   <span>RR: {row.rr}</span>
+                  {row.rr2 && (
+                    <>
+                      <span className="opacity-50">|</span>
+                      <span>{row.rr2}</span>
+                    </>
+                  )}
                 </div>
               )}
               {row.optionSuggestion && (
@@ -3746,6 +3767,11 @@ export default function ScannerClient() {
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Target Objective</span>
                             <span className="font-bold text-accent-green text-sm">₹{fmt(target)}</span>
+                            {drawerStock.target2 != null && drawerStock.target2 > 0 && (
+                              <span className="block font-bold text-accent-green text-xs mt-0.5">
+                                T2: ₹{fmt(drawerStock.target2)}
+                              </span>
+                            )}
                           </div>
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Stop Loss</span>
@@ -3754,6 +3780,11 @@ export default function ScannerClient() {
                           <div>
                             <span className="text-text-tertiary text-[10px] block uppercase">Risk Reward Ratio</span>
                             <span className="font-bold text-accent-blue text-sm">{rr}</span>
+                            {drawerStock.rr2 && (
+                              <span className="block font-bold text-accent-blue text-xs mt-0.5 opacity-80">
+                                T2: {drawerStock.rr2}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3762,11 +3793,11 @@ export default function ScannerClient() {
                         <span className="font-bold text-text-primary block uppercase mb-1">Trading Strategy Guide</span>
                         {direction === 'LONG' ? (
                           <p className="text-accent-green bg-accent-green/5 p-2 rounded">
-                            ★ <strong>Bullish Strategy:</strong> Consider buying near TC at ₹{fmt(entry)}. Hold for ₹{fmt(target)}. Exit if below ₹{fmt(sl)}.
+                            ★ <strong>Bullish Strategy:</strong> Consider buying near TC at ₹{fmt(entry)}. Hold for ₹{fmt(target)}{drawerStock.target2 != null && drawerStock.target2 > 0 ? ` (T2: ₹${fmt(drawerStock.target2)})` : ''}. Exit if below ₹{fmt(sl)}.
                           </p>
                         ) : (
                           <p className="text-accent-red bg-accent-red/5 p-2 rounded">
-                            ▼ <strong>Bearish Strategy:</strong> Consider shorting near BC at ₹{fmt(entry)}. Cover at ₹{fmt(target)}. Exit if above ₹{fmt(sl)}.
+                            ▼ <strong>Bearish Strategy:</strong> Consider shorting near BC at ₹{fmt(entry)}. Cover at ₹{fmt(target)}{drawerStock.target2 != null && drawerStock.target2 > 0 ? ` (T2: ₹${fmt(drawerStock.target2)})` : ''}. Exit if above ₹{fmt(sl)}.
                           </p>
                         )}
                       </div>
