@@ -1,4 +1,4 @@
-import { BreakoutWatcherService, type BreakoutScanResult } from '@/services/alert/breakout-watcher.service';
+import { BreakoutWatcherService, type BreakoutScanResult, breakoutAlertClaimKey } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { MarketSessionResolver } from '@/config/market-profile';
 import { shouldFreezeBreakouts } from '@/lib/market-hours';
@@ -25,18 +25,26 @@ export type ScanResultForBreakoutAlert = {
 export function mapScanResultsForBreakoutAlert(
   results: ScanResultForBreakoutAlert[]
 ): BreakoutScanResult[] {
-  return results.map((r) => ({
-    symbol: r.symbol,
-    signals: r.signals || [],
-    ltp: r.ltp,
-    entry: r.entry ?? r.tc ?? r.ltp,
-    sl: r.sl ?? r.bc ?? r.ltp * 0.99,
-    target: r.target ?? r.r1 ?? r.ltp * 1.02,
-    rr: r.rr ?? '1:1.5',
-    score: r.score ?? 0,
-    sector: r.sector ?? 'Other',
-    eventRiskScore: r.eventRiskScore ?? 0,
-  }));
+  return results.map((r) => {
+    const signals = r.signals || [];
+    const isBreakdown = signals.includes('BREAKDOWN') && !signals.includes('BREAKOUT');
+    // Direction-aware level fallbacks when entry/sl/target missing from scan row.
+    const entry = r.entry ?? (isBreakdown ? (r.bc ?? r.ltp) : (r.tc ?? r.ltp));
+    const sl = r.sl ?? (isBreakdown ? (r.tc ?? r.ltp * 1.01) : (r.bc ?? r.ltp * 0.99));
+    const target = r.target ?? (isBreakdown ? (r.ltp * 0.98) : (r.r1 ?? r.ltp * 1.02));
+    return {
+      symbol: r.symbol,
+      signals,
+      ltp: r.ltp,
+      entry,
+      sl,
+      target,
+      rr: r.rr ?? '1:1.5',
+      score: r.score ?? 0,
+      sector: r.sector ?? 'Other',
+      eventRiskScore: r.eventRiskScore ?? 0,
+    };
+  });
 }
 
 function buildFnOLookup(): Map<string, boolean> {
@@ -77,24 +85,26 @@ export function notifyBreakoutsFromScan(
     return;
   }
 
-  let claimedSymbols: string[] = [];
+  let claimedKeys: string[] = [];
   BreakoutWatcherService.detectNewBreakouts(mapScanResultsForBreakoutAlert(eligible))
     .then(async (newBreakouts) => {
       if (newBreakouts.length === 0) return;
-      claimedSymbols = newBreakouts.map((b) => b.symbol);
+      claimedKeys = newBreakouts.map((b) =>
+        breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
+      );
       const result = await TelegramService.sendBreakoutAlert(newBreakouts);
       if (!result.ok) {
         console.error(
           `[BreakoutWatcher] ${label} Telegram send failed (${result.reason ?? 'unknown'}) — releasing claims`
         );
-        await BreakoutWatcherService.releaseClaims(claimedSymbols);
-        claimedSymbols = [];
+        await BreakoutWatcherService.releaseClaims(claimedKeys);
+        claimedKeys = [];
       }
     })
     .catch(async (err) => {
       console.error(`[BreakoutWatcher] ${label} alert pipeline failed:`, err);
-      if (claimedSymbols.length > 0) {
-        await BreakoutWatcherService.releaseClaims(claimedSymbols);
+      if (claimedKeys.length > 0) {
+        await BreakoutWatcherService.releaseClaims(claimedKeys);
       }
     });
 }

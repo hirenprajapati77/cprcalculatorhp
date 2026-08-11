@@ -6,7 +6,7 @@ export class RankingService {
    * Calculates a score out of 100 for a stock based on active signals.
    *
    * Category A — CPR Structure (max 45):
-   *   NARROW: +15, HIGHER_VALUE/INSIDE_VALUE: +10, BREAKOUT/BUILD: +10,
+   *   NARROW: +15, HIGHER_VALUE/INSIDE_VALUE/LOWER_VALUE: +10, BREAKOUT/BREAKDOWN/BUILD: +10,
    *   HP_INSIDE_CPR: +10, VIRGIN: +5, ASC+BULLISH or DESC+BEARISH: +5
    *
    * Category B — Volume & Liquidity (max 25, Volume Ratio only):
@@ -28,6 +28,7 @@ export class RankingService {
    *     + BREAKOUT/BREAKDOWN volume: +15  ← all 3 conditions met (highest conviction)
    *   EMA_CROSS_BULL/BEAR + good RSI (no volume): +10
    *   EMA_BULL_ALIGN + RSI_STRONG (continuation): +5
+   *   EMA_BEAR_ALIGN + RSI_BEARISH (continuation): +5
    *   EMA_BULL_ALIGN + RSI_OVERBOUGHT: -10  ← late entry trap
    *   EMA_BEAR_ALIGN + RSI_OVERSOLD: -10   ← late short trap
    *
@@ -58,10 +59,15 @@ export class RankingService {
     if (signals.includes('NARROW')) {
       catASum += 15;
     }
-    if (signals.includes('HIGHER_VALUE') || signals.includes('INSIDE_VALUE')) {
+    if (signals.includes('HIGHER_VALUE') || signals.includes('INSIDE_VALUE') || signals.includes('LOWER_VALUE')) {
       catASum += 10;
     }
-    if (signals.includes('BREAKOUT') || signals.includes('LONG_BUILD') || signals.includes('SHORT_BUILD')) {
+    if (
+      signals.includes('BREAKOUT') ||
+      signals.includes('BREAKDOWN') ||
+      signals.includes('LONG_BUILD') ||
+      signals.includes('SHORT_BUILD')
+    ) {
       catASum += 10;
     }
     if (signals.includes('HP_INSIDE_CPR') || signals.includes('KGS_INSIDE_CPR')) {
@@ -133,6 +139,8 @@ export class RankingService {
       catF = hasVolume ? 15 : 10;
     } else if (signals.includes('EMA_BULL_ALIGN') && signals.includes('RSI_STRONG')) {
       catF = 5; // continuation — aligned and not yet overbought
+    } else if (signals.includes('EMA_BEAR_ALIGN') && signals.includes('RSI_BEARISH')) {
+      catF = 5; // continuation — aligned bearish and not yet oversold
     } else if (signals.includes('EMA_BULL_ALIGN') && signals.includes('RSI_OVERBOUGHT')) {
       catF = -10; // late entry trap
     } else if (signals.includes('EMA_BEAR_ALIGN') && signals.includes('RSI_OVERSOLD')) {

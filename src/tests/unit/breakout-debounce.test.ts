@@ -2,7 +2,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { prisma } from '../../lib/db';
-import { BreakoutWatcherService, BreakoutScanResult } from '../../services/alert/breakout-watcher.service';
+import {
+  BreakoutWatcherService,
+  BreakoutScanResult,
+  breakoutAlertClaimKey,
+} from '../../services/alert/breakout-watcher.service';
 import { Prisma } from '@prisma/client';
 
 describe('BreakoutWatcher Debounce & Flicker Prevention', () => {
@@ -114,7 +118,7 @@ describe('BreakoutWatcher Debounce & Flicker Prevention', () => {
       console.log('--- CYCLE 1: Breakout Present ---');
       const res1 = await BreakoutWatcherService.detectNewBreakouts(makeScan(true));
       assert.equal(res1.length, 1, 'Should alert on initial breakout');
-      const state1 = mockDB.find(r => r.symbol === targetSymbol);
+      const state1 = mockDB.find(r => r.symbol === breakoutAlertClaimKey(targetSymbol, 'BREAKOUT'));
       assert.ok(state1, 'State row should be created');
       assert.equal(state1.hadBreakout, true, 'hadBreakout should be true');
       assert.equal(state1.missCount, 0, 'missCount should start at 0');
