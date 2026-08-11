@@ -155,6 +155,43 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     }
   });
 
+  await t.test('RANGE short (pivot entry, SL above) journals PE when LTP ≤ entry', async () => {
+    const mocks = mockJobDeps([
+      makeSignal({
+        symbol: 'RANGESHORT',
+        ltp: 99.5,
+        entry: 100,
+        sl: 100.5,
+        target: 97,
+        tc: 102,
+        bc: 98,
+        signalSummary: 'RANGE,BELOW_PIVOT',
+      }),
+      makeSignal({
+        symbol: 'RANGESKIP',
+        ltp: 100.5,
+        entry: 100,
+        sl: 100.5,
+        target: 97,
+        tc: 102,
+        bc: 98,
+        signalSummary: 'RANGE,BELOW_PIVOT',
+      }),
+    ]);
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['RANGESKIP']);
+      assert.deepStrictEqual(result.logged, ['RANGESHORT']);
+      const call = mocks.suggestArgs.find((c) => c.symbol === 'RANGESHORT');
+      assert.strictEqual(call?.direction, 'SHORT');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logCall = mocks.logCalls.find((c: any) => c.symbol === 'RANGESHORT') as any;
+      assert.strictEqual(logCall.optionType, 'PE');
+    } finally {
+      mocks.restore();
+    }
+  });
+
   await t.test('SECTOR_DIVERGENCE skips journaling only in live filter mode', async () => {
     const divergent = makeSignal({
       symbol: 'DIVERGED',
