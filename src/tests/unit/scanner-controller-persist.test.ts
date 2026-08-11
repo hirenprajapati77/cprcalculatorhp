@@ -52,13 +52,13 @@ test('persistScanResults upserts scanner rows and scan history', async () => {
   prisma.scannerResult.upsert = (async (args: { where: { symbol_date: { symbol: string } } }) => {
     upsertCalls.push(args.where.symbol_date.symbol);
     return {} as never;
-  }) as typeof prisma.scannerResult.upsert;
-  prisma.marketSnapshot.upsert = (async () => ({} as never)) as typeof prisma.marketSnapshot.upsert;
+  }) as unknown as typeof prisma.scannerResult.upsert;
+  prisma.marketSnapshot.upsert = (async () => ({} as never)) as unknown as typeof prisma.marketSnapshot.upsert;
   prisma.scanHistory.create = (async (args: { data: { resultCount: number; durationMs: number } }) => {
     assert.equal(args.data.resultCount, 2);
     assert.equal(args.data.durationMs, 1234);
     return {} as never;
-  }) as typeof prisma.scanHistory.create;
+  }) as unknown as typeof prisma.scanHistory.create;
 
   try {
     await ScannerController.persistScanResults({

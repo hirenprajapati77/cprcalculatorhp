@@ -217,6 +217,8 @@ export class TelegramService {
       sector: string;
       alertKind?: 'BREAKOUT' | 'BREAKDOWN';
       signals?: string[];
+      /** Pre-attached by breakout-alert.pipeline — never fetched inside this method. */
+      optionSuggestion?: OptionSuggestion;
     }>,
     overrideChatId?: string,
     overrideToken?: string
@@ -269,11 +271,19 @@ export class TelegramService {
           ? `\n   Target 2: ₹${s.target2.toFixed(2)} (RR: ${escapeTelegramHtml(s.rr2 ?? '')})`
           : '';
 
+      let optionText = '';
+      const suggestion = s.optionSuggestion;
+      if (suggestion && !suggestion.error && suggestion.formattedName) {
+        const priceText = suggestion.ltp ? ` @ ₹${suggestion.ltp.toFixed(2)}` : '';
+        const optionLabel = escapeTelegramHtml(suggestion.formattedName);
+        optionText = `\n   🎯 Option: <b>${optionLabel}${priceText}</b>`;
+      }
+
       return (
         `${icon} <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
         `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
         `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target 1: ₹${s.target.toFixed(2)}${target2Line}\n` +
-        `   RR: ${escapeTelegramHtml(s.rr)}`
+        `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
       );
     }).join('\n\n');
 
