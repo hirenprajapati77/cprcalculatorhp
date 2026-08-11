@@ -292,7 +292,7 @@ export class TelegramService {
         return (
           `🚀 <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
           `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
-          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}${target2Line}\n` +
+          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target 1: ₹${s.target.toFixed(2)}${target2Line}\n` +
           `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
         );
       })
