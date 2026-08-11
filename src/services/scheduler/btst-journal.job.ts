@@ -171,6 +171,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       let optionName: string | null = null;
       let optionStrike: number | null = null;
       let optionLtp: number | null = null;
+      let optionExpiry: string | undefined;
 
       try {
         const suggestion = await OptionSuggestionService.suggestOption(
@@ -183,6 +184,11 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
             `${suggestion.strike} ${optionType}`;
           optionStrike = suggestion.strike;
           optionLtp = suggestion.ltp;
+          // Extract and store expiry from formattedName so captureSnapshot never needs to parse it
+          const fn = suggestion.formattedName ?? '';
+          const wm = fn.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+          const mm = fn.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+          optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
         } else {
           console.warn(
             `[BtstJournal] No ${optionType} for ${signal.symbol}: ` +
@@ -239,6 +245,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         optionContract: optionName!,
         optionStrike: optionStrike!,
         optionType,
+        ...(optionExpiry ? { optionExpiry } : {}),
         entryCmp: optionLtp!,
         score: signal.overnightScore ?? 0,
         confidence: signal.confidence ?? 0,
