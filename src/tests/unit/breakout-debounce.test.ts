@@ -18,7 +18,7 @@ describe('BreakoutWatcher Debounce & Flicker Prevention', () => {
     const originalUpdate = prisma.breakoutAlertState.update;
 
     // 2. Setup mock in-memory DB
-    let mockDB: Array<{
+    const mockDB: Array<{
       symbol: string;
       hadBreakout: boolean;
       missCount: number;
