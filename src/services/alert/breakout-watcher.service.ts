@@ -7,6 +7,9 @@ const MIN_BREAKOUT_ALERT_SCORE = 75;
 /** Minimum gap between two alerts for the same symbol (default 4 hours = one intraday session). */
 const BREAKOUT_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 
+/** Number of consecutive scan cycles a breakout signal must be absent before resetting alert state. */
+const BREAKOUT_MISS_DEBOUNCE_THRESHOLD = 2;
+
 export interface BreakoutScanResult {
   symbol: string;
   signals: string[];
@@ -83,7 +86,7 @@ export class BreakoutWatcherService {
                 { lastAlerted: { lt: cooldownCutoff } },
               ],
             },
-            data: { hadBreakout: true, lastAlerted: new Date() },
+            data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
           });
 
           if (claim.count === 1) {
@@ -95,6 +98,7 @@ export class BreakoutWatcherService {
                   symbol: result.symbol,
                   hadBreakout: true,
                   lastAlerted: new Date(),
+                  missCount: 0,
                 },
               });
               isNewAlert = true;
@@ -109,7 +113,7 @@ export class BreakoutWatcherService {
                       { lastAlerted: { lt: cooldownCutoff } },
                     ],
                   },
-                  data: { hadBreakout: true, lastAlerted: new Date() },
+                  data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
                 });
                 isNewAlert = retryClaim.count === 1;
               } else {
@@ -144,15 +148,50 @@ export class BreakoutWatcherService {
         newBreakouts.push(result);
       }
 
-      if (!isNewAlert && !hasBreakoutNow) {
+      if (hasBreakoutNow) {
         try {
           await prisma.breakoutAlertState.updateMany({
-            where: { symbol: result.symbol, hadBreakout: true },
-            data: { hadBreakout: false },
+            where: { symbol: result.symbol, missCount: { gt: 0 } },
+            data: { missCount: 0 },
           });
         } catch (err) {
           console.warn(
-            `[BreakoutWatcher] Could not clear breakout state for ${result.symbol}:`,
+            `[BreakoutWatcher] Could not reset missCount for ${result.symbol}:`,
+            err
+          );
+        }
+      }
+
+      if (!isNewAlert && !hasBreakoutNow) {
+        try {
+          const state = await prisma.breakoutAlertState.findUnique({
+            where: { symbol: result.symbol },
+            select: { hadBreakout: true, missCount: true },
+          });
+
+          if (state && state.hadBreakout) {
+            const newMissCount = state.missCount + 1;
+            if (newMissCount >= BREAKOUT_MISS_DEBOUNCE_THRESHOLD) {
+              await prisma.breakoutAlertState.update({
+                where: { symbol: result.symbol },
+                data: { hadBreakout: false, missCount: 0 },
+              });
+              console.log(
+                `[BreakoutWatcher] Cleared breakout state for ${result.symbol} after ${newMissCount} consecutive scan misses (threshold ${BREAKOUT_MISS_DEBOUNCE_THRESHOLD}).`
+              );
+            } else {
+              await prisma.breakoutAlertState.update({
+                where: { symbol: result.symbol },
+                data: { missCount: newMissCount },
+              });
+              console.log(
+                `[BreakoutWatcher] Recorded scan miss for active breakout ${result.symbol} (missCount: ${newMissCount}/${BREAKOUT_MISS_DEBOUNCE_THRESHOLD}). Cooldown active.`
+              );
+            }
+          }
+        } catch (err) {
+          console.warn(
+            `[BreakoutWatcher] Could not update breakout miss state for ${result.symbol}:`,
             err
           );
         }
