@@ -336,9 +336,10 @@ model TradeJournal {
   tradeDate      DateTime // stored as midnight IST for the signal date
   signalType     String // 'CPR' | 'BTST' | 'STBT'
   symbol         String
-  optionContract String // e.g. '1920 CE' | '2400 PE'
+  optionContract String // display name e.g. 'JUL 2026 4000 CE'
   optionStrike   Int
   optionType     String // 'CE' | 'PE'
+  optionExpiry   String? // parsed expiry e.g. 'JUL 2026' | '30 JUL 2026' — stored at signal time, avoids regex parsing in snapshots
   entryCmp       Float // option CMP at signal time (~3:20-3:30 PM)
   entryTime      DateTime // exact signal capture time
 

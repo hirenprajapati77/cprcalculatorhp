@@ -170,41 +170,50 @@ export class OptionSuggestionService {
       // 5s timeout prevents hanging the first enrichment call if Fyers CDN is slow at market open.
       const csvController = new AbortController();
       const csvTimeout = setTimeout(() => csvController.abort(), 5000);
-      let res: Response;
+      // Inner try/catch: if the fetch is aborted before a response arrives, `res` is
+      // never assigned and accessing `res.ok` would throw a ReferenceError. We guard
+      // against that here so the outer catch block stays clean.
       try {
-        res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
-      } finally {
-        clearTimeout(csvTimeout);
-      }
-      if (res.ok) {
-        const text = await res.text();
-        const lines = text.split('\n');
-        for (const line of lines) {
-          const parts = line.split(',');
-          if (parts.length > 10) {
-            const symbol = parts[9]?.trim();
-            const lotSize = parseInt(parts[3]?.trim(), 10);
-            if (symbol && !isNaN(lotSize) && lotSize > 0) {
-              lotSizesMap.set(symbol, lotSize);
-              const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
-              if (match) {
-                lotSizesMap.set(match[1], lotSize);
-              }
-              const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
-              if (futMatch) {
-                lotSizesMap.set(futMatch[1], lotSize);
+        let res: Response | undefined;
+        try {
+          res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
+        } finally {
+          clearTimeout(csvTimeout);
+        }
+        if (res && res.ok) {
+          const text = await res.text();
+          const lines = text.split('\n');
+          for (const line of lines) {
+            const parts = line.split(',');
+            if (parts.length > 10) {
+              const symbol = parts[9]?.trim();
+              const lotSize = parseInt(parts[3]?.trim(), 10);
+              if (symbol && !isNaN(lotSize) && lotSize > 0) {
+                lotSizesMap.set(symbol, lotSize);
+                const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
+                if (match) {
+                  lotSizesMap.set(match[1], lotSize);
+                }
+                const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
+                if (futMatch) {
+                  lotSizesMap.set(futMatch[1], lotSize);
+                }
               }
             }
           }
+          const cacheObj = Object.fromEntries(lotSizesMap);
+          await CacheService.set(cacheKey, cacheObj, 86400);
+          console.log(`[OptionSuggestion] Cached ${lotSizesMap.size} symbols lot sizes.`);
+        } else if (res) {
+          console.error(`[OptionSuggestion] Failed to fetch NSE_FO.csv: HTTP ${res.status}`);
+        } else {
+          console.warn('[OptionSuggestion] NSE_FO.csv fetch aborted before response — falling back to hardcoded lot sizes.');
         }
-        const cacheObj = Object.fromEntries(lotSizesMap);
-        await CacheService.set(cacheKey, cacheObj, 86400);
-        console.log(`[OptionSuggestion] Cached ${lotSizesMap.size} symbols lot sizes.`);
-      } else {
-        console.error(`[OptionSuggestion] Failed to fetch NSE_FO.csv: HTTP ${res.status}`);
+      } catch (innerErr) {
+        console.error('[OptionSuggestion] Error parsing NSE_FO.csv response:', innerErr);
       }
     } catch (err) {
-      console.error('[OptionSuggestion] Error downloading/parsing lot sizes master:', err);
+      console.error('[OptionSuggestion] Error downloading lot sizes master:', err);
     }
 
     // Always merge fallback lot sizes (ensuring SENSEX, NIFTY, etc. are always populated even if CSV format lacks BSE)

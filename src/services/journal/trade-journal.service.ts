@@ -27,9 +27,10 @@ export class TradeJournalService {
   static async logSignal(params: {
     signalType: 'CPR' | 'BTST' | 'STBT';
     symbol: string;
-    optionContract: string; // e.g. '1920 CE'
+    optionContract: string; // e.g. 'JUL 2026 4000 CE'
     optionStrike: number;
     optionType: 'CE' | 'PE';
+    optionExpiry?: string; // e.g. 'JUL 2026' | '30 JUL 2026' — stored to avoid regex in snapshots
     entryCmp: number; // Directly passed from OptionSuggestionService
     score: number;
     confidence: number;
@@ -85,6 +86,7 @@ export class TradeJournalService {
           optionContract: params.optionContract,
           optionStrike: params.optionStrike,
           optionType: params.optionType,
+          optionExpiry: params.optionExpiry ?? null,
           entryCmp,
           entryTime: new Date(),
           score: params.score,
@@ -252,20 +254,18 @@ export class TradeJournalService {
           const stockData = await MarketService.getStockData(entry.symbol);
           cmp = stockData?.ltp && stockData.ltp > 0 ? stockData.ltp : null;
         } else {
-          // Robustly extract expiry from contract name, handling both formats:
-          //   Monthly: "JUL 2026 4000 CE"  → tradeExpiry = "JUL 2026"
-          //   Weekly:  "30 JUL 2026 4000 CE" → tradeExpiry = "30 JUL 2026"
-          // The old firstToken approach failed because:
-          //   - Monthly first token = "JUL" → new Date("JUL") = Invalid Date
-          //   - Weekly first token  = "30"  → new Date("30")  = Invalid Date
-          // Both caused OptionChainService to silently fall back to current expiry.
-          const weeklyMatch = entry.optionContract?.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
-          const monthlyMatch = entry.optionContract?.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
-          const tradeExpiry = weeklyMatch
-            ? `${weeklyMatch[1]} ${weeklyMatch[2]} ${weeklyMatch[3]}`
-            : monthlyMatch
-            ? `${monthlyMatch[1]} ${monthlyMatch[2]}`
-            : undefined;
+          // Use the stored optionExpiry column (written at signal time) when available.
+          // Fall back to regex parsing for legacy rows written before this column existed.
+          let tradeExpiry: string | undefined = entry.optionExpiry ?? undefined;
+          if (!tradeExpiry) {
+            const weeklyMatch = entry.optionContract?.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+            const monthlyMatch = entry.optionContract?.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+            tradeExpiry = weeklyMatch
+              ? `${weeklyMatch[1]} ${weeklyMatch[2]} ${weeklyMatch[3]}`
+              : monthlyMatch
+              ? `${monthlyMatch[1]} ${monthlyMatch[2]}`
+              : undefined;
+          }
 
           cmp = await TradeJournalService.fetchOptionCmp(
             entry.symbol,

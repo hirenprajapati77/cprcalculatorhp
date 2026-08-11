@@ -128,6 +128,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     let optionStrike: number;
     let optionType: 'CE' | 'PE';
     let entryCmp: number;
+    let optionExpiry: string | undefined;
 
     try {
       const suggestion = await OptionSuggestionService.suggestOptionForBtst(
@@ -147,6 +148,11 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
           `${suggestion.strike} ${optionType}`;
         optionStrike = suggestion.strike;
         entryCmp = suggestion.ltp;
+        // Extract and store expiry so captureSnapshot never needs to parse it
+        const fn = suggestion.formattedName ?? '';
+        const wm = fn.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+        const mm = fn.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
+        optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
       } else {
         console.warn(
           `[CPRJournal] No option suggestion for ${signal.symbol}: ` +
@@ -176,6 +182,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       optionContract: optionName,
       optionStrike,
       optionType,
+      ...(optionExpiry ? { optionExpiry } : {}),
       entryCmp,
       score: signal.score,
       confidence: signal.confidence,
