@@ -131,7 +131,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     }
   });
 
-  await t.test('bearish signal checks trigger correctly and log PE options', async (t) => {
+  await t.test('bearish signal checks trigger correctly and log PE options', async (_t) => {
     const mocks = mockJobDeps([
       makeSignal({ symbol: 'BEARTRIG', ltp: 97, entry: 98, bc: 98, tc: 100 }),
       makeSignal({ symbol: 'BEARSKIP', ltp: 99, entry: 98, bc: 98, tc: 100 }),
