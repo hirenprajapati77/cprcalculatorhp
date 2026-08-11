@@ -1079,3 +1079,62 @@ test('Category F — EMA 9/21 + RSI Confluence Scoring', async (t) => {
   });
 });
 
+test('Scanner Service Target 2 Evaluation', async (t) => {
+  await t.test('resolves target2 and rr2 when a next level is available', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'T2STOCK1',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100.5,
+      high: 101.5,
+      low: 99.0,
+      close: 101.0,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 102.5, // BULLISH bias
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
+      ],
+    };
+
+    const res = await ScannerService.scanStock(mockStock, '2026-08-11');
+    assert.strictEqual(res.entry, 100); // TC = 100
+    assert.strictEqual(res.sl, 99.0); // SL is low (99.0) since dayLow (99.0) < minSL (99.5)
+    assert.strictEqual(res.target, 102.0); // R2 = 102.0
+    assert.strictEqual(res.rr, '1:2.0'); // (102.0 - 100) / 1.0 = 2.0
+    assert.strictEqual(res.target2, 103.0); // R3 = 103.0
+    assert.strictEqual(res.rr2, '1:3.0'); // (103.0 - 100) / 1.0 = 3.0
+  });
+
+  await t.test('returns null target2 and rr2 when target1 is the last level (R4/S4)', async () => {
+    const mockStock: MarketStockData = {
+      symbol: 'T2STOCK2',
+      market: 'NSE',
+      sector: 'Technology',
+      open: 100.5,
+      high: 101.5,
+      low: 97.5,
+      close: 101.0,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 102.5, // BULLISH bias
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
+      ],
+    };
+
+    const res = await ScannerService.scanStock(mockStock, '2026-08-11');
+    assert.strictEqual(res.entry, 100); // TC = 100
+    assert.strictEqual(res.sl, 97.5); // SL is low (97.5) since dayLow (97.5) < minSL (99.5)
+    assert.strictEqual(res.target, 104.0); // R4 = 104.0 (clears 100 + 2.5 * 1.5 = 103.75)
+    assert.strictEqual(res.rr, '1:1.6'); // (104.0 - 100) / 2.5 = 1.6
+    assert.strictEqual(res.target2, null); // Last level R4 reached
+    assert.strictEqual(res.rr2, null);
+  });
+});
+
+

@@ -15,6 +15,8 @@ export interface BreakoutScanResult {
   sl: number;
   target: number;
   rr: string;
+  target2?: number | null;
+  rr2?: string | null;
   score: number;
   sector: string;
   eventRiskScore?: number;

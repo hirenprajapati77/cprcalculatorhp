@@ -211,6 +211,8 @@ export class TelegramService {
       sl: number;
       target: number;
       rr: string;
+      target2?: number | null;
+      rr2?: string | null;
       score: number;
       sector: string;
     }>,
@@ -281,10 +283,14 @@ export class TelegramService {
           // Fallback gracefully if option lookup fails
         }
 
+        const target2Line = (s.target2 !== undefined && s.target2 !== null)
+          ? `\n   Target 2: ₹${s.target2.toFixed(2)} (RR: ${escapeTelegramHtml(s.rr2 ?? '')})`
+          : '';
+
         return (
           `🚀 <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
           `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
-          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}\n` +
+          `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target: ₹${s.target.toFixed(2)}${target2Line}\n` +
           `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
         );
       })
