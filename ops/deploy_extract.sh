@@ -63,7 +63,7 @@ fi
 pm2 save
 
 echo "=== Verifying PM2 memory limit (650M) ==="
-PM2_MAX=$(pm2 show cpr-platform 2>/dev/null | grep 'max memory restart' | awk '{print $NF}')
+PM2_MAX=$(pm2 show cpr-platform 2>/dev/null | grep 'max memory restart' | sed -E 's/[^0-9]//g')
 if [ "$PM2_MAX" != "681574400" ]; then
   echo "[ERROR] PM2 max_memory_restart is ${PM2_MAX:-unset}, expected 681574400 (650M)"
   echo "[ERROR] Start with /home/ubuntu/ecosystem.config.cjs — never ops/ecosystem.config.cjs at 450M"
