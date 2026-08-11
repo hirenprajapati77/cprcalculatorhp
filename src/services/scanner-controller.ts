@@ -10,15 +10,16 @@ import { EventCalendarService } from './overnight/event.service';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
-// Mutex to deduplicate concurrent scan executions within the same Node.js process.
+// Per-universe mutex to deduplicate concurrent scan executions within the same Node.js process.
+// Keyed by "universe:market" to prevent cross-contamination between e.g. NIFTY_FNO and WATCHLIST.
 // NOTE: This is process-local. In production, this relies on PM2 running in fork_mode.
 // If clustering or multi-worker deployment is introduced, this must be replaced with
 // a distributed lock (e.g. Redis SET mutex NX EX 120).
-let inFlightScanPromise: Promise<Array<ScannerSignalResult & { score: number }>> | null = null;
+const inFlightScanPromises = new Map<string, Promise<Array<ScannerSignalResult & { score: number }>>>();
 
-/** True while a full scan is running in this process (cron, refresh, or manual). */
+/** True while a full scan is running in this process for ANY universe (cron, refresh, or manual). */
 export function isScanInProgress(): boolean {
-  return inFlightScanPromise !== null;
+  return inFlightScanPromises.size > 0;
 }
 
 export class ScannerController {
@@ -29,20 +30,23 @@ export class ScannerController {
     universeName: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' = 'NSE_FNO',
     market: 'NSE' | 'BSE' = 'NSE'
   ): Promise<Array<ScannerSignalResult & { score: number }>> {
-    if (inFlightScanPromise) {
-      console.log('[SCAN] Scan already in progress — reusing in-flight scan promise.');
-      return inFlightScanPromise;
+    const scanKey = `${universeName}:${market}`;
+    const existing = inFlightScanPromises.get(scanKey);
+    if (existing) {
+      console.log(`[SCAN] Scan already in progress for ${scanKey} — reusing in-flight scan promise.`);
+      return existing;
     }
 
-    inFlightScanPromise = (async () => {
+    const promise = (async () => {
       try {
         return await ScannerController.executeScan(universeName, market);
       } finally {
-        inFlightScanPromise = null;
+        inFlightScanPromises.delete(scanKey);
       }
     })();
 
-    return inFlightScanPromise;
+    inFlightScanPromises.set(scanKey, promise);
+    return promise;
   }
 
   private static async executeScan(

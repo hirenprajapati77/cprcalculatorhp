@@ -134,25 +134,42 @@ class CacheServiceImpl {
   }
 
   async get<T>(key: string): Promise<T | null> {
-    let result: T | null = null;
-
     if (this.isRedisConnected) {
       try {
         const data = await this.redisClient!.get(key);
-        result = data ? JSON.parse(data) : null;
+        if (data) {
+          this.hits++;
+          return JSON.parse(data) as T;
+        }
+        // Redis returned null (key miss) — check L1 before giving up.
+        // This covers the case where a prior set() failed in Redis (e.g. OOM/READONLY)
+        // and fell through to write L1 — without this, that write is permanently invisible.
+        const l1 = memoryCache.get(key) as T | undefined;
+        if (l1 !== undefined) {
+          this.hits++;
+          return structuredClone(l1);
+        }
+        this.misses++;
+        return null;
       } catch {
-        result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
+        // Redis threw (network error, timeout, etc.) — fall through to L1.
+        const l1 = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
+        if (l1 !== null) {
+          this.hits++;
+        } else {
+          this.misses++;
+        }
+        return l1;
       }
-    } else {
-      result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
     }
 
+    // Memory-only path
+    const result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
     if (result !== null) {
       this.hits++;
     } else {
       this.misses++;
     }
-
     return result;
   }
 
