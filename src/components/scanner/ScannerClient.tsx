@@ -609,6 +609,7 @@ const StockRow = React.memo(({
                          row.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No Option Chain' :
                          row.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No Budget Match' :
                          row.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'No Lot Size' :
+                         row.optionSuggestion.error === 'EVENT_RISK_GATE' ? 'Event Risk Gate' :
                          `Err: ${row.optionSuggestion.error}`}
                       </span>
                     </div>
@@ -3814,6 +3815,7 @@ export default function ScannerClient() {
                                  drawerStock.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No option chain data available for this symbol.' :
                                  drawerStock.optionSuggestion.error === 'NO_VIABLE_STRIKES' ? 'No viable ITM strike found (chain may lack OI/volume data).' :
                                  drawerStock.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'Stock lot size is missing from symbol master.' :
+                                 drawerStock.optionSuggestion.error === 'EVENT_RISK_GATE' ? 'Option suggestion withheld due to high event risk.' :
                                  `Failed to fetch suggestion: ${drawerStock.optionSuggestion.error}`}
                               </span>
                             </div>

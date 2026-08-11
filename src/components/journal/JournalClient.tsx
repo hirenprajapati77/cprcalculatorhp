@@ -1444,7 +1444,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         {entry.symbol}
                       </td>
                       <td className="px-3 py-3 text-slate-400 font-mono whitespace-nowrap">
-                        {entry.optionContract}
+                        {entry.optionContract.startsWith('UNDERLYING') ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                            {entry.optionContract}
+                          </span>
+                        ) : (
+                          entry.optionContract
+                        )}
                       </td>
                       <td className="px-3 py-3 text-right text-slate-300 font-mono">
                         ₹{fmt(entry.entryCmp)}
