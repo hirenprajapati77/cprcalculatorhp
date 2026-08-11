@@ -1025,13 +1025,20 @@ export default function ScannerClient() {
 
   // Server-side full-universe heatmap sector breakdown (from insights.heatmapSectors).
   // When populated this replaces the page-limited client-side aggregation in heatmapGridData.
+  interface ServerHeatmapCell {
+    count: number;
+    avgScore: number;
+    symbols: string[];
+    topStock: string;
+    topStockScore: number;
+  }
   const [serverHeatmap, setServerHeatmap] = useState<Record<string, {
-    strongBuy: number;
-    breakout: number;
-    bullish: number;
-    bearish: number;
-    watch: number;
-    total: number;
+    strongBuy: ServerHeatmapCell;
+    breakout: ServerHeatmapCell;
+    bullish: ServerHeatmapCell;
+    bearish: ServerHeatmapCell;
+    watch: ServerHeatmapCell;
+    total: ServerHeatmapCell;
   }> | null>(null);
 
   // persistent scan runs log
@@ -2078,7 +2085,7 @@ export default function ScannerClient() {
 
     // ── Server path (full universe) ───────────────────────────────────────────
     if (serverHeatmap) {
-      const serverKeyMap: Record<CellKey, keyof typeof serverHeatmap[string]> = {
+      const serverKeyMap: Record<CellKey, 'strongBuy' | 'breakout' | 'bullish' | 'bearish' | 'watch'> = {
         'Strong Buy': 'strongBuy',
         'Breakout': 'breakout',
         'Bullish': 'bullish',
@@ -2086,19 +2093,42 @@ export default function ScannerClient() {
         'Watch': 'watch',
       };
 
-      for (const [sec, counts] of Object.entries(serverHeatmap)) {
+      for (const [sec, sectorData] of Object.entries(serverHeatmap)) {
         const gridSec = SECTORS_LIST.includes(sec) ? sec : 'Other';
         if (!grid[gridSec]) continue;
         const row = grid[gridSec];
 
         for (const cellKey of SIGNAL_KEYS) {
           const serverKey = serverKeyMap[cellKey];
-          const count = (counts[serverKey] as number) || 0;
-          if (count === 0) continue;
-          row[cellKey].count = count;
-          colTotals[cellKey].count += count;
+          const cellData = sectorData[serverKey];
+          if (!cellData || cellData.count === 0) continue;
+
+          row[cellKey].count = cellData.count;
+          row[cellKey].avgScore = cellData.avgScore;
+          row[cellKey].symbols = cellData.symbols || [];
+          row[cellKey].topStock = cellData.topStock || '';
+          row[cellKey].topStockScore = cellData.topStockScore || 0;
+
+          // Column Totals Accumulation
+          const colTotal = colTotals[cellKey];
+          colTotal.count += cellData.count;
+          colTotal.avgScore = (colTotal.avgScore * (colTotal.count - cellData.count) + cellData.avgScore * cellData.count) / colTotal.count;
+          colTotal.symbols = [...colTotal.symbols, ...(cellData.symbols || [])];
+          if (cellData.topStockScore > colTotal.topStockScore) {
+            colTotal.topStock = cellData.topStock;
+            colTotal.topStockScore = cellData.topStockScore;
+          }
         }
-        row['Total'].count = counts.total || 0;
+        
+        // Handle Row Total for 'Total'
+        const serverTotalCell = sectorData.total;
+        if (serverTotalCell) {
+          row['Total'].count = serverTotalCell.count;
+          row['Total'].avgScore = serverTotalCell.avgScore || 0;
+          row['Total'].symbols = serverTotalCell.symbols || [];
+          row['Total'].topStock = serverTotalCell.topStock || '';
+          row['Total'].topStockScore = serverTotalCell.topStockScore || 0;
+        }
       }
 
       return { grid, colTotals };

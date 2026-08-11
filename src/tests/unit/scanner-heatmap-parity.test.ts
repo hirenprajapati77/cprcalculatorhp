@@ -71,12 +71,34 @@ describe('Scanner API Heatmap & KPI Parity', () => {
       // 5. Verify parity of global KPIs with heatmap sector totals
       let heatmapStrongBuy = 0;
       let heatmapBreakoutReady = 0;
-      let heatmapAvoid = 0;
+      let symbolFound = false;
+      let topStockFound = false;
 
       for (const sector of Object.keys(heatmap)) {
-        heatmapStrongBuy += heatmap[sector].strongBuy;
-        heatmapBreakoutReady += heatmap[sector].breakout;
-        heatmapAvoid += heatmap[sector].bearish + heatmap[sector].watch; // based on our mapping/logic
+        const strongBuyCell = heatmap[sector].strongBuy;
+        const breakoutCell = heatmap[sector].breakout;
+
+        heatmapStrongBuy += strongBuyCell.count;
+        heatmapBreakoutReady += breakoutCell.count;
+
+        if (strongBuyCell.count > 0) {
+          assert.ok(Array.isArray(strongBuyCell.symbols), 'symbols must be an array');
+          if (strongBuyCell.symbols.length > 0) {
+            symbolFound = true;
+          }
+          if (strongBuyCell.topStock && strongBuyCell.topStock !== '') {
+            topStockFound = true;
+          }
+        }
+        if (breakoutCell.count > 0) {
+          assert.ok(Array.isArray(breakoutCell.symbols), 'symbols must be an array');
+          if (breakoutCell.symbols.length > 0) {
+            symbolFound = true;
+          }
+          if (breakoutCell.topStock && breakoutCell.topStock !== '') {
+            topStockFound = true;
+          }
+        }
       }
 
       // Parity assertions
@@ -86,6 +108,10 @@ describe('Scanner API Heatmap & KPI Parity', () => {
       // Check specific breakout count parity directly
       assert.strictEqual(heatmapStrongBuy, insights.strongBuy, 'Strong Buy heatmap sum matches KPI count');
       assert.strictEqual(heatmapBreakoutReady, insights.breakoutReady, 'Breakout Ready heatmap sum matches KPI count');
+
+      // Assert that detailed cell details are correctly populated
+      assert.ok(symbolFound, 'At least one cell has symbols list populated');
+      assert.ok(topStockFound, 'At least one cell has topStock populated');
     } finally {
       // 6. Restore original Prisma and Event methods
       prisma.marketSnapshot.findMany = originalSnapshotFindMany;
