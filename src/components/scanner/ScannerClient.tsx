@@ -32,7 +32,7 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST, lastRefreshLabel } from '@/utils/format';
 import { IndexSignalRow } from './IndexSignalRow';
-import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen } from '@/lib/market-hours';
+import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMarketOpen } from '@/lib/market-hours';
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
@@ -609,6 +609,7 @@ const StockRow = React.memo(({
                          row.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No Option Chain' :
                          row.optionSuggestion.error === 'NO_ITM_STRIKES_AVAILABLE' ? 'No Budget Match' :
                          row.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'No Lot Size' :
+                         row.optionSuggestion.error === 'EVENT_RISK_GATE' ? 'Event Risk Gate' :
                          `Err: ${row.optionSuggestion.error}`}
                       </span>
                     </div>
@@ -910,9 +911,14 @@ export default function ScannerClient() {
     else if (savedUniv === 'NIFTY200' || savedUniv === 'NIFTY100') setUniverse('NIFTY200');
     else if (savedUniv === 'ALL_NSE') setUniverse('ALL');
 
-    // 2. Auto-Refresh Interval
-    const savedRefresh = localStorage.getItem('cpr_settings_auto_refresh') || '15m';
-    setRefreshInterval(savedRefresh);
+    // 2. Auto-Refresh Interval — default Off during cash session (cron owns scans).
+    const savedRefresh = localStorage.getItem('cpr_settings_auto_refresh') ||
+      (isMarketOpen() ? 'Off' : '15m');
+    let interval = savedRefresh;
+    if (isMarketOpen() && savedRefresh === '5m') {
+      interval = '15m';
+    }
+    setRefreshInterval(interval);
 
     // 3. Min Price
     const savedMinPrice = localStorage.getItem('cpr_settings_min_price') || '20';
@@ -1684,6 +1690,19 @@ export default function ScannerClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ universe, market }),
       });
+
+      if (res.status === 202) {
+        const data = await res.json();
+        setLatency(Date.now() - startFetchTime);
+        showToast(data.message || 'Scan already in progress.', 'info');
+        await fetchScannerData(true);
+        fetchTopOpportunities();
+        fetchHistoryRuns();
+        if (refreshInterval !== 'Off') {
+          setCountdown(refreshIntervalSeconds(refreshInterval));
+        }
+        return;
+      }
 
       if (!res.ok) throw new Error('Recalculation failed');
       const data = await res.json();
@@ -3814,6 +3833,7 @@ export default function ScannerClient() {
                                  drawerStock.optionSuggestion.error === 'EMPTY_CHAIN' ? 'No option chain data available for this symbol.' :
                                  drawerStock.optionSuggestion.error === 'NO_VIABLE_STRIKES' ? 'No viable ITM strike found (chain may lack OI/volume data).' :
                                  drawerStock.optionSuggestion.error === 'LOT_SIZE_UNAVAILABLE' ? 'Stock lot size is missing from symbol master.' :
+                                 drawerStock.optionSuggestion.error === 'EVENT_RISK_GATE' ? 'Option suggestion withheld due to high event risk.' :
                                  `Failed to fetch suggestion: ${drawerStock.optionSuggestion.error}`}
                               </span>
                             </div>

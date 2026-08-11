@@ -16,6 +16,11 @@ import { EventCalendarService } from './overnight/event.service';
 // a distributed lock (e.g. Redis SET mutex NX EX 120).
 let inFlightScanPromise: Promise<Array<ScannerSignalResult & { score: number }>> | null = null;
 
+/** True while a full scan is running in this process (cron, refresh, or manual). */
+export function isScanInProgress(): boolean {
+  return inFlightScanPromise !== null;
+}
+
 export class ScannerController {
   /**
    * Runs a complete stock scanner execution for a specific universe and market.
@@ -79,8 +84,11 @@ export class ScannerController {
     const symbols = stocks.map(s => s.symbol.trim());
     const eventRisks = await EventCalendarService.getBulkEventRisk(symbols, today);
 
-    // Parallel fetch with batching — keep small on Oracle 1GB (RSS + Fyers 429 pressure).
-    const batchSize = 5;
+    // Parallel fetch with batching — shrink when Fyers is rate-limited (Oracle 1GB VM).
+    const batchSize = MarketService.isFyersTemporarilyUnavailable() ? 2 : 5;
+    if (batchSize < 5) {
+      console.log(`[SCAN] Fyers cooldown active — batch size ${batchSize}`);
+    }
     for (let i = 0; i < stocks.length; i += batchSize) {
       const batch = stocks.slice(i, i + batchSize);
       
@@ -130,9 +138,41 @@ export class ScannerController {
     const filtered = ranked.filter(r => r.score >= 10);
     console.log(`[SCAN] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
 
-    // Background database persist (upserts)
+    const scanDurationMs = Date.now() - startTime;
+
+    // Cache first so cron/UI can read results without waiting for DB upserts.
+    const cacheKey = `list:${universeName}:${market}`;
+    await CacheService.set(cacheKey, filtered, 5 * 60);
+
+    void ScannerController.persistScanResults({
+      filtered,
+      universeName,
+      market,
+      today,
+      scanDurationMs,
+    }).catch((err) => {
+      console.error('[SCAN] Background persist failed:', err);
+    });
+
+    console.log(
+      `[SCAN] Completed in ${scanDurationMs}ms (cache warm; DB persist queued for ${filtered.length} stocks).`
+    );
+
+    return filtered;
+  }
+
+  /** Fire-and-forget from executeScan — must not block HTTP or cron return. */
+  static async persistScanResults(args: {
+    filtered: Array<ScannerSignalResult & { score: number }>;
+    universeName: string;
+    market: string;
+    today: string;
+    scanDurationMs: number;
+  }): Promise<void> {
+    const { filtered, universeName, market, today, scanDurationMs } = args;
+    const persistStart = Date.now();
+
     try {
-      // Process database upserts in chunks of 15 to avoid connection pool exhaustion
       const CHUNK_SIZE = 15;
       for (let chunkIdx = 0; chunkIdx < filtered.length; chunkIdx += CHUNK_SIZE) {
         const chunk = filtered.slice(chunkIdx, chunkIdx + CHUNK_SIZE);
@@ -141,7 +181,6 @@ export class ScannerController {
             const signalsStr = r.signals.join(',');
             const dbSymbol = r.market === 'NSE' ? r.symbol : `${r.symbol}:BSE`;
 
-            // 1. Upsert ScannerResult (Stores calculation outputs)
             await prisma.scannerResult.upsert({
               where: {
                 symbol_date: {
@@ -207,8 +246,6 @@ export class ScannerController {
               },
             });
 
-            // 2. Upsert MarketSnapshot (metadata cache)
-            // `price` stays previousClose for legacy day-% UI; sessionOpen is real open.
             const previousClose = r.previousClose || r.open || r.ltp;
             const sessionOpen = r.open || r.ltp;
             await prisma.marketSnapshot.upsert({
@@ -236,29 +273,24 @@ export class ScannerController {
           })
         );
       }
-      
-      const durationMs = Date.now() - startTime;
-      const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
 
-      // 3. Log Scan History Run
+      const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
       await prisma.scanHistory.create({
         data: {
           filtersJson: JSON.stringify({ universe: universeName, market }),
           resultCount: filtered.length,
-          durationMs,
+          durationMs: scanDurationMs,
           topSymbols,
         },
       });
 
-      console.log(`Scanner database V2 persistence completed for ${filtered.length} stocks in ${durationMs}ms.`);
+      const persistMs = Date.now() - persistStart;
+      console.log(
+        `Scanner database V2 persistence completed for ${filtered.length} stocks in ${persistMs}ms ` +
+        `(scan ${scanDurationMs}ms).`
+      );
     } catch (dbErr) {
       console.error('Error persisting scanner results to DB:', dbErr);
     }
-
-    // Cache the filtered list for 5 minutes — aligns with autoScanResultCacheKey TTL
-    const cacheKey = `list:${universeName}:${market}`;
-    await CacheService.set(cacheKey, filtered, 5 * 60);
-
-    return filtered;
   }
 }
