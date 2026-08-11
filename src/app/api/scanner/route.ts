@@ -307,7 +307,7 @@ export async function GET(request: NextRequest) {
       prisma.scannerResult.count({ where }),
       prisma.scannerResult.findMany({
         where,
-        select: { score: true, signalSummary: true }
+        select: { symbol: true, score: true, signalSummary: true }
       })
     ]));
 
@@ -315,10 +315,42 @@ export async function GET(request: NextRequest) {
     let breakoutReadyCount = 0;
     let avoidCount = 0;
 
+    // Per-sector bucket aggregation — full universe (not page-limited).
+    // Thresholds match SIMPLE_SCORE constants (75 / 60 / 40) used by the client-side heatmap.
+    const heatmapSectors: Record<string, {
+      strongBuy: number;
+      breakout: number;
+      bullish: number;
+      bearish: number;
+      watch: number;
+      total: number;
+    }> = {};
+
+    // snapshotMap is built just below in step 6 — we build it early here to reuse for the heatmap.
+    const snapshotMapEarly = new Map(matchingSnapshots.map((s: MarketSnapshot) => [s.symbol, s]));
+
     for (const r of fullStats) {
       if (r.score >= 75) strongBuyCount++;
       if (r.score >= 60 && r.score < 75) breakoutReadyCount++;
       if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
+
+      // Resolve sector via symbol → snapshot join (same lookup the client side does via formattedResults)
+      const snap = snapshotMapEarly.get(r.symbol);
+      const sec: string = (snap && snap.sector) ? snap.sector : 'Other';
+
+      if (!heatmapSectors[sec]) {
+        heatmapSectors[sec] = { strongBuy: 0, breakout: 0, bullish: 0, bearish: 0, watch: 0, total: 0 };
+      }
+      const bucket = heatmapSectors[sec];
+      const signals = r.signalSummary ? r.signalSummary.split(',') : [];
+
+      let matched = false;
+      if (r.score >= 75) { bucket.strongBuy++; matched = true; }
+      if (r.score >= 60 && r.score < 75) { bucket.breakout++; matched = true; }
+      if (signals.includes('BULLISH') || signals.includes('ABOVE_VWAP')) { bucket.bullish++; matched = true; }
+      if (signals.includes('BEARISH') || signals.includes('BELOW_VWAP')) { bucket.bearish++; matched = true; }
+      if (r.score >= 40 && r.score < 60) { bucket.watch++; matched = true; }
+      if (matched) bucket.total++;
     }
 
     // 6. Join Metadata from MarketSnapshots — use stored SL/Target/RR values directly
@@ -427,6 +459,7 @@ export async function GET(request: NextRequest) {
         strongBuy: strongBuyCount,
         breakoutReady: breakoutReadyCount,
         avoid: avoidCount,
+        heatmapSectors,
       }
     }, { status: 200 });
   } catch (err) {

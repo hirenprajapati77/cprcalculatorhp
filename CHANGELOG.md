@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Full-Universe Heatmap Aggregation**: Fixed the "Market Sector Concentration Heatmap" grid to aggregate over the entire filtered universe (server-computed via `insights.heatmapSectors` in `route.ts`) rather than being client-side bound to the 10 paginated `results` rows. Verified parity between global KPI tiles and heatmap totals, and added a regression unit test.
 - **Deep-Review Bug Squashing (August 2026)**: Addressed multiple critical and high-severity logic edge-cases uncovered during an automated deep-level code review (PR #101 & PR #102), including:
   - **VPA SHORT Asymmetries**: Mirrored SHORT scoring and live gates for 'No Demand' and 'Climax' scenarios, ensuring valid SHORT setups receive reversal bonuses rather than being incorrectly penalized under LONG rules.
   - **VPA Math Safety**: Bound climax bands safely for inverted CPR days, and hardened RVOL calculation against `NaN` inputs.
