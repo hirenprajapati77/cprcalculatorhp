@@ -22,10 +22,15 @@ export function isBreakoutEntryGapInvalidated(args: {
   direction: 'LONG' | 'SHORT';
   buffer?: number;
 }): boolean {
-  const { entry, todayHigh, todayLow } = args;
+  const { entry, todayHigh, todayLow, direction } = args;
   const buffer = args.buffer ?? BREAKOUT_GAP_BUFFER;
   if (!(entry > 0 && todayHigh > 0 && todayLow > 0)) return false;
-  return entry > todayHigh * (1 + buffer) || entry < todayLow * (1 - buffer);
+
+  if (direction === 'LONG') {
+    return todayLow > entry * (1 + buffer);
+  } else {
+    return todayHigh < entry * (1 - buffer);
+  }
 }
 
 /**
