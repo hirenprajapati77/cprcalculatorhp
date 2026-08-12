@@ -30,6 +30,7 @@ function base(overrides: Partial<BreakoutScanResult> = {}): BreakoutScanResult {
 
 describe('breakout price gate — gap invalidation', () => {
   it('detects entry outside today high/low as gap-invalidated', () => {
+    // SHORT setup: entry above range (gapped down) -> true
     assert.equal(
       isBreakoutEntryGapInvalidated({
         entry: 1034.2,
@@ -39,6 +40,37 @@ describe('breakout price gate — gap invalidation', () => {
       }),
       true
     );
+    // LONG setup: entry above range (untriggered/not-yet-reached) -> false
+    assert.equal(
+      isBreakoutEntryGapInvalidated({
+        entry: 1034.2,
+        todayHigh: 951.8,
+        todayLow: 922.5,
+        direction: 'LONG',
+      }),
+      false
+    );
+    // LONG setup: entry below range (gapped up) -> true
+    assert.equal(
+      isBreakoutEntryGapInvalidated({
+        entry: 900,
+        todayHigh: 951.8,
+        todayLow: 922.5,
+        direction: 'LONG',
+      }),
+      true
+    );
+    // SHORT setup: entry below range (untriggered/not-yet-reached) -> false
+    assert.equal(
+      isBreakoutEntryGapInvalidated({
+        entry: 900,
+        todayHigh: 951.8,
+        todayLow: 922.5,
+        direction: 'SHORT',
+      }),
+      false
+    );
+    // Normal inside range -> false
     assert.equal(
       isBreakoutEntryGapInvalidated({
         entry: 100,
