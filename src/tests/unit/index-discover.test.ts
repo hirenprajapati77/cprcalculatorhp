@@ -58,6 +58,7 @@ describe('IndexDiscoverService.getIndiaVixState', () => {
     const state = await IndexDiscoverService.getIndiaVixState(new Date('2026-07-21T10:00:00+05:30'));
     assert.equal(state.elevated, false);
     assert.equal(state.vixCalm, null);
+    assert.equal(state.latestClose, null);
   });
 });
 

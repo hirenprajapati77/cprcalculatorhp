@@ -251,11 +251,10 @@ export async function logIndexBtstJournalEntries(params: {
       .filter(Boolean)
       .join(',');
 
-    let optionExpiry: string | undefined;
     const fn = suggestion.formattedName ?? '';
     const wm = fn.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
     const mm = fn.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
-    optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
+    const optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
 
     const didLog = await TradeJournalService.logSignal({
       signalType: 'BTST',
@@ -384,11 +383,10 @@ export async function logIndexStbtJournalEntries(params: {
       .filter(Boolean)
       .join(',');
 
-    let optionExpiry: string | undefined;
     const fn = suggestion.formattedName ?? '';
     const wm = fn.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
     const mm = fn.match(/\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
-    optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
+    const optionExpiry = wm ? `${wm[1]} ${wm[2]} ${wm[3]}` : mm ? `${mm[1]} ${mm[2]}` : undefined;
 
     const didLog = await TradeJournalService.logSignal({
       signalType: 'STBT',

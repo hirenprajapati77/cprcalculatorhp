@@ -113,6 +113,8 @@ export interface IndiaVixState {
    * null → unavailable / mock (score-safety INVALID).
    */
   vixCalm: boolean | null;
+  /** Latest India VIX close used for regime (null when unavailable / mock). */
+  latestClose: number | null;
 }
 
 import {
@@ -456,7 +458,7 @@ export class IndexDiscoverService {
   static async getIndiaVixState(date: Date): Promise<IndiaVixState> {
     const mode = env.HISTORICAL_MODE || 'mock';
     if (mode !== 'live') {
-      return { elevated: false, vixCalm: null };
+      return { elevated: false, vixCalm: null, latestClose: null };
     }
 
     try {
@@ -466,23 +468,23 @@ export class IndexDiscoverService {
 
       const history = await HistoricalProvider.getHistory('^INDIAVIX', startDateObj, endDateObj);
       if (!history || history.length === 0) {
-        return { elevated: false, vixCalm: null };
+        return { elevated: false, vixCalm: null, latestClose: null };
       }
 
       const latestClose = history[history.length - 1].close;
       if (latestClose >= INDIA_VIX_ELEVATED_MIN) {
-        return { elevated: true, vixCalm: false };
+        return { elevated: true, vixCalm: false, latestClose };
       }
       if (latestClose < INDIA_VIX_CALM_MAX) {
-        return { elevated: false, vixCalm: true };
+        return { elevated: false, vixCalm: true, latestClose };
       }
-      return { elevated: false, vixCalm: false };
+      return { elevated: false, vixCalm: false, latestClose };
     } catch (err) {
       console.warn(
         '[IndexDiscover] India VIX fetch failed:',
         err instanceof Error ? err.message : err
       );
-      return { elevated: false, vixCalm: null };
+      return { elevated: false, vixCalm: null, latestClose: null };
     }
   }
 

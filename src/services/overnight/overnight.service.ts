@@ -339,6 +339,8 @@ export class OvernightService {
     // overrides still come from mockStocks below; live path uses this map.
     const stockDataBySymbol = new Map<string, MarketStockData | null>();
     if (!mockStocks) {
+      // Seed Fyers LTP quotes in ≤50/request batches before per-symbol history.
+      await MarketService.prefetchFyersQuotes(symbols, 'NSE');
       for (let i = 0; i < symbols.length; i += STOCK_DATA_PREFETCH_CHUNK) {
         const chunk = symbols.slice(i, i + STOCK_DATA_PREFETCH_CHUNK);
         const settled = await Promise.allSettled(

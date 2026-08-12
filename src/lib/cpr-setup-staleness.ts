@@ -40,14 +40,16 @@ export function isBreakoutEntryExtended(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
+  maxExtensionPct?: number;
 }): boolean {
   const { entry, ltp, direction } = args;
+  const cap = args.maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
   if (!(entry > 0 && ltp > 0)) return false;
   const pctPastEntry = ((ltp - entry) / entry) * 100;
   if (direction === 'LONG') {
-    return pctPastEntry >= CPR_ENTRY_EXTENSION_PCT;
+    return pctPastEntry >= cap;
   }
-  return pctPastEntry <= -CPR_ENTRY_EXTENSION_PCT;
+  return pctPastEntry <= -cap;
 }
 
 /**
@@ -60,8 +62,10 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
   direction: 'LONG' | 'SHORT';
   todayHigh?: number;
   todayLow?: number;
+  maxExtensionPct?: number;
 }): { stale: true; reason: CprSetupStaleReason; detail: string } | { stale: false } {
   const { entry, ltp, direction, todayHigh = 0, todayLow = 0 } = args;
+  const maxExtensionPct = args.maxExtensionPct;
 
   if (
     todayHigh > 0 &&
@@ -75,12 +79,13 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
     };
   }
 
-  if (isBreakoutEntryExtended({ entry, ltp, direction })) {
+  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
+    const cap = maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
     return {
       stale: true,
       reason: 'EXTENDED',
-      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${CPR_ENTRY_EXTENSION_PCT}%)`,
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap}%)`,
     };
   }
 

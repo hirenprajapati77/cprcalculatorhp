@@ -2,10 +2,8 @@ import { EXTENSION_LIMITS, EntryManagerService } from '@/services/overnight/entr
 import type { BreakoutScanResult, BreakoutAlertKind } from '@/services/alert/breakout-watcher.service';
 import type { MarketStockData } from '@/services/market.service';
 import {
-  BREAKOUT_GAP_BUFFER,
   evaluateCprSetupPriceStalenessBasic,
   isBreakoutEntryExtended,
-  isBreakoutEntryGapInvalidated,
   type CprSetupStaleReason,
 } from '@/lib/cpr-setup-staleness';
 
@@ -31,6 +29,11 @@ function alertDirection(b: BreakoutScanResult): 'LONG' | 'SHORT' {
   return kind === 'BREAKDOWN' ? 'SHORT' : 'LONG';
 }
 
+export type BreakoutPriceGateOptions = {
+  /** Override entry-chase cap (%) — e.g. 2.0 when India VIX is in tighten band. */
+  entryExtensionPct?: number;
+};
+
 /**
  * Shared CPR/breakout price-staleness check (gap + extension/chase + ATR when available).
  * Used by Telegram pre-send gate and CPR journal.
@@ -46,6 +49,7 @@ export function evaluateCprSetupPriceStaleness(args: {
   open?: number;
   symbol?: string;
   sector?: string;
+  entryExtensionPct?: number;
 }): { stale: true; reason: BreakoutPriceGateReason; detail: string } | { stale: false } {
   const {
     entry,
@@ -57,6 +61,7 @@ export function evaluateCprSetupPriceStaleness(args: {
     open,
     symbol = 'UNKNOWN',
     sector = 'Other',
+    entryExtensionPct,
   } = args;
 
   const basic = evaluateCprSetupPriceStalenessBasic({
@@ -65,6 +70,7 @@ export function evaluateCprSetupPriceStaleness(args: {
     direction,
     todayHigh,
     todayLow,
+    ...(entryExtensionPct != null ? { maxExtensionPct: entryExtensionPct } : {}),
   });
   if (basic.stale && basic.reason === 'GAP_INVALIDATED') return basic;
 
@@ -93,12 +99,13 @@ export function evaluateCprSetupPriceStaleness(args: {
   if (basic.stale) return basic;
 
   // Defensive: keep detail wording aligned with EXTENSION_LIMITS if constants drift.
-  if (isBreakoutEntryExtended({ entry, ltp, direction })) {
+  const chaseCap = entryExtensionPct ?? EXTENSION_LIMITS.MAX_DAY_RETURN_PCT;
+  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct: chaseCap })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
     return {
       stale: true,
       reason: 'EXTENDED',
-      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${EXTENSION_LIMITS.MAX_DAY_RETURN_PCT}%)`,
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${chaseCap}%)`,
     };
   }
 
@@ -112,10 +119,12 @@ export function evaluateCprSetupPriceStaleness(args: {
  * publishes stale RR into the group and trains traders to ignore alerts.
  */
 export function filterBreakoutsForPriceActionability(
-  breakouts: BreakoutScanResult[]
+  breakouts: BreakoutScanResult[],
+  opts?: BreakoutPriceGateOptions
 ): BreakoutPriceGateResult {
   const actionable: BreakoutScanResult[] = [];
   const suppressed: BreakoutPriceGateResult['suppressed'] = [];
+  const entryExtensionPct = opts?.entryExtensionPct;
 
   for (const b of breakouts) {
     const direction = alertDirection(b);
@@ -129,6 +138,7 @@ export function filterBreakoutsForPriceActionability(
       ...(b.open != null ? { open: b.open } : {}),
       symbol: b.symbol,
       sector: b.sector,
+      ...(entryExtensionPct != null ? { entryExtensionPct } : {}),
     });
     if (verdict.stale) {
       console.warn(
