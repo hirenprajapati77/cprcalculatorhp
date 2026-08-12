@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CPR / breakout price-actionability gate (PRs #114–#116, #117, #119)**: Shared gap + extension checks (`cpr-setup-staleness.ts`, `breakout-price-gate.ts`) suppress unreachable/chased entries before Telegram send, skip them in the CPR journal (with live OHLC), and flag `GAP` / `EXTENDED — do not chase` in the scanner setup column. Direction-aware gap invalidation: LONG only when the day has already traded entirely above entry; SHORT only when entirely below. Test-breakout uses the same gate; cron releases already-delivered stale claims while preserving the 4h cooldown.
 - **Secondary Breakout Target**: Added secondary target levels (`target2`) and associated risk-reward ratios (`rr2`) to Trade Setup V3 calculations. Threaded them through the database schema (`ScannerResult` table), API routes, scanner controller mapping, and Telegram breakout alerts template.
 - **DirectionSetupState (Postgres)**: Durable FRESH/MATURE/STALE setup-age tracking for scanner direction bias — survives PM2 restarts and Redis flushes (`DirectionSetupState` table, `bullish-state.service.ts`).
 - **Breakout hold/reclaim confirmation**: 15m close, 5m reclaim hold, and 10m gap-continuation gates before tagging `BREAKOUT` / `BREAKDOWN` (`breakout-confirm.ts`).
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VPA Shadow Breakdown Persistence**: Added `vpaBreakdown` JSONB column to `ScannerResult` table and updated `ScannerController` to persist VPA confirmation outputs on every scan for historical false breakout analysis.
 
 ### Changed
+- **Scanner rating badges (PR #115)**: CPR strong/ready badges are direction-aware (`Strong Buy` / `Strong Sell`, `Opportunity Buy` / `Opportunity Sell`); RANGE stays neutral (`Strong` / `Opportunity`). Overnight BTST/STBT row tints: STBT uses red, not green. Heatmap strong-tier column key is direction-neutral `Strong` (API KPI `strongBuy` unchanged for parity) (PR #119).
 - **Scanner entry basis — today's CPR (owner-approved)**: Trade Setup V3 entry/SL/target/RR now use `cprToday.*` (same session as bias), not tomorrow's projected CPR. Governance comment locks this behind owner approval — see [`docs/decisions/cpr-entry-basis-2026-08-10.md`](docs/decisions/cpr-entry-basis-2026-08-10.md). Deployed with PR #98 (`9395ef5` / `615d769`).
 - **MarketSnapshot fields**: Separate `sessionOpen` and `previousClose` for clearer live vs prior-session semantics.
 - **Redis-only cache on connected path (Oracle 1 GB trade-off)**: `CacheService.set()` no longer mirrors every Redis write into the in-process L1 LRU when Redis is healthy. This deliberately reverses the prior always-write-L1 warm-cache fix to avoid duplicating ~700 keys in Node heap. Accepted side effect: after `mem_watchdog` flushes Redis at 75% RAM, both layers are cold and the next request batch can miss-storm; that transient burst is preferred over permanent 2× memory. See `cache.service.ts` comment and AGENTS.md → Memory. Durable product state (hysteresis, claims) must not rely on Redis alone.
@@ -49,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Deploy PM2 memory verify (PR #118)**: `ops/deploy.ps1` PM2 `max_memory_restart` check uses regex `grep -E "max.*memory.*restart"` so PowerShell/SSH quote-stripping cannot drop the pattern.
+- **Direction-aware gap gate (PR #117)**: `isBreakoutEntryGapInvalidated` ignored `direction` and treated any entry outside today's H/L as gap-invalidated — incorrectly suppressing untriggered LONGs (price still below entry) and SHORTs (price still above entry). Fixed to direction-specific gap checks.
 - **Dependency Bumps**: npm audit dependency lockfile bumps (ip-address, fast-uri, nanoid, hono, @hono/node-server).
 - **CPR Journal Bearish Fix**: `runCprJournalJob` was LONG/CE-only with a backwards trigger condition for bearish signals; now correctly processes SHORT/PE directions.
 - **Earnings Cron Lock**: Added claim-lock guard and in-process scheduler fallback to the earnings-populate cron job.
