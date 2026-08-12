@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fyers quote batch prefetch (PR #122)**: Scanner and overnight runs prefetch Fyers LTP quotes in batches of up to 50 symbols per HTTP request (`fyers-quotes-batch.ts`, `MarketService.prefetchFyersQuotes`), seeding a short-lived in-process cache so per-symbol `getStockData` skips redundant quote round-trips. Tunables: `FYERS_QUOTES_BATCH_SIZE`, `FYERS_QUOTE_CACHE_TTL_MS`. Cache cleared via `purgeInProcessCaches` after heavy crons.
+- **India VIX breakout alert gate (PR #122)**: Automated Telegram breakout alerts now respect India VIX regime (`breakout-vix-gate.ts`): pause all alerts when VIX ≥ 25; in the 18–24 band require score ≥ 85 and tighten entry-chase cap to 2% (from 3.5%). Manual test-breakout path unchanged. Constants in `BREAKOUT_VIX` (`trading-constants.ts`).
 - **Unit test environment isolation**: Fixed raw `tsx --test` execution where `dotenv/config` polluted `process.env.NODE_ENV` to `development`, causing event risk checks to query a missing local DB and return `EVENT_RISK_GATE` errors. Resolved by explicitly setting `process.env.NODE_ENV = 'test'` inside `option-suggestion.test.ts` and refining the service environment guard.
 - **Selective Redis pruning**: Hardened the memory watchdog (`ops/mem_watchdog.sh`) to selectively prune Redis keys, preserving critical synchronization keys (`cron_lock:*`, `cron_done:*`, and `rate_limit:*`) during off-hours automated restarts.
 - **Expanded lot-size fallbacks**: Added 30+ mid-cap FNO symbols to the fallback list in `OptionSuggestionService` to avoid `LOT_SIZE_UNAVAILABLE` errors when Fyers CDN downloads fail.
