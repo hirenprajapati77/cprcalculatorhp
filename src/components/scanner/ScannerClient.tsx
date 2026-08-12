@@ -36,6 +36,11 @@ import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMark
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
 import { VpaBreakdownPanel, VpaStatusChip, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
+import {
+  btstRowHighlightClass,
+  cprRatingLabel,
+  inferScannerBadgeDirection,
+} from '@/lib/scanner-rating';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
 
@@ -427,14 +432,7 @@ const StockRow = React.memo(({
 
   let rowClass = isPinned ? 'bg-accent-blue/5 border-l-2 border-accent-blue' : '';
   if (row.btstClassification) {
-    if (row.btstClassification === 'STRONG_BTST' || row.btstClassification === 'STRONG_STBT') {
-      rowClass += ' border-l-2 border-accent-green bg-accent-green/5';
-    } else if (row.btstClassification === 'BTST_READY' || row.btstClassification === 'STBT_READY') {
-      rowClass += ' border-l-2 border-accent-blue bg-accent-blue/5';
-    } else if (row.btstClassification === 'WATCH') {
-      rowClass += ' border-l-2 border-accent-amber bg-accent-amber/5';
-    }
-    else if (row.btstClassification === 'IGNORE') rowClass += ' border-l-2 border-text-tertiary bg-bg-tertiary/5';
+    rowClass += btstRowHighlightClass(row.btstClassification);
   }
 
   return (
@@ -2077,13 +2075,26 @@ export default function ScannerClient() {
     fetchScannerData();
   };
 
-  // Mode-aware badges: CPR uses 0–100 Simple thresholds; overnight uses Advanced 0–130
-  const getRatingBadge = (score: number) => {
+  // Mode-aware badges: CPR uses 0–100 Simple thresholds; overnight uses Advanced 0–130.
+  // CPR strong/ready labels are direction-aware (Buy vs Sell); RANGE stays neutral.
+  const getRatingBadge = (
+    score: number,
+    stock?: Pick<ScannedStock, 'entry' | 'bc' | 'tc' | 'sl' | 'target' | 'direction' | 'signals'>
+  ) => {
+    const direction = stock ? inferScannerBadgeDirection(stock) : null;
     if (score >= thresholds.strong) {
-      return <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">{overnightMode ? 'Strong' : 'Strong Buy'}</Badge>;
+      return (
+        <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">
+          {cprRatingLabel('strong', direction, overnightMode)}
+        </Badge>
+      );
     }
     if (score >= thresholds.ready) {
-      return <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">{overnightMode ? 'Ready' : 'Opportunity'}</Badge>;
+      return (
+        <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">
+          {cprRatingLabel('ready', direction, overnightMode)}
+        </Badge>
+      );
     }
     if (score >= thresholds.watch) {
       return <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge>;
@@ -3572,7 +3583,7 @@ export default function ScannerClient() {
                           </div>
                           <div className="flex items-center gap-2">
                              <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Win Rate {drawerStock.confidence}%</span>
-                            {getRatingBadge(drawerStock.score)}
+                            {getRatingBadge(drawerStock.score, drawerStock)}
                           </div>
                         </div>
                       </div>
