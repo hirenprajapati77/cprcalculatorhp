@@ -403,6 +403,7 @@ const StockRow = React.memo(({
   isPinned,
   isNotified,
   scoreThresholds: thresholds,
+  overnightMode,
   onToggleCompare,
   onToggleWatchlist,
   onOpenDrawer,
@@ -417,6 +418,7 @@ const StockRow = React.memo(({
   isPinned: boolean;
   isNotified: boolean;
   scoreThresholds: { strong: number; ready: number; watch: number };
+  overnightMode: boolean;
   onToggleCompare: (symbol: string) => void;
   onToggleWatchlist: (symbol: string, key: keyof WatchlistItemState) => void;
   onOpenDrawer: (stock: ScannedStock) => void;
@@ -720,12 +722,31 @@ const StockRow = React.memo(({
           <div className="space-y-0.5 font-mono text-left">
             <div className="font-bold text-text-primary text-[13px] leading-none">{row.score}</div>
             <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}%</div>
-            {densityMode === 'detailed' && <div className="mt-1">{
-              row.score >= thresholds.strong ? <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">Strong</Badge> :
-              row.score >= thresholds.ready ? <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">Ready</Badge> :
-              row.score >= thresholds.watch ? <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">Watch</Badge> :
-              <Badge variant="gray">Ignore</Badge>
-            }</div>}
+            {densityMode === 'detailed' && <div className="mt-1">{(() => {
+              const direction = inferScannerBadgeDirection(row);
+              if (row.score >= thresholds.strong) {
+                return (
+                  <Badge variant="purple" className="shadow-[0_0_10px_rgba(139,92,246,0.15)]">
+                    {cprRatingLabel('strong', direction, overnightMode)}
+                  </Badge>
+                );
+              }
+              if (row.score >= thresholds.ready) {
+                return (
+                  <Badge variant="green" className="shadow-[0_0_10px_rgba(16,185,129,0.15)]">
+                    {cprRatingLabel('ready', direction, overnightMode)}
+                  </Badge>
+                );
+              }
+              if (row.score >= thresholds.watch) {
+                return (
+                  <Badge variant="amber" className="shadow-[0_0_10px_rgba(245,158,11,0.15)]">
+                    Watch
+                  </Badge>
+                );
+              }
+              return <Badge variant="gray">Ignore</Badge>;
+            })()}</div>}
           </div>
         </td>
       )}
@@ -3466,6 +3487,7 @@ export default function ScannerClient() {
                             isPinned={isPinned}
                             isNotified={isNotified}
                             scoreThresholds={thresholds}
+                            overnightMode={overnightMode}
                             onToggleCompare={handleToggleCompareCheckbox}
                             onToggleWatchlist={handleToggleWatchlistState}
                             onOpenDrawer={handleOpenDrawer}
