@@ -25,8 +25,46 @@ restart_pm2_fresh() {
   pm2 save
 }
 
-# NSE cash session 09:15–15:30 IST (Mon–Fri). Skip Redis FLUSHDB here so
-# cron_done / unlock rate-limit keys survive memory pressure during market hours.
+is_protected_redis_key() {
+  local key="$1"
+  case "$key" in
+    cron_lock:*)
+      return 0
+      ;;
+    cron_done:*)
+      return 0
+      ;;
+    rate_limit:*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+prune_redis_cache_preserving_protected_keys() {
+  local deleted=0
+  local skipped=0
+  local key
+
+  # Avoid FLUSHDB so retain-claim and unlock guard keys survive off-hours pressure cleanup.
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    if is_protected_redis_key "$key"; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if redis-cli DEL "$key" >/dev/null 2>&1; then
+      deleted=$((deleted + 1))
+    fi
+  done < <(redis-cli --scan 2>/dev/null)
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Redis prune complete: deleted=$deleted preserved=$skipped" >> "$LOG"
+}
+
+# NSE cash session 09:15–15:30 IST (Mon–Fri). During session we avoid Redis cache
+# pruning entirely; outside session we prune but still preserve critical guard keys.
 is_nse_cash_session() {
   local dow hour min total
   dow=$(TZ=Asia/Kolkata date +%u)
@@ -89,8 +127,8 @@ if [ "$MEM_USED" -gt 85 ]; then
     echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session: PM2 restart WITHOUT Redis flush" >> "$LOG"
     restart_pm2_fresh >> "$LOG" 2>&1
   else
-    echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — flushing Redis + fresh PM2 restart" >> "$LOG"
-    redis-cli FLUSHDB >> "$LOG" 2>&1
+    echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — pruning Redis cache + fresh PM2 restart" >> "$LOG"
+    prune_redis_cache_preserving_protected_keys >> "$LOG" 2>&1
     restart_pm2_fresh >> "$LOG" 2>&1
   fi
   echo "$TIMESTAMP [INFO] Recovery complete" >> "$LOG"
@@ -98,8 +136,8 @@ elif [ "$MEM_USED" -gt 75 ]; then
   if [ "$IN_SESSION" -eq 1 ]; then
     echo "$TIMESTAMP [INFO] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session: skip Redis flush" >> "$LOG"
   else
-    echo "$TIMESTAMP [INFO] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — flushing Redis cache only" >> "$LOG"
-    redis-cli FLUSHDB >> "$LOG" 2>&1
+    echo "$TIMESTAMP [INFO] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — pruning Redis cache only" >> "$LOG"
+    prune_redis_cache_preserving_protected_keys >> "$LOG" 2>&1
   fi
 fi
 
