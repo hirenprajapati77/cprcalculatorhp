@@ -5,6 +5,8 @@ import { getISTDateString, shouldFreezeBreakouts } from '@/lib/market-hours';
 import { MarketService } from '@/services/market.service';
 import type { OptionSuggestion } from '@/services/option-suggestion.service';
 import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-price-gate';
+import { filterBreakoutsForVixRegime } from '@/services/alert/breakout-vix-gate';
+import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
 
 /**
  * Cap concurrent option-chain lookups for confirmed breakout alerts.
@@ -207,10 +209,41 @@ export function notifyBreakoutsFromScan(
         breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
       );
 
+      // India VIX regime: pause all alerts when elevated; tighten score/chase in mid band.
+      const vixState = await IndexDiscoverService.getIndiaVixState(new Date());
+      const {
+        actionable: vixActionable,
+        suppressed: vixSuppressed,
+        policy: vixPolicy,
+      } = filterBreakoutsForVixRegime(newBreakouts, vixState);
+
+      if (vixSuppressed.length > 0) {
+        const vixSuppressKeys = vixSuppressed.map((b) =>
+          breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
+        );
+        await BreakoutWatcherService.releaseClaims(vixSuppressKeys);
+        claimedKeys = claimedKeys.filter((k) => !vixSuppressKeys.includes(k));
+        const vixLabel =
+          vixPolicy.vixClose != null ? vixPolicy.vixClose.toFixed(2) : vixPolicy.regimeLabel;
+        console.log(
+          `[BreakoutVixGate] ${label}: India VIX ${vixLabel} (${vixPolicy.regimeLabel}) — ` +
+            `suppressed ${vixSuppressed.length} alert(s): ` +
+            vixSuppressed.map((s) => `${s.symbol}:${s.gateReason}`).join(', ')
+        );
+      }
+      if (vixActionable.length === 0) return;
+
       // Pre-send gate: gap-invalidated / extended entries never hit Telegram.
       // Release claims for suppressed rows so a later pullback into the entry
       // zone can still alert (unlike a real delivered alert which keeps cooldown).
-      const { actionable, suppressed } = filterBreakoutsForPriceActionability(newBreakouts);
+      const priceGateOpts =
+        vixPolicy.entryExtensionPct != null
+          ? { entryExtensionPct: vixPolicy.entryExtensionPct }
+          : undefined;
+      const { actionable, suppressed } = filterBreakoutsForPriceActionability(
+        vixActionable,
+        priceGateOpts
+      );
       if (suppressed.length > 0) {
         const suppressKeys = suppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')

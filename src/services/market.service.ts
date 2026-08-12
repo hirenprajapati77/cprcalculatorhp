@@ -3,6 +3,15 @@ import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { FyersAuthService } from './fyers-auth.service';
+import {
+  buildFyersQuotesUrl,
+  chunkSymbols,
+  FYERS_QUOTES_MAX_PER_REQUEST,
+  parseFyersQuotesResponse,
+  toFyersEquitySymbol,
+  type FyersQuoteFields,
+  type FyersQuotesApiResponse,
+} from './fyers-quotes-batch';
 import { parseFyers15mVwapAndCandle } from './overnight/fyers-intraday.util';
 
 export interface HistoricalCandle {
@@ -345,10 +354,165 @@ export class MarketService {
   private static fyersPermissionBlockedUntilMs = 0;
   /** Account-level rate-limit block (HTTP 429). Global — skip Fyers until cooldown. */
   private static fyersRateLimitedUntilMs = 0;
+  /**
+   * Short-lived in-process quote seed from prefetchFyersQuotes.
+   * Avoids N per-symbol quotes HTTP during scanner/overnight (Redis stays for full stock_data).
+   */
+  private static fyersQuoteCache = new Map<string, { quote: FyersQuoteFields; expiresAt: number }>();
 
   /** Clears the Fyers Data API permission cooldown (e.g. after re-login or successful probe). */
   static clearFyersPermissionBlock(): void {
     this.fyersPermissionBlockedUntilMs = 0;
+  }
+
+  /** Drop in-process quote seeds (cron memory purge / tests). */
+  static clearFyersQuoteCache(): void {
+    this.fyersQuoteCache.clear();
+  }
+
+  private static quoteCacheKey(cleanSymbol: string, market: 'NSE' | 'BSE'): string {
+    return `${market}:${cleanSymbol.trim().toUpperCase()}`;
+  }
+
+  private static quoteCacheTtlMs(): number {
+    return Math.max(5_000, env.FYERS_QUOTE_CACHE_TTL_MS || 20_000);
+  }
+
+  private static quotesBatchSize(): number {
+    const n = env.FYERS_QUOTES_BATCH_SIZE || FYERS_QUOTES_MAX_PER_REQUEST;
+    return Math.max(1, Math.min(FYERS_QUOTES_MAX_PER_REQUEST, n));
+  }
+
+  static getCachedFyersQuote(cleanSymbol: string, market: 'NSE' | 'BSE' = 'NSE'): FyersQuoteFields | null {
+    const key = this.quoteCacheKey(cleanSymbol, market);
+    const hit = this.fyersQuoteCache.get(key);
+    if (!hit) return null;
+    if (hit.expiresAt <= Date.now()) {
+      this.fyersQuoteCache.delete(key);
+      return null;
+    }
+    return hit.quote;
+  }
+
+  static seedFyersQuoteCache(
+    cleanSymbol: string,
+    market: 'NSE' | 'BSE',
+    quote: FyersQuoteFields,
+    ttlMs?: number
+  ): void {
+    this.fyersQuoteCache.set(this.quoteCacheKey(cleanSymbol, market), {
+      quote,
+      expiresAt: Date.now() + (ttlMs ?? this.quoteCacheTtlMs()),
+    });
+  }
+
+  /**
+   * Batch-fetch Fyers quotes (≤50 symbols/request) and seed the in-process quote cache.
+   * Call before scanner/overnight getStockData loops so tryFyersPrimary skips per-symbol quotes.
+   * Returns how many symbols were seeded. No-op when Fyers is unavailable / not connected.
+   */
+  static async prefetchFyersQuotes(
+    symbols: string[],
+    market: 'NSE' | 'BSE' = 'NSE'
+  ): Promise<{ seeded: number; batches: number }> {
+    const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+    if (unique.length === 0) return { seeded: 0, batches: 0 };
+
+    if (this.isFyersTemporarilyUnavailable()) {
+      return { seeded: 0, batches: 0 };
+    }
+
+    const token = await FyersAuthService.getAccessToken();
+    if (!token) return { seeded: 0, batches: 0 };
+
+    let appId: string;
+    try {
+      appId = FyersAuthService.getCredentials().appId;
+    } catch {
+      return { seeded: 0, batches: 0 };
+    }
+
+    const authHeaders = {
+      Authorization: `${appId}:${token}`,
+      Accept: 'application/json',
+    };
+
+    const chunks = chunkSymbols(unique, this.quotesBatchSize());
+    let seeded = 0;
+
+    for (const chunk of chunks) {
+      if (this.fyersRateLimitedUntilMs > Date.now() || this.fyersPermissionBlockedUntilMs > Date.now()) {
+        break;
+      }
+
+      const fyersSymbols = chunk.map((s) => toFyersEquitySymbol(s, market));
+      const url = buildFyersQuotesUrl(fyersSymbols);
+
+      try {
+        const res = await this.fetchWithTimeout(
+          url,
+          { cache: 'no-store', headers: authHeaders },
+          env.FYERS_REQUEST_TIMEOUT_MS
+        );
+
+        if (res.status === 401) {
+          if (this.shouldLogProviderError('fyers-401:quotes-batch')) {
+            console.warn('[LiveFeed] Fyers 401 on quotes batch; clearing token');
+          }
+          await FyersAuthService.clearToken();
+          break;
+        }
+
+        const json = (await res.json()) as FyersQuotesApiResponse;
+
+        if (!res.ok || json.s !== 'ok') {
+          if (this.markFyersRateLimited(res.status, json.message, json.code)) {
+            break;
+          }
+          const msg = typeof json.message === 'string' ? json.message.toLowerCase() : '';
+          if (
+            res.status === 403 ||
+            msg.includes('additional permission required') ||
+            msg.includes('do not have permission')
+          ) {
+            this.fyersPermissionBlockedUntilMs = Date.now() + 10 * 60 * 1000;
+            if (this.shouldLogProviderError('fyers-permission-remediation')) {
+              console.warn(
+                `[LiveFeed] Fyers quotes batch permission denied (${json.message ?? `HTTP ${res.status}`}). ` +
+                  `Skipping Fyers for 10m; Yahoo Fallback remains active.`
+              );
+            }
+            break;
+          }
+          if (this.shouldLogProviderError(`fyers-quotes-batch:${res.status}:${json.code ?? 'na'}`)) {
+            console.warn(
+              `[LiveFeed] Fyers quotes batch failed: HTTP ${res.status} code=${json.code} msg=${json.message ?? ''} (size=${chunk.length})`
+            );
+          }
+          continue;
+        }
+
+        const parsed = parseFyersQuotesResponse(json, market);
+        const ttl = this.quoteCacheTtlMs();
+        for (const [sym, quote] of parsed) {
+          this.seedFyersQuoteCache(sym, market, quote, ttl);
+          seeded++;
+        }
+      } catch (err) {
+        if (this.shouldLogProviderError('fyers-quotes-batch-exception')) {
+          console.warn(
+            `[LiveFeed] Fyers quotes batch exception: ${this.summarizeProviderError(err)}`
+          );
+        }
+      }
+    }
+
+    if (seeded > 0) {
+      console.log(
+        `[LiveFeed] Prefetched ${seeded}/${unique.length} Fyers quotes in ${chunks.length} batch(es) (${market})`
+      );
+    }
+    return { seeded, batches: chunks.length };
   }
 
   /** True while permission or rate-limit cooldown is active — callers should use Yahoo. */
@@ -885,6 +1049,8 @@ export class MarketService {
   /**
    * Fyers primary live feed (Connected-only).
    * Quotes API for true LTP (`lp`) + daily history for ATR/CPR windows.
+   * Prefer in-process quote seed from prefetchFyersQuotes (scanner/overnight)
+   * to avoid per-symbol quotes HTTP; falls back to single-symbol quotes.
    * Enriches with Fyers 15m history for VWAP + candle15m (Yahoo parity); falls back
    * to quote `atp` / typical price when 15m is unavailable.
    * Returns null if not logged in, on auth/symbol errors, or if remap fails
@@ -930,8 +1096,7 @@ export class MarketService {
       return null;
     }
 
-    const fyersSymbol =
-      market === 'NSE' ? `NSE:${cleanSymbol}-EQ` : `BSE:${cleanSymbol}-EQ`;
+    const fyersSymbol = toFyersEquitySymbol(cleanSymbol, market);
     const authHeaders = {
       Authorization: `${appId}:${token}`,
       Accept: 'application/json',
@@ -964,10 +1129,6 @@ export class MarketService {
     fromDate.setUTCDate(fromDate.getUTCDate() - 250); // ~175 trading days; buffer for holiday clusters
     const rangeFrom = getISTDateString(fromDate);
 
-    const quotesUrl =
-      `https://api-t1.fyers.in/data/quotes?` +
-      new URLSearchParams({ symbols: fyersSymbol }).toString();
-
     const historyUrl =
       `https://api-t1.fyers.in/data/history?` +
       new URLSearchParams({
@@ -980,59 +1141,70 @@ export class MarketService {
       }).toString();
 
     try {
-      // ── Quotes: true last-traded price ──────────────────────────────────
-      const quotesRes = await this.fetchWithTimeout(quotesUrl, {
-        cache: 'no-store',
-        headers: authHeaders,
-      }, env.FYERS_REQUEST_TIMEOUT_MS);
+      // ── Quotes: prefer prefetch cache, else single-symbol HTTP ──────────
+      let qv: FyersQuoteFields | null = this.getCachedFyersQuote(cleanSymbol, market);
 
-      if (quotesRes.status === 401) {
-        if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
-          console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
-        }
-        await FyersAuthService.clearToken();
-        return null;
-      }
+      if (!qv) {
+        const quotesUrl = buildFyersQuotesUrl([fyersSymbol]);
+        const quotesRes = await this.fetchWithTimeout(quotesUrl, {
+          cache: 'no-store',
+          headers: authHeaders,
+        }, env.FYERS_REQUEST_TIMEOUT_MS);
 
-      const quotesJson = (await quotesRes.json()) as {
-        s?: string;
-        code?: number;
-        message?: string;
-        d?: Array<{
-          n?: string;
-          s?: string;
-          v?: {
-            lp?: number;
-            open_price?: number;
-            high_price?: number;
-            low_price?: number;
-            prev_close_price?: number;
-            atp?: number;
-            volume?: number;
-          };
-        }>;
-      };
-
-      if (!quotesRes.ok || quotesJson.s !== 'ok' || !Array.isArray(quotesJson.d) || quotesJson.d.length === 0) {
-        if (this.markFyersRateLimited(quotesRes.status, quotesJson.message, quotesJson.code)) {
+        if (quotesRes.status === 401) {
+          if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
+            console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+          }
+          await FyersAuthService.clearToken();
           return null;
         }
-        markPermissionCooldown(quotesRes.status, quotesJson.message);
-        if (this.shouldLogProviderError(`fyers-quotes:${fyersSymbol}:${quotesRes.status}:${quotesJson.code ?? 'na'}`)) {
-          console.warn(
-            `[LiveFeed] Fyers quotes failed for ${fyersSymbol}: HTTP ${quotesRes.status} code=${quotesJson.code} msg=${quotesJson.message ?? ''}`
-          );
-        }
-        return null;
-      }
 
-      const quoteRow = quotesJson.d[0];
-      const qv = quoteRow?.v;
-      if (quoteRow?.s !== 'ok' || !qv || !isPositivePrice(qv.lp)) {
-        if (this.shouldLogProviderError(`fyers-quotes-invalid:${fyersSymbol}`)) {
-          console.warn(`[LiveFeed] Fyers quotes invalid LTP for ${fyersSymbol}`);
+        const quotesJson = (await quotesRes.json()) as FyersQuotesApiResponse;
+
+        if (!quotesRes.ok || quotesJson.s !== 'ok' || !Array.isArray(quotesJson.d) || quotesJson.d.length === 0) {
+          if (this.markFyersRateLimited(quotesRes.status, quotesJson.message, quotesJson.code)) {
+            return null;
+          }
+          markPermissionCooldown(quotesRes.status, quotesJson.message);
+          if (this.shouldLogProviderError(`fyers-quotes:${fyersSymbol}:${quotesRes.status}:${quotesJson.code ?? 'na'}`)) {
+            console.warn(
+              `[LiveFeed] Fyers quotes failed for ${fyersSymbol}: HTTP ${quotesRes.status} code=${quotesJson.code} msg=${quotesJson.message ?? ''}`
+            );
+          }
+          return null;
         }
-        return null;
+
+        const parsed = parseFyersQuotesResponse(quotesJson, market);
+        qv = parsed.get(cleanSymbol.trim().toUpperCase()) ?? null;
+        if (!qv) {
+          // Fallback: first row if symbol key mismatch (e.g. alias)
+          const first = quotesJson.d[0];
+          if (first?.s === 'ok' && first.v && isPositivePrice(first.v.lp)) {
+            qv = {
+              lp: first.v.lp,
+              open_price: isPositivePrice(first.v.open_price) ? first.v.open_price : undefined,
+              high_price: isPositivePrice(first.v.high_price) ? first.v.high_price : undefined,
+              low_price: isPositivePrice(first.v.low_price) ? first.v.low_price : undefined,
+              prev_close_price: isPositivePrice(first.v.prev_close_price)
+                ? first.v.prev_close_price
+                : undefined,
+              atp: isPositivePrice(first.v.atp) ? first.v.atp : undefined,
+              volume:
+                typeof first.v.volume === 'number' && Number.isFinite(first.v.volume) && first.v.volume >= 0
+                  ? first.v.volume
+                  : undefined,
+            };
+          }
+        }
+
+        if (!qv || !isPositivePrice(qv.lp)) {
+          if (this.shouldLogProviderError(`fyers-quotes-invalid:${fyersSymbol}`)) {
+            console.warn(`[LiveFeed] Fyers quotes invalid LTP for ${fyersSymbol}`);
+          }
+          return null;
+        }
+
+        this.seedFyersQuoteCache(cleanSymbol, market, qv);
       }
 
       const ltp = qv.lp;
@@ -1273,9 +1445,7 @@ export class MarketService {
     }
 
     const probeSymbol = 'NSE:SBIN-EQ';
-    const url =
-      `https://api-t1.fyers.in/data/quotes?` +
-      new URLSearchParams({ symbols: probeSymbol }).toString();
+    const url = buildFyersQuotesUrl([probeSymbol]);
 
     try {
       const res = await this.fetchWithTimeout(url, {

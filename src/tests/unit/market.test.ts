@@ -221,6 +221,7 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.strictEqual(yahooCalls, 0, 'Yahoo must not be consulted when Fyers Primary succeeds');
       assert.ok(cached, 'successful Fyers Primary should populate cache');
     } finally {
+      MarketService.clearFyersQuoteCache();
       MarketService.clearFyersPermissionBlock();
       (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
       global.fetch = originalFetch;
@@ -488,5 +489,100 @@ test('MarketService Fyers Rate Limit Circuit Breaker', async (t) => {
 
     MarketService.noteFyersHttpFailure(500, 'internal server error');
     assert.strictEqual(MarketService.isFyersTemporarilyUnavailable(), false);
+  });
+});
+
+test('MarketService Fyers quote batch prefetch', async (t) => {
+  await t.test('prefetchFyersQuotes seeds cache; getStockData skips per-symbol quotes HTTP', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
+    const originalClearToken = FyersAuthService.clearToken;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    MarketService.clearFyersQuoteCache();
+    MarketService.clearFyersPermissionBlock();
+    (MarketService as unknown as { fyersRateLimitedUntilMs: number }).fyersRateLimitedUntilMs = 0;
+
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+    FyersAuthService.getAccessToken = async () => 'fyers_test_token';
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
+    FyersAuthService.clearToken = async () => {};
+
+    const candles: Array<[number, number, number, number, number, number]> = [];
+    const start = Date.UTC(2026, 0, 1) / 1000;
+    for (let i = 0; i < 30; i++) {
+      const px = 100 + i;
+      candles.push([start + i * 86400, px, px + 1, px - 1, px, 1000 + i]);
+    }
+
+    let quotesHttpCalls = 0;
+    let historyHttpCalls = 0;
+
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('api-t1.fyers.in/data/quotes')) {
+        quotesHttpCalls++;
+        // Batch URL should include both symbols
+        assert.ok(
+          url.includes('AAA-EQ') && url.includes('BBB-EQ'),
+          'batch quotes URL should include both symbols'
+        );
+        return new Response(JSON.stringify({
+          s: 'ok',
+          code: 200,
+          d: [
+            { n: 'NSE:AAA-EQ', s: 'ok', v: { lp: 111, open_price: 110, prev_close_price: 109, volume: 1000 } },
+            { n: 'NSE:BBB-EQ', s: 'ok', v: { lp: 222, open_price: 220, prev_close_price: 218, volume: 2000 } },
+          ],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url.includes('api-t1.fyers.in/data/history')) {
+        historyHttpCalls++;
+        if (url.includes('resolution=15')) {
+          return new Response(JSON.stringify({ s: 'ok', code: 200, candles: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ s: 'ok', code: 200, candles }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const pref = await MarketService.prefetchFyersQuotes(['AAA', 'BBB'], 'NSE');
+      assert.equal(pref.seeded, 2);
+      assert.equal(quotesHttpCalls, 1, 'universe quotes should be one batch HTTP');
+
+      const a = await MarketService.getStockData('AAA', 'NSE');
+      const b = await MarketService.getStockData('BBB', 'NSE');
+      assert.ok(a && b);
+      assert.equal(a!.ltp, 111);
+      assert.equal(b!.ltp, 222);
+      assert.equal(quotesHttpCalls, 1, 'getStockData must not re-hit quotes when cache seeded');
+      assert.ok(historyHttpCalls >= 2, 'daily history still fetched per symbol');
+    } finally {
+      MarketService.clearFyersQuoteCache();
+      MarketService.clearFyersPermissionBlock();
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
+      FyersAuthService.clearToken = originalClearToken;
+    }
   });
 });

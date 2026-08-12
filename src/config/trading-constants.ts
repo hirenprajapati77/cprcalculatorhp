@@ -24,6 +24,21 @@ export const BREAKOUT_CONFIRMATION = {
   RECLAIM_HOLD_MINUTES: 5,
 } as const;
 
+/**
+ * India VIX regime for automated CPR breakout Telegram alerts (cron-only).
+ * Aligns pause threshold with overnight INDIA_VIX_ELEVATED_MIN (25).
+ */
+export const BREAKOUT_VIX = {
+  /** Pause all automated breakout alerts when latest India VIX close >= this. */
+  PAUSE_ALERTS_MIN: 25,
+  /** Tighten entry chase + minimum score when VIX is elevated but below pause. */
+  TIGHTEN_MIN: 18,
+  /** Stricter entry-chase cap (%) in the tighten band (default gate uses 3.5%). */
+  TIGHTENED_ENTRY_EXTENSION_PCT: 2.0,
+  /** Minimum scanner score to alert in the tighten band. */
+  TIGHTEN_MIN_SCORE: 85,
+} as const;
+
 export const BTST_SCORING = {
   // Original continuous CLV multiplier
   CLV_CONTINUOUS_MULTIPLIER: 100,

@@ -88,6 +88,10 @@ export class ScannerController {
     const symbols = stocks.map(s => s.symbol.trim());
     const eventRisks = await EventCalendarService.getBulkEventRisk(symbols, today);
 
+    // One/few Fyers quotes HTTP for the whole universe (≤50/req) so per-symbol
+    // getStockData skips N quote round-trips (history/15m still per-symbol).
+    await MarketService.prefetchFyersQuotes(symbols, market);
+
     // Parallel fetch with batching — shrink when Fyers is rate-limited (Oracle 1GB VM).
     const batchSize = MarketService.isFyersTemporarilyUnavailable() ? 2 : 5;
     if (batchSize < 5) {
