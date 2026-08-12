@@ -4,7 +4,9 @@ import { prisma } from '../../lib/db';
 import { env, envSchemaForTests } from '../../config/env';
 import { OptionSuggestionService } from '../../services/option-suggestion.service';
 import { TradeJournalService } from '../../services/journal/trade-journal.service';
+import { MarketService } from '../../services/market.service';
 import { runCprJournalJob } from '../../services/scheduler/cpr-journal.job';
+import type { MarketStockData } from '../../services/market.service';
 
 type ScannerRow = {
   symbol: string;
@@ -22,7 +24,9 @@ type ScannerRow = {
 function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
   return {
     symbol: 'TEST',
-    ltp: 105,
+    // Keep LTP within ±3.5% of entry so the price-staleness gate does not fire
+    // unless a test intentionally extends/gaps.
+    ltp: 103,
     entry: 100,
     sl: 98,
     target: 110,
@@ -35,22 +39,28 @@ function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
   };
 }
 
+type MarketFixture = Partial<MarketStockData> | null | 'throw';
+
 type Mocks = {
   restore: () => void;
   suggestCalls: string[];
-  suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT' }>;
+  suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT'; ltp: number }>;
   logCalls: unknown[];
   findManyArgs: unknown[];
 };
 
-function mockJobDeps(rows: ScannerRow[]): Mocks {
+function mockJobDeps(
+  rows: ScannerRow[],
+  marketBySymbol: Record<string, MarketFixture> = {}
+): Mocks {
   const originalCount = prisma.scannerResult.count;
   const originalFindMany = prisma.scannerResult.findMany;
   const originalSuggest = OptionSuggestionService.suggestOptionForBtst;
   const originalLog = TradeJournalService.logSignal;
+  const originalGetStock = MarketService.getStockData;
 
   const suggestCalls: string[] = [];
-  const suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT' }> = [];
+  const suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT'; ltp: number }> = [];
   const logCalls: unknown[] = [];
   const findManyArgs: unknown[] = [];
 
@@ -61,13 +71,36 @@ function mockJobDeps(rows: ScannerRow[]): Mocks {
     return rows.slice(0, take);
   }) as unknown as typeof prisma.scannerResult.findMany;
 
+  MarketService.getStockData = (async (symbol: string) => {
+    const key = symbol.toUpperCase();
+    const fixture = marketBySymbol[key] ?? marketBySymbol[symbol] ?? null;
+    if (fixture === 'throw') throw new Error('market down');
+    if (fixture == null) return null;
+    return {
+      symbol: key,
+      market: 'NSE',
+      sector: 'Other',
+      open: fixture.open ?? fixture.ltp ?? 100,
+      high: fixture.high ?? 0,
+      low: fixture.low ?? 0,
+      close: fixture.close ?? fixture.ltp ?? 100,
+      ltp: fixture.ltp ?? 100,
+      volume: 0,
+      avgVolume: 0,
+      marketCap: 0,
+      history: [],
+      previousClose: fixture.previousClose,
+      ...fixture,
+    } as MarketStockData;
+  }) as unknown as typeof MarketService.getStockData;
+
   OptionSuggestionService.suggestOptionForBtst = (async (
     symbol: string,
     ltp: number,
     direction: 'LONG' | 'SHORT'
   ) => {
     suggestCalls.push(symbol);
-    suggestArgs.push({ symbol, direction });
+    suggestArgs.push({ symbol, direction, ltp });
     const optionType = direction === 'SHORT' ? 'PE' : 'CE';
     return { strike: 100, ltp: 5.5, formattedName: `${symbol} 100 ${optionType}` };
   }) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
@@ -83,6 +116,7 @@ function mockJobDeps(rows: ScannerRow[]): Mocks {
       prisma.scannerResult.findMany = originalFindMany;
       OptionSuggestionService.suggestOptionForBtst = originalSuggest;
       TradeJournalService.logSignal = originalLog;
+      MarketService.getStockData = originalGetStock;
     },
     suggestCalls,
     suggestArgs,
@@ -95,7 +129,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
   await t.test('skips signal whose LTP never reached the entry trigger', async () => {
     const mocks = mockJobDeps([
       makeSignal({ symbol: 'NOTRIG', ltp: 95, entry: 100 }),
-      makeSignal({ symbol: 'TRIG', ltp: 105, entry: 100 }),
+      makeSignal({ symbol: 'TRIG', ltp: 103, entry: 100 }),
     ]);
     try {
       const result = await runCprJournalJob();
@@ -193,7 +227,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
   });
 
   await t.test('journals UNDERLYING stock LTP when option chain is unavailable', async () => {
-    const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 105, entry: 100 })]);
+    const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 103, entry: 100 })]);
     OptionSuggestionService.suggestOptionForBtst = (async () => ({
       error: 'NO_CHAIN',
     })) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
@@ -204,7 +238,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       const logCall = mocks.logCalls[0] as any;
       assert.strictEqual(logCall.optionContract, 'UNDERLYING CE');
       assert.strictEqual(logCall.optionStrike, 0);
-      assert.strictEqual(logCall.entryCmp, 105);
+      assert.strictEqual(logCall.entryCmp, 103);
     } finally {
       mocks.restore();
     }
@@ -272,6 +306,50 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     } finally {
       mocks.restore();
       env.CPR_JOURNAL_MAX_SIGNALS = originalMax;
+    }
+  });
+
+  await t.test('skips GAP_INVALIDATED when live OHLC leaves entry unreachable', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'GODREJCP', ltp: 940, entry: 1034.2, bc: 1034.2, tc: 1050, sl: 1060, target: 1000 })],
+      {
+        GODREJCP: { ltp: 940, high: 951.8, low: 922.5, open: 945, previousClose: 1030 },
+      }
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['GODREJCP:GAP_INVALIDATED']);
+      assert.deepStrictEqual(result.logged, []);
+      assert.strictEqual(mocks.suggestCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('skips EXTENDED when LTP chased past entry without market OHLC', async () => {
+    const mocks = mockJobDeps([
+      makeSignal({ symbol: 'CHASE', ltp: 105, entry: 100 }),
+    ]);
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['CHASE:EXTENDED']);
+      assert.deepStrictEqual(result.logged, []);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('uses live LTP for option suggest when market data is fresh', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'LIVE', ltp: 101, entry: 100 })],
+      { LIVE: { ltp: 102.5, high: 103, low: 99.8, open: 101, previousClose: 99.5 } }
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['LIVE']);
+      assert.strictEqual(mocks.suggestArgs[0]?.ltp, 102.5);
+    } finally {
+      mocks.restore();
     }
   });
 });

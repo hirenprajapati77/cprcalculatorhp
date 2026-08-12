@@ -2,6 +2,11 @@ import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
+import { MarketService } from '@/services/market.service';
+import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
+import { inferCprJournalDirection } from '@/lib/cpr-direction';
+
+export { inferCprJournalDirection } from '@/lib/cpr-direction';
 
 export type CprJournalJobResult = {
   success: boolean;
@@ -9,37 +14,6 @@ export type CprJournalJobResult = {
   skipped: string[];
   message?: string;
 };
-
-/**
- * Infer CPR journal direction from persisted ScannerResult levels.
- * TC entry → LONG, BC entry → SHORT, RANGE (pivot) → SL/target geometry
- * (sl > entry or target < entry → SHORT). Legacy entry≤0 → LONG.
- */
-export function inferCprJournalDirection(signal: {
-  entry: number | null;
-  bc: number | null;
-  tc: number | null;
-  sl: number | null;
-  target: number | null;
-}): 'LONG' | 'SHORT' {
-  const entry = signal.entry ?? 0;
-  if (entry <= 0) return 'LONG';
-
-  const bc = signal.bc ?? 0;
-  const tc = signal.tc ?? 0;
-
-  // Bias branch pins entry to today's TC (bullish) or BC (bearish).
-  // tc/bc/entry are toFixed(2) from the same raw cprToday value.
-  if (entry === bc && bc !== tc) return 'SHORT';
-  if (entry === tc && bc !== tc) return 'LONG';
-
-  // RANGE: entry = pivot. Short mean-revert has SL above entry / target below.
-  const sl = signal.sl;
-  if (sl != null && sl > entry) return 'SHORT';
-  const target = signal.target;
-  if (target != null && target < entry) return 'SHORT';
-  return 'LONG';
-}
 
 /**
  * Shared CPR journal pipeline for cron route and in-process scheduler.
@@ -123,6 +97,44 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       continue;
     }
 
+    // Gap / extension gate — same helpers as breakout Telegram pre-send.
+    // Prefer live OHLC from MarketService; fall back to entry-chase on signal.ltp alone.
+    let todayHigh = 0;
+    let todayLow = 0;
+    let previousClose: number | undefined;
+    let open: number | undefined;
+    let liveLtp = signal.ltp;
+    try {
+      const stockData = await MarketService.getStockData(cleanSym, 'NSE');
+      if (stockData) {
+        todayHigh = stockData.high || 0;
+        todayLow = stockData.low || 0;
+        previousClose = stockData.previousClose;
+        open = stockData.open;
+        if (stockData.ltp > 0) liveLtp = stockData.ltp;
+      }
+    } catch (mktErr) {
+      console.warn(`[CPRJournal] Market data fetch failed for ${signal.symbol}:`, mktErr);
+    }
+
+    const staleness = evaluateCprSetupPriceStaleness({
+      entry: signal.entry,
+      ltp: liveLtp,
+      direction: tag,
+      todayHigh,
+      todayLow,
+      ...(previousClose != null ? { previousClose } : {}),
+      ...(open != null ? { open } : {}),
+      symbol: signal.symbol,
+    });
+    if (staleness.stale) {
+      console.warn(
+        `[CPRJournal] ${signal.symbol} skipped (${staleness.reason}): ${staleness.detail}`
+      );
+      skipped.push(`${signal.symbol}:${staleness.reason}`);
+      continue;
+    }
+
     const fallbackOptionType = isBearish ? 'PE' : 'CE';
     let optionName: string;
     let optionStrike: number;
@@ -133,7 +145,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     try {
       const suggestion = await OptionSuggestionService.suggestOptionForBtst(
         cleanSym,
-        signal.ltp,
+        liveLtp,
         tag,
         signal.entry,
         signal.sl,
@@ -162,7 +174,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         optionType = fallbackOptionType;
         optionName = TradeJournalService.underlyingOptionContract(optionType);
         optionStrike = 0;
-        entryCmp = signal.ltp;
+        entryCmp = liveLtp;
       }
     } catch (optErr) {
       console.warn(
@@ -173,7 +185,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       optionType = fallbackOptionType;
       optionName = TradeJournalService.underlyingOptionContract(optionType);
       optionStrike = 0;
-      entryCmp = signal.ltp;
+      entryCmp = liveLtp;
     }
 
     const didLog = await TradeJournalService.logSignal({
