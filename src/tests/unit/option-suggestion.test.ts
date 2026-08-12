@@ -1,4 +1,4 @@
-process.env.NODE_ENV = 'test';
+(process.env as any).NODE_ENV = 'test';
 import test from 'node:test';
 import assert from 'node:assert';
 import { FyersAuthService } from '../../services/fyers-auth.service';
