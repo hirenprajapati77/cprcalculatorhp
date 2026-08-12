@@ -25,6 +25,12 @@ export interface BreakoutScanResult {
   score: number;
   sector: string;
   eventRiskScore?: number;
+  /** Today's observed high (from scan MarketStockData) — used by pre-send price gate. */
+  high?: number;
+  /** Today's observed low (from scan MarketStockData) — used by pre-send price gate. */
+  low?: number;
+  open?: number;
+  previousClose?: number;
   /** Which signal triggered this alert row (set by detectNewBreakouts). */
   alertKind?: BreakoutAlertKind;
   /** Pre-fetched by breakout-alert.pipeline before Telegram send (optional). */
