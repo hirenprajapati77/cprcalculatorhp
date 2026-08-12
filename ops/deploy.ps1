@@ -127,7 +127,7 @@ ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubun
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
 Log "Verifying PM2 memory limit on server..."
-$pm2Max = (ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER 'pm2 show cpr-platform 2>/dev/null | grep "max memory restart" | sed -E "s/[^0-9]//g"').Trim()
+$pm2Max = (ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER 'pm2 show cpr-platform 2>/dev/null | grep -E "max.*memory.*restart" | sed -E "s/[^0-9]//g"').Trim()
 if ($pm2Max -ne "681574400") {
     Err "PM2 max_memory_restart is '$pm2Max' (expected 681574400 / 650M). Check /home/ubuntu/ecosystem.config.cjs"
 }
