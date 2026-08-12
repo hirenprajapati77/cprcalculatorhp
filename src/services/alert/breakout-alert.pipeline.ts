@@ -4,6 +4,7 @@ import { MarketSessionResolver } from '@/config/market-profile';
 import { getISTDateString, shouldFreezeBreakouts } from '@/lib/market-hours';
 import { MarketService } from '@/services/market.service';
 import type { OptionSuggestion } from '@/services/option-suggestion.service';
+import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-price-gate';
 
 /**
  * Cap concurrent option-chain lookups for confirmed breakout alerts.
@@ -38,6 +39,10 @@ export type ScanResultForBreakoutAlert = {
   sector?: string | null;
   eventRiskScore?: number | null;
   degenerateData?: boolean | null;
+  high?: number | null;
+  low?: number | null;
+  open?: number | null;
+  previousClose?: number | null;
 };
 
 export function mapScanResultsForBreakoutAlert(
@@ -63,6 +68,10 @@ export function mapScanResultsForBreakoutAlert(
       score: r.score ?? 0,
       sector: r.sector ?? 'Other',
       eventRiskScore: r.eventRiskScore ?? 0,
+      ...(r.high != null ? { high: r.high } : {}),
+      ...(r.low != null ? { low: r.low } : {}),
+      ...(r.open != null ? { open: r.open } : {}),
+      ...(r.previousClose != null ? { previousClose: r.previousClose } : {}),
     };
   });
 }
@@ -192,7 +201,25 @@ export function notifyBreakoutsFromScan(
       claimedKeys = newBreakouts.map((b) =>
         breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
       );
-      const enriched = await enrichBreakoutsWithOptionSuggestions(newBreakouts);
+
+      // Pre-send gate: gap-invalidated / extended entries never hit Telegram.
+      // Release claims for suppressed rows so a later pullback into the entry
+      // zone can still alert (unlike a real delivered alert which keeps cooldown).
+      const { actionable, suppressed } = filterBreakoutsForPriceActionability(newBreakouts);
+      if (suppressed.length > 0) {
+        const suppressKeys = suppressed.map((b) =>
+          breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
+        );
+        await BreakoutWatcherService.releaseClaims(suppressKeys);
+        claimedKeys = claimedKeys.filter((k) => !suppressKeys.includes(k));
+        console.log(
+          `[BreakoutWatcher] ${label}: suppressed ${suppressed.length} stale-price alert(s): ` +
+            suppressed.map((s) => `${s.symbol}:${s.gateReason}`).join(', ')
+        );
+      }
+      if (actionable.length === 0) return;
+
+      const enriched = await enrichBreakoutsWithOptionSuggestions(actionable);
       const result = await TelegramService.sendBreakoutAlert(enriched);
       if (!result.ok) {
         console.error(
