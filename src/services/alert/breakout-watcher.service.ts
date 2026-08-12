@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
 import type { OptionSuggestion } from '../option-suggestion.service';
+import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
 
 const MIN_BREAKOUT_ALERT_SCORE = 75;
 
@@ -233,6 +234,7 @@ export class BreakoutWatcherService {
   /**
    * Undo claims when Telegram delivery fails so the next scan can re-alert.
    * Accepts either bare symbols (legacy) or `symbol:KIND` claim keys.
+   * Clears lastAlerted — used for never-delivered / gate-suppressed claims.
    */
   static async releaseClaims(symbolsOrKeys: string[]): Promise<void> {
     if (symbolsOrKeys.length === 0) return;
@@ -256,6 +258,61 @@ export class BreakoutWatcherService {
         err
       );
     }
+  }
+
+  /**
+   * Clear hadBreakout for already-delivered alerts whose entry is now
+   * gap-invalidated / extended, but keep lastAlerted so the 4h cooldown still
+   * blocks an immediate re-spam. After cooldown, a pullback into the entry
+   * zone can alert again; while still stale the pre-send gate suppresses.
+   */
+  static async releaseStaleDeliveredClaims(
+    scanResults: BreakoutScanResult[]
+  ): Promise<string[]> {
+    const staleKeys: string[] = [];
+
+    for (const r of scanResults) {
+      for (const kind of ['BREAKOUT', 'BREAKDOWN'] as const) {
+        if (!r.signals?.includes(kind)) continue;
+        const direction = kind === 'BREAKDOWN' ? 'SHORT' : 'LONG';
+        const verdict = evaluateCprSetupPriceStaleness({
+          entry: r.entry,
+          ltp: r.ltp,
+          direction,
+          ...(r.high != null ? { todayHigh: r.high } : {}),
+          ...(r.low != null ? { todayLow: r.low } : {}),
+          ...(r.previousClose != null ? { previousClose: r.previousClose } : {}),
+          ...(r.open != null ? { open: r.open } : {}),
+          symbol: r.symbol,
+          sector: r.sector,
+        });
+        if (verdict.stale) {
+          staleKeys.push(breakoutAlertClaimKey(r.symbol, kind));
+        }
+      }
+    }
+
+    if (staleKeys.length === 0) return [];
+
+    try {
+      const updated = await prisma.breakoutAlertState.updateMany({
+        where: { symbol: { in: staleKeys }, hadBreakout: true },
+        data: { hadBreakout: false },
+      });
+      if (updated.count > 0) {
+        console.log(
+          `[BreakoutWatcher] Released ${updated.count} stale-price delivered claim(s) ` +
+            `(cooldown preserved): ${staleKeys.join(', ')}`
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[BreakoutWatcher] Failed to release stale delivered claims for ${staleKeys.join(',')}:`,
+        err
+      );
+    }
+
+    return staleKeys;
   }
 
   static async resetDailyState(): Promise<void> {
