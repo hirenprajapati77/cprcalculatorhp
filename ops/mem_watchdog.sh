@@ -6,7 +6,7 @@ APP="/home/ubuntu/cpr-calculator-platform/.next/standalone"
 ECOSYSTEM="/home/ubuntu/ecosystem.config.cjs"
 
 rotate_log() {
-  if [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt "$MAX_LOG_LINES" ]; then
+  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG" 2>/dev/null || echo 0)" -gt "$MAX_LOG_LINES" ]; then
     tail -100 "$LOG" > "${LOG}.tmp" && mv "${LOG}.tmp" "$LOG"
   fi
 }
@@ -37,6 +37,9 @@ is_protected_redis_key() {
     rate_limit:*)
       return 0
       ;;
+    calc:share:*)
+      return 0
+      ;;
     *)
       return 1
       ;;
@@ -44,23 +47,52 @@ is_protected_redis_key() {
 }
 
 prune_redis_cache_preserving_protected_keys() {
+  local start_time
+  start_time=$(python3 -c "import time; print(time.time())" 2>/dev/null || date +%s)
+
   local deleted=0
   local skipped=0
   local key
+  local batch=()
+  local batch_size=500
 
-  # Avoid FLUSHDB so retain-claim and unlock guard keys survive off-hours pressure cleanup.
+  # Avoid FLUSHDB so retain-claim, unlock guards, and calculation share links survive off-hours pressure cleanup.
+  # Other transient keys such as cpr:bullish_state:* (durable in Postgres), option_chain_*, stock_data_*,
+  # scanner_results_*, and history:limit:* are safe to prune; they regenerate dynamically on cache-misses.
   while IFS= read -r key; do
     [ -z "$key" ] && continue
     if is_protected_redis_key "$key"; then
       skipped=$((skipped + 1))
       continue
     fi
-    if redis-cli DEL "$key" >/dev/null 2>&1; then
-      deleted=$((deleted + 1))
+
+    batch+=("$key")
+
+    if [ "${#batch[@]}" -ge "$batch_size" ]; then
+      local num_deleted
+      num_deleted=$(redis-cli DEL "${batch[@]}" 2>/dev/null)
+      if [[ "$num_deleted" =~ ^[0-9]+$ ]]; then
+        deleted=$((deleted + num_deleted))
+      fi
+      batch=()
     fi
   done < <(redis-cli --scan 2>/dev/null)
 
-  echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Redis prune complete: deleted=$deleted preserved=$skipped" >> "$LOG"
+  # Process any remaining keys in final batch
+  if [ "${#batch[@]}" -gt 0 ]; then
+    local num_deleted
+    num_deleted=$(redis-cli DEL "${batch[@]}" 2>/dev/null)
+    if [[ "$num_deleted" =~ ^[0-9]+$ ]]; then
+      deleted=$((deleted + num_deleted))
+    fi
+  fi
+
+  local end_time
+  end_time=$(python3 -c "import time; print(time.time())" 2>/dev/null || date +%s)
+  local elapsed
+  elapsed=$(python3 -c "print(f'{float(\"$end_time\") - float(\"$start_time\"):.3f}')" 2>/dev/null || echo "0")
+
+  echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Redis prune complete: deleted=$deleted preserved=$skipped elapsed=${elapsed}s" >> "$LOG"
 }
 
 # NSE cash session 09:15–15:30 IST (Mon–Fri). During session we avoid Redis cache
