@@ -41,6 +41,8 @@ import {
   cprRatingLabel,
   inferScannerBadgeDirection,
 } from '@/lib/scanner-rating';
+import { evaluateCprSetupPriceStalenessBasic } from '@/lib/cpr-setup-staleness';
+import { inferCprJournalDirection } from '@/lib/cpr-direction';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
 
@@ -435,6 +437,27 @@ const StockRow = React.memo(({
     rowClass += btstRowHighlightClass(row.btstClassification);
   }
 
+  // Flag gap/chase setups (same thresholds as breakout Telegram + CPR journal).
+  // Without day high/low on the API row, entry-chase still catches GODREJCP/NATIONALUM.
+  const setupDirection = inferCprJournalDirection({
+    entry: row.entry,
+    bc: row.bc,
+    tc: row.tc,
+    sl: row.sl,
+    target: row.target,
+  });
+  const setupStale = evaluateCprSetupPriceStalenessBasic({
+    entry: row.entry,
+    ltp: row.ltp,
+    direction: setupDirection,
+  });
+  const staleLabel =
+    setupStale.stale && setupStale.reason === 'GAP_INVALIDATED'
+      ? 'GAP'
+      : setupStale.stale
+        ? 'EXTENDED'
+        : null;
+
   return (
     <tr 
       className={`hover:bg-bg-tertiary/30 transition-colors group border-b border-border-primary/30 ${rowClass}`}
@@ -550,7 +573,15 @@ const StockRow = React.memo(({
       {visibleColumns.includes('setup') && (
         <td className={cellPadding}>
           {row.entry > 0 ? (
-            <div className="flex flex-col gap-1 font-mono text-[10px] leading-tight text-left">
+            <div className={`flex flex-col gap-1 font-mono text-[10px] leading-tight text-left ${staleLabel ? 'opacity-70' : ''}`}>
+              {staleLabel && (
+                <span
+                  className="inline-flex w-fit px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide bg-accent-amber/15 text-accent-amber border border-accent-amber/40"
+                  title={setupStale.stale ? setupStale.detail : undefined}
+                >
+                  {staleLabel} — do not chase
+                </span>
+              )}
               <div className="flex items-center gap-2">
                 <span className="text-text-tertiary">Entry</span>
                 <span className="font-bold text-text-primary">₹{fmt(row.entry)}</span>

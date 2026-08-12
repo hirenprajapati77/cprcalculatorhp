@@ -1,11 +1,21 @@
 import { EXTENSION_LIMITS, EntryManagerService } from '@/services/overnight/entry-manager.service';
 import type { BreakoutScanResult, BreakoutAlertKind } from '@/services/alert/breakout-watcher.service';
 import type { MarketStockData } from '@/services/market.service';
+import {
+  BREAKOUT_GAP_BUFFER,
+  evaluateCprSetupPriceStalenessBasic,
+  isBreakoutEntryExtended,
+  isBreakoutEntryGapInvalidated,
+  type CprSetupStaleReason,
+} from '@/lib/cpr-setup-staleness';
 
-/** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
-export const BREAKOUT_GAP_BUFFER = 0.002;
+export {
+  BREAKOUT_GAP_BUFFER,
+  isBreakoutEntryExtended,
+  isBreakoutEntryGapInvalidated,
+} from '@/lib/cpr-setup-staleness';
 
-export type BreakoutPriceGateReason = 'GAP_INVALIDATED' | 'EXTENDED';
+export type BreakoutPriceGateReason = CprSetupStaleReason;
 
 export type BreakoutPriceGateResult = {
   actionable: BreakoutScanResult[];
@@ -22,40 +32,77 @@ function alertDirection(b: BreakoutScanResult): 'LONG' | 'SHORT' {
 }
 
 /**
- * Entry unreachable given today's observed range (gapped away from CPR entry).
- * True when entry sits outside [todayLow×(1−buffer), todayHigh×(1+buffer)] —
- * covers GODREJCP-style SHORT entries above the day high and the symmetric
- * LONG case below the day low (and the inverse gap directions).
+ * Shared CPR/breakout price-staleness check (gap + extension/chase + ATR when available).
+ * Used by Telegram pre-send gate and CPR journal.
+ * Scanner UI should import evaluateCprSetupPriceStalenessBasic from `@/lib/cpr-setup-staleness`.
  */
-export function isBreakoutEntryGapInvalidated(args: {
-  entry: number;
-  todayHigh: number;
-  todayLow: number;
-  direction: 'LONG' | 'SHORT';
-  buffer?: number;
-}): boolean {
-  const { entry, todayHigh, todayLow } = args;
-  const buffer = args.buffer ?? BREAKOUT_GAP_BUFFER;
-  if (!(entry > 0 && todayHigh > 0 && todayLow > 0)) return false;
-  return entry > todayHigh * (1 + buffer) || entry < todayLow * (1 - buffer);
-}
-
-/**
- * LTP already chased past entry by more than BTST's extension day-return cap (3.5%).
- * Reuses EXTENSION_LIMITS — does not invent a new threshold.
- */
-export function isBreakoutEntryExtended(args: {
+export function evaluateCprSetupPriceStaleness(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
-}): boolean {
-  const { entry, ltp, direction } = args;
-  if (!(entry > 0 && ltp > 0)) return false;
-  const pctPastEntry = ((ltp - entry) / entry) * 100;
-  if (direction === 'LONG') {
-    return pctPastEntry >= EXTENSION_LIMITS.MAX_DAY_RETURN_PCT;
+  todayHigh?: number;
+  todayLow?: number;
+  previousClose?: number;
+  open?: number;
+  symbol?: string;
+  sector?: string;
+}): { stale: true; reason: BreakoutPriceGateReason; detail: string } | { stale: false } {
+  const {
+    entry,
+    ltp,
+    direction,
+    todayHigh = 0,
+    todayLow = 0,
+    previousClose,
+    open,
+    symbol = 'UNKNOWN',
+    sector = 'Other',
+  } = args;
+
+  const basic = evaluateCprSetupPriceStalenessBasic({
+    entry,
+    ltp,
+    direction,
+    todayHigh,
+    todayLow,
+  });
+  if (basic.stale && basic.reason === 'GAP_INVALIDATED') return basic;
+
+  if (todayHigh > 0 && todayLow > 0 && (previousClose ?? 0) > 0) {
+    const stock: MarketStockData = {
+      symbol,
+      market: 'NSE',
+      sector,
+      open: open ?? ltp,
+      high: todayHigh,
+      low: todayLow,
+      close: ltp,
+      ltp,
+      volume: 0,
+      avgVolume: 0,
+      marketCap: 0,
+      history: [],
+      ...(previousClose != null ? { previousClose } : {}),
+    };
+    const ext = EntryManagerService.evaluateExtension(stock, direction);
+    if (!ext.eligible) {
+      return { stale: true, reason: 'EXTENDED', detail: ext.reason ?? 'EXTENDED' };
+    }
   }
-  return pctPastEntry <= -EXTENSION_LIMITS.MAX_DAY_DROP_PCT;
+
+  if (basic.stale) return basic;
+
+  // Defensive: keep detail wording aligned with EXTENSION_LIMITS if constants drift.
+  if (isBreakoutEntryExtended({ entry, ltp, direction })) {
+    const pct = (((ltp - entry) / entry) * 100).toFixed(2);
+    return {
+      stale: true,
+      reason: 'EXTENDED',
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${EXTENSION_LIMITS.MAX_DAY_RETURN_PCT}%)`,
+    };
+  }
+
+  return { stale: false };
 }
 
 /**
@@ -72,57 +119,24 @@ export function filterBreakoutsForPriceActionability(
 
   for (const b of breakouts) {
     const direction = alertDirection(b);
-    const todayHigh = b.high ?? 0;
-    const todayLow = b.low ?? 0;
-
-    if (
-      isBreakoutEntryGapInvalidated({
-        entry: b.entry,
-        todayHigh,
-        todayLow,
-        direction,
-      })
-    ) {
-      const detail = `entry ${b.entry} outside today range [${todayLow}, ${todayHigh}]`;
-      console.warn(`[BreakoutPriceGate] ${b.symbol} GAP_INVALIDATED — ${detail}; suppressing alert`);
-      suppressed.push({ ...b, gateReason: 'GAP_INVALIDATED', gateDetail: detail });
+    const verdict = evaluateCprSetupPriceStaleness({
+      entry: b.entry,
+      ltp: b.ltp,
+      direction,
+      ...(b.high != null ? { todayHigh: b.high } : {}),
+      ...(b.low != null ? { todayLow: b.low } : {}),
+      ...(b.previousClose != null ? { previousClose: b.previousClose } : {}),
+      ...(b.open != null ? { open: b.open } : {}),
+      symbol: b.symbol,
+      sector: b.sector,
+    });
+    if (verdict.stale) {
+      console.warn(
+        `[BreakoutPriceGate] ${b.symbol} ${verdict.reason} — ${verdict.detail}; suppressing alert`
+      );
+      suppressed.push({ ...b, gateReason: verdict.reason, gateDetail: verdict.detail });
       continue;
     }
-
-    // Prefer full BTST extension gate when OHLC + previousClose are present.
-    if (todayHigh > 0 && todayLow > 0 && (b.previousClose ?? 0) > 0) {
-      const stock: MarketStockData = {
-        symbol: b.symbol,
-        market: 'NSE',
-        sector: b.sector,
-        open: b.open ?? b.ltp,
-        high: todayHigh,
-        low: todayLow,
-        close: b.ltp,
-        ltp: b.ltp,
-        volume: 0,
-        avgVolume: 0,
-        marketCap: 0,
-        history: [],
-        ...(b.previousClose != null ? { previousClose: b.previousClose } : {}),
-      };
-      const ext = EntryManagerService.evaluateExtension(stock, direction);
-      if (!ext.eligible) {
-        const detail = ext.reason ?? 'EXTENDED';
-        console.warn(`[BreakoutPriceGate] ${b.symbol} EXTENDED — ${detail}; suppressing alert`);
-        suppressed.push({ ...b, gateReason: 'EXTENDED', gateDetail: detail });
-        continue;
-      }
-    }
-
-    if (isBreakoutEntryExtended({ entry: b.entry, ltp: b.ltp, direction })) {
-      const pct = (((b.ltp - b.entry) / b.entry) * 100).toFixed(2);
-      const detail = `ltp ${b.ltp} is ${pct}% from entry ${b.entry} (limit ±${EXTENSION_LIMITS.MAX_DAY_RETURN_PCT}%)`;
-      console.warn(`[BreakoutPriceGate] ${b.symbol} EXTENDED — ${detail}; suppressing alert`);
-      suppressed.push({ ...b, gateReason: 'EXTENDED', gateDetail: detail });
-      continue;
-    }
-
     actionable.push(b);
   }
 

@@ -1,4 +1,4 @@
-import { inferCprJournalDirection } from '@/services/scheduler/cpr-journal.job';
+import { inferCprJournalDirection } from '@/lib/cpr-direction';
 
 export type ScannerBadgeDirection = 'LONG' | 'SHORT' | null;
 
