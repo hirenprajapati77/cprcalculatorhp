@@ -332,7 +332,8 @@ export class OptionSuggestionService {
       return { error: 'INVALID_SPOT' };
     }
 
-    if (process.env.NODE_ENV !== 'test') {
+    const isProductionLike = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'development';
+    if (isProductionLike) {
       const today = signalDate || getISTDateString();
       try {
         const eventRisk = await EventCalendarService.getEventRisk(cleanSym, today);
