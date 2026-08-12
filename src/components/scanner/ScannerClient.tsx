@@ -2149,13 +2149,15 @@ export default function ScannerClient() {
   // Fallback path: build from the paginated `results` array (old behaviour, kept for
   // cache-served responses or any code path that does not yet return heatmapSectors).
   const heatmapGridData = useMemo(() => {
-    const SIGNAL_KEYS = ['Strong Buy', 'Breakout', 'Bullish', 'Bearish', 'Watch'] as const;
+    // Column key is direction-neutral "Strong" (score tier), not "Strong Buy" —
+    // SHORT setups use Strong Sell badges but share this heatmap bucket.
+    const SIGNAL_KEYS = ['Strong', 'Breakout', 'Bullish', 'Bearish', 'Watch'] as const;
     type CellKey = typeof SIGNAL_KEYS[number];
     type Cell = { count: number; avgScore: number; symbols: string[]; topStock: string; topStockScore: number };
 
     const makeCell = (): Cell => ({ count: 0, avgScore: 0, symbols: [], topStock: '', topStockScore: 0 });
     const makeRow = (): Record<string, Cell> => ({
-      'Strong Buy': makeCell(),
+      'Strong': makeCell(),
       'Breakout': makeCell(),
       'Bullish': makeCell(),
       'Bearish': makeCell(),
@@ -2166,7 +2168,7 @@ export default function ScannerClient() {
     const grid: Record<string, Record<string, Cell>> = {};
     SECTORS_LIST.forEach(sec => { grid[sec] = makeRow(); });
     const colTotals: Record<string, Cell> = {
-      'Strong Buy': makeCell(),
+      'Strong': makeCell(),
       'Breakout': makeCell(),
       'Bullish': makeCell(),
       'Bearish': makeCell(),
@@ -2176,7 +2178,7 @@ export default function ScannerClient() {
     // ── Server path (full universe) ───────────────────────────────────────────
     if (serverHeatmap) {
       const serverKeyMap: Record<CellKey, 'strongBuy' | 'breakout' | 'bullish' | 'bearish' | 'watch'> = {
-        'Strong Buy': 'strongBuy',
+        'Strong': 'strongBuy',
         'Breakout': 'breakout',
         'Bullish': 'bullish',
         'Bearish': 'bearish',
@@ -2256,7 +2258,7 @@ export default function ScannerClient() {
         matchedAny = true;
       };
 
-      if (score >= thresholds.strong) checkAndAddCell('Strong Buy');
+      if (score >= thresholds.strong) checkAndAddCell('Strong');
       if (score >= thresholds.ready && score < thresholds.strong) checkAndAddCell('Breakout');
       if (
         signals.includes('BULLISH') ||
@@ -2728,7 +2730,7 @@ export default function ScannerClient() {
                         let chipColorClass = 'bg-slate-700 text-slate-300';
                         if (count > 0) {
                           textClass = 'text-text-primary font-bold';
-                          if (sig === 'Strong Buy' || sig === 'Breakout') {
+                          if (sig === 'Strong' || sig === 'Breakout') {
                             bgClass = count >= 3 ? 'bg-accent-purple/30' : 'bg-accent-purple/10';
                             chipColorClass = 'bg-violet-900/60 text-violet-200 border border-violet-500/30';
                           } else if (sig === 'Bullish') {

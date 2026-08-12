@@ -195,7 +195,12 @@ export function notifyBreakoutsFromScan(
   }
 
   let claimedKeys: string[] = [];
-  BreakoutWatcherService.detectNewBreakouts(mapScanResultsForBreakoutAlert(eligible))
+  const mapped = mapScanResultsForBreakoutAlert(eligible);
+  BreakoutWatcherService.releaseStaleDeliveredClaims(mapped)
+    .catch((err) => {
+      console.warn(`[BreakoutWatcher] ${label}: stale-claim cleanup failed:`, err);
+    })
+    .then(() => BreakoutWatcherService.detectNewBreakouts(mapped))
     .then(async (newBreakouts) => {
       if (newBreakouts.length === 0) return;
       claimedKeys = newBreakouts.map((b) =>
