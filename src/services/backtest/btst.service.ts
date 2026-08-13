@@ -419,7 +419,7 @@ export class BtstService {
       vduPoints = 0;
       // INTENTIONALLY DIVERGENT from score-path cprNarrowWeight (fixed BTST_SCORING).
       // scoreBreakdown honors env.CPR_WEIGHT; total score uses constants. Do NOT unify
-      // without explicit owner approval — see AGENTS / acceptance gate §0.2.
+      // without explicit owner approval BEFORE the change — see AGENTS.md Common Pitfalls.
       const cprWeight = env.CPR_WEIGHT !== undefined ? env.CPR_WEIGHT : 35;
       cprPoints = (tomorrowCpr.classification === 'NARROW' || sessionVirgin) ? cprWeight : 0;
     }

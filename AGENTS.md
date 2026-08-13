@@ -67,18 +67,21 @@ This **reverses** the earlier always-write-L1 warm-cache behavior (added to prev
 
 ## Common Pitfalls (Read Before Touching Anything)
 
-1. **`prisma/schema.prisma` must always be `provider = "postgresql"`**  
+1. **`CPR_WEIGHT` / `BTST_SCORING` in `src/services/backtest/btst.service.ts` must stay divergent**
+   Score-path (`calculateLongScore` / `calculateShortScore`) uses `BTST_SCORING.CPR_NARROW_WEIGHT` / `CPR_NARROW_WEIGHT_NO_VDU`. The `scoreBreakdown` path honors `env.CPR_WEIGHT`. This is intentional and has been reverted 3+ times after unauthorized unification. **Any future touch requires explicit owner approval BEFORE the change**, not after via revert. Guarded by the unit test in `src/tests/unit/btst.test.ts`.
+
+2. **`prisma/schema.prisma` must always be `provider = "postgresql"`**  
    `prisma-setup.js` silently switches it to `sqlite` locally. Always check before building.
 
-2. **`NEXT_PUBLIC_BASE_URL` is inlined at BUILD time**  
+3. **`NEXT_PUBLIC_BASE_URL` is inlined at BUILD time**  
    Production build must use `https://129-159-230-41.nip.io` (see `ops/deploy.ps1`). Prefer that HTTPS URL in the browser — not bare `http://IP` — so Secure session cookies stick.
 
-3. **Cookie `Secure` flag must NOT use `NODE_ENV === 'production'`**  
+4. **Cookie `Secure` flag must NOT use `NODE_ENV === 'production'`**  
    Use request HTTPS / `X-Forwarded-Proto` / `NEXT_PUBLIC_BASE_URL.startsWith('https://')` (`src/lib/auth-cookie.ts`). Nginx TLS terminates at nip.io; Node still listens on localhost HTTP behind the proxy.
 
-4. **Redis errors during `npm run build` are normal** — no local Redis, it falls back to memory.
+5. **Redis errors during `npm run build` are normal** — no local Redis, it falls back to memory.
 
-5. **After deploy, always restore `.env` `NEXT_PUBLIC_BASE_URL` to `http://localhost:3000`**  
+6. **After deploy, always restore `.env` `NEXT_PUBLIC_BASE_URL` to `http://localhost:3000`**  
    `deploy.ps1` does this automatically.
 
 ---
