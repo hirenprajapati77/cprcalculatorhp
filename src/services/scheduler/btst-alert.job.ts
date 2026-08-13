@@ -31,6 +31,14 @@ function isUniqueConstraintError(err: unknown): boolean {
   );
 }
 
+const SEND_ATTEMPTS_LIMIT = 2;
+/** Survives cron re-entry in the same process. Lost on PM2 restart (one extra retry at most). */
+const sendAttemptCounts = new Map<string, number>();
+
+export function resetBtstAlertSendAttemptsForTests(): void {
+  sendAttemptCounts.clear();
+}
+
 export type BtstAlertJobResult = {
   sent: boolean;
   reason?: string | undefined;
@@ -404,13 +412,33 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
 
   const rollbackClaims = async (reason: string) => {
     if (claimedSymbols.length === 0) return;
+
+    // L5: Track attempts per date+claim across cron ticks (module Map, not per-invocation).
+    // After SEND_ATTEMPTS_LIMIT failures, keep the claim so 15:10–15:25 does not re-spam.
+    const keysToRollback: string[] = [];
+    for (const key of claimedSymbols) {
+      const attemptKey = `${signalDate}:${key}`;
+      const attempts = (sendAttemptCounts.get(attemptKey) ?? 0) + 1;
+      sendAttemptCounts.set(attemptKey, attempts);
+      if (attempts >= SEND_ATTEMPTS_LIMIT) {
+        console.warn(
+          `[BtstAlert] ${key} reached max retry attempts (${attempts}/${SEND_ATTEMPTS_LIMIT}) — ` +
+          `preserving claim state to prevent 3:20 PM Telegram retry storm (${reason}).`
+        );
+      } else {
+        keysToRollback.push(key);
+      }
+    }
+
+    if (keysToRollback.length === 0) return;
+
     try {
       await prisma.btstAlertState.deleteMany({
-        where: { date: signalDate, symbol: { in: claimedSymbols } },
+        where: { date: signalDate, symbol: { in: keysToRollback } },
       });
     } catch (rollbackErr) {
       console.error(
-        `[BtstAlert] Failed to roll back claims (${reason}) for ${claimedSymbols.join(',')}:`,
+        `[BtstAlert] Failed to roll back claims (${reason}) for ${keysToRollback.join(',')}:`,
         rollbackErr
       );
     }

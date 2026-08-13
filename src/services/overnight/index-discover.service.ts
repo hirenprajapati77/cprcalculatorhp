@@ -17,6 +17,7 @@ import {
   getISTDateString,
   getISTTime,
   BTST_CLOCK,
+  getCompletedHistory,
 } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { HistoricalProvider, OHLC } from '../backtest/historical.provider';
@@ -574,7 +575,9 @@ export class IndexDiscoverService {
         const sessionChangePct =
           prevClose > 0 ? (todayCandle.close - prevClose) / prevClose : 0;
 
-        const atrPct = getAtrPct(history.slice(0, -1), yesterdayCandle.close);
+        // M2 fix: Use getCompletedHistory to strip today's bar if present,
+        // rather than naive history.slice(0, -1) which drops yesterday's bar if today's is missing.
+        const atrPct = getAtrPct(getCompletedHistory(history), yesterdayCandle.close);
 
         const todayCpr = calculateCPR(
           { high: yesterdayCandle.high, low: yesterdayCandle.low, close: yesterdayCandle.close },
@@ -869,11 +872,8 @@ export class IndexDiscoverService {
 
         const direction: 'LONG' | 'SHORT' = bullish ? 'LONG' : 'SHORT';
 
-        const atrHistory =
-          lastCandle.date === dateStr && history.length >= 2
-            ? history.slice(0, -1)
-            : history;
-        const atrPct = getAtrPct(atrHistory, previousClose);
+        // M2 fix: Use getCompletedHistory consistently for ATR history.
+        const atrPct = getAtrPct(getCompletedHistory(history), previousClose);
         const cprSourceCandle = previousSessionCandle;
         const realCpr = calculateCPR(
           { high: cprSourceCandle.high, low: cprSourceCandle.low, close: cprSourceCandle.close },

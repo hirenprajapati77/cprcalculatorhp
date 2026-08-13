@@ -87,8 +87,12 @@ export type BtstJournalJobResult = {
 export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
   const signalDate = TradeJournalService.todayISTString();
   const regime = await RegimeService.getMarketRegime(signalDate);
-  const suppressStbt = regime.trend === 'BULL';
-  const suppressBtst = regime.trend === 'BEAR';
+  // C3 fix: when regime data is unreliable (Nifty fetch failed), suppress BOTH
+  // directions to maintain parity with btst-alert.job.ts. Without this guard
+  // the journal writes ghost entries that were never alerted.
+  const regimeUnknown = !regime.reliable;
+  const suppressStbt = regime.trend === 'BULL' || regimeUnknown;
+  const suppressBtst = regime.trend === 'BEAR' || regimeUnknown;
 
   console.log(`[BtstJournal] Refreshing OvernightSignal for ${signalDate} before journal selection.`);
   await OvernightService.discover('BOTH');
@@ -174,7 +178,11 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       let optionExpiry: string | undefined;
 
       try {
-        const suggestion = await OptionSuggestionService.suggestOption(
+        // C2 fix: BTST is an overnight position that holds overnight theta risk.
+        // suggestOptionForBtst picks next-week expiry to avoid same-day decay,
+        // matching btst-alert.job.ts. Using suggestOption (intraday expiry) here
+        // previously decoupled journal PnL from the actual alerted contract.
+        const suggestion = await OptionSuggestionService.suggestOptionForBtst(
           signal.symbol, ltp, optionSide, entry, sl, target, signal.signalDate
         );
         if (!suggestion.error && suggestion.strike && suggestion.ltp) {

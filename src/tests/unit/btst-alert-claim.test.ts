@@ -7,7 +7,7 @@ import { RegimeService } from '../../services/overnight/regime.service';
 import { OvernightService } from '../../services/overnight/overnight.service';
 import { IndexDiscoverService } from '../../services/overnight/index-discover.service';
 import { getISTDateString } from '../../lib/market-hours';
-import { runBtstAlertJob } from '../../services/scheduler/btst-alert.job';
+import { runBtstAlertJob, resetBtstAlertSendAttemptsForTests } from '../../services/scheduler/btst-alert.job';
 import { MarketService } from '../../services/market.service';
 import { OptionSuggestionService } from '../../services/option-suggestion.service';
 import { TradeJournalService } from '../../services/journal/trade-journal.service';
@@ -214,6 +214,7 @@ function mockBtstRouteDeps(handlers: {
       MarketService.getStockData = originalGetStockData;
       OptionSuggestionService.suggestOptionForBtst = originalSuggestOption;
       TradeJournalService.logSignal = originalLogSignal;
+      resetBtstAlertSendAttemptsForTests();
     },
   };
 }
@@ -553,6 +554,33 @@ test('BTST alert cron — alert-time journaling (alert ↔ journal parity)', asy
       assert.strictEqual(result.sent, false);
       assert.strictEqual(mocks.journalCalls.length, 0, 'unsent alerts must not be journaled');
       assert.strictEqual(mocks.deleteManyCallArgs.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('second Telegram failure in the same process preserves the claim', async () => {
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      suggestOptionForBtst: (async () => ({
+        strike: 100,
+        ltp: 4.2,
+        formattedName: 'TEST 100 CE',
+      })) as typeof OptionSuggestionService.suggestOptionForBtst,
+      sendBtstAlert: async () => ({ sent: false, reason: 'telegram_api_error' }),
+    });
+
+    try {
+      resetBtstAlertSendAttemptsForTests();
+      await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(mocks.deleteManyCallArgs.length, 1, 'first failure still rolls back');
+
+      await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(
+        mocks.deleteManyCallArgs.length,
+        1,
+        'second failure must keep the claim (no extra rollback)'
+      );
     } finally {
       mocks.restore();
     }

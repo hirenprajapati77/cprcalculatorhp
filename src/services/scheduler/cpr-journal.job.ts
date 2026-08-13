@@ -4,7 +4,9 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { MarketService } from '@/services/market.service';
 import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
-import { inferCprJournalDirection } from '@/lib/cpr-direction';
+import { cprDirectionToOptionBias, inferCprJournalDirection } from '@/lib/cpr-direction';
+import { getAtrPct } from '@/lib/atr';
+import { getCompletedHistory } from '@/lib/market-hours';
 
 export { inferCprJournalDirection } from '@/lib/cpr-direction';
 
@@ -36,15 +38,31 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     },
   });
 
-  const topSignals = await prisma.scannerResult.findMany({
+  const topSignalsRaw = await prisma.scannerResult.findMany({
     where: {
       date: todayStr,
       score: { gte: 75 },
       NOT: { symbol: { endsWith: ':BSE' } },
     },
-    orderBy: { score: 'desc' },
-    take: maxSignals,
+    // H2 fix: stable tie-breaker prevents non-deterministic ordering when
+    // multiple rows share the same score (common in same-date rescans).
+    orderBy: [{ score: 'desc' }, { symbol: 'asc' }],
+    // Over-fetch slightly to leave room for symbol dedup below.
+    take: maxSignals * 3,
   });
+
+  // H2 fix: deduplicate by symbol (same stock can appear multiple times from
+  // multiple intraday rescans). Concurrent upserts on duplicate symbols in
+  // Promise.allSettled cause Prisma P2002 unique constraint violations.
+  const seenSymbols = new Set<string>();
+  const topSignals = topSignalsRaw
+    .filter((s) => {
+      const sym = s.symbol.split(':')[0].trim();
+      if (seenSymbols.has(sym)) return false;
+      seenSymbols.add(sym);
+      return true;
+    })
+    .slice(0, maxSignals);
 
   if (qualifyingCount > topSignals.length) {
     console.log(
@@ -104,6 +122,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       let previousClose: number | undefined;
       let open: number | undefined;
       let liveLtp = signal.ltp;
+      let atrPct: number | undefined;
       try {
         const stockData = await MarketService.getStockData(cleanSym, 'NSE');
         if (stockData) {
@@ -112,6 +131,9 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
           previousClose = stockData.previousClose;
           open = stockData.open;
           if (stockData.ltp > 0) liveLtp = stockData.ltp;
+          if (stockData.history && stockData.history.length > 0) {
+            atrPct = getAtrPct(getCompletedHistory(stockData.history), liveLtp) * 100;
+          }
         }
       } catch (mktErr) {
         console.warn(`[CPRJournal] Market data fetch failed for ${signal.symbol}:`, mktErr);
@@ -125,6 +147,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         todayLow,
         ...(previousClose != null ? { previousClose } : {}),
         ...(open != null ? { open } : {}),
+        ...(atrPct != null ? { atrPct } : {}),
         symbol: signal.symbol,
       });
       if (staleness.stale) {
@@ -142,10 +165,14 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       let optionExpiry: string | undefined;
 
       try {
-        const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+        // C2 fix: CPR is an intraday strategy — use suggestOption (current-week
+        // / nearest-expiry) not suggestOptionForBtst (next-week expiry).
+        // Previously the journal tracked a further-dated expiry contract that
+        // no intraday trader would hold, decoupling recorded PnL from reality.
+        const suggestion = await OptionSuggestionService.suggestOption(
           cleanSym,
           liveLtp,
-          tag,
+          cprDirectionToOptionBias(tag),
           signal.entry,
           signal.sl,
           signal.target,

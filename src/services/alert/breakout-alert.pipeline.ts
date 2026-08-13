@@ -1,7 +1,8 @@
 import { BreakoutWatcherService, type BreakoutScanResult, breakoutAlertClaimKey } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { MarketSessionResolver } from '@/config/market-profile';
-import { getISTDateString, shouldFreezeBreakouts } from '@/lib/market-hours';
+import { getISTDateString, shouldFreezeBreakouts, getCompletedHistory } from '@/lib/market-hours';
+import { getAtrPct } from '@/lib/atr';
 import { MarketService } from '@/services/market.service';
 import type { OptionSuggestion } from '@/services/option-suggestion.service';
 import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-price-gate';
@@ -46,6 +47,7 @@ export type ScanResultForBreakoutAlert = {
   open?: number | null;
   previousClose?: number | null;
   classification?: string | null;
+  history?: Array<{ date: string; high: number; low: number; close: number }> | null;
 };
 
 export function mapScanResultsForBreakoutAlert(
@@ -58,6 +60,10 @@ export function mapScanResultsForBreakoutAlert(
     const entry = r.entry ?? (isBreakdown ? (r.bc ?? r.ltp) : (r.tc ?? r.ltp));
     const sl = r.sl ?? (isBreakdown ? (r.tc ?? r.ltp * 1.01) : (r.bc ?? r.ltp * 0.99));
     const target = r.target ?? (isBreakdown ? (r.ltp * 0.98) : (r.r1 ?? r.ltp * 1.02));
+    const atrPct =
+      r.history && r.history.length > 0
+        ? getAtrPct(getCompletedHistory(r.history), r.ltp) * 100
+        : undefined;
     return {
       symbol: r.symbol,
       signals,
@@ -76,6 +82,7 @@ export function mapScanResultsForBreakoutAlert(
       ...(r.low != null ? { low: r.low } : {}),
       ...(r.open != null ? { open: r.open } : {}),
       ...(r.previousClose != null ? { previousClose: r.previousClose } : {}),
+      ...(atrPct != null && Number.isFinite(atrPct) && atrPct > 0 ? { atrPct } : {}),
     };
   });
 }
@@ -89,19 +96,11 @@ function buildFnOLookup(): Map<string, boolean> {
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      }
-    );
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
   });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -204,14 +203,12 @@ export function notifyBreakoutsFromScan(
     .catch((err) => {
       console.warn(`[BreakoutWatcher] ${label}: stale-claim cleanup failed:`, err);
     })
-    .then(() => BreakoutWatcherService.detectNewBreakouts(mapped))
+    .then(() => BreakoutWatcherService.detectNewBreakouts(mapped, { deferClaim: true }))
     .then(async (newBreakouts) => {
       if (newBreakouts.length === 0) return;
-      claimedKeys = newBreakouts.map((b) =>
-        breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
-      );
 
       // India VIX regime: pause all alerts when elevated; tighten score/chase in mid band.
+      // Gate BEFORE claiming so a suppressed alert does not start a 4h cooldown.
       const vixState = await IndexDiscoverService.getIndiaVixState(new Date());
       const {
         actionable: vixActionable,
@@ -220,11 +217,6 @@ export function notifyBreakoutsFromScan(
       } = filterBreakoutsForVixRegime(newBreakouts, vixState);
 
       if (vixSuppressed.length > 0) {
-        const vixSuppressKeys = vixSuppressed.map((b) =>
-          breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
-        );
-        await BreakoutWatcherService.releaseClaims(vixSuppressKeys);
-        claimedKeys = claimedKeys.filter((k) => !vixSuppressKeys.includes(k));
         const vixLabel =
           vixPolicy.vixClose != null ? vixPolicy.vixClose.toFixed(2) : vixPolicy.regimeLabel;
         console.log(
@@ -235,9 +227,6 @@ export function notifyBreakoutsFromScan(
       }
       if (vixActionable.length === 0) return;
 
-      // Pre-send gate: gap-invalidated / extended entries never hit Telegram.
-      // Release claims for suppressed rows so a later pullback into the entry
-      // zone can still alert (unlike a real delivered alert which keeps cooldown).
       const priceGateOpts =
         vixPolicy.entryExtensionPct != null
           ? { entryExtensionPct: vixPolicy.entryExtensionPct }
@@ -247,11 +236,6 @@ export function notifyBreakoutsFromScan(
         priceGateOpts
       );
       if (suppressed.length > 0) {
-        const suppressKeys = suppressed.map((b) =>
-          breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
-        );
-        await BreakoutWatcherService.releaseClaims(suppressKeys);
-        claimedKeys = claimedKeys.filter((k) => !suppressKeys.includes(k));
         console.log(
           `[BreakoutWatcher] ${label}: suppressed ${suppressed.length} stale-price alert(s): ` +
             suppressed.map((s) => `${s.symbol}:${s.gateReason}`).join(', ')
@@ -259,7 +243,13 @@ export function notifyBreakoutsFromScan(
       }
       if (actionable.length === 0) return;
 
-      const enriched = await enrichBreakoutsWithOptionSuggestions(actionable);
+      const claimed = await BreakoutWatcherService.commitClaims(actionable);
+      claimedKeys = claimed.map((b) =>
+        breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
+      );
+      if (claimed.length === 0) return;
+
+      const enriched = await enrichBreakoutsWithOptionSuggestions(claimed);
       const result = await TelegramService.sendBreakoutAlert(enriched);
       if (!result.ok) {
         console.error(

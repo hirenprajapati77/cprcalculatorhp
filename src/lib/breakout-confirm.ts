@@ -49,8 +49,12 @@ export function getBreakoutCandidate(
 
 /**
  * True when the candidate breakout is confirmed (hold / reclaim / 15m close).
- * When a 15m candle is present it is authoritative: LTP flicker with a 15m close
- * still inside the CPR band is rejected.
+ *
+ * A 15m close beyond the level confirms immediately. A 15m close still inside
+ * the CPR band does NOT hard-reject: we fall through to session-reclaim / gap-
+ * continuation so a valid 5m hold is not killed by a stale previous 15m bar.
+ * SignalService first pass sets allowSessionReclaim=false, so that path still
+ * requires a 15m close beyond the level.
  */
 export function isBreakoutConfirmed(input: BreakoutConfirmInput): boolean {
   const {
@@ -71,8 +75,13 @@ export function isBreakoutConfirmed(input: BreakoutConfirmInput): boolean {
   if (direction === 'UP') {
     if (!(ltp > level)) return false;
 
+    // 15m candle can CONFIRM early (close above level) but must NOT hard-reject.
+    // If the last formed 15m close is below level we still fall through to the
+    // session-hold checks — a valid 5-min reclaim should not be killed by a
+    // stale 15m close from the previous bar.
     if (candle15m && Number.isFinite(candle15m.close) && candle15m.close > 0) {
-      return candle15m.close > level;
+      if (candle15m.close > level) return true;
+      // fall through — let session reclaim decide
     }
 
     if (!allowSessionReclaim) return false;
@@ -97,8 +106,11 @@ export function isBreakoutConfirmed(input: BreakoutConfirmInput): boolean {
   // DOWN / breakdown
   if (!(ltp < level)) return false;
 
+  // Same logic as UP: 15m close below level confirms early, but a close above
+  // level must not kill a valid session reclaim — fall through instead.
   if (candle15m && Number.isFinite(candle15m.close) && candle15m.close > 0) {
-    return candle15m.close < level;
+    if (candle15m.close < level) return true;
+    // fall through — let session reclaim decide
   }
 
   if (!allowSessionReclaim) return false;

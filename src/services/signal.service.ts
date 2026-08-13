@@ -1,5 +1,5 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
-import { VOLUME_THRESHOLDS, ATR } from '@/config/trading-constants';
+import { VOLUME_THRESHOLDS, ATR, CPR_THRESHOLDS } from '@/config/trading-constants';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
@@ -51,11 +51,26 @@ export class SignalService {
     const ltp = stock.ltp;
 
     // ── Candle Resolution ──────────────────────────────────────────────────────
-    // Use IST-aware date to avoid UTC boundary misclassification.
-    // NSE market closes at 3:30 PM IST; the UTC date flips at 6:30 PM IST,
-    // so using new Date().toISOString() would misclassify candles for 3 hours daily.
-    const todayStr = asOfDate ?? getISTDateString();
-    const isTradingSession = asOfDate ? true : getISTTime().isTradingDay;
+    // M1 fix: Normalize asOfDate if provided (e.g. "2026-08-13T00:00:00.000Z" → "2026-08-13").
+    // If asOfDate contains a timestamp or ISO offset, convert to YYYY-MM-DD IST so string
+    // comparison against stock.history[].date matches strictly rather than failing silently.
+    let normalizedAsOfDate: string | undefined = undefined;
+    if (asOfDate) {
+      const trimmed = asOfDate.trim();
+      if (trimmed.includes('T')) {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+          normalizedAsOfDate = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        } else {
+          normalizedAsOfDate = trimmed.split('T')[0];
+        }
+      } else {
+        normalizedAsOfDate = trimmed;
+      }
+    }
+
+    const todayStr = normalizedAsOfDate ?? getISTDateString();
+    const isTradingSession = normalizedAsOfDate ? true : getISTTime().isTradingDay;
 
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
@@ -69,8 +84,8 @@ export class SignalService {
       const lastCandle = stock.history[stock.history.length - 1];
       const isLastToday = lastCandle.date === todayStr;
       
-      const isTodayCandleFinal = asOfDate 
-        ? isLastToday 
+      const isTodayCandleFinal = normalizedAsOfDate
+        ? isLastToday
         : (isLastToday && isTodayCandleClosed());
 
       if (!isTradingSession && !isLastToday) {
@@ -109,7 +124,7 @@ export class SignalService {
     }
 
     // ── ATR% ──────────────────────────────────────────────────────────────────
-    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const completedHistory = getCompletedHistory(stock.history || [], normalizedAsOfDate);
     const atrRefClose = completedHistory.length
       ? completedHistory[completedHistory.length - 1].close
       : stock.close;
@@ -302,7 +317,7 @@ export class SignalService {
     // safeRatio returns 1 (far) when pivot is 0, preventing hotZone from firing on bad data.
     const closeDistance = safeRatio(Math.abs(stock.ltp - pivot), pivot, 1);
     // PROVISIONAL: threshold derived from assumed 2% avg ATR, pending backtest confirmation.
-    const hotZoneThreshold = 0.10 * atrPct;
+    const hotZoneThreshold = CPR_THRESHOLDS.HOT_ZONE_ATR_MULTIPLIER * atrPct;
     const hotZone = cprToday.classification === 'NARROW' && closeDistance <= hotZoneThreshold;
     if (hotZone) signals.push('HOT_ZONE');
 

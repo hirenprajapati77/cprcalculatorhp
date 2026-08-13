@@ -9,6 +9,14 @@ export const CPR_ENTRY_EXTENSION_PCT = 3.5;
 /** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
 export const BREAKOUT_GAP_BUFFER = 0.002;
 
+/**
+ * ATR-scaled chase cap in percent. `atrPct` is percent (2.5 = 2.5%), bounded 2–6.
+ */
+export function atrScaledExtensionCap(atrPct?: number): number {
+  if (!(atrPct && Number.isFinite(atrPct) && atrPct > 0)) return CPR_ENTRY_EXTENSION_PCT;
+  return Math.min(6.0, Math.max(2.0, atrPct * 1.5));
+}
+
 export type CprSetupStaleReason = 'GAP_INVALIDATED' | 'EXTENDED';
 
 /**
@@ -34,16 +42,18 @@ export function isBreakoutEntryGapInvalidated(args: {
 }
 
 /**
- * LTP already chased past entry by more than the 3.5% extension cap.
+ * LTP already chased past entry by more than the extension cap (default 3.5%, or ATR-scaled if atrPct provided).
  */
 export function isBreakoutEntryExtended(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
   maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
 }): boolean {
-  const { entry, ltp, direction } = args;
-  const cap = args.maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
+  const { entry, ltp, direction, atrPct } = args;
+  const dynamicCap = atrScaledExtensionCap(atrPct);
+  const cap = args.maxExtensionPct ?? dynamicCap;
   if (!(entry > 0 && ltp > 0)) return false;
   const pctPastEntry = ((ltp - entry) / entry) * 100;
   if (direction === 'LONG') {
@@ -63,9 +73,9 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
   todayHigh?: number | undefined;
   todayLow?: number | undefined;
   maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
 }): { stale: true; reason: CprSetupStaleReason; detail: string } | { stale: false } {
-  const { entry, ltp, direction, todayHigh = 0, todayLow = 0 } = args;
-  const maxExtensionPct = args.maxExtensionPct;
+  const { entry, ltp, direction, todayHigh = 0, todayLow = 0, maxExtensionPct, atrPct } = args;
 
   if (
     todayHigh > 0 &&
@@ -79,13 +89,13 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
     };
   }
 
-  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct })) {
+  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct, atrPct })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
-    const cap = maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
+    const cap = maxExtensionPct ?? atrScaledExtensionCap(atrPct);
     return {
       stale: true,
       reason: 'EXTENDED',
-      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap}%)`,
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap.toFixed(1)}%)`,
     };
   }
 

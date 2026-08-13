@@ -643,10 +643,14 @@ export class OvernightService {
       }
     }
 
+    // H3 fix: sort by unique key (symbol, then direction) BEFORE the transaction
+    // so concurrent workers acquire row locks in the same order. Symbol-only sort
+    // left LONG vs SHORT of the same ticker unordered (stable sort keeps insert
+    // order) and could still deadlock. UI score sort is re-applied below.
     signalsToSave.sort((a, b) => {
-      if (a.classification === 'IGNORE' && b.classification !== 'IGNORE') return 1;
-      if (a.classification !== 'IGNORE' && b.classification === 'IGNORE') return -1;
-      return (b.overnightScore || 0) - (a.overnightScore || 0);
+      const sym = (a.symbol as string).localeCompare(b.symbol as string);
+      if (sym !== 0) return sym;
+      return String(a.direction ?? '').localeCompare(String(b.direction ?? ''));
     });
 
     // H-6: Batch all upserts into a single interactive transaction instead of
@@ -688,6 +692,14 @@ export class OvernightService {
       // to all users until the cache expires at midnight.
       throw new Error('Overnight scan persistence failed — database transaction aborted');
     }
+
+    // Re-sort for UI: IGNORE last, then by descending score.
+    // (Transaction payload was sorted by symbol for lock-order safety above.)
+    savedSignals.sort((a, b) => {
+      if (a.classification === 'IGNORE' && b.classification !== 'IGNORE') return 1;
+      if (a.classification !== 'IGNORE' && b.classification === 'IGNORE') return -1;
+      return (b.overnightScore || 0) - (a.overnightScore || 0);
+    });
 
     return savedSignals;
   }

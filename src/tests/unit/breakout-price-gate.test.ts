@@ -5,6 +5,7 @@ import {
   isBreakoutEntryExtended,
   isBreakoutEntryGapInvalidated,
 } from '@/services/alert/breakout-price-gate';
+import { atrScaledExtensionCap } from '@/lib/cpr-setup-staleness';
 import { EXTENSION_LIMITS } from '@/services/overnight/entry-manager.service';
 import type { BreakoutScanResult } from '@/services/alert/breakout-watcher.service';
 
@@ -159,5 +160,18 @@ describe('breakout price gate — regression (normal alert)', () => {
     assert.equal(result.suppressed.length, 0);
     assert.equal(result.actionable.length, 1);
     assert.deepEqual(result.actionable[0], row);
+  });
+});
+
+describe('atrScaledExtensionCap', () => {
+  it('defaults to 3.5% when ATR is missing', () => {
+    assert.equal(atrScaledExtensionCap(undefined), 3.5);
+    assert.equal(atrScaledExtensionCap(0), 3.5);
+  });
+
+  it('scales 1.5× ATR and clamps to 2–6%', () => {
+    assert.equal(atrScaledExtensionCap(2.5), 3.75);
+    assert.equal(atrScaledExtensionCap(1.0), 2.0);
+    assert.equal(atrScaledExtensionCap(5.0), 6.0);
   });
 });

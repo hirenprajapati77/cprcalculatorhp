@@ -166,4 +166,88 @@ describe('BreakoutWatcher Debounce & Flicker Prevention', () => {
       prisma.breakoutAlertState.update = originalUpdate;
     }
   });
+
+  it('deferClaim does not write lastAlerted; commitClaims does', async () => {
+    const originalUpdateMany = prisma.breakoutAlertState.updateMany;
+    const originalCreate = prisma.breakoutAlertState.create;
+    const originalFindUnique = prisma.breakoutAlertState.findUnique;
+    const originalUpdate = prisma.breakoutAlertState.update;
+
+    const mockDB: Array<{
+      symbol: string;
+      hadBreakout: boolean;
+      missCount: number;
+      lastAlerted: Date | null;
+    }> = [];
+
+    prisma.breakoutAlertState.updateMany = (async (args: any) => {
+      const symbol = args.where.symbol;
+      const row = mockDB.find((r) => r.symbol === symbol);
+      if (args.where.hadBreakout === false) {
+        if (row && row.hadBreakout === false) {
+          row.hadBreakout = args.data.hadBreakout;
+          row.lastAlerted = args.data.lastAlerted;
+          row.missCount = args.data.missCount ?? 0;
+          return { count: 1 };
+        }
+        return { count: 0 };
+      }
+      if (args.where.missCount && args.where.missCount.gt === 0) {
+        if (row && row.missCount > 0) {
+          row.missCount = args.data.missCount ?? 0;
+          return { count: 1 };
+        }
+        return { count: 0 };
+      }
+      return { count: 0 };
+    }) as any;
+
+    prisma.breakoutAlertState.create = (async (args: any) => {
+      mockDB.push({
+        symbol: args.data.symbol,
+        hadBreakout: args.data.hadBreakout ?? false,
+        missCount: args.data.missCount ?? 0,
+        lastAlerted: args.data.lastAlerted ?? null,
+      });
+      return args.data;
+    }) as any;
+
+    prisma.breakoutAlertState.findUnique = (async (args: any) => {
+      return mockDB.find((r) => r.symbol === args.where.symbol) ?? null;
+    }) as any;
+
+    prisma.breakoutAlertState.update = originalUpdate;
+
+    try {
+      const scan: BreakoutScanResult[] = [
+        {
+          symbol: 'RELIANCE',
+          signals: ['BREAKOUT'],
+          ltp: 1400,
+          entry: 1395,
+          sl: 1380,
+          target: 1420,
+          rr: '1:2',
+          score: 88,
+          sector: 'Energy',
+          eventRiskScore: 0,
+        },
+      ];
+
+      const preview = await BreakoutWatcherService.detectNewBreakouts(scan, { deferClaim: true });
+      assert.equal(preview.length, 1);
+      assert.equal(mockDB.length, 0, 'deferClaim must not insert a claim row');
+
+      const committed = await BreakoutWatcherService.commitClaims(preview);
+      assert.equal(committed.length, 1);
+      assert.equal(mockDB.length, 1);
+      assert.equal(mockDB[0]!.hadBreakout, true);
+      assert.ok(mockDB[0]!.lastAlerted);
+    } finally {
+      prisma.breakoutAlertState.updateMany = originalUpdateMany;
+      prisma.breakoutAlertState.create = originalCreate;
+      prisma.breakoutAlertState.findUnique = originalFindUnique;
+      prisma.breakoutAlertState.update = originalUpdate;
+    }
+  });
 });

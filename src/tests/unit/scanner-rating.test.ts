@@ -5,6 +5,7 @@ import {
   cprRatingLabel,
   inferScannerBadgeDirection,
 } from '@/lib/scanner-rating';
+import { cprDirectionToOptionBias } from '@/lib/cpr-direction';
 
 describe('inferScannerBadgeDirection', () => {
   it('returns SHORT when entry is pinned to BC (bearish CPR)', () => {
@@ -65,5 +66,12 @@ describe('btstRowHighlightClass', () => {
   it('STBT_READY uses red tint (not shared blue with BTST_READY)', () => {
     assert.match(btstRowHighlightClass('STBT_READY'), /accent-red/);
     assert.match(btstRowHighlightClass('BTST_READY'), /accent-blue/);
+  });
+});
+
+describe('cprDirectionToOptionBias', () => {
+  it('maps LONG to BULLISH and SHORT to BEARISH', () => {
+    assert.equal(cprDirectionToOptionBias('LONG'), 'BULLISH');
+    assert.equal(cprDirectionToOptionBias('SHORT'), 'BEARISH');
   });
 });

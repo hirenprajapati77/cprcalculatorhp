@@ -50,6 +50,8 @@ export function evaluateCprSetupPriceStaleness(args: {
   symbol?: string;
   sector?: string;
   entryExtensionPct?: number;
+  /** ATR as percent (2.5 = 2.5%). Used by L3 chase cap when no explicit override. */
+  atrPct?: number;
 }): { stale: true; reason: BreakoutPriceGateReason; detail: string } | { stale: false } {
   const {
     entry,
@@ -62,6 +64,7 @@ export function evaluateCprSetupPriceStaleness(args: {
     symbol = 'UNKNOWN',
     sector = 'Other',
     entryExtensionPct,
+    atrPct,
   } = args;
 
   const basic = evaluateCprSetupPriceStalenessBasic({
@@ -71,6 +74,7 @@ export function evaluateCprSetupPriceStaleness(args: {
     todayHigh,
     todayLow,
     ...(entryExtensionPct != null ? { maxExtensionPct: entryExtensionPct } : {}),
+    ...(atrPct != null ? { atrPct } : {}),
   });
   if (basic.stale && basic.reason === 'GAP_INVALIDATED') return basic;
 
@@ -139,6 +143,7 @@ export function filterBreakoutsForPriceActionability(
       symbol: b.symbol,
       sector: b.sector,
       ...(entryExtensionPct != null ? { entryExtensionPct } : {}),
+      ...(b.atrPct != null ? { atrPct: b.atrPct } : {}),
     });
     if (verdict.stale) {
       console.warn(
