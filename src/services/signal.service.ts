@@ -51,11 +51,26 @@ export class SignalService {
     const ltp = stock.ltp;
 
     // ── Candle Resolution ──────────────────────────────────────────────────────
-    // Use IST-aware date to avoid UTC boundary misclassification.
-    // NSE market closes at 3:30 PM IST; the UTC date flips at 6:30 PM IST,
-    // so using new Date().toISOString() would misclassify candles for 3 hours daily.
-    const todayStr = asOfDate ?? getISTDateString();
-    const isTradingSession = asOfDate ? true : getISTTime().isTradingDay;
+    // M1 fix: Normalize asOfDate if provided (e.g. "2026-08-13T00:00:00.000Z" → "2026-08-13").
+    // If asOfDate contains a timestamp or ISO offset, convert to YYYY-MM-DD IST so string
+    // comparison against stock.history[].date matches strictly rather than failing silently.
+    let normalizedAsOfDate: string | undefined = undefined;
+    if (asOfDate) {
+      const trimmed = asOfDate.trim();
+      if (trimmed.includes('T')) {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+          normalizedAsOfDate = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        } else {
+          normalizedAsOfDate = trimmed.split('T')[0];
+        }
+      } else {
+        normalizedAsOfDate = trimmed;
+      }
+    }
+
+    const todayStr = normalizedAsOfDate ?? getISTDateString();
+    const isTradingSession = normalizedAsOfDate ? true : getISTTime().isTradingDay;
 
     let yesterdayCandle = { high: stock.high, low: stock.low, close: stock.close };
     let todayCandle = { open: stock.open, high: stock.high, low: stock.low, close: stock.ltp };
