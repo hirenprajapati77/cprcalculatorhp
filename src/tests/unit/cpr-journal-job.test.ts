@@ -352,6 +352,28 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       mocks.restore();
     }
   });
+
+  await t.test('parallel execution: one signal throwing an unexpected error does not block the rest', async () => {
+    const mocks = mockJobDeps([
+      makeSignal({ symbol: 'ERRORSYMBOL', ltp: 103, entry: 100 }),
+      makeSignal({ symbol: 'GOODSYMBOL', ltp: 103, entry: 100 }),
+    ]);
+
+    const originalLog = TradeJournalService.logSignal;
+    TradeJournalService.logSignal = (async (params: any) => {
+      if (params.symbol === 'ERRORSYMBOL') throw new Error('Uncaught exception in parallel block');
+      return originalLog(params);
+    }) as unknown as typeof TradeJournalService.logSignal;
+
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['ERRORSYMBOL:UNCAUGHT_ERROR']);
+      assert.deepStrictEqual(result.logged, ['GOODSYMBOL']);
+    } finally {
+      TradeJournalService.logSignal = originalLog;
+      mocks.restore();
+    }
+  });
 });
 
 test('CPR_JOURNAL_MAX_SIGNALS env schema rejects unsafe values', () => {
