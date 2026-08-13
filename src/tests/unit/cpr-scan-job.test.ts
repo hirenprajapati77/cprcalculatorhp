@@ -113,7 +113,7 @@ describe('runCprScanJob', () => {
 describe('cpr-scan claim buckets (retainClaim)', () => {
   it('same bucket key cannot re-claim after retainClaim=true', async () => {
     resetCronRunClaims();
-    const key = 'cpr-scan:2026-07-27:150';
+    const key = 'cpr-scan:NIFTY_FNO:2026-07-27:150';
     assert.equal(await tryClaimCronRun(key), true);
     await completeCronRun(key, true);
     assert.equal(await tryClaimCronRun(key), false);
@@ -121,12 +121,24 @@ describe('cpr-scan claim buckets (retainClaim)', () => {
 
   it('next time-bucket key can claim again (periodic re-fire)', async () => {
     resetCronRunClaims();
-    const keyA = 'cpr-scan:2026-07-27:150';
-    const keyB = 'cpr-scan:2026-07-27:151';
+    const keyA = 'cpr-scan:NIFTY_FNO:2026-07-27:150';
+    const keyB = 'cpr-scan:NIFTY_FNO:2026-07-27:151';
     assert.equal(await tryClaimCronRun(keyA), true);
     await completeCronRun(keyA, true);
     assert.equal(await tryClaimCronRun(keyB), true);
     await completeCronRun(keyB, true);
+  });
+
+  it('different universes in same bucket do not collide', async () => {
+    resetCronRunClaims();
+    const keyA = 'cpr-scan:NIFTY_FNO:2026-07-27:150';
+    const keyB = 'cpr-scan:ALL_NSE:2026-07-27:150';
+    assert.equal(await tryClaimCronRun(keyA), true);
+    assert.equal(await tryClaimCronRun(keyB), true);
+    await completeCronRun(keyA, true);
+    await completeCronRun(keyB, true);
+    assert.equal(await tryClaimCronRun(keyA), false);
+    assert.equal(await tryClaimCronRun(keyB), false);
   });
 
   it('retainClaim=false allows same key to reclaim after complete', async () => {

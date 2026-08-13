@@ -12,7 +12,7 @@ import {
 
 /**
  * Host-crontab entry for CPR auto-scan. Shares the same time-bucket claim key as
- * MarketCronScheduler (`cpr-scan:{date}:{bucket}`) so crontab + in-process ticks
+ * MarketCronScheduler (`cpr-scan:{universe}:{date}:{bucket}`) so crontab + in-process ticks
  * cannot double-scan the F&O universe on the 1 GB Oracle box.
  */
 export async function GET(req: NextRequest) {
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   const dateKey = getISTDateString();
   const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
   const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
-  const claimKey = `cpr-scan:${dateKey}:${timeBucket}`;
+  const claimKey = `cpr-scan:${universe}:${dateKey}:${timeBucket}`;
 
   if (!(await tryClaimCronRun(claimKey))) {
     return NextResponse.json({
