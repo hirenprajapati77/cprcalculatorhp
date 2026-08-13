@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **13 Aug LICI / Scan hang (live)**:
+  - **Against prior close**: LONG breakouts with LTP still below previous close (and SHORT breakdowns still above it) are suppressed before Telegram claim and skipped in the CPR journal. Scanner setup column flags `VS CLOSE`. Would have blocked LICI 14:45 IST (415.35 vs prev close 417).
+  - **PCR veto**: After option enrich, CE is not sent when chain PCR is bearish (< 0.8) and PE is not sent when PCR is bullish (> 1.2). Claim is released so a later aligned print can still fire. LICI had PCR 0.73 with a 410 CE.
+  - **Scan button hang**: `POST /api/scanner/refresh` starts the full scan in the background and always returns **202**; the UI shows cached rows instead of spinning 40–100s+ on the 1 GB VM (15:25 IST hang).
 - **Deep-review follow-up (pre-deploy)**: Closed holes in the 20-fix pack so it is safe to ship:
   - **C2**: CPR journal maps `LONG`/`SHORT` → `BULLISH`/`BEARISH` before `suggestOption()`, so SHORT rows journal PE (passing `SHORT` previously always resolved to CE). Unit mocks now target `suggestOption`.
   - **H1**: VIX and price gates run **before** claiming. Never-sent alerts no longer start a 4h cooldown; a later pullback can still fire. `commitClaims()` writes `lastAlerted` only for rows that will be sent.

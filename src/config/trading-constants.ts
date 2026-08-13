@@ -27,6 +27,17 @@ export const BREAKOUT_CONFIRMATION = {
 } as const;
 
 /**
+ * Option-chain put-call ratio bands (total PE OI / total CE OI).
+ * Same thresholds as OptionSuggestionService PCR context scoring.
+ */
+export const OPTION_PCR = {
+  /** PCR above this confirms CE / bullish option context. */
+  BULLISH_MIN: 1.2,
+  /** PCR below this confirms PE / bearish option context. */
+  BEARISH_MAX: 0.8,
+} as const;
+
+/**
  * India VIX regime for automated CPR breakout Telegram alerts (cron-only).
  * Aligns pause threshold with overnight INDIA_VIX_ELEVATED_MIN (25).
  */

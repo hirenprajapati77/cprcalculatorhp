@@ -7,6 +7,7 @@ import { MarketService } from '@/services/market.service';
 import type { OptionSuggestion } from '@/services/option-suggestion.service';
 import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-price-gate';
 import { filterBreakoutsForVixRegime } from '@/services/alert/breakout-vix-gate';
+import { filterBreakoutsForPcrAlignment } from '@/services/alert/breakout-pcr-gate';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
 
 /**
@@ -250,7 +251,24 @@ export function notifyBreakoutsFromScan(
       if (claimed.length === 0) return;
 
       const enriched = await enrichBreakoutsWithOptionSuggestions(claimed);
-      const result = await TelegramService.sendBreakoutAlert(enriched);
+      const {
+        actionable: pcrActionable,
+        suppressed: pcrSuppressed,
+      } = filterBreakoutsForPcrAlignment(enriched);
+      if (pcrSuppressed.length > 0) {
+        console.log(
+          `[BreakoutPcrGate] ${label}: suppressed ${pcrSuppressed.length} alert(s): ` +
+            pcrSuppressed.map((s) => `${s.symbol}:${s.gateDetail}`).join(', ')
+        );
+        const pcrKeys = pcrSuppressed.map((b) =>
+          breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
+        );
+        await BreakoutWatcherService.releaseClaims(pcrKeys);
+        claimedKeys = claimedKeys.filter((k) => !pcrKeys.includes(k));
+      }
+      if (pcrActionable.length === 0) return;
+
+      const result = await TelegramService.sendBreakoutAlert(pcrActionable);
       if (!result.ok) {
         console.error(
           `[BreakoutWatcher] ${label} Telegram send failed (${result.reason ?? 'unknown'}) — releasing claims`

@@ -3,6 +3,7 @@ import { CacheService } from './cache.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { safeRatio } from '@/lib/math';
 import { EventCalendarService } from './overnight/event.service';
+import { OPTION_PCR } from '@/config/trading-constants';
 
 export interface OptionSuggestion {
   symbol?: string;
@@ -239,9 +240,9 @@ export class OptionSuggestionService {
   /**
    * Compute PCR (Put-Call Ratio) across ALL strikes in the option chain.
    * PCR = totalPutOI / totalCallOI
-   * PCR > 1.2 → bullish bias building (CE trades favoured)
-   * PCR < 0.8 → bearish bias building (PE trades favoured)
-   * 0.8–1.2   → neutral
+   * PCR > OPTION_PCR.BULLISH_MIN → bullish bias building (CE trades favoured)
+   * PCR < OPTION_PCR.BEARISH_MAX → bearish bias building (PE trades favoured)
+   * between the two → neutral
    */
   private static computePCR(allOptions: OptionChainResult['optionsChain']): number {
     const totalPutOI = allOptions
@@ -274,11 +275,11 @@ export class OptionSuggestionService {
 
     // 2. PCR Context Score (max 20): does chain PCR agree with the trade direction?
     let pcrContextScore: number;
-    if (type === 'CE' && pcr > 1.2) {
+    if (type === 'CE' && pcr > OPTION_PCR.BULLISH_MIN) {
       pcrContextScore = 20; // bullish bias confirms CE entry
-    } else if (type === 'PE' && pcr < 0.8) {
+    } else if (type === 'PE' && pcr < OPTION_PCR.BEARISH_MAX) {
       pcrContextScore = 20; // bearish bias confirms PE entry
-    } else if (pcr >= 0.8 && pcr <= 1.2) {
+    } else if (pcr >= OPTION_PCR.BEARISH_MAX && pcr <= OPTION_PCR.BULLISH_MIN) {
       pcrContextScore = 10; // neutral — partial credit
     } else {
       pcrContextScore = 0; // PCR contradicts direction
@@ -470,7 +471,7 @@ export class OptionSuggestionService {
     // 4. Compute PCR from the full chain (all strikes, both types, excluding equity row)
     const allValidOptions = chainRes.optionsChain.filter(o => o.strikePrice > 0);
     const pcr = this.computePCR(allValidOptions);
-    console.log(`[OptionSuggestion] ${cleanSym} chain PCR: ${pcr} (${pcr > 1.2 ? 'Bullish bias' : pcr < 0.8 ? 'Bearish bias' : 'Neutral'})`);
+    console.log(`[OptionSuggestion] ${cleanSym} chain PCR: ${pcr} (${pcr > OPTION_PCR.BULLISH_MIN ? 'Bullish bias' : pcr < OPTION_PCR.BEARISH_MAX ? 'Bearish bias' : 'Neutral'})`);
 
     // 5. Build ITM candidate pool (up to 3 strikes)
     //    CE ITM = strikes BELOW spot (sorted ascending → highest below spot = last before spot)

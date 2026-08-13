@@ -343,6 +343,21 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     }
   });
 
+  await t.test('skips AGAINST_PRIOR_CLOSE when LONG LTP is still below previous close', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'LICI', ltp: 415.35, entry: 414.95, tc: 414.95, bc: 410, sl: 410.1, target: 425.2 })],
+      { LICI: { ltp: 415.35, high: 416.35, low: 414, open: 415.35, previousClose: 417 } }
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['LICI:AGAINST_PRIOR_CLOSE']);
+      assert.deepStrictEqual(result.logged, []);
+      assert.strictEqual(mocks.suggestCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
   await t.test('uses live LTP for option suggest when market data is fresh', async () => {
     const mocks = mockJobDeps(
       [makeSignal({ symbol: 'LIVE', ltp: 101, entry: 100 })],
