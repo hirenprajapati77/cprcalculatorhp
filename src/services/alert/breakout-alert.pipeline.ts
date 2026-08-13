@@ -263,7 +263,9 @@ export function notifyBreakoutsFromScan(
         const pcrKeys = pcrSuppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
         );
-        await BreakoutWatcherService.releaseClaims(pcrKeys);
+        // H1: preserve lastAlerted so PCR-gate suppression does not reopen the
+        // claim/suppress/release loop (same contract as VIX/price gates).
+        await BreakoutWatcherService.suppressClaims(pcrKeys);
         claimedKeys = claimedKeys.filter((k) => !pcrKeys.includes(k));
       }
       if (pcrActionable.length === 0) return;
