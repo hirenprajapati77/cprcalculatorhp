@@ -223,7 +223,11 @@ export function notifyBreakoutsFromScan(
         const vixSuppressKeys = vixSuppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
         );
-        await BreakoutWatcherService.releaseClaims(vixSuppressKeys);
+        // H1 fix: use suppressClaims (not releaseClaims) to preserve the
+        // 4-hour cooldown. releaseClaims nulls lastAlerted which causes an
+        // infinite claim → suppress → release loop every 5 min during
+        // elevated VIX periods.
+        await BreakoutWatcherService.suppressClaims(vixSuppressKeys);
         claimedKeys = claimedKeys.filter((k) => !vixSuppressKeys.includes(k));
         const vixLabel =
           vixPolicy.vixClose != null ? vixPolicy.vixClose.toFixed(2) : vixPolicy.regimeLabel;
@@ -250,7 +254,9 @@ export function notifyBreakoutsFromScan(
         const suppressKeys = suppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
         );
-        await BreakoutWatcherService.releaseClaims(suppressKeys);
+        // H1 fix: use suppressClaims to preserve the 4h cooldown so a
+        // price-gated symbol doesn't loop through claim/release every 5 min.
+        await BreakoutWatcherService.suppressClaims(suppressKeys);
         claimedKeys = claimedKeys.filter((k) => !suppressKeys.includes(k));
         console.log(
           `[BreakoutWatcher] ${label}: suppressed ${suppressed.length} stale-price alert(s): ` +
