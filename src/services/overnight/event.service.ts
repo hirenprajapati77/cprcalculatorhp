@@ -88,7 +88,8 @@ export class EventCalendarService {
         select: { createdAt: true }
       }));
       
-      const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
+      const historicalMode = env.HISTORICAL_MODE || 'mock';
+      const isHistoricalMode = historicalMode === 'mock' || historicalMode === 'db';
       // marketEvent has no populator yet, so freshness enforcement must be opt-in.
       const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
 
@@ -235,7 +236,8 @@ export class EventCalendarService {
           select: { createdAt: true }
         }));
         
-        const isHistoricalMode = env.HISTORICAL_MODE === 'mock' || env.HISTORICAL_MODE === 'db';
+        const historicalMode = env.HISTORICAL_MODE || 'mock';
+        const isHistoricalMode = historicalMode === 'mock' || historicalMode === 'db';
         // marketEvent has no populator yet, so freshness enforcement must be opt-in.
         const enforceFreshness = env.EVENT_CALENDAR_ENFORCE_FRESHNESS === 'true';
 

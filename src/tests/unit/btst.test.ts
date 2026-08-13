@@ -2,8 +2,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { BtstService } from '../../services/backtest/btst.service';
 import { OvernightService } from '../../services/overnight/overnight.service';
-import { BTST_WINDOWS } from '../../config/trading-constants';
+import { BTST_WINDOWS, BTST_SCORING } from '../../config/trading-constants';
 import { BTST_CLOCK } from '../../lib/market-hours';
+import { env } from '../../config/env';
 import type { OvernightSignal } from '@prisma/client';
 
 describe('BTST Scoring Engine Tests', () => {
@@ -255,6 +256,64 @@ describe('BTST Scoring Engine Tests', () => {
       assert.strictEqual(result.insights.totalLong, 1);
     } finally {
       OvernightService.discover = originalDiscover;
+    }
+  });
+
+  test('no_vdu_weighted: score-path CPR weight stays on BTST_SCORING; scoreBreakdown honors CPR_WEIGHT', () => {
+    // Intentional divergence (AGENTS.md): do NOT unify these paths without owner approval.
+    const original = env.CPR_WEIGHT;
+    const mutableEnv = env as unknown as Record<string, unknown>;
+    env.CPR_WEIGHT = 50; // != BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU (35)
+    try {
+      const stock = {
+        ...baseStock,
+        high: 100.05,
+        low: 99.95,
+        close: 100,
+        ltp: 100,
+        volume: 400000,
+        avgVolume: 400000, // below liquidity gate; volume ratio = 1
+        vwap: 100, // ltp not above vwap * 1.002
+        candle15m: { open: 100, high: 102, low: 98, close: 100, volume: 1000 },
+      };
+      const result = BtstService.evaluateOvernight(stock, undefined, 'no_vdu_weighted');
+      assert.ok(result.scoreBreakdown, 'scoreBreakdown is required');
+      const bd = result.scoreBreakdown;
+      assert.ok(
+        (bd.cprNarrow ?? 0) > 0,
+        'fixture must trigger NARROW CPR or sessionVirgin so both paths award CPR points'
+      );
+      assert.strictEqual(
+        bd.cprNarrow,
+        50,
+        'scoreBreakdown path must honor env.CPR_WEIGHT'
+      );
+      assert.notStrictEqual(
+        bd.cprNarrow,
+        BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU,
+        'paths must diverge when CPR_WEIGHT != BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU'
+      );
+
+      const dominantScore =
+        result.longScore >= result.shortScore ? result.longScore : result.shortScore;
+      const nonCpr =
+        (bd.vdu ?? 0) +
+        (bd.higherValue ?? 0) +
+        (bd.vwap ?? 0) +
+        (bd.closeStrength ?? 0) +
+        (bd.liquidity ?? 0);
+      assert.ok(
+        dominantScore < 100,
+        `dominant score must be uncapped to isolate CPR contribution (got ${dominantScore})`
+      );
+      assert.strictEqual(
+        dominantScore - nonCpr,
+        BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU,
+        'score-path must keep using BTST_SCORING.CPR_NARROW_WEIGHT_NO_VDU, not env.CPR_WEIGHT'
+      );
+    } finally {
+      if (original === undefined) delete mutableEnv.CPR_WEIGHT;
+      else env.CPR_WEIGHT = original;
     }
   });
 
