@@ -215,6 +215,7 @@ export class TelegramService {
       rr2?: string | null;
       score: number;
       sector: string;
+      classification?: string;
       alertKind?: 'BREAKOUT' | 'BREAKDOWN';
       signals?: string[];
       /** Pre-attached by breakout-alert.pipeline — never fetched inside this method. */
@@ -307,11 +308,17 @@ export class TelegramService {
         : hasBreakdown
           ? `NEW BREAKDOWN SIGNAL${stocks.length > 1 ? 'S' : ''}`
           : `NEW BREAKOUT SIGNAL${stocks.length > 1 ? 'S' : ''}`;
+
+    // Get unique classifications and check for volume spike across the batch
+    const classifications = Array.from(new Set(stocks.map(s => s.classification || 'NORMAL'))).join(' / ');
+    const hasVolumeSpike = stocks.some(s => s.signals?.includes('VOLUME_SPIKE'));
+    const volText = hasVolumeSpike ? ' + Volume Spike' : '';
+
     const footnote = hasBreakdown && !hasBreakout
-      ? escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike + Price < BC. Verify before trading.')
+      ? escapeTelegramHtml(`⚠️ ${classifications} CPR${volText} + Price < BC. Verify before trading.`)
       : hasBreakout && hasBreakdown
-        ? escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike at CPR band edge. Verify before trading.')
-        : escapeTelegramHtml('⚠️ NARROW CPR + Volume Spike + Price > TC. Verify before trading.');
+        ? escapeTelegramHtml(`⚠️ ${classifications} CPR${volText} at CPR band edge. Verify before trading.`)
+        : escapeTelegramHtml(`⚠️ ${classifications} CPR${volText} + Price > TC. Verify before trading.`);
 
     const message =
       `⚡ <b>${headline}</b>\n` +
