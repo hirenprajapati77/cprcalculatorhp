@@ -8,6 +8,8 @@ export const CPR_THRESHOLDS = {
   QUALITY_A_PLUS: 90,
   QUALITY_A: 75,
   QUALITY_B: 50,
+  /** Distance to pivot must be <= (HOT_ZONE_ATR_MULTIPLIER * ATR%) for HOT_ZONE signal. */
+  HOT_ZONE_ATR_MULTIPLIER: 0.10,
 };
 
 export const VOLUME_THRESHOLDS = {

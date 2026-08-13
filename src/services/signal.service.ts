@@ -1,5 +1,5 @@
 import { calculateCPR, isCprVirgin } from '@/lib/cpr-engine';
-import { VOLUME_THRESHOLDS, ATR } from '@/config/trading-constants';
+import { VOLUME_THRESHOLDS, ATR, CPR_THRESHOLDS } from '@/config/trading-constants';
 import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
@@ -317,7 +317,7 @@ export class SignalService {
     // safeRatio returns 1 (far) when pivot is 0, preventing hotZone from firing on bad data.
     const closeDistance = safeRatio(Math.abs(stock.ltp - pivot), pivot, 1);
     // PROVISIONAL: threshold derived from assumed 2% avg ATR, pending backtest confirmation.
-    const hotZoneThreshold = 0.10 * atrPct;
+    const hotZoneThreshold = CPR_THRESHOLDS.HOT_ZONE_ATR_MULTIPLIER * atrPct;
     const hotZone = cprToday.classification === 'NARROW' && closeDistance <= hotZoneThreshold;
     if (hotZone) signals.push('HOT_ZONE');
 

@@ -255,7 +255,7 @@ export class TradeJournalService {
           cmp = stockData?.ltp && stockData.ltp > 0 ? stockData.ltp : null;
         } else {
           // Use the stored optionExpiry column (written at signal time) when available.
-          // Fall back to regex parsing for legacy rows written before this column existed.
+          // @deprecated L4: Legacy regex fallback for pre-2026-08 rows. Scheduled for removal by 2026-10-01.
           let tradeExpiry: string | undefined = entry.optionExpiry ?? undefined;
           if (!tradeExpiry) {
             const weeklyMatch = entry.optionContract?.match(/\b(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+(20\d{2})\b/);
