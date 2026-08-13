@@ -94,23 +94,7 @@ describe('breakout-confirm', () => {
     );
   });
 
-  it('15m close is authoritative for UP (rejects flicker when 15m still inside)', () => {
-    assert.equal(
-      isBreakoutConfirmed({
-        direction: 'UP',
-        ltp: 101,
-        level: 100,
-        open: 99,
-        high: 102,
-        low: 98,
-        candle15m: { open: 99, high: 101, low: 98, close: 99.5 },
-        holdMinutes: 30,
-      }),
-      false
-    );
-  });
-
-  it('confirms UP when 15m closes above TC even with allowSessionReclaim false', () => {
+  it('15m close beyond level confirms immediately', () => {
     assert.equal(
       isBreakoutConfirmed({
         direction: 'UP',
@@ -124,6 +108,38 @@ describe('breakout-confirm', () => {
         allowSessionReclaim: false,
       }),
       true
+    );
+  });
+
+  it('15m close inside CPR still confirms via session reclaim when hold is met', () => {
+    assert.equal(
+      isBreakoutConfirmed({
+        direction: 'UP',
+        ltp: 101,
+        level: 100,
+        open: 99,
+        high: 102,
+        low: 98,
+        candle15m: { open: 99, high: 101, low: 98, close: 99.5 },
+        holdMinutes: BREAKOUT_CONFIRM.RECLAIM_HOLD_MINUTES,
+      }),
+      true
+    );
+  });
+
+  it('15m close inside CPR does not confirm flicker without reclaim hold', () => {
+    assert.equal(
+      isBreakoutConfirmed({
+        direction: 'UP',
+        ltp: 101,
+        level: 100,
+        open: 99,
+        high: 102,
+        low: 98,
+        candle15m: { open: 99, high: 101, low: 98, close: 99.5 },
+        holdMinutes: 0,
+      }),
+      false
     );
   });
 

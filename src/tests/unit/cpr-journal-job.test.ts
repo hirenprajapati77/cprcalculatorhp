@@ -55,7 +55,7 @@ function mockJobDeps(
 ): Mocks {
   const originalCount = prisma.scannerResult.count;
   const originalFindMany = prisma.scannerResult.findMany;
-  const originalSuggest = OptionSuggestionService.suggestOptionForBtst;
+  const originalSuggest = OptionSuggestionService.suggestOption;
   const originalLog = TradeJournalService.logSignal;
   const originalGetStock = MarketService.getStockData;
 
@@ -94,16 +94,20 @@ function mockJobDeps(
     } as MarketStockData;
   }) as unknown as typeof MarketService.getStockData;
 
-  OptionSuggestionService.suggestOptionForBtst = (async (
+  OptionSuggestionService.suggestOption = (async (
     symbol: string,
     ltp: number,
-    direction: 'LONG' | 'SHORT'
+    bias: 'BULLISH' | 'BEARISH'
   ) => {
     suggestCalls.push(symbol);
-    suggestArgs.push({ symbol, direction, ltp });
-    const optionType = direction === 'SHORT' ? 'PE' : 'CE';
+    suggestArgs.push({
+      symbol,
+      direction: bias === 'BEARISH' ? 'SHORT' : 'LONG',
+      ltp,
+    });
+    const optionType = bias === 'BEARISH' ? 'PE' : 'CE';
     return { strike: 100, ltp: 5.5, formattedName: `${symbol} 100 ${optionType}` };
-  }) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
+  }) as unknown as typeof OptionSuggestionService.suggestOption;
 
   TradeJournalService.logSignal = (async (params: unknown) => {
     logCalls.push(params);
@@ -114,7 +118,7 @@ function mockJobDeps(
     restore: () => {
       prisma.scannerResult.count = originalCount;
       prisma.scannerResult.findMany = originalFindMany;
-      OptionSuggestionService.suggestOptionForBtst = originalSuggest;
+      OptionSuggestionService.suggestOption = originalSuggest;
       TradeJournalService.logSignal = originalLog;
       MarketService.getStockData = originalGetStock;
     },
@@ -228,9 +232,9 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
 
   await t.test('journals UNDERLYING stock LTP when option chain is unavailable', async () => {
     const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 103, entry: 100 })]);
-    OptionSuggestionService.suggestOptionForBtst = (async () => ({
+    OptionSuggestionService.suggestOption = (async () => ({
       error: 'NO_CHAIN',
-    })) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
+    })) as unknown as typeof OptionSuggestionService.suggestOption;
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['NOCHAIN']);
@@ -248,9 +252,9 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     const mocks = mockJobDeps([
       makeSignal({ symbol: 'NOCHAINBEAR', ltp: 97, entry: 98, bc: 98, tc: 100 }),
     ]);
-    OptionSuggestionService.suggestOptionForBtst = (async () => ({
+    OptionSuggestionService.suggestOption = (async () => ({
       error: 'NO_CHAIN',
-    })) as unknown as typeof OptionSuggestionService.suggestOptionForBtst;
+    })) as unknown as typeof OptionSuggestionService.suggestOption;
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['NOCHAINBEAR']);
@@ -301,7 +305,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     const mocks = mockJobDeps(rows);
     try {
       const result = await runCprJournalJob();
-      assert.strictEqual((mocks.findManyArgs[0] as { take: number }).take, 3);
+      assert.strictEqual((mocks.findManyArgs[0] as { take: number }).take, 9);
       assert.strictEqual(result.logged.length, 3);
     } finally {
       mocks.restore();

@@ -9,6 +9,14 @@ export const CPR_ENTRY_EXTENSION_PCT = 3.5;
 /** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
 export const BREAKOUT_GAP_BUFFER = 0.002;
 
+/**
+ * ATR-scaled chase cap in percent. `atrPct` is percent (2.5 = 2.5%), bounded 2–6.
+ */
+export function atrScaledExtensionCap(atrPct?: number): number {
+  if (!(atrPct && Number.isFinite(atrPct) && atrPct > 0)) return CPR_ENTRY_EXTENSION_PCT;
+  return Math.min(6.0, Math.max(2.0, atrPct * 1.5));
+}
+
 export type CprSetupStaleReason = 'GAP_INVALIDATED' | 'EXTENDED';
 
 /**
@@ -44,11 +52,7 @@ export function isBreakoutEntryExtended(args: {
   atrPct?: number | undefined;
 }): boolean {
   const { entry, ltp, direction, atrPct } = args;
-  // L3 fix: Scale extension cap by ATR when available (e.g. low-vol ITC ~2.5% vs high-vol Adani ~5%),
-  // bounded between 2.0% and 6.0%.
-  const dynamicCap = atrPct && Number.isFinite(atrPct) && atrPct > 0
-    ? Math.min(6.0, Math.max(2.0, atrPct * 1.5))
-    : CPR_ENTRY_EXTENSION_PCT;
+  const dynamicCap = atrScaledExtensionCap(atrPct);
   const cap = args.maxExtensionPct ?? dynamicCap;
   if (!(entry > 0 && ltp > 0)) return false;
   const pctPastEntry = ((ltp - entry) / entry) * 100;
@@ -87,10 +91,7 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
 
   if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct, atrPct })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
-    const dynamicCap = atrPct && Number.isFinite(atrPct) && atrPct > 0
-      ? Math.min(6.0, Math.max(2.0, atrPct * 1.5))
-      : CPR_ENTRY_EXTENSION_PCT;
-    const cap = maxExtensionPct ?? dynamicCap;
+    const cap = maxExtensionPct ?? atrScaledExtensionCap(atrPct);
     return {
       stale: true,
       reason: 'EXTENDED',

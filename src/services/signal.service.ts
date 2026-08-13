@@ -84,8 +84,8 @@ export class SignalService {
       const lastCandle = stock.history[stock.history.length - 1];
       const isLastToday = lastCandle.date === todayStr;
       
-      const isTodayCandleFinal = asOfDate 
-        ? isLastToday 
+      const isTodayCandleFinal = normalizedAsOfDate
+        ? isLastToday
         : (isLastToday && isTodayCandleClosed());
 
       if (!isTradingSession && !isLastToday) {
@@ -124,7 +124,7 @@ export class SignalService {
     }
 
     // ── ATR% ──────────────────────────────────────────────────────────────────
-    const completedHistory = getCompletedHistory(stock.history || [], asOfDate);
+    const completedHistory = getCompletedHistory(stock.history || [], normalizedAsOfDate);
     const atrRefClose = completedHistory.length
       ? completedHistory[completedHistory.length - 1].close
       : stock.close;

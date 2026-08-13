@@ -643,11 +643,15 @@ export class OvernightService {
       }
     }
 
-    // H3 fix: sort by symbol (the primary key) BEFORE the transaction to ensure
-    // deterministic row-lock acquisition order. The previous sort by score caused
-    // AB-BA deadlocks when concurrent queries acquired locks in a different order.
-    // The UI-facing score sort is applied to the savedSignals return array below.
-    signalsToSave.sort((a, b) => (a.symbol as string).localeCompare(b.symbol as string));
+    // H3 fix: sort by unique key (symbol, then direction) BEFORE the transaction
+    // so concurrent workers acquire row locks in the same order. Symbol-only sort
+    // left LONG vs SHORT of the same ticker unordered (stable sort keeps insert
+    // order) and could still deadlock. UI score sort is re-applied below.
+    signalsToSave.sort((a, b) => {
+      const sym = (a.symbol as string).localeCompare(b.symbol as string);
+      if (sym !== 0) return sym;
+      return String(a.direction ?? '').localeCompare(String(b.direction ?? ''));
+    });
 
     // H-6: Batch all upserts into a single interactive transaction instead of
     // 200 sequential await prisma.overnightSignal.upsert() calls (~1 s of DB I/O).

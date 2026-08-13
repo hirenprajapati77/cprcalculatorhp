@@ -4,7 +4,9 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { MarketService } from '@/services/market.service';
 import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
-import { inferCprJournalDirection } from '@/lib/cpr-direction';
+import { cprDirectionToOptionBias, inferCprJournalDirection } from '@/lib/cpr-direction';
+import { getAtrPct } from '@/lib/atr';
+import { getCompletedHistory } from '@/lib/market-hours';
 
 export { inferCprJournalDirection } from '@/lib/cpr-direction';
 
@@ -120,6 +122,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       let previousClose: number | undefined;
       let open: number | undefined;
       let liveLtp = signal.ltp;
+      let atrPct: number | undefined;
       try {
         const stockData = await MarketService.getStockData(cleanSym, 'NSE');
         if (stockData) {
@@ -128,6 +131,9 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
           previousClose = stockData.previousClose;
           open = stockData.open;
           if (stockData.ltp > 0) liveLtp = stockData.ltp;
+          if (stockData.history && stockData.history.length > 0) {
+            atrPct = getAtrPct(getCompletedHistory(stockData.history), liveLtp) * 100;
+          }
         }
       } catch (mktErr) {
         console.warn(`[CPRJournal] Market data fetch failed for ${signal.symbol}:`, mktErr);
@@ -141,6 +147,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         todayLow,
         ...(previousClose != null ? { previousClose } : {}),
         ...(open != null ? { open } : {}),
+        ...(atrPct != null ? { atrPct } : {}),
         symbol: signal.symbol,
       });
       if (staleness.stale) {
@@ -165,7 +172,7 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         const suggestion = await OptionSuggestionService.suggestOption(
           cleanSym,
           liveLtp,
-          tag,
+          cprDirectionToOptionBias(tag),
           signal.entry,
           signal.sl,
           signal.target,

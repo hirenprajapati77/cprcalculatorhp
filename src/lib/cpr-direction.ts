@@ -1,3 +1,10 @@
+/** Map journal/scanner direction onto OptionSuggestionService.suggestOption bias. */
+export function cprDirectionToOptionBias(
+  direction: 'LONG' | 'SHORT'
+): 'BULLISH' | 'BEARISH' {
+  return direction === 'SHORT' ? 'BEARISH' : 'BULLISH';
+}
+
 /**
  * Infer CPR journal / setup direction from persisted ScannerResult levels.
  * TC entry → LONG, BC entry → SHORT, RANGE (pivot) → SL/target geometry

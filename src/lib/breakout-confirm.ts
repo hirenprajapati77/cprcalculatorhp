@@ -49,8 +49,12 @@ export function getBreakoutCandidate(
 
 /**
  * True when the candidate breakout is confirmed (hold / reclaim / 15m close).
- * When a 15m candle is present it is authoritative: LTP flicker with a 15m close
- * still inside the CPR band is rejected.
+ *
+ * A 15m close beyond the level confirms immediately. A 15m close still inside
+ * the CPR band does NOT hard-reject: we fall through to session-reclaim / gap-
+ * continuation so a valid 5m hold is not killed by a stale previous 15m bar.
+ * SignalService first pass sets allowSessionReclaim=false, so that path still
+ * requires a 15m close beyond the level.
  */
 export function isBreakoutConfirmed(input: BreakoutConfirmInput): boolean {
   const {

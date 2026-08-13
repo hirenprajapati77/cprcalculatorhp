@@ -33,6 +33,8 @@ export interface BreakoutScanResult {
   low?: number;
   open?: number;
   previousClose?: number;
+  /** ATR as percent (2.5 = 2.5%) from scan history — L3 chase cap. */
+  atrPct?: number;
   /** Which signal triggered this alert row (set by detectNewBreakouts). */
   alertKind?: BreakoutAlertKind;
   /** Pre-fetched by breakout-alert.pipeline before Telegram send (optional). */
@@ -55,15 +57,21 @@ export class BreakoutWatcherService {
   /**
    * Detects symbols newly showing BREAKOUT or BREAKDOWN (edge-trigger per kind).
    * Claim keys are `symbol:BREAKOUT` / `symbol:BREAKDOWN` so both directions can alert.
+   *
+   * Pass `{ deferClaim: true }` to identify new alerts without writing lastAlerted.
+   * The cron pipeline uses that so VIX/price gates can reject before a 4h cooldown starts;
+   * call `commitClaims` only for rows that will actually be sent.
    */
   static async detectNewBreakouts(
-    scanResults: BreakoutScanResult[]
+    scanResults: BreakoutScanResult[],
+    opts?: { deferClaim?: boolean }
   ): Promise<BreakoutScanResult[]> {
     const newAlerts: BreakoutScanResult[] = [];
+    const deferClaim = opts?.deferClaim === true;
 
     for (const result of scanResults) {
       for (const kind of ['BREAKOUT', 'BREAKDOWN'] as const) {
-        const alert = await BreakoutWatcherService.evaluateKind(result, kind);
+        const alert = await BreakoutWatcherService.evaluateKind(result, kind, deferClaim);
         if (alert) newAlerts.push(alert);
       }
     }
@@ -71,9 +79,87 @@ export class BreakoutWatcherService {
     return newAlerts;
   }
 
+  /** Atomic claim used after VIX/price gates pass. Returns rows that won the claim. */
+  static async commitClaims(breakouts: BreakoutScanResult[]): Promise<BreakoutScanResult[]> {
+    const claimed: BreakoutScanResult[] = [];
+    for (const b of breakouts) {
+      const kind = b.alertKind ?? 'BREAKOUT';
+      const claimKey = breakoutAlertClaimKey(b.symbol, kind);
+      try {
+        if (await BreakoutWatcherService.tryClaim(claimKey)) {
+          claimed.push(b);
+        }
+      } catch (err) {
+        console.warn(
+          `[BreakoutWatcher] Could not commit ${kind} claim for ${b.symbol}:`,
+          err
+        );
+      }
+    }
+    return claimed;
+  }
+
+  private static async isClaimable(claimKey: string): Promise<boolean> {
+    const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
+    const state = await prisma.breakoutAlertState.findUnique({
+      where: { symbol: claimKey },
+      select: { hadBreakout: true, lastAlerted: true },
+    });
+    if (!state) return true;
+    if (state.hadBreakout) return false;
+    return state.lastAlerted == null || state.lastAlerted < cooldownCutoff;
+  }
+
+  private static async tryClaim(claimKey: string): Promise<boolean> {
+    const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
+
+    const claim = await prisma.breakoutAlertState.updateMany({
+      where: {
+        symbol: claimKey,
+        hadBreakout: false,
+        OR: [
+          { lastAlerted: null },
+          { lastAlerted: { lt: cooldownCutoff } },
+        ],
+      },
+      data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
+    });
+
+    if (claim.count === 1) return true;
+
+    try {
+      await prisma.breakoutAlertState.create({
+        data: {
+          symbol: claimKey,
+          hadBreakout: true,
+          lastAlerted: new Date(),
+          missCount: 0,
+        },
+      });
+      return true;
+    } catch (createErr) {
+      if (isUniqueConstraintError(createErr)) {
+        const retryClaim = await prisma.breakoutAlertState.updateMany({
+          where: {
+            symbol: claimKey,
+            hadBreakout: false,
+            OR: [
+              { lastAlerted: null },
+              { lastAlerted: { lt: cooldownCutoff } },
+            ],
+          },
+          data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
+        });
+        return retryClaim.count === 1;
+      }
+      throw createErr;
+    }
+  }
+
   private static async evaluateKind(
     result: BreakoutScanResult,
-    kind: BreakoutAlertKind
+    kind: BreakoutAlertKind,
+    deferClaim = false
   ): Promise<BreakoutScanResult | null> {
     const hasSignalNow = result.signals.includes(kind);
     const claimKey = breakoutAlertClaimKey(result.symbol, kind);
@@ -110,54 +196,14 @@ export class BreakoutWatcherService {
 
     if (qualifiesForAlert) {
       try {
-        const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
-
-        const claim = await prisma.breakoutAlertState.updateMany({
-          where: {
-            symbol: claimKey,
-            hadBreakout: false,
-            OR: [
-              { lastAlerted: null },
-              { lastAlerted: { lt: cooldownCutoff } },
-            ],
-          },
-          data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
-        });
-
-        if (claim.count === 1) {
-          isNewAlert = true;
+        if (deferClaim) {
+          isNewAlert = await BreakoutWatcherService.isClaimable(claimKey);
         } else {
-          try {
-            await prisma.breakoutAlertState.create({
-              data: {
-                symbol: claimKey,
-                hadBreakout: true,
-                lastAlerted: new Date(),
-                missCount: 0,
-              },
-            });
-            isNewAlert = true;
-          } catch (createErr) {
-            if (isUniqueConstraintError(createErr)) {
-              const retryClaim = await prisma.breakoutAlertState.updateMany({
-                where: {
-                  symbol: claimKey,
-                  hadBreakout: false,
-                  OR: [
-                    { lastAlerted: null },
-                    { lastAlerted: { lt: cooldownCutoff } },
-                  ],
-                },
-                data: { hadBreakout: true, lastAlerted: new Date(), missCount: 0 },
-              });
-              isNewAlert = retryClaim.count === 1;
-            } else {
-              throw createErr;
-            }
-          }
+          isNewAlert = await BreakoutWatcherService.tryClaim(claimKey);
         }
 
-        if (!isNewAlert && qualifiesForAlert) {
+        if (!isNewAlert) {
+          const cooldownCutoff = new Date(Date.now() - BREAKOUT_ALERT_COOLDOWN_MS);
           const state = await prisma.breakoutAlertState.findUnique({
             where: { symbol: claimKey },
             select: { lastAlerted: true, hadBreakout: true },
@@ -351,6 +397,7 @@ export class BreakoutWatcherService {
           ...(r.low != null ? { todayLow: r.low } : {}),
           ...(r.previousClose != null ? { previousClose: r.previousClose } : {}),
           ...(r.open != null ? { open: r.open } : {}),
+          ...(r.atrPct != null ? { atrPct: r.atrPct } : {}),
           symbol: r.symbol,
           sector: r.sector,
         });

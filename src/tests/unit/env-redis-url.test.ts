@@ -39,4 +39,15 @@ describe('REDIS_URL / optional URL env (P1-4)', () => {
       assert.equal(parsed.data.REDIS_URL, 'redis://127.0.0.1:6379');
     }
   });
+
+  it('defaults FYERS_QUOTE_CACHE_TTL_MS to 90s', () => {
+    const parsed = envSchemaForTests.safeParse({
+      NODE_ENV: 'test',
+      APP_ACCESS_TOKEN: 'test-token-123',
+    });
+    assert.equal(parsed.success, true);
+    if (parsed.success) {
+      assert.equal(parsed.data.FYERS_QUOTE_CACHE_TTL_MS, 90_000);
+    }
+  });
 });

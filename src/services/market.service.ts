@@ -380,7 +380,7 @@ export class MarketService {
     // 60–90s. At 20s, symbols 100–200 had expired quotes and each fired an
     // individual Fyers HTTP request — defeating the prefetch and risking 429s.
     // Override via FYERS_QUOTE_CACHE_TTL_MS if a shorter TTL is needed.
-    return Math.max(5_000, env.FYERS_QUOTE_CACHE_TTL_MS || 90_000);
+    return Math.max(5_000, env.FYERS_QUOTE_CACHE_TTL_MS);
   }
 
   private static quotesBatchSize(): number {

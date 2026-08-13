@@ -31,6 +31,14 @@ function isUniqueConstraintError(err: unknown): boolean {
   );
 }
 
+const SEND_ATTEMPTS_LIMIT = 2;
+/** Survives cron re-entry in the same process. Lost on PM2 restart (one extra retry at most). */
+const sendAttemptCounts = new Map<string, number>();
+
+export function resetBtstAlertSendAttemptsForTests(): void {
+  sendAttemptCounts.clear();
+}
+
 export type BtstAlertJobResult = {
   sent: boolean;
   reason?: string | undefined;
@@ -401,19 +409,17 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   }
 
   const claimedSymbols: string[] = [];
-  const SEND_ATTEMPTS_LIMIT = 2;
-  const sendAttemptCounts = new Map<string, number>();
 
   const rollbackClaims = async (reason: string) => {
     if (claimedSymbols.length === 0) return;
 
-    // L5 fix: Track attempts per claim key to prevent a 3:20–3:24 PM retry storm.
-    // If Telegram times out repeatedly, preserve the claim after MAX_ATTEMPTS so
-    // we don't spam duplicate alerts into the Telegram channel.
+    // L5: Track attempts per date+claim across cron ticks (module Map, not per-invocation).
+    // After SEND_ATTEMPTS_LIMIT failures, keep the claim so 15:10–15:25 does not re-spam.
     const keysToRollback: string[] = [];
     for (const key of claimedSymbols) {
-      const attempts = (sendAttemptCounts.get(key) ?? 0) + 1;
-      sendAttemptCounts.set(key, attempts);
+      const attemptKey = `${signalDate}:${key}`;
+      const attempts = (sendAttemptCounts.get(attemptKey) ?? 0) + 1;
+      sendAttemptCounts.set(attemptKey, attempts);
       if (attempts >= SEND_ATTEMPTS_LIMIT) {
         console.warn(
           `[BtstAlert] ${key} reached max retry attempts (${attempts}/${SEND_ATTEMPTS_LIMIT}) — ` +

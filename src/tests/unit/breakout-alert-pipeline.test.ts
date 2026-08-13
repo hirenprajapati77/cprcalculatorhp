@@ -36,4 +36,22 @@ describe('mapScanResultsForBreakoutAlert', () => {
     assert.equal(mapped.sector, 'Other');
     assert.deepEqual(mapped.signals, []);
   });
+
+  it('computes atrPct percent from history for L3 chase cap', () => {
+    const [mapped] = mapScanResultsForBreakoutAlert([
+      {
+        symbol: 'ITC',
+        ltp: 400,
+        signals: ['BREAKOUT'],
+        history: Array.from({ length: 16 }, (_, i) => ({
+          date: `2026-07-${String(i + 1).padStart(2, '0')}`,
+          high: 402,
+          low: 398,
+          close: 400,
+        })),
+      },
+    ]);
+    assert.ok(mapped.atrPct != null && mapped.atrPct > 0);
+    assert.ok(mapped.atrPct < 5, 'ITC-like range should be a small percent, not a 0–1 fraction');
+  });
 });
