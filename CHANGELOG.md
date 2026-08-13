@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Cookie Secure Flag**: Centralized cookie `Secure` flag logic into `src/lib/auth-cookie.ts`, now also honoring `X-Forwarded-Proto` behind nginx/nip.io HTTPS setups.
 
 ### Fixed
+- **Telegram Breakout Alerts Footer**: Alerts now dynamically show the actual CPR width classification (NARROW, NORMAL, WIDE) instead of hardcoding 'NARROW CPR', and only append "Volume Spike" if the `VOLUME_SPIKE` signal is actually present.
+- **Auto-scan cron claim keys**: Scan claim keys are now namespaced by `universe` (`cpr-scan:{universe}:{date}:{bucket}`) to prevent duplicate execution locks across different scan universes running concurrently.
+- **CPR Journal parallelization**: Replaced sequential processing with `Promise.allSettled(topSignals.map(...))` to evaluate API option lookups in parallel, significantly improving overnight batch run times.
 - **Deploy PM2 memory verify (PR #118)**: `ops/deploy.ps1` PM2 `max_memory_restart` check uses regex `grep -E "max.*memory.*restart"` so PowerShell/SSH quote-stripping cannot drop the pattern.
 - **Direction-aware gap gate (PR #117)**: `isBreakoutEntryGapInvalidated` ignored `direction` and treated any entry outside today's H/L as gap-invalidated — incorrectly suppressing untriggered LONGs (price still below entry) and SHORTs (price still above entry). Fixed to direction-specific gap checks.
 - **Dependency Bumps**: npm audit dependency lockfile bumps (ip-address, fast-uri, nanoid, hono, @hono/node-server).
