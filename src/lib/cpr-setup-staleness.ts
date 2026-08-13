@@ -34,16 +34,22 @@ export function isBreakoutEntryGapInvalidated(args: {
 }
 
 /**
- * LTP already chased past entry by more than the 3.5% extension cap.
+ * LTP already chased past entry by more than the extension cap (default 3.5%, or ATR-scaled if atrPct provided).
  */
 export function isBreakoutEntryExtended(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
   maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
 }): boolean {
-  const { entry, ltp, direction } = args;
-  const cap = args.maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
+  const { entry, ltp, direction, atrPct } = args;
+  // L3 fix: Scale extension cap by ATR when available (e.g. low-vol ITC ~2.5% vs high-vol Adani ~5%),
+  // bounded between 2.0% and 6.0%.
+  const dynamicCap = atrPct && Number.isFinite(atrPct) && atrPct > 0
+    ? Math.min(6.0, Math.max(2.0, atrPct * 1.5))
+    : CPR_ENTRY_EXTENSION_PCT;
+  const cap = args.maxExtensionPct ?? dynamicCap;
   if (!(entry > 0 && ltp > 0)) return false;
   const pctPastEntry = ((ltp - entry) / entry) * 100;
   if (direction === 'LONG') {
@@ -63,9 +69,9 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
   todayHigh?: number | undefined;
   todayLow?: number | undefined;
   maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
 }): { stale: true; reason: CprSetupStaleReason; detail: string } | { stale: false } {
-  const { entry, ltp, direction, todayHigh = 0, todayLow = 0 } = args;
-  const maxExtensionPct = args.maxExtensionPct;
+  const { entry, ltp, direction, todayHigh = 0, todayLow = 0, maxExtensionPct, atrPct } = args;
 
   if (
     todayHigh > 0 &&
@@ -79,13 +85,16 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
     };
   }
 
-  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct })) {
+  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct, atrPct })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
-    const cap = maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
+    const dynamicCap = atrPct && Number.isFinite(atrPct) && atrPct > 0
+      ? Math.min(6.0, Math.max(2.0, atrPct * 1.5))
+      : CPR_ENTRY_EXTENSION_PCT;
+    const cap = maxExtensionPct ?? dynamicCap;
     return {
       stale: true,
       reason: 'EXTENDED',
-      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap}%)`,
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap.toFixed(1)}%)`,
     };
   }
 

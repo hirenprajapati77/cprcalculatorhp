@@ -401,16 +401,38 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   }
 
   const claimedSymbols: string[] = [];
+  const SEND_ATTEMPTS_LIMIT = 2;
+  const sendAttemptCounts = new Map<string, number>();
 
   const rollbackClaims = async (reason: string) => {
     if (claimedSymbols.length === 0) return;
+
+    // L5 fix: Track attempts per claim key to prevent a 3:20–3:24 PM retry storm.
+    // If Telegram times out repeatedly, preserve the claim after MAX_ATTEMPTS so
+    // we don't spam duplicate alerts into the Telegram channel.
+    const keysToRollback: string[] = [];
+    for (const key of claimedSymbols) {
+      const attempts = (sendAttemptCounts.get(key) ?? 0) + 1;
+      sendAttemptCounts.set(key, attempts);
+      if (attempts >= SEND_ATTEMPTS_LIMIT) {
+        console.warn(
+          `[BtstAlert] ${key} reached max retry attempts (${attempts}/${SEND_ATTEMPTS_LIMIT}) — ` +
+          `preserving claim state to prevent 3:20 PM Telegram retry storm (${reason}).`
+        );
+      } else {
+        keysToRollback.push(key);
+      }
+    }
+
+    if (keysToRollback.length === 0) return;
+
     try {
       await prisma.btstAlertState.deleteMany({
-        where: { date: signalDate, symbol: { in: claimedSymbols } },
+        where: { date: signalDate, symbol: { in: keysToRollback } },
       });
     } catch (rollbackErr) {
       console.error(
-        `[BtstAlert] Failed to roll back claims (${reason}) for ${claimedSymbols.join(',')}:`,
+        `[BtstAlert] Failed to roll back claims (${reason}) for ${keysToRollback.join(',')}:`,
         rollbackErr
       );
     }
