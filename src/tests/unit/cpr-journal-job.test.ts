@@ -379,6 +379,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     ]);
 
     const originalLog = TradeJournalService.logSignal;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     TradeJournalService.logSignal = (async (params: any) => {
       if (params.symbol === 'ERRORSYMBOL') throw new Error('Uncaught exception in parallel block');
       return originalLog(params);

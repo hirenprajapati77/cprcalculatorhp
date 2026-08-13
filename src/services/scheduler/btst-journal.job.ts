@@ -183,7 +183,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         // matching btst-alert.job.ts. Using suggestOption (intraday expiry) here
         // previously decoupled journal PnL from the actual alerted contract.
         const suggestion = await OptionSuggestionService.suggestOptionForBtst(
-          signal.symbol, ltp, optionSide, entry, sl, target, signal.signalDate
+          signal.symbol, ltp, dir, entry, sl, target, signal.signalDate
         );
         if (!suggestion.error && suggestion.strike && suggestion.ltp) {
           const cleanSym = signal.symbol.split(':')[0].trim();
