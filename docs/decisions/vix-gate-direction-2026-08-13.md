@@ -1,6 +1,6 @@
 # Decision memo: India VIX gating directionality for breakouts
 
-**Status:** Owner sign-off pending
+**Status:** Owner sign-off (a) — 2026-08-13
 **Date:** 2026-08-13  
 **Scope:** Investigation + documentation only (no code changes to `breakout-vix-gate.ts` or `trading-constants.ts` in this task)  
 **Related:** PR #122 (which added `filterBreakoutsForVixRegime()`)
@@ -65,9 +65,9 @@ High VIX strongly correlates with market panic and selling pressure. When the ma
 
 ## Decision
 
-**Owner sign-off recorded [DATE]**
+**Owner sign-off recorded 2026-08-13**
 
-- [ ] (a) Keep symmetric pause/tighten as-is + add governance comment
+- [x] (a) Keep symmetric pause/tighten as-is + add governance comment
 - [ ] (b) Make it asymmetric (Favor Short Setups)
 
-Owner: ___________  Date: ___________
+Owner: Hiren  Date: 2026-08-13

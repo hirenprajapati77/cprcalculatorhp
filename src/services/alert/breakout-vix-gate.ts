@@ -71,6 +71,11 @@ export type BreakoutVixGateResult = {
  * Session-wide India VIX gate for automated breakout Telegram alerts.
  * - VIX >= PAUSE_ALERTS_MIN (25): suppress all alerts
  * - VIX >= TIGHTEN_MIN (18): require higher score; price gate uses tighter chase cap
+ * 
+ * INTENTIONAL — symmetric pause/tighten across LONG and SHORT is reviewed.
+ * Do NOT make asymmetric without explicit owner approval.
+ * See docs/decisions/vix-gate-direction-2026-08-13.md.
+ * Note: Revisit once real elevated-VIX trade data exists in the journal.
  */
 export function filterBreakoutsForVixRegime(
   breakouts: BreakoutScanResult[],
