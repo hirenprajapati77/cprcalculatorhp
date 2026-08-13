@@ -90,7 +90,7 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
   // C3 fix: when regime data is unreliable (Nifty fetch failed), suppress BOTH
   // directions to maintain parity with btst-alert.job.ts. Without this guard
   // the journal writes ghost entries that were never alerted.
-  const regimeUnknown = !regime.reliable;
+  const regimeUnknown = regime.reliable === false;
   const suppressStbt = regime.trend === 'BULL' || regimeUnknown;
   const suppressBtst = regime.trend === 'BEAR' || regimeUnknown;
 
