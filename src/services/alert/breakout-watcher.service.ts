@@ -180,13 +180,42 @@ export class BreakoutWatcherService {
 
     if (hasSignalNow) {
       try {
-        await prisma.breakoutAlertState.updateMany({
-          where: { symbol: claimKey, missCount: { gt: 0 } },
-          data: { missCount: 0 },
-        });
+        if (qualifiesForAlert) {
+          // Fully qualifying: reset miss counter
+          await prisma.breakoutAlertState.updateMany({
+            where: { symbol: claimKey, missCount: { gt: 0 } },
+            data: { missCount: 0 },
+          });
+        } else {
+          // M3 fix: signal present but score/event risk prevents alert.
+          // Increment missCount so a persistent low-score stock eventually
+          // clears hadBreakout and can re-alert when score recovers.
+          const state = await prisma.breakoutAlertState.findUnique({
+            where: { symbol: claimKey },
+            select: { hadBreakout: true, missCount: true },
+          });
+          if (state?.hadBreakout) {
+            const newMissCount = state.missCount + 1;
+            if (newMissCount >= BREAKOUT_MISS_DEBOUNCE_THRESHOLD) {
+              await prisma.breakoutAlertState.update({
+                where: { symbol: claimKey },
+                data: { hadBreakout: false, missCount: 0 },
+              });
+              console.log(
+                `[BreakoutWatcher] Cleared ${kind} state for ${result.symbol} after ` +
+                `${newMissCount} low-score misses (score=${result.score}).`
+              );
+            } else {
+              await prisma.breakoutAlertState.update({
+                where: { symbol: claimKey },
+                data: { missCount: newMissCount },
+              });
+            }
+          }
+        }
       } catch (err) {
         console.warn(
-          `[BreakoutWatcher] Could not reset ${kind} missCount for ${result.symbol}:`,
+          `[BreakoutWatcher] Could not update ${kind} missCount for ${result.symbol}:`,
           err
         );
       }
@@ -235,7 +264,8 @@ export class BreakoutWatcherService {
   /**
    * Undo claims when Telegram delivery fails so the next scan can re-alert.
    * Accepts either bare symbols (legacy) or `symbol:KIND` claim keys.
-   * Clears lastAlerted — used for never-delivered / gate-suppressed claims.
+   * Clears lastAlerted — used ONLY for never-delivered claims (Telegram failure).
+   * For gate-suppressed claims use suppressClaims() to preserve the cooldown.
    */
   static async releaseClaims(symbolsOrKeys: string[]): Promise<void> {
     if (symbolsOrKeys.length === 0) return;
@@ -256,6 +286,43 @@ export class BreakoutWatcherService {
     } catch (err) {
       console.error(
         `[BreakoutWatcher] Failed to release claims for ${[...keys].join(',')}:`,
+        err
+      );
+    }
+  }
+
+  /**
+   * H1 fix: Suppress gate-rejected claims (VIX / price gate) while PRESERVING
+   * lastAlerted so the 4-hour cooldown remains intact.
+   *
+   * Without this, releaseClaims() would null out lastAlerted, causing the
+   * watcher to re-claim + re-suppress on every subsequent 5-min cron tick
+   * for as long as VIX is elevated — producing thousands of DB writes/day.
+   *
+   * After the cooldown expires, detectNewBreakouts will see lastAlerted is
+   * past the 4h window and allow the alert to be re-evaluated normally.
+   */
+  static async suppressClaims(symbolsOrKeys: string[]): Promise<void> {
+    if (symbolsOrKeys.length === 0) return;
+    const keys = new Set<string>();
+    for (const s of symbolsOrKeys) {
+      if (s.endsWith(':BREAKOUT') || s.endsWith(':BREAKDOWN')) {
+        keys.add(s);
+      } else {
+        keys.add(breakoutAlertClaimKey(s, 'BREAKOUT'));
+        keys.add(breakoutAlertClaimKey(s, 'BREAKDOWN'));
+      }
+    }
+    try {
+      await prisma.breakoutAlertState.updateMany({
+        where: { symbol: { in: [...keys] } },
+        // hadBreakout=false so next evaluate can re-claim; lastAlerted preserved
+        // via NOT setting it — we only update hadBreakout.
+        data: { hadBreakout: false },
+      });
+    } catch (err) {
+      console.error(
+        `[BreakoutWatcher] Failed to suppress claims for ${[...keys].join(',')}:`,
         err
       );
     }
