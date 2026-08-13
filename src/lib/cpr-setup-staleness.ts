@@ -40,7 +40,7 @@ export function isBreakoutEntryExtended(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
-  maxExtensionPct?: number;
+  maxExtensionPct?: number | undefined;
 }): boolean {
   const { entry, ltp, direction } = args;
   const cap = args.maxExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
@@ -60,9 +60,9 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
   entry: number;
   ltp: number;
   direction: 'LONG' | 'SHORT';
-  todayHigh?: number;
-  todayLow?: number;
-  maxExtensionPct?: number;
+  todayHigh?: number | undefined;
+  todayLow?: number | undefined;
+  maxExtensionPct?: number | undefined;
 }): { stale: true; reason: CprSetupStaleReason; detail: string } | { stale: false } {
   const { entry, ltp, direction, todayHigh = 0, todayLow = 0 } = args;
   const maxExtensionPct = args.maxExtensionPct;

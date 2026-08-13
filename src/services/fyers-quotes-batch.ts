@@ -7,12 +7,12 @@ export const FYERS_QUOTES_MAX_PER_REQUEST = 50;
 
 export interface FyersQuoteFields {
   lp: number;
-  open_price?: number;
-  high_price?: number;
-  low_price?: number;
-  prev_close_price?: number;
-  atp?: number;
-  volume?: number;
+  open_price?: number | undefined;
+  high_price?: number | undefined;
+  low_price?: number | undefined;
+  prev_close_price?: number | undefined;
+  atp?: number | undefined;
+  volume?: number | undefined;
 }
 
 export type FyersQuotesApiRow = {
