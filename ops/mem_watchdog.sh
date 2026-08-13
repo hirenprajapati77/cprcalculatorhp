@@ -40,6 +40,17 @@ is_protected_redis_key() {
     calc:share:*)
       return 0
       ;;
+    stock_data_*|market:*)
+      # H5 fix: stock data is read mid-scan by overnight BTST/STBT jobs.
+      # Pruning these during an active scan causes partial OHLC loss —
+      # mismatched entries, missing option suggestions, and wrong CPR values.
+      return 0
+      ;;
+    option_chain_*)
+      # H5 fix: option chain data is fetched per-symbol during overnight runs.
+      # Evicting mid-scan produces blank strike suggestions in the Telegram alert.
+      return 0
+      ;;
     *)
       return 1
       ;;
@@ -57,8 +68,8 @@ prune_redis_cache_preserving_protected_keys() {
   local batch_size=500
 
   # Avoid FLUSHDB so retain-claim, unlock guards, and calculation share links survive off-hours pressure cleanup.
-  # Other transient keys such as cpr:bullish_state:* (durable in Postgres), option_chain_*, stock_data_*,
-  # scanner_results_*, and history:limit:* are safe to prune; they regenerate dynamically on cache-misses.
+  # Protected keys: cron_lock:*, cron_done:*, rate_limit:*, calc:share:*, stock_data_*, market:*, option_chain_*
+  # Safe to prune: scanner_results_*, history:limit:*, auto_scan_result:* — these regenerate on cache-miss.
   while IFS= read -r key; do
     [ -z "$key" ] && continue
     if is_protected_redis_key "$key"; then

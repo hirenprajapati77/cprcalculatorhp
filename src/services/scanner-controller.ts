@@ -117,13 +117,25 @@ export class ScannerController {
         } catch (err) {
           const sym = stockMeta.symbol;
           const failureCacheKey = `failure_count_${sym}`;
-          const failCount = (await CacheService.get<number>(failureCacheKey) || 0) + 1;
-          // Blacklist temporary fetch issues for 1 hour instead of a full day to allow recovery
-          await CacheService.set(failureCacheKey, failCount, 3600);
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error(`[SKIP] ${sym} - fetch failed: ${errMsg}`);
-          if (failCount >= 3) {
-            console.warn(`[BLACKLIST] ${sym} - 3 consecutive failures, skipping future scans`);
+
+          // C5 fix: do NOT increment failCount during a global Fyers 429 event.
+          // A transient rate-limit hits every symbol simultaneously; incrementing
+          // individual failCounts causes mass-blacklisting for 1 hour — wiping out
+          // all breakout alerts during the prime 10:30–11:30 AM window.
+          if (MarketService.isFyersTemporarilyUnavailable()) {
+            console.warn(
+              `[SKIP] ${sym} - skipping failCount increment: global Fyers rate-limit active. ` +
+              `Symbols will be re-evaluated after cooldown.`
+            );
+          } else {
+            const failCount = (await CacheService.get<number>(failureCacheKey) || 0) + 1;
+            // Blacklist temporary fetch issues for 1 hour instead of a full day to allow recovery
+            await CacheService.set(failureCacheKey, failCount, 3600);
+            if (failCount >= 3) {
+              console.warn(`[BLACKLIST] ${sym} - 3 consecutive failures, skipping future scans`);
+            }
           }
         }
         return null;
