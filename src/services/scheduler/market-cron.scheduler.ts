@@ -146,7 +146,7 @@ export function startMarketCronScheduler(): void {
         // retainClaim=false here — that would re-run on every 60s poll tick.
         const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
         const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
-        const cprScanKey = `cpr-scan:${dateKey}:${timeBucket}`;
+        const cprScanKey = `cpr-scan:NIFTY_FNO:${dateKey}:${timeBucket}`;
         await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
       }
 
