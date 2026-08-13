@@ -45,6 +45,7 @@ export type ScanResultForBreakoutAlert = {
   low?: number | null;
   open?: number | null;
   previousClose?: number | null;
+  classification?: string | null;
 };
 
 export function mapScanResultsForBreakoutAlert(
@@ -69,6 +70,7 @@ export function mapScanResultsForBreakoutAlert(
       rr2: r.rr2 ?? null,
       score: r.score ?? 0,
       sector: r.sector ?? 'Other',
+      classification: r.classification ?? 'NORMAL',
       eventRiskScore: r.eventRiskScore ?? 0,
       ...(r.high != null ? { high: r.high } : {}),
       ...(r.low != null ? { low: r.low } : {}),

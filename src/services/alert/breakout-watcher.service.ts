@@ -25,6 +25,7 @@ export interface BreakoutScanResult {
   rr2?: string | null;
   score: number;
   sector: string;
+  classification?: string;
   eventRiskScore?: number;
   /** Today's observed high (from scan MarketStockData) — used by pre-send price gate. */
   high?: number;

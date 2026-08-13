@@ -204,3 +204,47 @@ test('sendBreakoutAlert escapes HTML in footnote', async () => {
     env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
   }
 });
+
+test('sendBreakoutAlert uses dynamic CPR classification and conditionally includes Volume Spike', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalGroupChatId = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'unit-test-token';
+  env.TELEGRAM_GROUP_CHAT_ID = 'group-chat';
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  let sentBody = '';
+  global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { text: string };
+    sentBody = body.text;
+    return { ok: true, text: async () => '', json: async () => ({ ok: true }) };
+  }) as unknown as typeof global.fetch;
+
+  try {
+    const baseStock = {
+      ltp: 100, entry: 101, sl: 99, target: 103, rr: '1:1.5', score: 80, sector: 'IT', alertKind: 'BREAKDOWN' as const,
+    };
+
+    // 1. NORMAL width
+    await TelegramService.sendBreakoutAlert([{ ...baseStock, symbol: 'NORMAL_STK', classification: 'NORMAL', signals: ['BREAKDOWN'] }]);
+    assert.match(sentBody, /NORMAL CPR/);
+    assert.doesNotMatch(sentBody, /NARROW CPR/);
+    assert.doesNotMatch(sentBody, /Volume Spike/); // No VOLUME_SPIKE signal
+
+    // 2. WIDE width + Volume Spike
+    await TelegramService.sendBreakoutAlert([{ ...baseStock, symbol: 'WIDE_STK', classification: 'WIDE', signals: ['BREAKDOWN', 'VOLUME_SPIKE'] }]);
+    assert.match(sentBody, /WIDE CPR \+ Volume Spike/);
+    assert.doesNotMatch(sentBody, /NARROW CPR/);
+
+    // 3. NARROW width + Volume Spike (byte-for-byte regression guard)
+    await TelegramService.sendBreakoutAlert([{ ...baseStock, symbol: 'NARROW_STK', classification: 'NARROW', signals: ['BREAKDOWN', 'VOLUME_SPIKE'] }]);
+    assert.match(sentBody, /NARROW CPR \+ Volume Spike \+ Price &lt; BC\. Verify before trading\./);
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
+  }
+});
