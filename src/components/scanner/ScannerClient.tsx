@@ -452,13 +452,18 @@ const StockRow = React.memo(({
     entry: row.entry,
     ltp: row.ltp,
     direction: setupDirection,
+    ...(((row as { previousClose?: number }).previousClose || row.price)
+      ? { previousClose: (row as { previousClose?: number }).previousClose || row.price }
+      : {}),
   });
   const staleLabel =
-    setupStale.stale && setupStale.reason === 'GAP_INVALIDATED'
-      ? 'GAP'
-      : setupStale.stale
-        ? 'EXTENDED'
-        : null;
+    !setupStale.stale
+      ? null
+      : setupStale.reason === 'GAP_INVALIDATED'
+        ? 'GAP'
+        : setupStale.reason === 'AGAINST_PRIOR_CLOSE'
+          ? 'VS CLOSE'
+          : 'EXTENDED';
 
   return (
     <tr 
@@ -1752,7 +1757,7 @@ export default function ScannerClient() {
       if (res.status === 202) {
         const data = await res.json();
         setLatency(Date.now() - startFetchTime);
-        showToast(data.message || 'Scan already in progress.', 'info');
+        showToast(data.message || 'Scan started — showing latest cached rows.', 'info');
         await fetchScannerData(true);
         fetchTopOpportunities();
         fetchHistoryRuns();

@@ -163,6 +163,80 @@ describe('breakout price gate — regression (normal alert)', () => {
   });
 });
 
+describe('breakout price gate — against prior close', () => {
+  it('LICI-style LONG: LTP still below previous close is suppressed', () => {
+    const result = filterBreakoutsForPriceActionability([
+      base({
+        symbol: 'LICI',
+        alertKind: 'BREAKOUT',
+        signals: ['BREAKOUT', 'NARROW', 'VOLUME_SPIKE'],
+        ltp: 415.35,
+        entry: 414.95,
+        sl: 410.1,
+        target: 425.2,
+        high: 416.35,
+        low: 414.0,
+        open: 415.35,
+        previousClose: 417,
+      }),
+    ]);
+    assert.equal(result.actionable.length, 0);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'AGAINST_PRIOR_CLOSE');
+  });
+
+  it('SHORT still green vs previous close is suppressed', () => {
+    const result = filterBreakoutsForPriceActionability([
+      base({
+        symbol: 'GREENSHORT',
+        alertKind: 'BREAKDOWN',
+        signals: ['BREAKDOWN'],
+        ltp: 100.5,
+        entry: 100.2,
+        sl: 101.5,
+        target: 97,
+        high: 101,
+        low: 99.8,
+        open: 100.3,
+        previousClose: 100,
+      }),
+    ]);
+    assert.equal(result.actionable.length, 0);
+    assert.equal(result.suppressed[0].gateReason, 'AGAINST_PRIOR_CLOSE');
+  });
+
+  it('fails open when previousClose is missing', () => {
+    const row = base({
+      symbol: 'NOPC',
+      alertKind: 'BREAKOUT',
+      ltp: 100.2,
+      entry: 100,
+      high: 101,
+      low: 99.5,
+      open: 100,
+    });
+    delete row.previousClose;
+    const result = filterBreakoutsForPriceActionability([row]);
+    assert.equal(result.suppressed.length, 0);
+    assert.equal(result.actionable.length, 1);
+  });
+
+  it('allows LONG when LTP equals previous close', () => {
+    const result = filterBreakoutsForPriceActionability([
+      base({
+        ltp: 100,
+        entry: 99.8,
+        high: 101,
+        low: 99.5,
+        previousClose: 100,
+        open: 99.9,
+      }),
+    ]);
+    assert.equal(result.suppressed.length, 0);
+    assert.equal(result.actionable.length, 1);
+  });
+});
+
 describe('atrScaledExtensionCap', () => {
   it('defaults to 3.5% when ATR is missing', () => {
     assert.equal(atrScaledExtensionCap(undefined), 3.5);

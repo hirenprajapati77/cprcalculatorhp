@@ -73,10 +73,16 @@ export function evaluateCprSetupPriceStaleness(args: {
     direction,
     todayHigh,
     todayLow,
+    ...(previousClose != null ? { previousClose } : {}),
     ...(entryExtensionPct != null ? { maxExtensionPct: entryExtensionPct } : {}),
     ...(atrPct != null ? { atrPct } : {}),
   });
-  if (basic.stale && basic.reason === 'GAP_INVALIDATED') return basic;
+  if (
+    basic.stale &&
+    (basic.reason === 'GAP_INVALIDATED' || basic.reason === 'AGAINST_PRIOR_CLOSE')
+  ) {
+    return basic;
+  }
 
   if (todayHigh > 0 && todayLow > 0 && (previousClose ?? 0) > 0) {
     const stock: MarketStockData = {
@@ -118,9 +124,9 @@ export function evaluateCprSetupPriceStaleness(args: {
 
 /**
  * Pre-send gate for CPR breakout/breakdown Telegram alerts.
- * Suppresses (does not send) gap-invalidated and extended/chase setups —
- * same hard-reject posture as EntryManagerService for BTST. Flagging still
- * publishes stale RR into the group and trains traders to ignore alerts.
+ * Suppresses (does not send) gap-invalidated, against-prior-close, and
+ * extended/chase setups — same hard-reject posture as EntryManagerService for BTST.
+ * Flagging still publishes stale RR into the group and trains traders to ignore alerts.
  */
 export function filterBreakoutsForPriceActionability(
   breakouts: BreakoutScanResult[],

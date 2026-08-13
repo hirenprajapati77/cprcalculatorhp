@@ -49,16 +49,20 @@ export async function POST(request: NextRequest) {
       }, { status: 202 });
     }
 
-    // UI manual refresh: recompute scanner data only.
-    // Telegram breakout alerts are cron-only (cpr-scan job + /api/cron/auto-scan).
-    const results = await ScannerController.runFullScan(universe, market);
+    // Kick off without blocking the HTTP response. A NIFTY_FNO scan on the 1 GB VM
+    // can take 40–100s+ (Fyers 429 cooldown made one run 315s). The Scan button
+    // must not spin until that finishes — UI polls GET /api/scanner (warm cache).
+    // Telegram breakout alerts stay cron-only (cpr-scan job + /api/cron/auto-scan).
+    void ScannerController.runFullScan(universe, market).catch((err) => {
+      console.error('[ScannerRefresh] background scan failed:', err);
+    });
 
     return NextResponse.json({
       success: true,
-      message: 'Scanner refresh completed.',
-      count: results.length,
-      results,
-    }, { status: 200 });
+      inProgress: true,
+      started: true,
+      message: 'Scan started. Poll GET /api/scanner for updated rows.',
+    }, { status: 202 });
   } catch (err) {
     console.error('Error in scanner refresh API route:', err);
     return NextResponse.json(
