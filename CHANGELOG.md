@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **1-Week Deep Review Production Bugfixes (PRs #125–#129)**: Complete resolution of 20 critical, high, medium, and low severity system issues across 5 focused branches:
+  - **Breakout & Alert Pipeline (C1, H1, M3)**: `isBreakoutConfirmed` falls through on 15m candle close miss to preserve valid 5m session hold alerts (C1); `suppressClaims()` preserves 4-hour cooldowns during VIX and price-gate suppressions (H1); `missCount` increments whenever setups fail score thresholds (M3).
+  - **Journal Parity & Concurrency (C2, C3, H2, H3)**: BTST journal uses next-week options while CPR journal uses intraday options for alert parity (C2); `regime.reliable` check suppresses ghost entries during market data outages (C3); CPR journal deduplicates symbols and applies stable tie-breakers before parallel logging (H2); overnight upsert `$transaction` payload is sorted by primary key (`symbol`) to eliminate DB deadlocks (H3).
+  - **Data Feed & Infrastructure (C4, M4, M4b, C5, H4, H5)**: Removed stale L1 memory cache fallback on Redis key misses (C4); added `clearL1()` and bound it to Redis `ready` events and `purgeInProcessCaches()` (M4/M4b); protected scanner from mass 1-hour blacklisting during global Fyers 429 events (C5); extended Fyers quote prefetch TTL to 90s (H4); protected `stock_data_*` and `option_chain_*` keys in `mem_watchdog.sh` (H5).
+  - **Medium Correctness (M1, M2, M5)**: Normalized `asOfDate` parameters to strict `YYYY-MM-DD` IST format in signal logic (M1); used `getCompletedHistory()` consistently for index ATR calculations (M2); handled `AbortError` timeouts gracefully during lot-size master downloads (M5).
+  - **Quality & Resilience (L1, L2, L3, L4, L5)**: Refactored `withTimeout` to `Promise.race` pattern with `.finally()` cleanup (L1); exported `HOT_ZONE_ATR_MULTIPLIER` in `trading-constants.ts` (L2); added ATR-scaled dynamic extension caps in `cpr-setup-staleness.ts` (L3); deprecated legacy optionExpiry regex fallback (L4); added a send attempts limit to `btst-alert.job.ts` to prevent 3:20 PM retry storms (L5).
+
 ### Added
 - **Fyers quote batch prefetch (PR #122)**: Scanner and overnight runs prefetch Fyers LTP quotes in batches of up to 50 symbols per HTTP request (`fyers-quotes-batch.ts`, `MarketService.prefetchFyersQuotes`), seeding a short-lived in-process cache so per-symbol `getStockData` skips redundant quote round-trips. Tunables: `FYERS_QUOTES_BATCH_SIZE`, `FYERS_QUOTE_CACHE_TTL_MS`. Cache cleared via `purgeInProcessCaches` after heavy crons.
 - **India VIX breakout alert gate (PR #122)**: Automated Telegram breakout alerts now respect India VIX regime (`breakout-vix-gate.ts`): pause all alerts when VIX ≥ 25; in the 18–24 band require score ≥ 85 and tighten entry-chase cap to 2% (from 3.5%). Manual test-breakout path unchanged. Constants in `BREAKOUT_VIX` (`trading-constants.ts`).
