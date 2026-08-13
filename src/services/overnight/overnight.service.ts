@@ -643,11 +643,11 @@ export class OvernightService {
       }
     }
 
-    signalsToSave.sort((a, b) => {
-      if (a.classification === 'IGNORE' && b.classification !== 'IGNORE') return 1;
-      if (a.classification !== 'IGNORE' && b.classification === 'IGNORE') return -1;
-      return (b.overnightScore || 0) - (a.overnightScore || 0);
-    });
+    // H3 fix: sort by symbol (the primary key) BEFORE the transaction to ensure
+    // deterministic row-lock acquisition order. The previous sort by score caused
+    // AB-BA deadlocks when concurrent queries acquired locks in a different order.
+    // The UI-facing score sort is applied to the savedSignals return array below.
+    signalsToSave.sort((a, b) => (a.symbol as string).localeCompare(b.symbol as string));
 
     // H-6: Batch all upserts into a single interactive transaction instead of
     // 200 sequential await prisma.overnightSignal.upsert() calls (~1 s of DB I/O).
@@ -688,6 +688,14 @@ export class OvernightService {
       // to all users until the cache expires at midnight.
       throw new Error('Overnight scan persistence failed — database transaction aborted');
     }
+
+    // Re-sort for UI: IGNORE last, then by descending score.
+    // (Transaction payload was sorted by symbol for lock-order safety above.)
+    savedSignals.sort((a, b) => {
+      if (a.classification === 'IGNORE' && b.classification !== 'IGNORE') return 1;
+      if (a.classification !== 'IGNORE' && b.classification === 'IGNORE') return -1;
+      return (b.overnightScore || 0) - (a.overnightScore || 0);
+    });
 
     return savedSignals;
   }

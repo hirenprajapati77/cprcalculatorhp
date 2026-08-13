@@ -36,15 +36,31 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     },
   });
 
-  const topSignals = await prisma.scannerResult.findMany({
+  const topSignalsRaw = await prisma.scannerResult.findMany({
     where: {
       date: todayStr,
       score: { gte: 75 },
       NOT: { symbol: { endsWith: ':BSE' } },
     },
-    orderBy: { score: 'desc' },
-    take: maxSignals,
+    // H2 fix: stable tie-breaker prevents non-deterministic ordering when
+    // multiple rows share the same score (common in same-date rescans).
+    orderBy: [{ score: 'desc' }, { symbol: 'asc' }],
+    // Over-fetch slightly to leave room for symbol dedup below.
+    take: maxSignals * 3,
   });
+
+  // H2 fix: deduplicate by symbol (same stock can appear multiple times from
+  // multiple intraday rescans). Concurrent upserts on duplicate symbols in
+  // Promise.allSettled cause Prisma P2002 unique constraint violations.
+  const seenSymbols = new Set<string>();
+  const topSignals = topSignalsRaw
+    .filter((s) => {
+      const sym = s.symbol.split(':')[0].trim();
+      if (seenSymbols.has(sym)) return false;
+      seenSymbols.add(sym);
+      return true;
+    })
+    .slice(0, maxSignals);
 
   if (qualifyingCount > topSignals.length) {
     console.log(
@@ -142,7 +158,11 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       let optionExpiry: string | undefined;
 
       try {
-        const suggestion = await OptionSuggestionService.suggestOptionForBtst(
+        // C2 fix: CPR is an intraday strategy — use suggestOption (current-week
+        // / nearest-expiry) not suggestOptionForBtst (next-week expiry).
+        // Previously the journal tracked a further-dated expiry contract that
+        // no intraday trader would hold, decoupling recorded PnL from reality.
+        const suggestion = await OptionSuggestionService.suggestOption(
           cleanSym,
           liveLtp,
           tag,
