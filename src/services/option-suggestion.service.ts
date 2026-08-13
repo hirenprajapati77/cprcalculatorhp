@@ -212,10 +212,18 @@ export class OptionSuggestionService {
           console.warn('[OptionSuggestion] NSE_FO.csv fetch aborted before response — falling back to hardcoded lot sizes.');
         }
       } catch (innerErr) {
-        console.error('[OptionSuggestion] Error parsing NSE_FO.csv response:', innerErr);
+        if (innerErr instanceof Error && (innerErr.name === 'AbortError' || innerErr.message.includes('aborted'))) {
+          console.warn('[OptionSuggestion] NSE_FO.csv download timed out after 5s — falling back to hardcoded lot sizes.');
+        } else {
+          console.error('[OptionSuggestion] Error downloading/parsing NSE_FO.csv response:', innerErr);
+        }
       }
     } catch (err) {
-      console.error('[OptionSuggestion] Error downloading lot sizes master:', err);
+      if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
+        console.warn('[OptionSuggestion] Lot sizes master download timed out — falling back to hardcoded lot sizes.');
+      } else {
+        console.error('[OptionSuggestion] Error downloading lot sizes master:', err);
+      }
     }
 
     // Always merge fallback lot sizes (ensuring SENSEX, NIFTY, etc. are always populated even if CSV format lacks BSE)
