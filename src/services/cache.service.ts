@@ -115,6 +115,12 @@ class CacheServiceImpl {
           console.log('Redis connected');
           this.redisFallbackLogged = false;
           this.provider = 'redis';
+          // C4/M4 fix: flush stale L1 entries that accumulated during the outage.
+          // After Redis reconnects, set() writes Redis-only; if L1 has old values
+          // from the downtime they would be returned by get() on a Redis eviction,
+          // potentially delivering stale prices to Telegram alerts.
+          memoryCache.clear();
+          console.log('[Cache] L1 memoryCache cleared on Redis reconnect — stale data purged.');
         });
       } catch {
         console.error('Failed to initialize Redis, using memory cache.');
@@ -141,18 +147,15 @@ class CacheServiceImpl {
           this.hits++;
           return JSON.parse(data) as T;
         }
-        // Redis returned null (key miss) — check L1 before giving up.
-        // This covers the case where a prior set() failed in Redis (e.g. OOM/READONLY)
-        // and fell through to write L1 — without this, that write is permanently invisible.
-        const l1 = memoryCache.get(key) as T | undefined;
-        if (l1 !== undefined) {
-          this.hits++;
-          return structuredClone(l1);
-        }
+        // C4 fix: Redis returned null = genuine key miss. Do NOT fall back to L1.
+        // Returning stale L1 data here is worse than a cache miss because it can
+        // deliver wrong LTP/entry/SL to Telegram alerts after mem_watchdog evictions.
+        // L1 is only trusted when Redis is genuinely unreachable (error path below).
         this.misses++;
         return null;
       } catch {
-        // Redis threw (network error, timeout, etc.) — fall through to L1.
+        // Redis threw (network error, timeout, etc.) — fall through to L1 ONLY
+        // because Redis is genuinely unavailable, not just missing the key.
         const l1 = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
         if (l1 !== null) {
           this.hits++;
@@ -223,6 +226,16 @@ class CacheServiceImpl {
       size: memoryCache.size,
       max: memoryCache.max,
     };
+  }
+
+  /**
+   * M4 fix: Expose explicit L1 purge for post-cron memory management.
+   * Call this via purgeInProcessCaches() after heavy overnight crons to
+   * enforce strict Node.js heap limits on the 1 GB Oracle VM.
+   */
+  clearL1(): void {
+    memoryCache.clear();
+    console.log('[Cache] L1 memoryCache explicitly cleared.');
   }
 
   async getMetrics() {
