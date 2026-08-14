@@ -165,10 +165,10 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       let optionExpiry: string | undefined;
 
       try {
-        // C2 fix: CPR is an intraday strategy — use suggestOption (current-week
-        // / nearest-expiry) not suggestOptionForBtst (next-week expiry).
-        // Previously the journal tracked a further-dated expiry contract that
-        // no intraday trader would hold, decoupling recorded PnL from reality.
+        // C2 fix: CPR journal matches breakout-alert.pipeline.ts by calling suggestOption
+        // (mapping LONG/SHORT → BULLISH/BEARISH) rather than suggestOptionForBtst.
+        // Currently both methods are functionally identical because INDEX_BTST_PREFER_DEEPER_ITM
+        // is false, but using the correct method prevents a future discrepancy if deeper ITM is re-enabled.
         const suggestion = await OptionSuggestionService.suggestOption(
           cleanSym,
           liveLtp,

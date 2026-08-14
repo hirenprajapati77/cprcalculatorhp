@@ -142,7 +142,6 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
     allPicks.map(async (signal) => {
       const dir = signal._dir;
       const signalType = dir === 'LONG' ? 'BTST' : 'STBT';
-      const optionSide = dir === 'LONG' ? ('BULLISH' as const) : ('BEARISH' as const);
       const optionType = dir === 'LONG' ? 'CE' : 'PE';
       const defaultSlMul = dir === 'LONG' ? 0.98 : 1.02;
       const defaultTargetMul = dir === 'LONG' ? 1.04 : 0.96;
@@ -178,10 +177,10 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       let optionExpiry: string | undefined;
 
       try {
-        // C2 fix: BTST is an overnight position that holds overnight theta risk.
-        // suggestOptionForBtst picks next-week expiry to avoid same-day decay,
-        // matching btst-alert.job.ts. Using suggestOption (intraday expiry) here
-        // previously decoupled journal PnL from the actual alerted contract.
+        // C2 fix: BTST journal matches btst-alert.job.ts by calling suggestOptionForBtst
+        // rather than suggestOption. Currently both methods are functionally identical
+        // because INDEX_BTST_PREFER_DEEPER_ITM is false, but using suggestOptionForBtst
+        // ensures journal-alert parity if INDEX_BTST_PREFER_DEEPER_ITM is re-enabled.
         const suggestion = await OptionSuggestionService.suggestOptionForBtst(
           signal.symbol, ltp, dir, entry, sl, target, signal.signalDate
         );
