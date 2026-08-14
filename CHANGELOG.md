@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **14 Aug NSE F&O drift fetch timeout (PR #134)**:
+  - Added 10s `AbortSignal.timeout(10_000)` to `FnoUniverseCheckService.checkDrift()` when querying `fo_mktlots.csv` from NSE archives, preventing indefinite request hangs when NSE endpoints are slow or block cloud IPs.
+- **14 Aug Scan persistence retry & visibility (PR #133)**:
+  - Wrapped `ScannerController.persistScanResults()` in `DatabaseCircuitBreaker.execute()` with a single automatic 3s retry on transient DB timeouts.
+  - Added durable 24h Redis failure marker logging (`scan_persist_failed:{universe}:{date}:{timestamp}`) when persistence attempts fail.
 - **13 Aug LICI / Scan hang (live)**:
   - **Against prior close**: LONG breakouts with LTP still below previous close (and SHORT breakdowns still above it) are suppressed before Telegram claim and skipped in the CPR journal. Scanner setup column flags `VS CLOSE`. Would have blocked LICI 14:45 IST (415.35 vs prev close 417).
   - **PCR veto**: After option enrich, CE is not sent when chain PCR is bearish (< 0.8) and PE is not sent when PCR is bullish (> 1.2). Claim is released so a later aligned print can still fire. LICI had PCR 0.73 with a 410 CE.
