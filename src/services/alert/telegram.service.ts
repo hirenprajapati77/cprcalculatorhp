@@ -280,11 +280,19 @@ export class TelegramService {
         optionText = `\n   🎯 Option: <b>${optionLabel}${priceText}</b>`;
       }
 
+      let slFooter = 'Stop loss closes on 15m candle';
+      if (s.signals?.includes('RANGE')) {
+        slFooter = 'Stop loss closes on 15m candle (RANGE breakout)';
+      } else if (s.signals?.includes('TREND')) {
+        slFooter = 'Stop loss closes on 15m candle (TREND continuation)';
+      }
+
       return (
         `${icon} <b>${escapeTelegramHtml(s.symbol)}</b> (${escapeTelegramHtml(s.sector)})\n` +
         `   LTP: ₹${s.ltp.toFixed(2)} | Score: ${s.score}\n` +
         `   Entry: ₹${s.entry.toFixed(2)} | SL: ₹${s.sl.toFixed(2)} | Target 1: ₹${s.target.toFixed(2)}${target2Line}\n` +
-        `   RR: ${escapeTelegramHtml(s.rr)}${optionText}`
+        `   RR: ${escapeTelegramHtml(s.rr)}${optionText}\n` +
+        `   <i>${escapeTelegramHtml(slFooter)}</i>`
       );
     }).join('\n\n');
 
