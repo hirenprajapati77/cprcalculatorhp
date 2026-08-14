@@ -92,4 +92,16 @@ NOT FNO, NONFNO`);
     assert.strictEqual(result.data?.symbolsOnlyInNse.length, 0);
     assert.strictEqual(result.data?.newlyIneligible.length, 0);
   });
+
+  await t.test('should handle network timeout / abort error gracefully', async () => {
+    global.fetch = async () => {
+      const err = new Error('The operation was aborted due to timeout');
+      err.name = 'TimeoutError';
+      throw err;
+    };
+
+    const result = await FnoUniverseCheckService.checkDrift();
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error?.includes('timeout') || result.error?.includes('aborted'));
+  });
 });
