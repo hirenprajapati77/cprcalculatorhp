@@ -7,6 +7,7 @@ import { RankingService } from './ranking.service';
 import { SectorRegimeService } from './sector-regime.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { EventCalendarService } from './overnight/event.service';
+import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
@@ -188,11 +189,12 @@ export class ScannerController {
     market: string;
     today: string;
     scanDurationMs: number;
+    retryDelayMs?: number;
   }): Promise<void> {
-    const { filtered, universeName, market, today, scanDurationMs } = args;
-    const persistStart = Date.now();
+    const { filtered, universeName, market, today, scanDurationMs, retryDelayMs = 3000 } = args;
 
-    try {
+    const doPersist = async () => {
+      const persistStart = Date.now();
       const CHUNK_SIZE = 15;
       for (let chunkIdx = 0; chunkIdx < filtered.length; chunkIdx += CHUNK_SIZE) {
         const chunk = filtered.slice(chunkIdx, chunkIdx + CHUNK_SIZE);
@@ -309,8 +311,53 @@ export class ScannerController {
         `Scanner database V2 persistence completed for ${filtered.length} stocks in ${persistMs}ms ` +
         `(scan ${scanDurationMs}ms).`
       );
-    } catch (dbErr) {
-      console.error('Error persisting scanner results to DB:', dbErr);
+    };
+
+    // Attempt 1 with DatabaseCircuitBreaker
+    try {
+      await DatabaseCircuitBreaker.execute(doPersist);
+      return;
+    } catch (attempt1Err) {
+      const msg1 = attempt1Err instanceof Error ? attempt1Err.message : String(attempt1Err);
+      console.warn(
+        `[SCAN] Initial DB persist failed for ${universeName}:${market}: ${msg1}. Retrying in ${retryDelayMs}ms...`
+      );
+    }
+
+    // Short delay before single retry
+    if (retryDelayMs > 0) {
+      await new Promise((res) => setTimeout(res, retryDelayMs));
+    }
+
+    // Attempt 2 (retry) with DatabaseCircuitBreaker
+    try {
+      await DatabaseCircuitBreaker.execute(doPersist);
+      return;
+    } catch (attempt2Err) {
+      const errMsg = attempt2Err instanceof Error ? attempt2Err.message : String(attempt2Err);
+      console.error(
+        `[SCAN] Retry DB persist failed for ${universeName}:${market}: ${errMsg}. Writing failure marker to Redis.`
+      );
+
+      const timestamp = Date.now();
+      const failureKey = `scan_persist_failed:${universeName}:${today}:${timestamp}`;
+      const failurePayload = {
+        universeName,
+        market,
+        date: today,
+        timestamp,
+        error: errMsg,
+        filteredCount: filtered.length,
+        failedAt: new Date().toISOString(),
+      };
+
+      try {
+        await CacheService.set(failureKey, failurePayload, 24 * 60 * 60);
+      } catch (cacheErr) {
+        console.error('[SCAN] Failed to write scan persist failure marker to Redis:', cacheErr);
+      }
+
+      // TODO: // AWAITING OWNER DECISION — Alert channel wiring (e.g. Telegram / Ops channel) for DB persistence failures.
     }
   }
 }
