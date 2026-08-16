@@ -5,6 +5,8 @@ import { CacheService } from '@/services/cache.service';
 import { buildInsightsFromOvernight } from '@/services/overnight/overnight-ui-adapter';
 import { getISTDateString, getISTTime, BTST_CLOCK } from '@/lib/market-hours';
 import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-filter';
+import { overnightScanCacheKey, shouldDiscoverOvernightScan } from '@/lib/overnight-scan-cache';
+import { BTST_WINDOWS } from '@/config/trading-constants';
 import { publicApiError } from '@/lib/api-error';
 
 /** Matches historical Prisma `activeOnly` filter (READY+ / WATCH classifications). */
@@ -60,8 +62,8 @@ export async function GET(req: NextRequest) {
       const state = OvernightService.determineState(now);
 
       // Cache key uses getISTDateString() (YYYY-MM-DD) — consistent with BTST cache key format.
-      const todayCacheKey = getISTDateString();
-      const OVERNIGHT_KEY = `overnight_last_scan_${todayCacheKey}`;
+      const OVERNIGHT_KEY = overnightScanCacheKey(getISTDateString());
+      const windowOpen = state === 'ACTIVE' || state === 'DISCOVERING';
 
       interface CachedOvernightData {
         scannedAt: string;
@@ -69,25 +71,31 @@ export async function GET(req: NextRequest) {
         insights: unknown;
       }
 
-      // Live discovery spans DISCOVERING + ACTIVE (BTST_WINDOWS via getBtstWindowState)
-      if (state !== 'ACTIVE' && state !== 'DISCOVERING' && !bypass) {
-        const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
-        if (cached) {
-          const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
-          return NextResponse.json({
-            success: true,
-            windowOpen: false,
-            cachedResult: true,
-            scannedAt: cached.scannedAt,
-            message: `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
-            results: filtered,
-            insights: cached.insights,
-            state,
-          });
+      const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
+
+      if (shouldDiscoverOvernightScan(bypass, Boolean(cached), windowOpen)) {
+        if (bypass) {
+          await CacheService.delete(OVERNIGHT_KEY);
         }
-        // If cache is missing but we are after 15:10 IST today, check DB for today's frozen scan signals
+      } else if (cached) {
+        const filtered = applyOvernightQueryFilters(cached.results, direction, activeOnly);
+        return NextResponse.json({
+          success: true,
+          windowOpen,
+          cachedResult: true,
+          scannedAt: cached.scannedAt,
+          message: windowOpen
+            ? `Showing scan from ${cached.scannedAt}. Use bypass=true to force a fresh scan.`
+            : `Showing last scan from ${cached.scannedAt}. Next scan at ${BTST_CLOCK.discoveryStart} IST.`,
+          results: filtered,
+          insights: cached.insights,
+          state,
+        });
+      } else {
+        const discoveryStartMin =
+          BTST_WINDOWS.DISCOVERY_START.hour * 60 + BTST_WINDOWS.DISCOVERY_START.minute;
         const istTime = getISTTime(now);
-        if (istTime.totalMinutes >= 15 * 60 + 10) {
+        if (istTime.totalMinutes >= discoveryStartMin) {
           const dbSignals = await prisma.overnightSignal.findMany({
             where: {
               signalDate: todayStr,
@@ -123,16 +131,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Bypass ON — delete the existing cache so the fall-through below ALWAYS
-      // triggers a fresh OvernightService.discover(). Without this deletion,
-      // bypass=true would silently return the stale 9-hour cache, making it
-      // impossible for admins to force a fresh scan after the initial run.
-      if (bypass) {
-        await CacheService.delete(OVERNIGHT_KEY);
-        // Fall through to OvernightService.discover() below
-      }
-
-      // Discovery open — run Advanced scan and cache
+      // Window open with no cache, or bypass=true — run Advanced scan and cache
       const signals = await OvernightService.discover('BOTH');
 
       interface OvernightResultItem {

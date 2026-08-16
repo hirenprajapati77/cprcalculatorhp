@@ -30,7 +30,7 @@ const NEUTRAL_EVENT = {
   severity: 0,
   reason: null,
   source: 'LOCAL_DB' as const,
-  confidence: 'UNKNOWN' as const,
+  confidence: 'HIGH' as const,
 };
 
 type OvernightSig = {
