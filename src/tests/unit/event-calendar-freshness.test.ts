@@ -33,6 +33,7 @@ test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t)
       const result = await EventCalendarService.getEventRisk('SBIN', SIGNAL_DATE);
       assert.strictEqual(result.severity, 0);
       assert.strictEqual(result.reason, null);
+      assert.strictEqual(result.confidence, 'HIGH');
     } finally {
       env.HISTORICAL_MODE = originalHistMode;
       mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
@@ -52,6 +53,7 @@ test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t)
       const result = await EventCalendarService.getEventRisk('SBIN', SIGNAL_DATE);
       assert.strictEqual(result.severity, 0);
       assert.strictEqual(result.reason, null);
+      assert.strictEqual(result.confidence, 'HIGH');
     } finally {
       env.HISTORICAL_MODE = originalHistMode;
       env.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
@@ -91,6 +93,7 @@ test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t)
       const result = await EventCalendarService.getBulkEventRisk(['SBIN'], SIGNAL_DATE);
       assert.strictEqual(result.SBIN.severity, 0);
       assert.strictEqual(result.SBIN.reason, null);
+      assert.strictEqual(result.SBIN.confidence, 'HIGH');
     } finally {
       env.HISTORICAL_MODE = originalHistMode;
       mutableEnv.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;
@@ -110,6 +113,7 @@ test('EventCalendarService — EVENT_CALENDAR_ENFORCE_FRESHNESS flag', async (t)
       const result = await EventCalendarService.getBulkEventRisk(['SBIN'], SIGNAL_DATE);
       assert.strictEqual(result.SBIN.severity, 0);
       assert.strictEqual(result.SBIN.reason, null);
+      assert.strictEqual(result.SBIN.confidence, 'HIGH');
     } finally {
       env.HISTORICAL_MODE = originalHistMode;
       env.EVENT_CALENDAR_ENFORCE_FRESHNESS = originalEnforce;

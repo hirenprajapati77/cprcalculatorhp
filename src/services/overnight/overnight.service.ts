@@ -592,7 +592,7 @@ export class OvernightService {
             shortSig?.score || 0,
             regime,
             history.length,
-            bulkEventRisks[fullStock.symbol] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'UNKNOWN' },
+            bulkEventRisks[fullStock.symbol] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' },
             macroEventRisk,
             relativeStrength
           );

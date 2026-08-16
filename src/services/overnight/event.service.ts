@@ -10,6 +10,16 @@ export interface EventRiskResult {
   confidence: 'HIGH' | 'LOW' | 'UNKNOWN';
 }
 
+/** No matching events and calendar not in stale-enforced fallback. */
+function noKnownEventRisk(): EventRiskResult {
+  return {
+    severity: 0,
+    reason: null,
+    source: 'LOCAL_DB',
+    confidence: 'HIGH',
+  };
+}
+
 /** How many NSE trading sessions ahead to query/decay event risk. */
 export const EVENT_LOOKAHEAD_TRADING_DAYS = 3;
 
@@ -113,13 +123,10 @@ export class EventCalendarService {
         };
       }
 
-      // If calendar is fresh but has absolutely no entries, we are in an unverified state
-      return {
-        severity: 0,
-        reason: null,
-        source: 'LOCAL_DB',
-        confidence: latestGlobalEvent ? 'HIGH' : 'UNKNOWN'
-      };
+      // Empty table (and freshness not enforced) means no known events — not UNKNOWN.
+      // UNKNOWN is reserved for fetch failures so SignalQuality does not demote every
+      // name to WATCHLIST when marketEvent has never been populated.
+      return noKnownEventRisk();
 
     } catch (err) {
       console.error(`[EventCalendarService] Error fetching events for ${symbol}:`, err);
@@ -254,12 +261,7 @@ export class EventCalendarService {
       for (const sym of symbols) {
         if (result[sym].reason === 'UNVERIFIED_CALENDAR') {
           if (!isCalendarStale) {
-            result[sym] = { 
-              severity: 0, 
-              reason: null, 
-              source: 'LOCAL_DB', 
-              confidence: latestGlobalEvent ? 'HIGH' : 'UNKNOWN' 
-            };
+            result[sym] = noKnownEventRisk();
           } else {
             result[sym].reason = 'STALE_CALENDAR_FALLBACK';
             result[sym].confidence = 'LOW';

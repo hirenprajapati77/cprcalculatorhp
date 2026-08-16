@@ -81,7 +81,7 @@ export class SignalQualityService {
     ) {
       qualityBucket = 'LOW_QUALITY';
     } else if (regimeFit < 50 || liquidityQuality < 80 || maxSeverityEvent.confidence === 'UNKNOWN') {
-      // Misaligned regime, slightly weak liquidity, or unknown event risk drops it to Watchlist
+      // UNKNOWN is fetch failure only — empty calendar is HIGH/severity 0 (see EventCalendarService).
       qualityBucket = 'WATCHLIST';
     }
 

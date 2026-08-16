@@ -710,6 +710,13 @@ describe('Overnight Engine Tests', () => {
       );
       assert.strictEqual(q7.qualityBucket, 'LOW_QUALITY');
 
+      const qUnknown = SignalQualityService.evaluateSignal(
+        stock, 'LONG', 100, 50, { trend: 'BULL', volatility: 'LOW', score: 80 }, 100,
+        { severity: 0, reason: 'DB_FETCH_ERROR', source: 'ERROR', confidence: 'UNKNOWN' },
+        { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'HIGH' }
+      );
+      assert.strictEqual(qUnknown.qualityBucket, 'WATCHLIST');
+
     } finally {
       
       
