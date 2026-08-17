@@ -114,13 +114,9 @@ export async function GET(request: NextRequest) {
         const cachedData = cached as { data: CachedScanItem[]; timestamp?: string };
         const formattedResults = cachedData.data.map((r) => ({
           ...r,
-          market: 'NSE',
-          sector: 'Auto-Scan Cache',
-          volumeRatio: 1.0,
-          entry: r.tc ?? null,
-          sl: r.bc ?? null,
-          target: r.r1 ?? null,
-          rr: 1.5,
+          market: (r as { market?: string }).market ?? 'NSE',
+          sector: (r as { sector?: string }).sector ?? 'Auto-Scan Cache',
+          volumeRatio: (r as { volumeRatio?: number }).volumeRatio ?? 1.0,
         }));
 
         if (universeLive) {
