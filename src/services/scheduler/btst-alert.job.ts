@@ -288,7 +288,7 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
 
       // Cross-engine conflict gate: block BTST LONG on intraday BREAKDOWN, STBT SHORT on intraday BREAKOUT
       try {
-        const signalRes = SignalService.calculateSignals(stockData);
+        const signalRes = SignalService.getSignals(stockData);
         const conflict = EntryManagerService.evaluateBreakoutConflict(stockData, direction, signalRes.signals);
         if (!conflict.eligible) {
           console.warn(`[BtstAlert] ${sig.symbol} ${direction} skipped (cross-engine conflict): ${conflict.reason}`);

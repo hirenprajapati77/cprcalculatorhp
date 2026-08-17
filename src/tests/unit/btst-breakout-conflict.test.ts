@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateBtstScannerConflict } from '../../lib/cpr-breakout-conflict';
 import { EntryManagerService } from '../../services/overnight/entry-manager.service';
+import { SignalService } from '../../services/signal.service';
 import type { MarketStockData } from '../../services/market.service';
 
 describe('evaluateBtstScannerConflict', () => {
@@ -69,4 +70,11 @@ describe('EntryManagerService.evaluateBreakoutConflict', () => {
     assert.equal(res.eligible, true);
     assert.equal(res.reason, null);
   });
+
+  it('integrates cleanly with SignalService.getSignals output', () => {
+    const signals = SignalService.getSignals(dummyStock).signals;
+    const res = EntryManagerService.evaluateBreakoutConflict(dummyStock, 'LONG', signals);
+    assert.equal(typeof res.eligible, 'boolean');
+  });
 });
+

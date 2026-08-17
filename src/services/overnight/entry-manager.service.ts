@@ -172,7 +172,7 @@ export class EntryManagerService {
     const conflict = evaluateBtstScannerConflict(direction, scannerSignals);
     if (conflict.conflicted) {
       console.log(`[BreakoutConflictGate] ${stock.symbol} ${direction} rejected: ${conflict.reason} (${conflict.detail})`);
-      return { eligible: false, reason: conflict.reason };
+      return { eligible: false, reason: conflict.reason ?? null };
     }
     return { eligible: true, reason: null };
   }

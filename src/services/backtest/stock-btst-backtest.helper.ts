@@ -265,7 +265,7 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
   }
 
   // Cross-engine breakout conflict gate: block BTST LONG on BREAKDOWN, STBT SHORT on BREAKOUT
-  const scannerSignals = SignalService.calculateSignals(stock, ctx.today.date).signals;
+  const scannerSignals = SignalService.getSignals(stock, ctx.today.date).signals;
   const conflictCheck = EntryManagerService.evaluateBreakoutConflict(stock, finalDir, scannerSignals);
   if (!conflictCheck.eligible) {
     return notTradable(conflictCheck.reason ?? 'Scanner breakout conflict', {
