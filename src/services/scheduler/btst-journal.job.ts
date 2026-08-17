@@ -1,5 +1,6 @@
 import { BtstService } from '@/services/backtest/btst.service';
 import { MarketService } from '@/services/market.service';
+import { SignalService } from '@/services/signal.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
@@ -168,6 +169,19 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
         console.warn(`[BtstJournal] ${signal.symbol} ${signalType} skipped: ${ext.reason}`);
         return { tag: `${logTag}:EXTENDED`, didLog: false };
       }
+
+      // Cross-engine conflict gate: block BTST LONG on intraday BREAKDOWN, STBT SHORT on intraday BREAKOUT
+      try {
+        const signalRes = SignalService.calculateSignals(stockData);
+        const conflict = EntryManagerService.evaluateBreakoutConflict(stockData, dir, signalRes.signals);
+        if (!conflict.eligible) {
+          console.warn(`[BtstJournal] ${signal.symbol} ${signalType} skipped (cross-engine conflict): ${conflict.reason}`);
+          return { tag: `${logTag}:${conflict.reason}`, didLog: false };
+        }
+      } catch (scanErr) {
+        console.warn(`[BtstJournal] Signal check failed for ${signal.symbol} (proceeding):`, scanErr);
+      }
+
 
       // Prefer a live option quote; if unavailable, journal the underlying so the
       // signal is not lost. Snapshots for UNDERLYING legs use stock LTP (not strike 0).

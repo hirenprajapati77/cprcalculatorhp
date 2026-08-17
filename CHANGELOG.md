@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **17 Aug Cross-Engine Breakout Conflict Gate (PR #138)**:
+  - Added strict symmetrical cross-engine protection (`evaluateBtstScannerConflict` in `src/lib/cpr-breakout-conflict.ts` and `EntryManagerService.evaluateBreakoutConflict`):
+    - BTST (LONG) is suppressed if the intraday CPR scanner confirms an active `BREAKDOWN`.
+    - STBT (SHORT) is suppressed if the intraday CPR scanner confirms an active `BREAKOUT`.
+  - Wired into `btst-alert.job.ts`, `btst-journal.job.ts`, and `stock-btst-backtest.helper.ts`, eliminating counter-trend overnight trap trades (such as buying a CALL on a breakdown day) and ensuring full harmony between the intraday scanner and the trade journal.
 - **17 Aug scanner useCache trade levels (PR #136)**: `GET /api/scanner?useCache=true` no longer overwrites persisted entry/SL/target with TC/BC/R1 when serving cached auto-scan rows — trade setup columns match the last full scan.
 - **16 Aug overnight empty calendar + in-window cache (PR #135)**: Empty `MarketEvent` calendar now yields `confidence: HIGH` / `noKnownEventRisk()` so earnings-free days are not falsely blocked; `/api/overnight` serves the in-window Redis/DB cache like BTST between 15:10–15:25 IST (`overnight-scan-cache.ts`).
   - Added 10s `AbortSignal.timeout(10_000)` to `FnoUniverseCheckService.checkDrift()` when querying `fo_mktlots.csv` from NSE archives, preventing indefinite request hangs when NSE endpoints are slow or block cloud IPs.
