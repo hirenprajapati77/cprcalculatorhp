@@ -60,6 +60,9 @@ model ScannerResult {
   sl             Float    @default(0)
   target         Float    @default(0)
   rr             String   @default("1:2.0")
+  alertSuppressedReason String?
+  alertSuppressedDetail String?
+  alertSuppressedAt     DateTime?
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])

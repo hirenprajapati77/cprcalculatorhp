@@ -5,7 +5,8 @@ import {
   overnightSignalToBtstUi,
   buildInsightsFromOvernight,
   selectTradableOvernightPicks,
-  compareLatestScanRows,
+  compareOvernightPickRows,
+  compareLatestScanBySymbol,
 } from '../../services/overnight/overnight-ui-adapter';
 import { BTST_CLOCK } from '../../lib/market-hours';
 
@@ -89,11 +90,45 @@ describe('overnight-ui-adapter (Phase H)', () => {
     assert.strictEqual(insights.totalShort, 1);
   });
 
-  it('compareLatestScanRows prefers newer signalTime then score', () => {
-    const a = makeSignal({ signalTime: '15:10', overnightScore: 110 });
-    const b = makeSignal({ signalTime: '15:25', overnightScore: 95 });
-    assert.ok(compareLatestScanRows(b, a) < 0, '15:25 row sorts before 15:10');
-    assert.ok(compareLatestScanRows(a, b) > 0);
+  it('compareOvernightPickRows prefers higher score then newer signalTime', () => {
+    const highScore = makeSignal({ signalTime: '15:10', overnightScore: 110 });
+    const freshLower = makeSignal({ signalTime: '15:25', overnightScore: 95 });
+    assert.ok(compareOvernightPickRows(highScore, freshLower) < 0, '110 beats 95 regardless of time');
+    assert.ok(compareOvernightPickRows(freshLower, highScore) > 0);
+    const tieScoreA = makeSignal({ symbol: 'A', signalTime: '15:10', overnightScore: 90 });
+    const tieScoreB = makeSignal({ symbol: 'B', signalTime: '15:25', overnightScore: 90 });
+    assert.ok(compareOvernightPickRows(tieScoreB, tieScoreA) < 0, 'same score → fresher time wins');
+  });
+
+  it('compareLatestScanBySymbol prefers newer signalTime for same-symbol dedup', () => {
+    const older = makeSignal({ signalTime: '15:10', overnightScore: 110 });
+    const newer = makeSignal({ signalTime: '15:25', overnightScore: 95 });
+    assert.ok(compareLatestScanBySymbol(newer, older) < 0, '15:25 rescan wins over 15:10');
+  });
+
+  it('ranks by score across symbols; fresher scan only breaks ties', () => {
+    const signals = [
+      makeSignal({
+        id: '1',
+        symbol: 'STALE_HIGH',
+        signalTime: '15:10',
+        overnightScore: 95,
+        classification: 'STRONG_BTST',
+      }),
+      makeSignal({
+        id: '2',
+        symbol: 'FRESH_LOWER',
+        signalTime: '15:25',
+        overnightScore: 88,
+        classification: 'BTST_READY',
+      }),
+    ];
+    const { longs } = selectTradableOvernightPicks(signals, { take: 2, suppressShort: true });
+    assert.deepEqual(
+      longs.map((s) => s.symbol),
+      ['STALE_HIGH', 'FRESH_LOWER'],
+      'score-95 @ 15:10 outranks score-88 @ 15:25'
+    );
   });
 
   it('dedupes by symbol so rescans cannot fill both top-N slots', () => {

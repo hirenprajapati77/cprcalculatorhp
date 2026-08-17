@@ -52,6 +52,9 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (August 2026):**
+- **PR #137 — Score-first overnight picks + breakout suppression UI (Aug 17)**: Overnight journal/alert top-N ranks by score (freshness tie-break); rescans dedupe to latest `signalTime` per symbol. Breakout Telegram gate suppressions (EXTENDED, VIX, PCR, etc.) persist on `ScannerResult` and render as **No alert: …** badges in the scanner setup column.
+- **PR #136 — useCache trade levels (Aug 17)**: `GET /api/scanner?useCache=true` preserves stored entry/SL/target instead of overwriting with TC/BC/R1 on cached auto-scan responses.
+- **PR #135 — Overnight empty calendar + in-window cache (Aug 16)**: Empty earnings calendar → `noKnownEventRisk()` / HIGH confidence; `/api/overnight` serves in-window cache during 15:10–15:25 IST like BTST.
 - **PR #134 — NSE F&O drift fetch timeout (Aug 14)**: Added 10s `AbortSignal.timeout(10_000)` to `FnoUniverseCheckService.checkDrift()` when fetching `fo_mktlots.csv` from NSE archives, preventing indefinite request stalls.
 - **PR #133 — Scanner persistence retry & failure visibility (Aug 14)**: Wrapped `ScannerController.persistScanResults()` in `DatabaseCircuitBreaker.execute()` with single 3s retry and 24h Redis failure marker logging (`scan_persist_failed:{universe}:{date}:{timestamp}`) on persistence timeouts.
 - **PR #132 — C2 documentation & method alignment (Aug 13)**: Corrected C2 documentation and aligned `cpr-journal` with `suggestOption` and `btst-journal` with `suggestOptionForBtst`.

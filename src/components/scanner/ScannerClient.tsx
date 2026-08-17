@@ -256,6 +256,23 @@ const BtstStateBanner = () => {
   );
 };
 
+function alertSuppressionShortLabel(reason: string): string {
+  switch (reason) {
+    case 'GAP_INVALIDATED':
+      return 'GAP';
+    case 'AGAINST_PRIOR_CLOSE':
+      return 'VS CLOSE';
+    case 'VIX_ELEVATED':
+      return 'VIX';
+    case 'VIX_TIGHTEN_SCORE':
+      return 'VIX SCORE';
+    case 'PCR_CONTRADICTS':
+      return 'PCR';
+    default:
+      return reason;
+  }
+}
+
 interface ScannedStock {
   distPivot?: number;
   id: string;
@@ -297,6 +314,8 @@ interface ScannedStock {
   rr2?: string | null;
   eventRiskScore?: number;
   eventRiskReason?: string | null;
+  alertSuppressedReason?: string | null;
+  alertSuppressedDetail?: string | null;
   signalTime?: string;
   expectedGap?: number | null;
   expectedMove?: number | null;
@@ -456,14 +475,23 @@ const StockRow = React.memo(({
       ? { previousClose: (row as { previousClose?: number }).previousClose || row.price }
       : {}),
   });
-  const staleLabel =
-    !setupStale.stale
+  const persistedSuppression = row.alertSuppressedReason
+    ? {
+        label: `No alert: ${alertSuppressionShortLabel(row.alertSuppressedReason)}`,
+        detail: row.alertSuppressedDetail ?? row.alertSuppressedReason,
+      }
+    : null;
+  const staleLabel = persistedSuppression
+    ? persistedSuppression.label
+    : !setupStale.stale
       ? null
       : setupStale.reason === 'GAP_INVALIDATED'
         ? 'GAP'
         : setupStale.reason === 'AGAINST_PRIOR_CLOSE'
           ? 'VS CLOSE'
           : 'EXTENDED';
+  const staleDetail = persistedSuppression?.detail ?? (setupStale.stale ? setupStale.detail : undefined);
+  const staleSuffix = persistedSuppression ? '' : ' — do not chase';
 
   return (
     <tr 
@@ -584,9 +612,9 @@ const StockRow = React.memo(({
               {staleLabel && (
                 <span
                   className="inline-flex w-fit px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide bg-accent-amber/15 text-accent-amber border border-accent-amber/40"
-                  title={setupStale.stale ? setupStale.detail : undefined}
+                  title={staleDetail}
                 >
-                  {staleLabel} — do not chase
+                  {staleLabel}{staleSuffix}
                 </span>
               )}
               <div className="flex items-center gap-2">

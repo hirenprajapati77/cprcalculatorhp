@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **14 Aug NSE F&O drift fetch timeout (PR #134)**:
+- **17 Aug scanner useCache trade levels (PR #136)**: `GET /api/scanner?useCache=true` no longer overwrites persisted entry/SL/target with TC/BC/R1 when serving cached auto-scan rows — trade setup columns match the last full scan.
+- **16 Aug overnight empty calendar + in-window cache (PR #135)**: Empty `MarketEvent` calendar now yields `confidence: HIGH` / `noKnownEventRisk()` so earnings-free days are not falsely blocked; `/api/overnight` serves the in-window Redis/DB cache like BTST between 15:10–15:25 IST (`overnight-scan-cache.ts`).
   - Added 10s `AbortSignal.timeout(10_000)` to `FnoUniverseCheckService.checkDrift()` when querying `fo_mktlots.csv` from NSE archives, preventing indefinite request hangs when NSE endpoints are slow or block cloud IPs.
 - **14 Aug Scan persistence retry & visibility (PR #133)**:
   - Wrapped `ScannerController.persistScanResults()` in `DatabaseCircuitBreaker.execute()` with a single automatic 3s retry on transient DB timeouts.
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Quality & Resilience (L1, L2, L3, L4, L5)**: Refactored `withTimeout` to `Promise.race` pattern with `.finally()` cleanup (L1); exported `HOT_ZONE_ATR_MULTIPLIER` in `trading-constants.ts` (L2); ATR-scaled dynamic extension caps (2–6%) now receive ATR% from Telegram/journal (L3); deprecated legacy optionExpiry regex fallback (L4); BTST send-attempt limit persists across cron ticks in-process to prevent 3:20 PM retry storms (L5).
 
 ### Added
+- **17 Aug breakout alert suppression visibility (PR #137)**: Cron breakout pipeline persists VIX / price / PCR gate reasons (`alertSuppressedReason`, `alertSuppressedDetail`, `alertSuppressedAt`) on `ScannerResult`. Scanner setup column shows **No alert: EXTENDED** (etc.) with tooltip detail so suppressed breakouts are visible without log diving. Migration: `20260817120000_add_scanner_alert_suppression`.
 - **Fyers quote batch prefetch (PR #122)**: Scanner and overnight runs prefetch Fyers LTP quotes in batches of up to 50 symbols per HTTP request (`fyers-quotes-batch.ts`, `MarketService.prefetchFyersQuotes`), seeding a short-lived in-process cache so per-symbol `getStockData` skips redundant quote round-trips. Tunables: `FYERS_QUOTES_BATCH_SIZE`, `FYERS_QUOTE_CACHE_TTL_MS`. Cache cleared via `purgeInProcessCaches` after heavy crons.
 - **India VIX breakout alert gate (PR #122)**: Automated Telegram breakout alerts now respect India VIX regime (`breakout-vix-gate.ts`): pause all alerts when VIX ≥ 25; in the 18–24 band require score ≥ 85 and tighten entry-chase cap to 2% (from 3.5%). Manual test-breakout path unchanged. Constants in `BREAKOUT_VIX` (`trading-constants.ts`).
 - **Unit test environment isolation**: Fixed raw `tsx --test` execution where `dotenv/config` polluted `process.env.NODE_ENV` to `development`, causing event risk checks to query a missing local DB and return `EVENT_RISK_GATE` errors. Resolved by explicitly setting `process.env.NODE_ENV = 'test'` inside `option-suggestion.test.ts` and refining the service environment guard.
@@ -63,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **VPA Shadow Breakdown Persistence**: Added `vpaBreakdown` JSONB column to `ScannerResult` table and updated `ScannerController` to persist VPA confirmation outputs on every scan for historical false breakout analysis.
 
 ### Changed
+- **17 Aug overnight pick ranking (PR #137)**: Journal and Telegram top-N selection ranks TRADEABLE READY+ picks by **score** (desc), then signalTime, then symbol. Rescans still dedupe to the latest row per symbol via `compareLatestScanBySymbol` — extension gate at send/journal time handles stale prices.
 - **Scanner rating badges (PR #115)**: CPR strong/ready badges are direction-aware (`Strong Buy` / `Strong Sell`, `Opportunity Buy` / `Opportunity Sell`); RANGE stays neutral (`Strong` / `Opportunity`). Overnight BTST/STBT row tints: STBT uses red, not green. Heatmap strong-tier column key is direction-neutral `Strong` (API KPI `strongBuy` unchanged for parity) (PR #119).
 - **Scanner entry basis — today's CPR (owner-approved)**: Trade Setup V3 entry/SL/target/RR now use `cprToday.*` (same session as bias), not tomorrow's projected CPR. Governance comment locks this behind owner approval — see [`docs/decisions/cpr-entry-basis-2026-08-10.md`](docs/decisions/cpr-entry-basis-2026-08-10.md). Deployed with PR #98 (`9395ef5` / `615d769`).
 - **MarketSnapshot fields**: Separate `sessionOpen` and `previousClose` for clearer live vs prior-session semantics.
