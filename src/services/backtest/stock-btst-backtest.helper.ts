@@ -8,6 +8,7 @@ import { ADVANCED_SCORE, LIQUIDITY, VOLUME_THRESHOLDS } from '@/config/trading-c
 import { BtstRankingService, type AdvancedScoreBreakdown } from '../overnight/btst-ranking.service';
 import { StbtRankingService } from '../overnight/stbt-ranking.service';
 import { EntryManagerService } from '../overnight/entry-manager.service';
+import { SignalService } from '../signal.service';
 import { resolveOvernightConflict } from '../overnight/overnight-conflict';
 import { SignalQualityService } from '../overnight/signal-quality.service';
 import type { EventRiskResult } from '../overnight/event.service';
@@ -262,6 +263,18 @@ export function evaluateStockBtstDay(ctx: StockBtstDayContext): StockBtstDayEval
       volumeRatio,
     });
   }
+
+  // Cross-engine breakout conflict gate: block BTST LONG on BREAKDOWN, STBT SHORT on BREAKOUT
+  const scannerSignals = SignalService.calculateSignals(stock, ctx.today.date).signals;
+  const conflictCheck = EntryManagerService.evaluateBreakoutConflict(stock, finalDir, scannerSignals);
+  if (!conflictCheck.eligible) {
+    return notTradable(conflictCheck.reason ?? 'Scanner breakout conflict', {
+      longScore: longSig?.score ?? null,
+      shortScore: shortSig?.score ?? null,
+      volumeRatio,
+    });
+  }
+
 
   const classification = finalSig.cls;
   const score = finalSig.score;

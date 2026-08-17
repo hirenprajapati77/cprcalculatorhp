@@ -5,6 +5,7 @@ import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { MarketService } from '@/services/market.service';
+import { SignalService } from '@/services/signal.service';
 import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import {
   overnightSignalToBtstUi,
@@ -280,11 +281,29 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
         continue;
       }
       const ext = EntryManagerService.evaluateExtension(stockData, direction);
-      if (ext.eligible) out.push(sig);
-      else console.warn(`[BtstAlert] ${sig.symbol} ${direction} skipped: ${ext.reason}`);
+      if (!ext.eligible) {
+        console.warn(`[BtstAlert] ${sig.symbol} ${direction} skipped: ${ext.reason}`);
+        continue;
+      }
+
+      // Cross-engine conflict gate: block BTST LONG on intraday BREAKDOWN, STBT SHORT on intraday BREAKOUT
+      try {
+        const signalRes = SignalService.calculateSignals(stockData);
+        const conflict = EntryManagerService.evaluateBreakoutConflict(stockData, direction, signalRes.signals);
+        if (!conflict.eligible) {
+          console.warn(`[BtstAlert] ${sig.symbol} ${direction} skipped (cross-engine conflict): ${conflict.reason}`);
+          continue;
+        }
+      } catch (scanErr) {
+        console.warn(`[BtstAlert] Signal check failed for ${sig.symbol} (proceeding):`, scanErr);
+      }
+
+
+      out.push(sig);
     }
     return out;
   };
+
 
   const filteredLongs = await filterExtended(longs, 'LONG');
   const filteredShorts = await filterExtended(shorts, 'SHORT');

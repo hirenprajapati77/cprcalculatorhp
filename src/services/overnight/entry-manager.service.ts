@@ -2,6 +2,7 @@ import { getAtrPct } from '@/lib/atr';
 import { getCompletedHistory, getISTDateString } from '@/lib/market-hours';
 import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import { MarketStockData } from '../market.service';
+import { evaluateBtstScannerConflict } from '@/lib/cpr-breakout-conflict';
 
 export interface ExclusionCheckResult {
   eligible: boolean;
@@ -158,4 +159,22 @@ export class EntryManagerService {
 
     return { eligible: true, reason: null };
   }
+
+  /**
+   * Cross-engine breakout conflict gate.
+   * Suppresses BTST LONG on confirmed intraday BREAKDOWN, and STBT SHORT on confirmed BREAKOUT.
+   */
+  static evaluateBreakoutConflict(
+    stock: MarketStockData,
+    direction: 'LONG' | 'SHORT',
+    scannerSignals?: string[] | null
+  ): ExclusionCheckResult {
+    const conflict = evaluateBtstScannerConflict(direction, scannerSignals);
+    if (conflict.conflicted) {
+      console.log(`[BreakoutConflictGate] ${stock.symbol} ${direction} rejected: ${conflict.reason} (${conflict.detail})`);
+      return { eligible: false, reason: conflict.reason };
+    }
+    return { eligible: true, reason: null };
+  }
 }
+
