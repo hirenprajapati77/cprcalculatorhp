@@ -63,6 +63,10 @@ model ScannerResult {
   target2        Float?
   rr2            String?
   vpaBreakdown   Json?
+  /// Last breakout Telegram gate that blocked alert (EXTENDED, VIX_ELEVATED, etc.)
+  alertSuppressedReason String?
+  alertSuppressedDetail String?
+  alertSuppressedAt     DateTime?
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])

@@ -133,33 +133,54 @@ export function filterOvernightByUniverse(
   return signals.filter((s) => allowed.has(s.symbol.trim()));
 }
 
-/** Sort scan rows: latest signalTime first, then highest score. */
-export function compareLatestScanRows(
-  a: { signalTime?: string | null; overnightScore?: number | null },
-  b: { signalTime?: string | null; overnightScore?: number | null }
-): number {
+type OvernightPickRow = {
+  symbol?: string;
+  signalTime?: string | null;
+  overnightScore?: number | null;
+};
+
+/**
+ * Compare two rescans of the same symbol — latest signalTime wins, then score.
+ * Used only for per-symbol dedup (not cross-symbol top-N ranking).
+ */
+export function compareLatestScanBySymbol(a: OvernightPickRow, b: OvernightPickRow): number {
   const timeCmp = (b.signalTime ?? '').localeCompare(a.signalTime ?? '');
   if (timeCmp !== 0) return timeCmp;
   return (b.overnightScore ?? 0) - (a.overnightScore ?? 0);
 }
 
 /**
- * Keep one row per symbol from a list sorted by compareLatestScanRows (latest scan wins).
- * OvernightSignal is unique on [symbol, signalDate, signalTime, direction], so rescans can
- * return the same name twice and steal both top-N journal/alert slots.
+ * Cross-symbol overnight ranking: score desc → freshness → symbol (deterministic).
+ * Extension gate at alert/journal time handles stale prices; score is the primary signal.
  */
-export function distinctLatestScanBySymbol<T extends { symbol: string }>(
+export function compareOvernightPickRows(a: OvernightPickRow, b: OvernightPickRow): number {
+  const scoreCmp = (b.overnightScore ?? 0) - (a.overnightScore ?? 0);
+  if (scoreCmp !== 0) return scoreCmp;
+  const timeCmp = (b.signalTime ?? '').localeCompare(a.signalTime ?? '');
+  if (timeCmp !== 0) return timeCmp;
+  return (a.symbol ?? '').localeCompare(b.symbol ?? '');
+}
+
+/** @deprecated Use compareOvernightPickRows for ranking or compareLatestScanBySymbol for dedup. */
+export const compareLatestScanRows = compareOvernightPickRows;
+
+/**
+ * Keep one row per symbol — always the latest scan (by signalTime), regardless of input order.
+ * OvernightSignal is unique on [symbol, signalDate, signalTime, direction], so rescans can
+ * return the same name twice and steal both top-N journal/alert slots without dedup.
+ */
+export function distinctLatestScanBySymbol<T extends OvernightPickRow & { symbol: string }>(
   signals: T[]
 ): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
+  const best = new Map<string, T>();
   for (const s of signals) {
     const key = s.symbol.trim();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
+    const prev = best.get(key);
+    if (!prev || compareLatestScanBySymbol(s, prev) < 0) {
+      best.set(key, s);
+    }
   }
-  return out;
+  return [...best.values()];
 }
 
 /** @deprecated Use distinctLatestScanBySymbol — input must be latest-scan sorted. */
@@ -181,30 +202,30 @@ export function selectTradableOvernightPicks(
   const longs = opts.suppressLong
     ? []
     : distinctLatestScanBySymbol(
-        signals
-          .filter(
-            (s) =>
-              s.direction === 'LONG' &&
-              s.qualityBucket === 'TRADEABLE' &&
-              LONG_READY.includes(s.classification) &&
-              (s.overnightScore ?? 0) >= minScore
-          )
-          .sort(compareLatestScanRows)
-      ).slice(0, take);
+        signals.filter(
+          (s) =>
+            s.direction === 'LONG' &&
+            s.qualityBucket === 'TRADEABLE' &&
+            LONG_READY.includes(s.classification) &&
+            (s.overnightScore ?? 0) >= minScore
+        )
+      )
+        .sort(compareOvernightPickRows)
+        .slice(0, take);
 
   const shorts = opts.suppressShort
     ? []
     : distinctLatestScanBySymbol(
-        signals
-          .filter(
-            (s) =>
-              s.direction === 'SHORT' &&
-              s.qualityBucket === 'TRADEABLE' &&
-              SHORT_READY.includes(s.classification) &&
-              (s.overnightScore ?? 0) >= minScore
-          )
-          .sort(compareLatestScanRows)
-      ).slice(0, take);
+        signals.filter(
+          (s) =>
+            s.direction === 'SHORT' &&
+            s.qualityBucket === 'TRADEABLE' &&
+            SHORT_READY.includes(s.classification) &&
+            (s.overnightScore ?? 0) >= minScore
+        )
+      )
+        .sort(compareOvernightPickRows)
+        .slice(0, take);
 
   return { longs, shorts };
 }

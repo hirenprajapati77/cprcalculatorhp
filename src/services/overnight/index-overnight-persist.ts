@@ -4,7 +4,7 @@ import type { IndexSignalResult } from './index-discover.service';
 import { IndexDiscoverService } from './index-discover.service';
 import { INDEX_SCORE } from './index-ranking.service';
 import {
-  compareLatestScanRows,
+  compareOvernightPickRows,
   distinctLatestScanBySymbol,
 } from './overnight-ui-adapter';
 
@@ -92,22 +92,22 @@ export function selectTradableIndexBtstPicks(
   }
 
   return distinctLatestScanBySymbol(
-    signals
-      .filter(
-        (s) =>
-          s.direction === 'LONG' &&
-          s.instrumentType === 'INDEX' &&
-          INDEX_STRONG_OR_READY.includes(
-            s.classification as (typeof INDEX_STRONG_OR_READY)[number]
-          ) &&
-          (s.overnightScore ?? 0) >= minScore &&
-          s.entry != null &&
-          s.entry > 0 &&
-          s.stopLoss != null &&
-          s.target != null
-      )
-      .sort(compareLatestScanRows)
-  ).slice(0, take);
+    signals.filter(
+      (s) =>
+        s.direction === 'LONG' &&
+        s.instrumentType === 'INDEX' &&
+        INDEX_STRONG_OR_READY.includes(
+          s.classification as (typeof INDEX_STRONG_OR_READY)[number]
+        ) &&
+        (s.overnightScore ?? 0) >= minScore &&
+        s.entry != null &&
+        s.entry > 0 &&
+        s.stopLoss != null &&
+        s.target != null
+    )
+  )
+    .sort(compareOvernightPickRows)
+    .slice(0, take);
 }
 
 /**
@@ -129,22 +129,22 @@ export function selectTradableIndexStbtPicks(
   }
 
   return distinctLatestScanBySymbol(
-    signals
-      .filter(
-        (s) =>
-          s.direction === 'SHORT' &&
-          s.instrumentType === 'INDEX' &&
-          INDEX_STRONG_OR_READY.includes(
-            s.classification as (typeof INDEX_STRONG_OR_READY)[number]
-          ) &&
-          (s.overnightScore ?? 0) >= minScore &&
-          s.entry != null &&
-          s.entry > 0 &&
-          s.stopLoss != null &&
-          s.target != null
-      )
-      .sort(compareLatestScanRows)
-  ).slice(0, take);
+    signals.filter(
+      (s) =>
+        s.direction === 'SHORT' &&
+        s.instrumentType === 'INDEX' &&
+        INDEX_STRONG_OR_READY.includes(
+          s.classification as (typeof INDEX_STRONG_OR_READY)[number]
+        ) &&
+        (s.overnightScore ?? 0) >= minScore &&
+        s.entry != null &&
+        s.entry > 0 &&
+        s.stopLoss != null &&
+        s.target != null
+    )
+  )
+    .sort(compareOvernightPickRows)
+    .slice(0, take);
 }
 
 export type IndexBtstJournalResult = {

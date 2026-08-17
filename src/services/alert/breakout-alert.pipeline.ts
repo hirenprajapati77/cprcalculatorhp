@@ -9,6 +9,10 @@ import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-
 import { filterBreakoutsForVixRegime } from '@/services/alert/breakout-vix-gate';
 import { filterBreakoutsForPcrAlignment } from '@/services/alert/breakout-pcr-gate';
 import { IndexDiscoverService } from '@/services/overnight/index-discover.service';
+import {
+  persistBreakoutAlertSuppressions,
+  clearBreakoutAlertSuppressions,
+} from '@/services/alert/breakout-suppression.persist';
 
 /**
  * Cap concurrent option-chain lookups for confirmed breakout alerts.
@@ -208,6 +212,9 @@ export function notifyBreakoutsFromScan(
     .then(async (newBreakouts) => {
       if (newBreakouts.length === 0) return;
 
+      // Re-evaluate gate suppressions for symbols entering the new-breakout path.
+      await clearBreakoutAlertSuppressions(newBreakouts.map((b) => b.symbol));
+
       // India VIX regime: pause all alerts when elevated; tighten score/chase in mid band.
       // Gate BEFORE claiming so a suppressed alert does not start a 4h cooldown.
       const vixState = await IndexDiscoverService.getIndiaVixState(new Date());
@@ -225,6 +232,13 @@ export function notifyBreakoutsFromScan(
             `suppressed ${vixSuppressed.length} alert(s): ` +
             vixSuppressed.map((s) => `${s.symbol}:${s.gateReason}`).join(', ')
         );
+        await persistBreakoutAlertSuppressions(
+          vixSuppressed.map((s) => ({
+            symbol: s.symbol,
+            reason: s.gateReason,
+            detail: s.gateDetail ?? s.gateReason,
+          }))
+        );
       }
       if (vixActionable.length === 0) return;
 
@@ -240,6 +254,13 @@ export function notifyBreakoutsFromScan(
         console.log(
           `[BreakoutWatcher] ${label}: suppressed ${suppressed.length} stale-price alert(s): ` +
             suppressed.map((s) => `${s.symbol}:${s.gateReason}`).join(', ')
+        );
+        await persistBreakoutAlertSuppressions(
+          suppressed.map((s) => ({
+            symbol: s.symbol,
+            reason: s.gateReason,
+            detail: s.gateDetail ?? s.gateReason,
+          }))
         );
       }
       if (actionable.length === 0) return;
@@ -260,6 +281,13 @@ export function notifyBreakoutsFromScan(
           `[BreakoutPcrGate] ${label}: suppressed ${pcrSuppressed.length} alert(s): ` +
             pcrSuppressed.map((s) => `${s.symbol}:${s.gateDetail}`).join(', ')
         );
+        await persistBreakoutAlertSuppressions(
+          pcrSuppressed.map((s) => ({
+            symbol: s.symbol,
+            reason: s.gateReason,
+            detail: s.gateDetail,
+          }))
+        );
         const pcrKeys = pcrSuppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
         );
@@ -271,7 +299,9 @@ export function notifyBreakoutsFromScan(
       if (pcrActionable.length === 0) return;
 
       const result = await TelegramService.sendBreakoutAlert(pcrActionable);
-      if (!result.ok) {
+      if (result.ok) {
+        await clearBreakoutAlertSuppressions(pcrActionable.map((b) => b.symbol));
+      } else {
         console.error(
           `[BreakoutWatcher] ${label} Telegram send failed (${result.reason ?? 'unknown'}) — releasing claims`
         );

@@ -61,6 +61,9 @@ model ScannerResult {
   target         Float    @default(0)
   rr             String   @default("1:2.0")
   vpaBreakdown   Json?
+  alertSuppressedReason String?
+  alertSuppressedDetail String?
+  alertSuppressedAt     DateTime?
   createdAt      DateTime @default(now())
 
   @@unique([symbol, date])
