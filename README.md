@@ -52,6 +52,7 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (August 2026):**
+- **PR #139 — CPR Journal PCR Veto Gate (Aug 18)**: Wired `optionPcrContradictsDirection` into `cpr-journal.job.ts` so trades with PCR-contradicted option chains (e.g. CE on chain PCR < 0.8) are skipped from journaling (`symbol:PCR_CONTRADICTS`), ensuring 100% parity between Telegram alerts and trade journal entries.
 - **PR #138 — Cross-Engine Breakout/Breakdown Conflict Gate (Aug 17)**: Symmetrical cross-engine filter (`evaluateBtstScannerConflict` / `EntryManagerService.evaluateBreakoutConflict`) suppressing BTST (LONG) on active intraday `BREAKDOWN` and STBT (SHORT) on active intraday `BREAKOUT` across alert crons, journal logging, and backtest helpers, preventing contradictory overnight picks.
 - **PR #137 — Score-first overnight picks + breakout suppression UI (Aug 17)**: Overnight journal/alert top-N ranks by score (freshness tie-break); rescans dedupe to latest `signalTime` per symbol. Breakout Telegram gate suppressions (EXTENDED, VIX, PCR, etc.) persist on `ScannerResult` and render as **No alert: …** badges in the scanner setup column.
 - **PR #136 — useCache trade levels (Aug 17)**: `GET /api/scanner?useCache=true` preserves stored entry/SL/target instead of overwriting with TC/BC/R1 on cached auto-scan responses.

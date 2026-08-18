@@ -4,6 +4,7 @@ import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { MarketService } from '@/services/market.service';
 import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
+import { optionPcrContradictsDirection } from '@/services/alert/breakout-pcr-gate';
 import { cprDirectionToOptionBias, inferCprJournalDirection } from '@/lib/cpr-direction';
 import { getAtrPct } from '@/lib/atr';
 import { getCompletedHistory } from '@/lib/market-hours';
@@ -178,6 +179,13 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
           signal.target,
           todayStr
         );
+
+        if (!suggestion.error && optionPcrContradictsDirection(suggestion.type, suggestion.pcr)) {
+          console.warn(
+            `[CPRJournal] ${signal.symbol} skipped (PCR_CONTRADICTS): ${suggestion.type} vs chain PCR ${suggestion.pcr}`
+          );
+          return { tag: `${signal.symbol}:PCR_CONTRADICTS`, didLog: false };
+        }
 
         if (!suggestion.error && suggestion.strike && suggestion.ltp) {
           optionType = suggestion.type ?? fallbackOptionType;
