@@ -394,6 +394,31 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       mocks.restore();
     }
   });
+
+  await t.test('skips signal when OptionSuggestion PCR contradicts direction', async () => {
+    const mocks = mockJobDeps([
+      makeSignal({ symbol: 'AMBER', ltp: 103, entry: 100 }),
+    ]);
+
+    const originalSuggest = OptionSuggestionService.suggestOption;
+    // Mock AMBER with CE option but bearish chain PCR (0.61)
+    OptionSuggestionService.suggestOption = (async () => ({
+      strike: 7300,
+      ltp: 150.1,
+      type: 'CE',
+      pcr: 0.61,
+      formattedName: 'AMBER 7300 CE',
+    })) as unknown as typeof OptionSuggestionService.suggestOption;
+
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.skipped, ['AMBER:PCR_CONTRADICTS']);
+      assert.deepStrictEqual(result.logged, []);
+    } finally {
+      OptionSuggestionService.suggestOption = originalSuggest;
+      mocks.restore();
+    }
+  });
 });
 
 test('CPR_JOURNAL_MAX_SIGNALS env schema rejects unsafe values', () => {

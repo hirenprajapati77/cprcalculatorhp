@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **18 Aug CPR Journal PCR Veto Gate (PR #139)**:
+  - Wired `optionPcrContradictsDirection` into `cpr-journal.job.ts` (`src/services/scheduler/cpr-journal.job.ts`), matching `breakout-alert.pipeline.ts`.
+  - When option chain PCR contradicts the suggested contract (CE on chain PCR < 0.8 or PE on chain PCR > 1.2), the trade is skipped from journaling with tag `symbol:PCR_CONTRADICTS`. This ensures 100% parity between Telegram breakout alerts and the trade journal (e.g. blocking AMBER 7300 CE from logging when chain PCR is 0.61).
 - **17 Aug Cross-Engine Breakout Conflict Gate (PR #138)**:
   - Added strict symmetrical cross-engine protection (`evaluateBtstScannerConflict` in `src/lib/cpr-breakout-conflict.ts` and `EntryManagerService.evaluateBreakoutConflict`):
     - BTST (LONG) is suppressed if the intraday CPR scanner confirms an active `BREAKDOWN`.
