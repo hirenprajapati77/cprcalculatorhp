@@ -291,10 +291,23 @@ export function notifyBreakoutsFromScan(
         const pcrKeys = pcrSuppressed.map((b) =>
           breakoutAlertClaimKey(b.symbol, b.alertKind ?? 'BREAKOUT')
         );
-        // H1: preserve lastAlerted so PCR-gate suppression does not reopen the
-        // claim/suppress/release loop (same contract as VIX/price gates).
-        await BreakoutWatcherService.suppressClaims(pcrKeys);
+        // M-4 fix: wrap suppressClaims in its own try/catch.
+        // If suppressClaims throws, we must NOT let the outer .catch() handler
+        // see the original claimedKeys (still including PCR keys) and call
+        // releaseClaims on them — that would reopen the cooldown for PCR-suppressed
+        // symbols and could trigger duplicate alerts on the next cron tick.
+        // Filter claimedKeys BEFORE the await so the mutation is always applied.
         claimedKeys = claimedKeys.filter((k) => !pcrKeys.includes(k));
+        try {
+          // H1: preserve lastAlerted so PCR-gate suppression does not reopen the
+          // claim/suppress/release loop (same contract as VIX/price gates).
+          await BreakoutWatcherService.suppressClaims(pcrKeys);
+        } catch (suppressErr) {
+          console.warn(
+            `[BreakoutWatcher] ${label}: suppressClaims failed for PCR-gated keys — claims remain active:`,
+            suppressErr
+          );
+        }
       }
       if (pcrActionable.length === 0) return;
 
@@ -312,7 +325,18 @@ export function notifyBreakoutsFromScan(
     .catch(async (err) => {
       console.error(`[BreakoutWatcher] ${label} alert pipeline failed:`, err);
       if (claimedKeys.length > 0) {
-        await BreakoutWatcherService.releaseClaims(claimedKeys);
+        // L-2 fix: wrap releaseClaims in its own try/catch.
+        // If this throws, the exception would be silently swallowed by the
+        // outer fire-and-forget promise chain, leaving claims locked for the
+        // full LOCK_TTL (10 min) with no log entry to diagnose.
+        try {
+          await BreakoutWatcherService.releaseClaims(claimedKeys);
+        } catch (releaseErr) {
+          console.error(
+            `[BreakoutWatcher] ${label}: releaseClaims also failed — claims will expire via TTL:`,
+            releaseErr
+          );
+        }
       }
     });
 }

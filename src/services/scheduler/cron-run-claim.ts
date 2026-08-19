@@ -26,7 +26,11 @@ const DONE_TTL_SECONDS = 24 * 60 * 60;
 
 // In-memory fallback (single-process only — used when Redis is down)
 const memoryRunning = new Set<string>();
-const memoryClaimed = new Set<string>();
+// M-5 fix: use a Map<key, expiresAtMs> instead of a permanent Set so that
+// retainClaim entries expire after DONE_TTL_SECONDS (matching Redis behaviour).
+// Previously, memoryClaimed was a plain Set that never expired, permanently
+// locking date-free cron keys across midnight without a process restart.
+const memoryClaimed = new Map<string, number>(); // key → expiresAt (ms)
 /** Active running lock keys tracked for process exit cleanup */
 const activeRunningLocks = new Set<string>();
 
@@ -55,7 +59,13 @@ if (typeof process !== 'undefined') {
 }
 
 function memoryTryClaim(key: string): boolean {
-  if (memoryClaimed.has(key) || memoryRunning.has(key)) return false;
+  // M-5 fix: evict expired entries before checking.
+  const claimedUntil = memoryClaimed.get(key);
+  if (claimedUntil !== undefined) {
+    if (Date.now() < claimedUntil) return false; // still within TTL
+    memoryClaimed.delete(key); // expired — allow re-claim
+  }
+  if (memoryRunning.has(key)) return false;
   memoryRunning.add(key);
   activeRunningLocks.add(key);
   return true;
@@ -98,7 +108,8 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
 export async function completeCronRun(key: string, retainClaim = true): Promise<void> {
   memoryRunning.delete(key);
   activeRunningLocks.delete(key);
-  if (retainClaim) memoryClaimed.add(key);
+  // M-5 fix: store expiry timestamp so the memory fallback matches the Redis 24h TTL.
+  if (retainClaim) memoryClaimed.set(key, Date.now() + DONE_TTL_SECONDS * 1000);
 
   if (!CacheService.isRedisConnected) return;
 

@@ -449,9 +449,17 @@ export class OvernightService {
           ? (isTodayCandleFinal ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
           : lastCandle;
 
-        const yesterdayCandle = history.length >= 2
-          ? history[history.length - 2]
-          : lastCandle;
+        // M-3 fix: replace silent fallback (yesterdayCandle = lastCandle when only 1 bar)
+        // with an explicit skip. The fallback caused todayCpr === yesterdayCpr silently,
+        // making the Higher Value rule always false and producing misleading BTST signals.
+        // Note: the history.length >= 2 invariant is also checked above at line 438,
+        // but only when isLastToday is true. This guard covers the non-today case.
+        if (history.length < 2) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: only 1 bar in history, cannot derive yesterdayCandle.`);
+          continue;
+        }
+
+        const yesterdayCandle = history[history.length - 2];
 
 
         // Same completed-history ATR input as signal.service / Simple BtstService

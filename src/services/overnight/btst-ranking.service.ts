@@ -52,10 +52,11 @@ export class BtstRankingService {
    */
   static calculateScoreDetails(inputs: BtstScoringInputs): BtstScoreDetails {
     // Score Safety: If required inputs are missing, return null (INVALID)
+    // H-1 fix: last15mHigh is intentionally null before 15:15 IST — do NOT reject on it.
+    // Rule 5 is scored conditionally when last15mHigh is available (see below).
     if (
       inputs.vwap === undefined || inputs.vwap === null ||
       inputs.intradayVolume === undefined || inputs.intradayVolume === null || inputs.intradayVolume <= 0 ||
-      inputs.last15mHigh === undefined || inputs.last15mHigh === null ||
       !inputs.hasConfirmationCandles
     ) {
       return { score: null, breakdown: null };
@@ -94,8 +95,10 @@ export class BtstRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window
-    if (inputs.close > inputs.last15mHigh) {
+    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window.
+    // H-1 fix: last15mHigh is null before 15:15 IST; skip rule rather than evaluate
+    // close > null (which JS coerces to close > 0, awarding 20 pts to every stock).
+    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close > inputs.last15mHigh) {
       breakdown.liquidity = 20;
     }
 
