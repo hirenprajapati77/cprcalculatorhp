@@ -92,7 +92,11 @@ export class JournalReportService {
     let count = 0;
 
     for (const t of trades) {
-      if (t.modelEntryPrice && t.modelExitPrice && t.pnlPct !== null) {
+      // M-1 fix: explicit zero-guard on modelEntryPrice before division.
+      // Falsy check alone (`if (t.modelEntryPrice)`) already blocks 0, but an
+      // explicit check documents intent and prevents Infinity if the guard is
+      // ever relaxed. modelExitPrice zero-guard added for symmetry.
+      if (t.modelEntryPrice && t.modelEntryPrice !== 0 && t.modelExitPrice && t.pnlPct !== null) {
         // STBT/SHORT model P&L is inverted vs long stock/CE trades
         const isShort = t.signalType === 'STBT';
         const modelPnlPct = isShort

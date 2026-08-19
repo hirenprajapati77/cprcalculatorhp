@@ -156,7 +156,9 @@ class CacheServiceImpl {
       } catch {
         // Redis threw (network error, timeout, etc.) — fall through to L1 ONLY
         // because Redis is genuinely unavailable, not just missing the key.
-        const l1 = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
+        // C-1 fix: structuredClone(undefined) throws DataCloneError; guard before clone.
+        const l1Raw = memoryCache.get(key) as T | undefined;
+        const l1 = l1Raw !== undefined ? structuredClone(l1Raw) : null;
         if (l1 !== null) {
           this.hits++;
         } else {
@@ -167,7 +169,9 @@ class CacheServiceImpl {
     }
 
     // Memory-only path
-    const result = structuredClone(memoryCache.get(key) as T | undefined) ?? null;
+    // C-1 fix: structuredClone(undefined) throws DataCloneError; guard before clone.
+    const resultRaw = memoryCache.get(key) as T | undefined;
+    const result = resultRaw !== undefined ? structuredClone(resultRaw) : null;
     if (result !== null) {
       this.hits++;
     } else {

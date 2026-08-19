@@ -17,13 +17,14 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2026-05-01', // Maharashtra Day
     '2026-05-28', // Bakri Id
     '2026-06-26', // Muharram
-    '2026-09-14', // Ganesh Chaturthi
-    '2026-10-02', // Mahatma Gandhi Jayanti / Dussehra (both fall on same date)
-    '2026-10-20', // Dussehra — verify against NSE circular; Vijaya Dashami 2026 may be Oct 2
+    '2026-08-25', // Ganesh Chaturthi (corrected from Sep 14 — 2026 Ganesh Chaturthi is Aug 25 per Panchang)
+    '2026-10-02', // Mahatma Gandhi Jayanti + Dussehra (Vijaya Dashami) — both fall on Oct 2, 2026
+    // L-1 fix: removed erroneous duplicate '2026-10-20' Dussehra entry.
+    // Vijaya Dashami 2026 is Oct 2, not Oct 20. Two entries caused Oct 20 to be
+    // treated as a trading holiday, freezing cron jobs on a live trading day.
     '2026-11-03', // Diwali — Laxmi Puja (NSE closed; Muhurat trading may be held separately)
     '2026-11-04', // Diwali — Balipratipada
     '2026-11-10', // Prakash Gurpurb Sri Guru Nanak Dev
-    '2026-11-24', // Prakash Gurpurb (second date — verify against NSE circular)
     '2026-12-25', // Christmas
     // NOTE: Always cross-check with official NSE holiday circular at
     // https://www.nseindia.com/resources/exchange-communication-holidays
@@ -323,6 +324,11 @@ export function isBtstJournalWindowOpen(date: Date = new Date()): boolean {
  * Returns history with the in-progress IST daily candle removed when the session
  * is still open. Completed-session ATR/CPR classification must not use today's
  * partial high/low/close.
+ *
+ * Historical replay (`asOfDate` provided): treats the asOfDate bar as final and
+ * returns the full array unchanged. The early return is intentional — do NOT
+ * remove it. The `todayStr` assignment above is kept for the live path's
+ * end-of-function check only.
  */
 export function getCompletedHistory<T extends { date: string }>(
   history: T[],
@@ -331,7 +337,8 @@ export function getCompletedHistory<T extends { date: string }>(
   if (!history.length) return history;
   const todayStr = asOfDate || getISTDateString();
   const last = history[history.length - 1];
-  // When replaying a historical asOfDate, treat that day's candle as final.
+  // H-2: Historical replay — asOfDate bar is the final candle; return as-is.
+  // This is deliberate: backtests need the replay date's OHLC for CPR/ATR.
   if (asOfDate) return history;
   if (last.date === todayStr && !isTodayCandleClosed()) {
     return history.slice(0, -1);

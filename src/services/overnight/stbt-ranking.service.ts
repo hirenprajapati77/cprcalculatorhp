@@ -37,10 +37,11 @@ export class StbtRankingService {
    * Returns null score if INVALID due to missing inputs.
    */
   static calculateScoreDetails(inputs: StbtScoringInputs): StbtScoreDetails {
+    // H-1 fix: last15mLow is intentionally null before 15:15 IST — do NOT reject on it.
+    // Rule 5 is scored conditionally when last15mLow is available (see below).
     if (
       inputs.vwap === undefined || inputs.vwap === null ||
       inputs.intradayVolume === undefined || inputs.intradayVolume === null || inputs.intradayVolume <= 0 ||
-      inputs.last15mLow === undefined || inputs.last15mLow === null ||
       !inputs.hasConfirmationCandles
     ) {
       return { score: null, breakdown: null };
@@ -81,8 +82,11 @@ export class StbtRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Weakness — close < lowest price in 15:15–15:30 IST window
-    if (inputs.close < inputs.last15mLow) {
+    // Rule 5: EOD Weakness — close < lowest price in 15:15–15:30 IST window.
+    // H-1 fix: last15mLow is null before 15:15 IST; skip rule rather than evaluate
+    // close < null (which JS coerces to close < 0, always false for positive prices
+    // — but makes the condition semantically wrong and fragile for any future change).
+    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close < inputs.last15mLow) {
       breakdown.liquidity = 20;
     }
 

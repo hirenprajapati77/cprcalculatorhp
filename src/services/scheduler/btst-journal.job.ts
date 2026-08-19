@@ -155,14 +155,18 @@ export async function runBtstJournalJob(): Promise<BtstJournalJobResult> {
       }
 
       const ltp = stockData.ltp ?? signal.entry ?? 0;
-      const entry = signal.entry ?? ltp;
-      const sl = signal.stopLoss ?? ltp * defaultSlMul;
-      const target = signal.target ?? ltp * defaultTargetMul;
 
+      // H-3 fix: guard LTP before deriving sl/target from it.
+      // Previously this check appeared after sl/target were already computed
+      // from ltp, potentially storing sl=0, target=0 in the journal.
       if (!ltp || ltp <= 0) {
         console.warn(`[BtstJournal] No LTP for ${signal.symbol}; skipping ${signalType} log`);
         return { tag: logTag, didLog: false };
       }
+
+      const entry = signal.entry ?? ltp;
+      const sl = signal.stopLoss ?? ltp * defaultSlMul;
+      const target = signal.target ?? ltp * defaultTargetMul;
 
       const ext = EntryManagerService.evaluateExtension(stockData, dir);
       if (!ext.eligible) {

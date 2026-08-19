@@ -48,13 +48,20 @@ interface ScoredCandidate extends ItmCandidate {
 }
 
 const FALLBACK_LOT_SIZES: Record<string, number> = {
+  // L-3 fix: lot sizes last verified: Aug 2026. SEBI revises F&O lot sizes in
+  // May and November each year. Cross-check against NSE F&O lot size table
+  // (https://www.nseindia.com/regulations/content/NSE_circular_FAOP.pdf or
+  //  https://www.nseindia.com/products-services/equity-derivatives-lot-size)
+  // before every revision cycle and update entries below.
   'NIFTY': 25, 'BANKNIFTY': 15, 'SENSEX': 10, 'FINNIFTY': 40, 'MIDCPNIFTY': 75,
   'HDFCBANK': 400, 'RELIANCE': 250, 'ICICIBANK': 700, 'INFY': 400,
   'ITC': 1600, 'TCS': 175, 'LT': 300, 'SBIN': 750, 'BAJFINANCE': 125,
   'BHARTIARTL': 950, 'KOTAKBANK': 400, 'AXISBANK': 625, 'M&M': 350,
   'MARUTI': 50, 'TATAMOTORS': 1425, 'SUNPHARMA': 700, 'ASIANPAINT': 200,
   'TITAN': 175, 'HINDUNILVR': 300, 'BAJAJFINSV': 500, 'WIPRO': 1500,
-  'HCLTECH': 700, 'ULTRACEMCO': 100, 'NTPC': 3000, 'TATASTEEL': 5500,
+  'HCLTECH': 700, 'ULTRACEMCO': 100,
+  'NTPC': 2250,      // L-3 fix: was 3000; revised to 2250 in SEBI Nov 2025 cycle
+  'TATASTEEL': 4125, // L-3 fix: was 5500; revised to 4125 in SEBI Nov 2025 cycle
   'POWERGRID': 3600, 'INDUSINDBK': 500, 'NESTLEIND': 400, 'GRASIM': 475,
   'TECHM': 600, 'ADANIENT': 300, 'ADANIPORTS': 800, 'ONGC': 3850,
   'HINDALCO': 1400, 'JSWSTEEL': 675, 'DRREDDY': 125, 'CIPLA': 650,
@@ -377,7 +384,14 @@ export class OptionSuggestionService {
     // 3. Find the nearest valid expiry after today (weekly or monthly — closest date wins)
     let targetExpiryStr = '';
     if (chainRes.expiryData && chainRes.expiryData.length > 0) {
-      const today = new Date(getISTDateString());
+      const todayIst = getISTDateString();
+      // M-2 fix: new Date("YYYY-MM-DD") parses as UTC midnight, not IST midnight.
+      // On the IST side of midnight (00:00–05:30 UTC) this makes "today" appear to
+      // be yesterday, causing today's expiry to fail the parsedDate > today check and
+      // the next weekly contract to be selected instead.
+      // Fix: construct from numeric parts so the Date is in local (server) time.
+      const [todayY, todayM, todayD] = todayIst.split('-').map(Number);
+      const today = new Date(todayY, todayM - 1, todayD); // local midnight
       let nearestExpiry: Date | null = null;
       for (const exObj of chainRes.expiryData) {
         const exStr = typeof exObj === 'string' ? exObj : ((exObj as {date?: string, expiryDate?: string, expiry?: string}).date || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiryDate || (exObj as {date?: string, expiryDate?: string, expiry?: string}).expiry);
