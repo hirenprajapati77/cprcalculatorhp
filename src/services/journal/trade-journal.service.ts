@@ -284,6 +284,19 @@ export class TradeJournalService {
           continue;
         }
 
+        // Fix 5: Guard against dead/illiquid option ticks at market open.
+        // Options below ₹0.25 have not yet formed a real market (penny/dead contracts
+        // or wide auction spread). Writing these distorts PnL and can cause false
+        // GAP_FAILURE classifications. Skip the write — the next slot (9:30/9:45) will
+        // capture a proper market price.
+        if (cmp < 0.25) {
+          console.warn(
+            `[TradeJournal] ${timeSlot} snapshot: CMP ₹${cmp} below minimum tick (₹0.25) for ` +
+            `${entry.symbol} ${entry.optionContract} — skipping write, will retry next slot.`
+          );
+          continue;
+        }
+
         // Write the snapshot column only if it is STILL null in the DB. Using updateMany
         // with the null guard (instead of a plain update on a stale in-memory row) makes
         // the write idempotent and race-safe: a duplicate/overlapping cron run cannot
@@ -566,7 +579,11 @@ export class TradeJournalService {
       // manual exit before cmp916 was written — previously skipped GAP_FAILURE).
       const gapRef =
         trade.cmp916 ?? trade.cmp930 ?? trade.cmp945 ?? trade.exitCmp;
-      if (trade.signalType !== 'CPR' && gapRef != null && trade.entryCmp) {
+      // Fix 4: Removed `trade.signalType !== 'CPR'` exclusion — CPR trades can also suffer
+      // overnight gap failures (e.g. FORTIS Aug 2026: gapped +0.78% against PE, -32% loss).
+      // The exclusion caused CPR gap losses to be misclassified as EXECUTION_SLIPPAGE
+      // instead of GAP_FAILURE, masking a systematic market risk in analytics.
+      if (gapRef != null && trade.entryCmp) {
         const gapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
         // Severe adverse gap blow-through in options is usually -15% or worse overnight
         if (gapPct < -15) {

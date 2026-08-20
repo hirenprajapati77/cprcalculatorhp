@@ -5,7 +5,8 @@ import { TradeJournalService } from '@/services/journal/trade-journal.service';
 import { MarketService } from '@/services/market.service';
 import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-gate';
 import { optionPcrContradictsDirection } from '@/services/alert/breakout-pcr-gate';
-import { cprDirectionToOptionBias, inferCprJournalDirection } from '@/lib/cpr-direction';
+import { cprDirectionToOptionBias, inferCprJournalDirection, validateCprSignalConfluence } from '@/lib/cpr-direction';
+import { RegimeService } from '@/services/overnight/regime.service';
 import { getAtrPct } from '@/lib/atr';
 import { getCompletedHistory } from '@/lib/market-hours';
 
@@ -26,6 +27,20 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
   const todayStr = new Date().toLocaleDateString('en-CA', {
     timeZone: 'Asia/Kolkata',
   });
+
+  // ── Market Regime Gate ────────────────────────────────────────────────────
+  // Mirrors btst-journal.job.ts L90-96: suppress counter-trend signals to avoid
+  // buying PEs in a Bull market or CEs in a Bear market (root cause of FORTIS loss).
+  // When regime.reliable === false (Nifty history unavailable), suppress BOTH
+  // directions (fail-closed) rather than treating unknown as CHOPPY/neutral.
+  const regime = await RegimeService.getMarketRegime(todayStr);
+  const regimeUnknown = regime.reliable === false;
+  const suppressShort = regime.trend === 'BULL' || regimeUnknown; // No PE/Short in Bull
+  const suppressLong  = regime.trend === 'BEAR' || regimeUnknown; // No CE/Long in Bear
+  console.log(
+    `[CPRJournal] Regime: ${regime.trend} (score ${regime.score}, reliable=${regime.reliable ?? true}) ` +
+    `→ suppressShort=${suppressShort} suppressLong=${suppressLong}`
+  );
 
   const maxSignals = env.CPR_JOURNAL_MAX_SIGNALS;
 
@@ -96,6 +111,34 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
 
       const tag = inferCprJournalDirection(signal);
       const isBearish = tag === 'SHORT';
+
+      // ── Fix 1: Market Regime Suppression ─────────────────────────────────
+      // Full suppression: no SHORT (PE) in Bull market, no LONG (CE) in Bear market.
+      // When regime is unreliable (Nifty data missing), both are suppressed (fail-closed).
+      // This is the #1 guard against FORTIS-type overnight counter-trend option losses.
+      if (isBearish && suppressShort) {
+        console.log(
+          `[CPRJournal] ${signal.symbol} suppressed: SHORT (PE) while market regime is ${regime.trend} — skipping.`
+        );
+        return { tag: `${signal.symbol}:REGIME_SUPPRESSED`, didLog: false };
+      }
+      if (!isBearish && suppressLong) {
+        console.log(
+          `[CPRJournal] ${signal.symbol} suppressed: LONG (CE) while market regime is ${regime.trend} — skipping.`
+        );
+        return { tag: `${signal.symbol}:REGIME_SUPPRESSED`, didLog: false };
+      }
+
+      // ── Fix 2: Signal Confluence / Direction Contradiction ────────────────
+      // Reject setups where the morning tag explicitly contradicts the trade direction.
+      // e.g. GAP_UP on a SHORT setup means the stock already moved against the bear thesis.
+      const confluenceCheck = validateCprSignalConfluence(signal.signalSummary, tag);
+      if (!confluenceCheck.valid) {
+        console.log(
+          `[CPRJournal] ${signal.symbol} skipped: ${confluenceCheck.reason} — direction ${tag} contradicted by morning signal.`
+        );
+        return { tag: `${signal.symbol}:${confluenceCheck.reason}`, didLog: false };
+      }
 
       // Entry is the breakout-continuation / mean-revert trigger.
       // Bullish must hold ABOVE entry; bearish must hold BELOW entry.

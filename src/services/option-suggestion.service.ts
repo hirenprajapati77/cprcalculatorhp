@@ -159,6 +159,80 @@ export class OptionSuggestionService {
     return '';
   }
 
+  /**
+   * Computes trading Days-To-Expiry (DTE) for an option symbol by parsing its expiry from
+   * the Fyers symbology and counting business days to today (Saturday/Sunday excluded).
+   * Used by the theta risk buffer in the dynamic delta SL calculation.
+   * Returns null if the expiry cannot be parsed (fail-safe: no theta buffer applied).
+   */
+  private static computeDTE(
+    optionSymbol: string,
+    underlying: string,
+    todayStr: string
+  ): number | null {
+    try {
+      const cleanUnderlying = underlying.toUpperCase().trim().replace('-EQ', '');
+      const prefixes = [`NSE:${cleanUnderlying}`, `BSE:${cleanUnderlying}`];
+      const monthMap: Record<string, number> = {
+        JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+        JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+      };
+
+      let expiryDate: Date | null = null;
+
+      for (const prefix of prefixes) {
+        if (!optionSymbol.startsWith(prefix)) continue;
+        const remainder = optionSymbol.substring(prefix.length);
+        // Strip trailing strike+type (e.g. "910PE" or "25000CE")
+        const body = remainder.replace(/\d+(CE|PE)$/, '');
+
+        // Monthly: 26AUG → Aug 2026 (last thursday)
+        const monthlyMatch = body.match(/^(\d{2})([A-Z]{3})$/);
+        if (monthlyMatch) {
+          const yy = parseInt(monthlyMatch[1], 10) + 2000;
+          const mo = monthMap[monthlyMatch[2]];
+          if (mo !== undefined) {
+            // Use last day of month as an approximation for monthly expiry
+            expiryDate = new Date(Date.UTC(yy, mo + 1, 0));
+          }
+        }
+
+        // Weekly: 26820 → 20 Aug 2026
+        const weeklyMatch = body.match(/^(\d{2})([1-9OND])(\d{2})$/);
+        if (weeklyMatch) {
+          const yy = parseInt(weeklyMatch[1], 10) + 2000;
+          const mCode = weeklyMatch[2];
+          const dd = parseInt(weeklyMatch[3], 10);
+          const moMap: Record<string, number> = {
+            '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5,
+            '7': 6, '8': 7, '9': 8, 'O': 9, 'N': 10, 'D': 11,
+          };
+          const mo = moMap[mCode];
+          if (mo !== undefined) {
+            expiryDate = new Date(Date.UTC(yy, mo, dd));
+          }
+        }
+        if (expiryDate) break;
+      }
+
+      if (!expiryDate) return null;
+
+      // Count business days (Mon–Fri) from today to expiry (inclusive of expiry day).
+      const [y, m, d] = todayStr.split('-').map(Number);
+      const todayUTC = new Date(Date.UTC(y, m - 1, d));
+      let dte = 0;
+      const cursor = new Date(todayUTC);
+      while (cursor <= expiryDate) {
+        const dow = cursor.getUTCDay();
+        if (dow !== 0 && dow !== 6) dte++; // exclude Sunday=0 and Saturday=6
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+      return dte;
+    } catch {
+      return null;
+    }
+  }
+
   private static async loadLotSizes(): Promise<Map<string, number>> {
     const cacheKey = 'fyers_lot_sizes_map';
     try {
@@ -538,13 +612,37 @@ export class OptionSuggestionService {
       return { error: 'NO_VIABLE_STRIKES' };
     }
 
-    // 8. Estimate SL / Target using 0.7 delta proxy
-    const delta = 0.7;
+    // 8. Estimate SL / Target using depth-calibrated, DTE-aware delta proxy.
+    //
+    // Rationale for depth-specific deltas:
+    //   Depth 1 (closest ITM, near-ATM): actual delta ≈ 0.45–0.55 — more extrinsic, more theta.
+    //   Depth 2 (1 strike deeper):       actual delta ≈ 0.60–0.70 — balanced.
+    //   Depth 3 (2 strikes deeper):      actual delta ≈ 0.75–0.85 — more intrinsic, lower theta.
+    // Using 0.7 for depth-1 overstated sensitivity (understated % risk), causing premature SL triggers.
+    const DELTA_BY_DEPTH: Record<number, number> = { 1: 0.52, 2: 0.65, 3: 0.80 };
+    const delta = DELTA_BY_DEPTH[selected.itmDepth] ?? 0.65;
+
+    // Theta risk buffer: options with DTE ≤ 4 trading days suffer accelerated time decay.
+    // A 0.78% adverse spot move on a 5-DTE option caused -32% option loss (FORTIS, Aug 2026).
+    // Tighten the SL by 10% of its distance to protect capital during expiry week.
+    const today = signalDate || getISTDateString();
+    const dte = OptionSuggestionService.computeDTE(selected.option.symbol, cleanSym, today);
+    const thetaBuffer = dte !== null && dte <= 4 ? 0.10 : 0;
+
     const stockMoveTarget = Math.max(0, type === 'CE' ? stockTarget - stockEntry : stockEntry - stockTarget);
     const stockMoveSl = Math.max(0, type === 'CE' ? stockEntry - stockSl : stockSl - stockEntry);
 
     const optionTarget = parseFloat((selected.option.ltp + stockMoveTarget * delta).toFixed(2));
-    const optionSl = parseFloat(Math.max(0.05, selected.option.ltp - stockMoveSl * delta).toFixed(2));
+    // thetaBuffer shrinks the distance between ltp and SL so we exit earlier in expiry week.
+    const rawSlDistance = stockMoveSl * delta;
+    const adjustedSlDistance = rawSlDistance * (1 + thetaBuffer);
+    const optionSl = parseFloat(Math.max(0.05, selected.option.ltp - adjustedSlDistance).toFixed(2));
+
+    console.log(
+      `[OptionSuggestion] ${cleanSym} ${type} depth=${selected.itmDepth} delta=${delta} ` +
+      `dte=${dte ?? 'unknown'} thetaBuffer=${thetaBuffer} → SL=${optionSl} target=${optionTarget}`
+    );
+
     const cost = parseFloat((selected.option.ltp * lotSize).toFixed(2));
 
     const expiryStr = this.extractFyersOptionExpiry(

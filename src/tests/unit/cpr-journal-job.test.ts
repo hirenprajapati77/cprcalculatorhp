@@ -5,8 +5,10 @@ import { env, envSchemaForTests } from '../../config/env';
 import { OptionSuggestionService } from '../../services/option-suggestion.service';
 import { TradeJournalService } from '../../services/journal/trade-journal.service';
 import { MarketService } from '../../services/market.service';
+import { RegimeService } from '../../services/overnight/regime.service';
 import { runCprJournalJob } from '../../services/scheduler/cpr-journal.job';
 import type { MarketStockData } from '../../services/market.service';
+import type { MarketRegime } from '../../services/overnight/regime.service';
 
 type ScannerRow = {
   symbol: string;
@@ -49,15 +51,23 @@ type Mocks = {
   findManyArgs: unknown[];
 };
 
+// Default regime = CHOPPY so existing tests are unaffected by the new regime gate.
+const DEFAULT_REGIME: MarketRegime = { trend: 'CHOPPY', volatility: 'LOW', score: 50, reliable: true };
+
 function mockJobDeps(
   rows: ScannerRow[],
-  marketBySymbol: Record<string, MarketFixture> = {}
+  marketBySymbol: Record<string, MarketFixture> = {},
+  regime: MarketRegime = DEFAULT_REGIME
 ): Mocks {
   const originalCount = prisma.scannerResult.count;
   const originalFindMany = prisma.scannerResult.findMany;
   const originalSuggest = OptionSuggestionService.suggestOption;
   const originalLog = TradeJournalService.logSignal;
   const originalGetStock = MarketService.getStockData;
+  const originalGetRegime = RegimeService.getMarketRegime;
+
+  // Stub regime so the job doesn't hit Nifty history network calls in tests.
+  RegimeService.getMarketRegime = (async () => regime) as unknown as typeof RegimeService.getMarketRegime;
 
   const suggestCalls: string[] = [];
   const suggestArgs: Array<{ symbol: string; direction: 'LONG' | 'SHORT'; ltp: number }> = [];
@@ -121,6 +131,7 @@ function mockJobDeps(
       OptionSuggestionService.suggestOption = originalSuggest;
       TradeJournalService.logSignal = originalLog;
       MarketService.getStockData = originalGetStock;
+      RegimeService.getMarketRegime = originalGetRegime;
     },
     suggestCalls,
     suggestArgs,
@@ -416,6 +427,194 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       assert.deepStrictEqual(result.logged, []);
     } finally {
       OptionSuggestionService.suggestOption = originalSuggest;
+      mocks.restore();
+    }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Regime Suppression Tests (Fix 1)
+// ────────────────────────────────────────────────────────────────────────────
+test('runCprJournalJob regime suppression gate', async (t) => {
+  await t.test('BULL regime suppresses SHORT (PE) signals — core FORTIS guard', async () => {
+    const bullRegime: MarketRegime = { trend: 'BULL', volatility: 'LOW', score: 80, reliable: true };
+    // Bearish signal (entry=bc → SHORT direction)
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'FORTIS', ltp: 97, entry: 98, bc: 98, tc: 100, signalSummary: 'BEARISH,BREAKDOWN' })],
+      {},
+      bullRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, [], 'FORTIS SHORT must be suppressed in BULL regime');
+      assert.ok(
+        result.skipped.some((s) => s.includes('REGIME_SUPPRESSED')),
+        `Expected REGIME_SUPPRESSED in skipped, got: ${JSON.stringify(result.skipped)}`
+      );
+      assert.strictEqual(mocks.suggestCalls.length, 0, 'Option chain must NOT be queried for suppressed signals');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('BULL regime allows LONG (CE) signals through', async () => {
+    const bullRegime: MarketRegime = { trend: 'BULL', volatility: 'LOW', score: 80, reliable: true };
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'RELIANCE', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
+      {},
+      bullRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['RELIANCE'], 'LONG signal must be allowed in BULL regime');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('BEAR regime suppresses LONG (CE) signals', async () => {
+    const bearRegime: MarketRegime = { trend: 'BEAR', volatility: 'LOW', score: 20, reliable: true };
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'HDFC', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
+      {},
+      bearRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, [], 'LONG (CE) must be suppressed in BEAR regime');
+      assert.ok(result.skipped.some((s) => s.includes('REGIME_SUPPRESSED')));
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('BEAR regime allows SHORT (PE) signals through', async () => {
+    const bearRegime: MarketRegime = { trend: 'BEAR', volatility: 'LOW', score: 20, reliable: true };
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'ICICI', ltp: 97, entry: 98, bc: 98, tc: 100, signalSummary: 'BEARISH,BREAKDOWN' })],
+      {},
+      bearRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['ICICI'], 'SHORT signal must be allowed in BEAR regime');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('unreliable regime (reliable=false) suppresses all signals — fail-closed', async () => {
+    const unreliableRegime: MarketRegime = { trend: 'CHOPPY', volatility: 'LOW', score: 50, reliable: false };
+    const mocks = mockJobDeps(
+      [
+        makeSignal({ symbol: 'LONG_SYM', ltp: 103, entry: 100, tc: 100, bc: 98 }),
+        makeSignal({ symbol: 'SHORT_SYM', ltp: 97, entry: 98, bc: 98, tc: 100 }),
+      ],
+      {},
+      unreliableRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, [], 'All signals must be suppressed when regime is unreliable');
+      assert.strictEqual(
+        result.skipped.filter((s) => s.includes('REGIME_SUPPRESSED')).length,
+        2,
+        'Both signals must appear as REGIME_SUPPRESSED'
+      );
+    } finally {
+      mocks.restore();
+    }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Signal Confluence / Direction Contradiction Tests (Fix 2)
+// ────────────────────────────────────────────────────────────────────────────
+test('runCprJournalJob signal confluence gate', async (t) => {
+  // CHOPPY regime allows both directions — so regime gate does NOT interfere here.
+  const choppyRegime: MarketRegime = { trend: 'CHOPPY', volatility: 'LOW', score: 50, reliable: true };
+
+  await t.test('rejects SHORT setup with GAP_UP tag — exact FORTIS scenario', async () => {
+    const mocks = mockJobDeps(
+      [
+        makeSignal({
+          symbol: 'FORTIS',
+          ltp: 97,
+          entry: 98,
+          bc: 98,
+          tc: 100,
+          // FORTIS had GAP_UP alongside BEARISH — the smoking gun
+          signalSummary: 'OVERLAPPING_VALUE,HP_CAM_BULL_BIAS,GAP_UP,BEARISH,BREAKDOWN',
+        }),
+      ],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, []);
+      assert.ok(
+        result.skipped.some((s) => s.includes('DIRECTION_CONFLICT')),
+        `Expected DIRECTION_CONFLICT in skipped, got: ${JSON.stringify(result.skipped)}`
+      );
+      assert.strictEqual(mocks.suggestCalls.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('rejects SHORT setup with HP_CAM_BULL_BIAS tag', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'AAPL', ltp: 97, entry: 98, bc: 98, tc: 100, signalSummary: 'BEARISH,HP_CAM_BULL_BIAS' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.ok(result.skipped.some((s) => s.includes('DIRECTION_CONFLICT:HP_CAM_BULL_BIAS')));
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('rejects LONG setup with GAP_DOWN tag', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'SBIN', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,GAP_DOWN,ABOVE_TC' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.ok(result.skipped.some((s) => s.includes('DIRECTION_CONFLICT:GAP_DOWN')));
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('allows SHORT setup with no contradictory tags', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'CLEANSHORT', ltp: 97, entry: 98, bc: 98, tc: 100, signalSummary: 'BEARISH,BREAKDOWN,RSI_BEARISH' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['CLEANSHORT'], 'Clean SHORT setup must pass confluence gate');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('allows LONG setup with no contradictory tags', async () => {
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'CLEANLONG', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC,RSI_BULLISH' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['CLEANLONG'], 'Clean LONG setup must pass confluence gate');
+    } finally {
       mocks.restore();
     }
   });
