@@ -25,28 +25,44 @@ async function enrichWithOptionSuggestions(
     return suggestionMap;
   }
 
-  try {
-    const { OptionSuggestionService } = await import(
-      '@/services/option-suggestion.service'
-    );
-    // Sequential lookups — avoid option-chain stampede during market hours.
-    for (const r of results.slice(0, maxSymbols)) {
-      const bias: 'BULLISH' | 'BEARISH' =
-        r.signalSummary?.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
-      try {
-        const suggestion = await OptionSuggestionService.suggestOption(
-          r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0, getISTDateString()
-        );
-        if (suggestion) suggestionMap.set(r.symbol, suggestion);
-      } catch (e) {
-        console.warn(`[OptionSuggestion] Failed for ${r.symbol}:`, e);
-      }
+  const enrichPromise = (async () => {
+    try {
+      const { OptionSuggestionService } = await import(
+        '@/services/option-suggestion.service'
+      );
+      const targetSymbols = results.slice(0, maxSymbols);
+      await Promise.allSettled(
+        targetSymbols.map(async (r) => {
+          const bias: 'BULLISH' | 'BEARISH' =
+            r.signalSummary?.includes('BEARISH') ? 'BEARISH' : 'BULLISH';
+          try {
+            const suggestion = await OptionSuggestionService.suggestOption(
+              r.symbol, r.ltp, bias, r.entry ?? 0, r.sl ?? 0, r.target ?? 0, getISTDateString()
+            );
+            if (suggestion && !('error' in suggestion)) {
+              suggestionMap.set(r.symbol, suggestion);
+            }
+          } catch (e) {
+            console.warn(`[OptionSuggestion] Failed for ${r.symbol}:`, e);
+          }
+        })
+      );
+    } catch (err) {
+      console.error('[OptionSuggestion] Enrichment failed:', err);
     }
-  } catch (err) {
-    console.error('[OptionSuggestion] Enrichment failed:', err);
-  }
-  return suggestionMap;
+    return suggestionMap;
+  })();
+
+  const timeoutPromise = new Promise<Map<string, unknown>>((resolve) =>
+    setTimeout(() => {
+      console.warn('[OptionSuggestion] Enrichment timed out after 2500ms — returning partial/empty suggestions');
+      resolve(suggestionMap);
+    }, 2500)
+  );
+
+  return Promise.race([enrichPromise, timeoutPromise]);
 }
+
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

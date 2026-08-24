@@ -271,10 +271,17 @@ export class OptionChainService {
     return option.ltp;
   }
 
-  private static async fetchWithRetry(url: string, options?: RequestInit, retries = 3, delay = 150): Promise<Response> {
+  private static async fetchWithRetry(url: string, options?: RequestInit, retries = 2, delay = 150): Promise<Response> {
     for (let i = 0; i < retries; i++) {
       try {
-        const res = await fetch(url, options);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const combinedOptions: RequestInit = {
+          ...options,
+          signal: controller.signal,
+        };
+        const res = await fetch(url, combinedOptions);
+        clearTimeout(timeoutId);
         if (res.status === 429) {
           console.warn(`[OptionChain] Hit 429 Rate Limit for ${url}. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -289,8 +296,18 @@ export class OptionChainService {
         delay *= 2;
       }
     }
-    return fetch(url, options);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return res;
+    } catch (e) {
+      clearTimeout(timeoutId);
+      throw e;
+    }
   }
+
 
   private static isValidOptionChainResponse(data: unknown): data is ValidOptionChainResponse {
     if (!data || typeof data !== 'object') return false;

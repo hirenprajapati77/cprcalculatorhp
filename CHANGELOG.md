@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **24 Aug Scanner API Option Suggestion Timeout Ceiling (PR #142)**:
+  - Fixed an issue where `GET /api/scanner` hung for 2+ minutes when Fyers option chain HTTP requests stalled or rate-limited, causing the live site scanner UI to show a continuous loading spinner.
+  - **Route Timeout Ceiling** (`src/app/api/scanner/route.ts`): Wrapped `enrichWithOptionSuggestions` in a hard 2.5s `Promise.race` timeout ceiling and parallelized top candidate lookups with `Promise.allSettled`. If option chain lookups exceed 2.5s, the route returns full scanner coordinates immediately without option suggestion badges instead of blocking the client response.
+  - **Fyers Option Chain Fetch Timeout** (`src/services/option-chain.service.ts`): Added a 3s `AbortController` timeout to `fetchWithRetry` so network stalls on Fyers `options-chain-v3` endpoints abort gracefully instead of hanging indefinitely.
 - **20 Aug CPR Journal Robustness Hardening — FORTIS Post-Mortem (PR #140)**:
   Five independent fixes applied after forensic analysis of the FORTIS Aug 19, 2026 PE trade loss (-32% option P&L on a +0.78% adverse spot gap):
   - **Fix 1 — Market Regime Gate** (`cpr-journal.job.ts`): CPR journal now fetches `RegimeService.getMarketRegime` at job start and suppresses SHORT/PE trades in BULL market regimes and LONG/CE trades in BEAR market regimes — mirroring the existing BTST/STBT gate. When `regime.reliable === false` (Nifty data missing), **both** directions are suppressed (fail-closed). The FORTIS SHORT in a BULL regime would have been stopped here.
