@@ -2,8 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'cpr-platform',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3000',
+      script: 'server-starter.js',
       cwd: '/home/ubuntu/cpr-calculator-platform',
       env: {
         NODE_ENV: 'production',
