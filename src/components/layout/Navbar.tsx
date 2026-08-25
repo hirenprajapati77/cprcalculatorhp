@@ -34,7 +34,8 @@ const NAV_GROUPS = [
   {
     label: 'Analysis',
     links: [
-      { href: '/market-tools/breadth', label: 'Market Breadth', icon: <TrendingUp size={13} />, badge: 'NEW' },
+      { href: '/market-tools/breadth', label: 'Market Breadth', icon: <TrendingUp size={13} />, badge: null },
+      { href: '/market-tools/breakout', label: 'Breakouts', icon: <Zap size={13} />, badge: 'NEW' },
       { href: '/heatmap', label: 'Heatmap', icon: <LayoutGrid size={13} />, badge: null },
       { href: '/backtest', label: 'Backtest', icon: <FlaskConical size={13} />, badge: null },
       { href: '/compare', label: 'Compare', icon: <Columns size={13} />, badge: null },

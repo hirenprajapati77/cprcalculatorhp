@@ -23,7 +23,6 @@ function makeSignal(overrides: Partial<OvernightSignal>): OvernightSignal {
     qualityBucket: 'TRADEABLE',
     classification: 'BTST_HIGH',
     rejectionReason: null,
-    executionOutcome: null,
     executed: false,
     actualExit: null,
     actualReturn: null,
@@ -46,7 +45,7 @@ function makeSignal(overrides: Partial<OvernightSignal>): OvernightSignal {
     instrumentType: null,
     createdAt: new Date('2026-08-20T09:45:00.000Z'),
     ...overrides,
-  };
+  } as unknown as OvernightSignal;
 }
 
 test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
