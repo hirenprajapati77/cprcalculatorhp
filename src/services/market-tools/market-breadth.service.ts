@@ -358,14 +358,15 @@ const INFRA_SYMBOLS = new Set([
 ]);
 
 export function getSymbolSector(symbol: string): string {
-  if (BANKING_SYMBOLS.has(symbol)) return 'BANKING';
-  if (IT_SYMBOLS.has(symbol)) return 'IT';
-  if (AUTO_SYMBOLS.has(symbol)) return 'AUTO';
-  if (PHARMA_SYMBOLS.has(symbol)) return 'PHARMA';
-  if (METALS_SYMBOLS.has(symbol)) return 'METALS';
-  if (ENERGY_SYMBOLS.has(symbol)) return 'ENERGY';
-  if (REALTY_SYMBOLS.has(symbol)) return 'REALTY';
-  if (INFRA_SYMBOLS.has(symbol)) return 'INFRA';
+  const base = symbol.split('-')[0]!;
+  if (BANKING_SYMBOLS.has(base)) return 'BANKING';
+  if (IT_SYMBOLS.has(base)) return 'IT';
+  if (AUTO_SYMBOLS.has(base)) return 'AUTO';
+  if (PHARMA_SYMBOLS.has(base)) return 'PHARMA';
+  if (METALS_SYMBOLS.has(base)) return 'METALS';
+  if (ENERGY_SYMBOLS.has(base)) return 'ENERGY';
+  if (REALTY_SYMBOLS.has(base)) return 'REALTY';
+  if (INFRA_SYMBOLS.has(base)) return 'INFRA';
   return 'OTHERS';
 }
 
