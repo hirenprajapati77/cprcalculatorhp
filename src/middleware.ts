@@ -38,12 +38,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // 2. Gate Page Routes — Redirect unauthenticated requests to /unlock
+  const normalizedPath = url.pathname.replace(/\/$/, '') || '/';
   const isPublicPage =
-    url.pathname === '/unlock' ||
-    url.pathname === '/about' ||
-    url.pathname === '/faq' ||
-    url.pathname === '/offline' ||
-    url.pathname.startsWith('/share/');
+    normalizedPath === '/unlock' ||
+    normalizedPath === '/about' ||
+    normalizedPath === '/faq' ||
+    normalizedPath === '/offline' ||
+    normalizedPath.startsWith('/share');
 
   if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
     const existing = request.cookies.get('app_access_token')?.value;
