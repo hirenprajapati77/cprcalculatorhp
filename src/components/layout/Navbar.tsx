@@ -58,6 +58,8 @@ const ALL_LINKS = NAV_GROUPS.flatMap(g => g.links);
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [marketStatus, setMarketStatus] = useState<{ cashSessionState: 'LIVE' | 'PRESESSION' | 'CLOSED'; isMarketOpen: boolean }>({
     cashSessionState: 'CLOSED',
@@ -103,7 +105,18 @@ export const Navbar: React.FC = () => {
 
   useEffect(() => {
     setMobileOpen(false);
+    setToolsOpen(false);
+    setMoreOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setToolsOpen(false);
+      setMoreOpen(false);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   const isActive = (href: string) =>
     pathname === href || (href === '/calculate' && pathname === '/');
@@ -117,7 +130,7 @@ export const Navbar: React.FC = () => {
             : 'bg-[#08090c] border-b border-[#1b1e2a]'
         }`}
       >
-        <div className="max-w-[1400px] mx-auto px-4 h-[52px] flex items-center gap-6">
+        <div className="max-w-[1400px] mx-auto px-4 h-[52px] flex items-center justify-between gap-4">
 
           {/* ── Brand Logo ──────────────────────────────────────── */}
           <Link href="/calculate" className="flex items-center gap-2.5 group shrink-0">
@@ -200,13 +213,18 @@ export const Navbar: React.FC = () => {
               )}
             </Link>
 
-            {/* Analysis / Market Tools Dropdown */}
+            {/* Analysis / Market Tools Dropdown (Hover + Click) */}
             <div className="relative group">
               <button
                 type="button"
-                className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
-                  pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare'
-                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToolsOpen(v => !v);
+                  setMoreOpen(false);
+                }}
+                className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide cursor-pointer ${
+                  toolsOpen || pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare'
+                    ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
                 }`}
               >
@@ -215,17 +233,23 @@ export const Navbar: React.FC = () => {
                 <span className="px-1 py-0 text-[7px] font-extrabold bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded uppercase">
                   NEW
                 </span>
-                <span className="text-[10px] text-slate-500 group-hover:text-slate-300">▼</span>
+                <span className="text-[9px] text-slate-500 transition-transform duration-200 group-hover:rotate-180">▼</span>
                 {(pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare') && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
                 )}
               </button>
 
-              {/* Dropdown Menu */}
-              <div className="absolute top-full left-0 pt-1.5 hidden group-hover:block z-50 min-w-[200px]">
+              {/* Dropdown Menu Panel */}
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className={`absolute top-full left-0 pt-1.5 z-50 min-w-[220px] transition-all ${
+                  toolsOpen ? 'block' : 'hidden group-hover:block'
+                }`}
+              >
                 <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
                   <Link
                     href="/market-tools/breakout"
+                    onClick={() => setToolsOpen(false)}
                     className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/market-tools/breakout'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
@@ -243,6 +267,7 @@ export const Navbar: React.FC = () => {
 
                   <Link
                     href="/market-tools/breadth"
+                    onClick={() => setToolsOpen(false)}
                     className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/market-tools/breadth'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
@@ -259,6 +284,7 @@ export const Navbar: React.FC = () => {
 
                   <Link
                     href="/heatmap"
+                    onClick={() => setToolsOpen(false)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/heatmap'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
@@ -271,6 +297,7 @@ export const Navbar: React.FC = () => {
 
                   <Link
                     href="/backtest"
+                    onClick={() => setToolsOpen(false)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/backtest'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
@@ -283,6 +310,7 @@ export const Navbar: React.FC = () => {
 
                   <Link
                     href="/compare"
+                    onClick={() => setToolsOpen(false)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/compare'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
@@ -331,21 +359,32 @@ export const Navbar: React.FC = () => {
             <div className="relative group">
               <button
                 type="button"
-                className={`relative flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
-                  pathname === '/about' || pathname === '/faq'
-                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMoreOpen(v => !v);
+                  setToolsOpen(false);
+                }}
+                className={`relative flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide cursor-pointer ${
+                  moreOpen || pathname === '/about' || pathname === '/faq' || pathname === '/settings'
+                    ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
                 }`}
               >
                 <Info size={13} className="text-slate-500" />
                 <span>More</span>
-                <span className="text-[10px] text-slate-500 group-hover:text-slate-300">▼</span>
+                <span className="text-[9px] text-slate-500 group-hover:text-slate-300">▼</span>
               </button>
 
-              <div className="absolute top-full right-0 pt-1.5 hidden group-hover:block z-50 min-w-[140px]">
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className={`absolute top-full right-0 pt-1.5 z-50 min-w-[150px] transition-all ${
+                  moreOpen ? 'block' : 'hidden group-hover:block'
+                }`}
+              >
                 <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
                   <Link
                     href="/about"
+                    onClick={() => setMoreOpen(false)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/about' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
@@ -355,6 +394,7 @@ export const Navbar: React.FC = () => {
                   </Link>
                   <Link
                     href="/faq"
+                    onClick={() => setMoreOpen(false)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/faq' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
@@ -364,6 +404,7 @@ export const Navbar: React.FC = () => {
                   </Link>
                   <Link
                     href="/settings"
+                    onClick={() => setMoreOpen(false)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
                       pathname === '/settings' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
@@ -377,7 +418,16 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* ── Right Cluster ─────────────────────────────────────── */}
-          <div className="ml-auto flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Quick Market Tools shortcut button for mobile screens */}
+            <Link
+              href="/market-tools/breakout"
+              className="md:hidden flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono"
+            >
+              <Zap size={11} className="text-amber-400" />
+              <span>Breakouts</span>
+            </Link>
+
             {/* Market Status Chip */}
             <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold font-mono border ${
               !isOnline
@@ -415,10 +465,15 @@ export const Navbar: React.FC = () => {
 
             {/* Mobile hamburger */}
             <button
-              onClick={() => setMobileOpen(v => !v)}
-              className="md:hidden h-8 w-8 flex items-center justify-center rounded-lg border border-slate-800 text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileOpen(v => !v);
+              }}
+              className="md:hidden h-8 w-8 flex items-center justify-center rounded-lg border border-slate-800 text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition-all cursor-pointer"
+              aria-label="Toggle Navigation Menu"
             >
-              {mobileOpen ? <X size={15} /> : <Menu size={15} />}
+              {mobileOpen ? <X size={16} /> : <Menu size={16} />}
             </button>
           </div>
         </div>
@@ -426,51 +481,57 @@ export const Navbar: React.FC = () => {
 
       {/* ── Mobile Drawer ────────────────────────────────────────── */}
       <div
-        className={`md:hidden fixed inset-0 z-40 transition-all duration-300 ${
+        className={`md:hidden fixed inset-0 z-50 transition-all duration-300 ${
           mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
         />
 
         {/* Drawer Panel */}
         <div
-          className={`absolute top-[52px] left-0 right-0 bg-[#0d0f18] border-b border-slate-800 shadow-2xl transition-transform duration-300 ${
+          className={`absolute top-[52px] left-0 right-0 max-h-[85vh] overflow-y-auto bg-[#0d0f18] border-b border-slate-800 shadow-2xl transition-transform duration-300 ${
             mobileOpen ? 'translate-y-0' : '-translate-y-4'
           }`}
         >
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-4 pb-8">
             {NAV_GROUPS.map(group => (
               <div key={group.label}>
-                <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest mb-2 px-1">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">
                   {group.label}
                 </p>
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   {group.links.map(link => {
                     const active = isActive(link.href);
                     return (
                       <Link
                         key={link.href}
                         href={link.href}
-                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[12px] font-semibold transition-all ${
+                        onClick={() => setMobileOpen(false)}
+                        className={`flex items-center gap-3 px-3.5 py-3 rounded-lg text-[13px] font-semibold transition-all ${
                           active
-                            ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5 active:bg-white/10 border border-transparent'
                         }`}
                       >
-                        <span className={active ? 'text-blue-400' : 'text-slate-600'}>
+                        <span className={active ? 'text-blue-400' : 'text-slate-500'}>
                           {link.icon}
                         </span>
-                        {link.label}
+                        <span>{link.label}</span>
+                        {link.badge === 'NEW' && (
+                          <span className="ml-auto text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">
+                            NEW
+                          </span>
+                        )}
                         {link.badge === 'LIVE' && (
-                          <span className="ml-auto text-[7px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 uppercase">
+                          <span className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 uppercase">
                             LIVE
                           </span>
                         )}
-                        {active && <ChevronRight size={11} className="ml-auto text-blue-400" />}
+                        {active && !link.badge && <ChevronRight size={13} className="ml-auto text-blue-400" />}
                       </Link>
                     );
                   })}
