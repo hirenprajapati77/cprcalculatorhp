@@ -1,7 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* standard production build */
+  generateBuildId: async () => {
+    return 'cpr-platform-prod';
+  },
 };
 
 export default nextConfig;
