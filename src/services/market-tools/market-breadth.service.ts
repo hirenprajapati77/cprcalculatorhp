@@ -139,19 +139,27 @@ export class MarketBreadthService {
     // 4. Compute Sector Rankings
     const sectors = computeSectorBreadth(stockStats);
 
-    // 5. Compute Overall Score & Regime
-    const overallScore = Math.round(
-      allNse.aboveMa50Pct * 0.35 +
-        allNse.aboveMa20Pct * 0.25 +
-        allNse.aboveMa200Pct * 0.25 +
-        (allNse.adRatio > 1 ? Math.min(allNse.adRatio * 15, 15) : 0)
-    );
+    // 5. Compute Overall Signed Signal-Agreement Score & Regime (matching reference tool -10 to +10 scale)
+    const signals = [
+      allNse.aboveMa20Pct >= 50 ? 1 : -1,
+      allNse.aboveMa50Pct >= 50 ? 1 : -1,
+      allNse.aboveMa200Pct >= 50 ? 1 : -1,
+      allNse.adRatio >= 1.0 ? 1 : -1,
+      allNse.up4PctCount > allNse.down4PctCount ? 1 : allNse.up4PctCount < allNse.down4PctCount ? -1 : 0,
+      allNse.netNewHighs > 0 ? 1 : allNse.netNewHighs < 0 ? -1 : 0,
+      nifty50.aboveMa50Pct >= 50 ? 1 : -1,
+      nifty50.adRatio >= 1.0 ? 1 : -1,
+      nseFno.aboveMa50Pct >= 50 ? 1 : -1,
+      nseFno.adRatio >= 1.0 ? 1 : -1,
+    ];
+
+    const overallScore = signals.reduce((sum, sig) => sum + sig, 0);
 
     let marketRegime: MarketBreadthReport['marketRegime'] = 'NEUTRAL';
-    if (overallScore >= 80) marketRegime = 'EXTREME_BULLISH';
-    else if (overallScore >= 60) marketRegime = 'BULLISH';
-    else if (overallScore >= 40) marketRegime = 'NEUTRAL';
-    else if (overallScore >= 20) marketRegime = 'BEARISH';
+    if (overallScore >= 7) marketRegime = 'EXTREME_BULLISH';
+    else if (overallScore >= 3) marketRegime = 'BULLISH';
+    else if (overallScore >= -2) marketRegime = 'NEUTRAL';
+    else if (overallScore >= -6) marketRegime = 'BEARISH';
     else marketRegime = 'EXTREME_BEARISH';
 
     const report: MarketBreadthReport = {
@@ -240,8 +248,8 @@ function computeUniverseBreadth(
     if (s.changePct >= 4.0) up4PctCount++;
     if (s.changePct <= -4.0) down4PctCount++;
 
-    if (s.high52w !== null && s.close >= s.high52w * 0.995) new52wHighCount++;
-    if (s.low52w !== null && s.close <= s.low52w * 1.005) new52wLowCount++;
+    if (s.high52w !== null && s.close >= s.high52w) new52wHighCount++;
+    if (s.low52w !== null && s.close <= s.low52w) new52wLowCount++;
   }
 
   const adRatio = declines > 0 ? Math.round((advances / declines) * 100) / 100 : advances;
