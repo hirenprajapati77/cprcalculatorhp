@@ -11,15 +11,15 @@ describe('breakout-suppression.persist', () => {
     const date = '2026-08-17-test';
     const symbol = 'TESTSUPP';
     const originalUpdateMany = prisma.scannerResult.updateMany;
-    const calls: Array<{ where: unknown; data: { alertSuppressedReason?: string | null } }> = [];
+    const calls: Array<{ where: unknown; data: unknown }> = [];
 
     prisma.scannerResult.updateMany = (async (args: {
       where: unknown;
-      data: { alertSuppressedReason?: string | null };
+      data: unknown;
     }) => {
       calls.push(args);
       return { count: 1 };
-    }) as unknown as typeof prisma.scannerResult.updateMany;
+    }) as typeof prisma.scannerResult.updateMany;
 
     try {
       await persistBreakoutAlertSuppressions(
