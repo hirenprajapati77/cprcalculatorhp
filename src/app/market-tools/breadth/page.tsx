@@ -193,10 +193,10 @@ export default function MarketBreadthPage() {
         <h2 className="text-base font-bold text-white uppercase tracking-wider">Moving Average Breadth (% Above MA)</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <MaGauge label="Above MA 10" count={currentUniverseData.aboveMa10Count} total={currentUniverseData.totalCount} pct={currentUniverseData.aboveMa10Pct} />
-          <MaGauge label="Above MA 20" count={currentUniverseData.aboveMa20Count} total={currentUniverseData.totalCount} pct={currentUniverseData.aboveMa20Pct} />
-          <MaGauge label="Above MA 50" count={currentUniverseData.aboveMa50Count} total={currentUniverseData.totalCount} pct={currentUniverseData.aboveMa50Pct} />
-          <MaGauge label="Above MA 200" count={currentUniverseData.aboveMa200Count} total={currentUniverseData.totalCount} pct={currentUniverseData.aboveMa200Pct} />
+          <MaGauge label="Above MA 10" count={currentUniverseData.aboveMa10Count} total={currentUniverseData.ma10EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa10Pct} />
+          <MaGauge label="Above MA 20" count={currentUniverseData.aboveMa20Count} total={currentUniverseData.ma20EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa20Pct} />
+          <MaGauge label="Above MA 50" count={currentUniverseData.aboveMa50Count} total={currentUniverseData.ma50EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa50Pct} />
+          <MaGauge label="Above MA 200" count={currentUniverseData.aboveMa200Count} total={currentUniverseData.ma200EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa200Pct} />
         </div>
       </div>
 

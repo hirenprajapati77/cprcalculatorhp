@@ -20,12 +20,16 @@ export interface UniverseBreadth {
   unchanged: number;
   adRatio: number;
   aboveMa10Count: number;
+  ma10EligibleCount: number;
   aboveMa10Pct: number;
   aboveMa20Count: number;
+  ma20EligibleCount: number;
   aboveMa20Pct: number;
   aboveMa50Count: number;
+  ma50EligibleCount: number;
   aboveMa50Pct: number;
   aboveMa200Count: number;
+  ma200EligibleCount: number;
   aboveMa200Pct: number;
   up4PctCount: number;
   down4PctCount: number;
@@ -97,6 +101,7 @@ export class MarketBreadthService {
           close,
           "prevClose",
           ((close - "prevClose") / NULLIF("prevClose", 0)) * 100 as "changePct",
+          COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
           AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) as ma10,
           AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) as ma20,
           AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) as ma50,
@@ -112,6 +117,7 @@ export class MarketBreadthService {
         close,
         "prevClose",
         "changePct",
+        "historyDays",
         ma10,
         ma20,
         ma50,
@@ -228,9 +234,13 @@ function computeUniverseBreadth(
   let unchanged = 0;
 
   let aboveMa10Count = 0;
+  let ma10EligibleCount = 0;
   let aboveMa20Count = 0;
+  let ma20EligibleCount = 0;
   let aboveMa50Count = 0;
+  let ma50EligibleCount = 0;
   let aboveMa200Count = 0;
+  let ma200EligibleCount = 0;
 
   let up4PctCount = 0;
   let down4PctCount = 0;
@@ -242,10 +252,24 @@ function computeUniverseBreadth(
     else if (s.changePct < -0.05) declines++;
     else unchanged++;
 
-    if (s.ma10 !== null && s.close >= s.ma10) aboveMa10Count++;
-    if (s.ma20 !== null && s.close >= s.ma20) aboveMa20Count++;
-    if (s.ma50 !== null && s.close >= s.ma50) aboveMa50Count++;
-    if (s.ma200 !== null && s.close >= s.ma200) aboveMa200Count++;
+    const historyDays = Number(s.historyDays || 0);
+
+    if (historyDays >= 10) {
+      ma10EligibleCount++;
+      if (s.ma10 !== null && s.close >= s.ma10) aboveMa10Count++;
+    }
+    if (historyDays >= 20) {
+      ma20EligibleCount++;
+      if (s.ma20 !== null && s.close >= s.ma20) aboveMa20Count++;
+    }
+    if (historyDays >= 50) {
+      ma50EligibleCount++;
+      if (s.ma50 !== null && s.close >= s.ma50) aboveMa50Count++;
+    }
+    if (historyDays >= 200) {
+      ma200EligibleCount++;
+      if (s.ma200 !== null && s.close >= s.ma200) aboveMa200Count++;
+    }
 
     if (s.changePct >= 4.0) up4PctCount++;
     if (s.changePct <= -4.0) down4PctCount++;
@@ -267,13 +291,17 @@ function computeUniverseBreadth(
     unchanged,
     adRatio,
     aboveMa10Count,
-    aboveMa10Pct: Math.round((aboveMa10Count / total) * 1000) / 10,
+    ma10EligibleCount,
+    aboveMa10Pct: ma10EligibleCount > 0 ? Math.round((aboveMa10Count / ma10EligibleCount) * 1000) / 10 : 0,
     aboveMa20Count,
-    aboveMa20Pct: Math.round((aboveMa20Count / total) * 1000) / 10,
+    ma20EligibleCount,
+    aboveMa20Pct: ma20EligibleCount > 0 ? Math.round((aboveMa20Count / ma20EligibleCount) * 1000) / 10 : 0,
     aboveMa50Count,
-    aboveMa50Pct: Math.round((aboveMa50Count / total) * 1000) / 10,
+    ma50EligibleCount,
+    aboveMa50Pct: ma50EligibleCount > 0 ? Math.round((aboveMa50Count / ma50EligibleCount) * 1000) / 10 : 0,
     aboveMa200Count,
-    aboveMa200Pct: Math.round((aboveMa200Count / total) * 1000) / 10,
+    ma200EligibleCount,
+    aboveMa200Pct: ma200EligibleCount > 0 ? Math.round((aboveMa200Count / ma200EligibleCount) * 1000) / 10 : 0,
     up4PctCount,
     down4PctCount,
     new52wHighCount,

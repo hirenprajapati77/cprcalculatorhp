@@ -1,3 +1,10 @@
+/**
+ * STANDING VERIFICATION RULE:
+ * Verification/read queries against DailyOhlcv (or any production table) MUST NOT
+ * be launched while a write operation (DELETE, INSERT, ingestion, backfill, migration)
+ * is in progress against the same database/table.
+ * Always wait for all writes to finish and commit before launching verification reads.
+ */
 import { PrismaClient } from '@prisma/client';
 
 export async function printConnectionSanityHeader(prisma: PrismaClient): Promise<{
