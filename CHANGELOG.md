@@ -7,13 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Added
 - **24 Aug Friday Weekend Gate + 9:16 AM Gap-Failure Exit Alert (PR #143)**:
   Addresses repeated Friday STBT option losses (BSE Aug 10 `GAP_FAILURE`, BSE Aug 21 `GAP_UP` on STBT PE) caused by 60+ hours of unhedged weekend gap risk in non-BEAR regimes.
   - **Friday Weekend Gate** (`src/services/overnight/overnight.service.ts`): Added `FRIDAY_STBT_GATE` — in `CHOPPY` or `BULL` regime, all SHORT/STBT overnight signals on Friday are hard-blocked before persisting. Only a confirmed `BEAR` regime (Nifty close < EMA20, EMA sloping down) permits Friday STBT signals. Added `FRIDAY_BTST_GATE` — Friday BTST/LONG signals require Score ≥ 85 (vs normal 75) in any non-BULL regime to survive weekend gap risk. IST day-of-week determined via `Intl.DateTimeFormat` with `timeZone: 'Asia/Kolkata'` to handle UTC offset correctly.
   - **9:16 AM Gap-Failure Exit Alert** (`src/services/scheduler/btst-alert.job.ts`): New `checkGapFailureExits()` function runs at market open (09:16–09:20 IST) and scans all unexecuted TRADEABLE/WATCHLIST overnight signals from the previous session. If the underlying has gapped > 1% against the trade direction (LONG: LTP < entry × 0.99; SHORT: LTP > entry × 1.01), sends a Telegram `⚠️ GAP_FAILURE_EXIT` alert immediately and marks the `OvernightSignal` and `TradeJournal` rows with `executionOutcome = 'GAP_FAILURE'`. Direction-aware signed return `((entry - ltp) / entry) * 100` stored in `OvernightSignal.actualReturn`.
   - **TelegramService** (`src/services/alert/telegram.service.ts`): Added `sendRawMessage()` static alias for pre-formatted HTML message delivery.
   - **Cron Scheduler** (`src/services/scheduler/market-cron.scheduler.ts`): Hooked `checkGapFailureExits` into the 60s poll tick under a `09:16–09:20 IST` time window with a `gap-failure-exit:{date}` deduplication claim key.
+- **24 Aug Market Tools Phase 1 — Daily NSE Bhavcopy Ingestion**:
+  - **`DailyOhlcv` Prisma Model** (`prisma/schema.prisma`): Added full-universe daily OHLCV storage schema (`symbol`, `date`, `open`, `high`, `low`, `close`, `prevClose`, `volume`, `value`, `trades`, `series`, `isin`) with unique `[symbol, date]` constraint and indexes on `date` and `[symbol, date]`. Tracked via Prisma migration `20260824195700_add_daily_ohlcv`.
+  - **Standalone Ingestion Pipeline** (`scripts/market-tools/bhavcopy-ingest.ts`): Standalone Node entrypoint for fetching, decompressing (`adm-zip`), parsing, and persisting NSE UDiFF CM Bhavcopy zips. Features bounded 250-row batching, in-batch key deduplication (preferring `EQ` series), and raw SQL `ON CONFLICT (symbol, date) DO UPDATE SET ...` for authoritative idempotency on re-run.
+  - **Memory Budget & Performance**: Runs strictly standalone outside `cpr-platform` to prevent memory retention. Features active memory ticker tracking peak RSS memory (`~44.15 MB` measured via `/usr/bin/time -v` on 3,645 inserted rows over 2.8s wall-clock runtime).
+  - **Crontab Registration**: Scheduled via OS crontab at `19:00 IST` (`13:30 UTC` / `0 13 * * 1-5`), completely collision-free with `cpr-platform`'s trading hours polling loop (09:15–15:30 IST).
+- **24 Aug Market Tools — Staged Historical Backfill & Market Breadth Scanner**:
+  - **Staged Backfill Pipeline** (`scripts/market-tools/bhavcopy-backfill.ts`): Resumable sequential backfill engine supporting custom `--start` / `--end` dates with courtesy delay and automatic weekend/holiday skipping. Ingested 264 distinct trading dates (`924,158` rows across `2025-08-01` to `2026-08-21`) with 0 duplicate keys and 0 errors in 4 minutes runtime.
+  - **`MarketBreadthService`** (`src/services/market-tools/market-breadth.service.ts`): Read-only market breadth calculator computing MA10/20/50/200 percentage breadth, advance/decline counts and ratio, 4% extreme moves, 52-week highs/lows, sector strength ranking, and market regime score (0-100).
+  - **API & UI Route** (`src/app/api/market-tools/breadth/route.ts`, `src/app/market-tools/breadth/page.tsx`): Exposes read-only JSON endpoint and dark-theme dashboard page with Moving Average breadth gauges, A/D ratio cards, 52W high/low status badges, and sector rank table.
 
 - **24 Aug Scanner API Option Suggestion Timeout Ceiling (PR #142)**:
   - Fixed an issue where `GET /api/scanner` hung for 2+ minutes when Fyers option chain HTTP requests stalled or rate-limited, causing the live site scanner UI to show a continuous loading spinner.

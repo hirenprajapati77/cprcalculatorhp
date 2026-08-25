@@ -17,7 +17,7 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2026-05-01', // Maharashtra Day
     '2026-05-28', // Bakri Id
     '2026-06-26', // Muharram
-    '2026-08-25', // Ganesh Chaturthi (corrected from Sep 14 — 2026 Ganesh Chaturthi is Aug 25 per Panchang)
+    '2026-09-14', // Ganesh Chaturthi (Sept 14, 2026)
     '2026-10-02', // Mahatma Gandhi Jayanti + Dussehra (Vijaya Dashami) — both fall on Oct 2, 2026
     // L-1 fix: removed erroneous duplicate '2026-10-20' Dussehra entry.
     // Vijaya Dashami 2026 is Oct 2, not Oct 20. Two entries caused Oct 20 to be
