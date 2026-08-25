@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **26 Aug Market Tools Phase 3 — 52W High Pattern Breakout Scanner Module (PR #145)**:
+  - **`PatternBreakoutService`** (`src/services/market-tools/pattern-breakout.service.ts`):
+    - **History-Depth Guard**: Enforces strict minimum $\ge 250$ trading days for 52W high baseline; newly listed stocks with $< 250$ days are safely excluded rather than calculated over truncated history.
+    - **Prior-Day Baseline**: Computes 52W High using SQL window function `ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING` to exclude today's candle and prevent self-comparison.
+    - **Classical Pattern Heuristics**:
+      - **Cup & Handle (O'Neil)**: Detects U-shaped cup ($12\%\text{–}35\%$ depth over 25–65d), lip symmetry ($\le 6\%$), and handle pullback ($\le 12\%$ drift in upper half of cup).
+      - **Flat Base (Minervini / O'Neil)**: Detects tight horizontal consolidation channel ($\le 15\%$ range over 20–50d within $15\%$ of 52W high).
+      - **Double Bottom**: W-pattern with two comparable troughs ($\pm 4.5\%$), intermediate peak rise $\ge 7\%$, and pivot breakout.
+      - **VCP (Volatility Contraction Pattern)**: Sequential multi-wave contraction (Wave 1: $12\%\text{–}35\% \rightarrow$ Wave 2: $4\%\text{–}18\%$ with $\ge 25\%$ contraction ratio).
+    - **Volume Confirmation (RVOL)**: Trailing 20-day volume ratio computed via `computeRvol` from VPA engine.
+    - **Composite Total Score (0–100)**: 52W Proximity (30 pts), RVOL 20D (25 pts), Pattern Quality (25 pts), Momentum & MA Alignment (20 pts). Quality tiers: **A+ (85–100)**, **A (70–84)**, **B (50–69)**, **C (<50)**.
+    - **Deterministic Pattern Tie-Breaker**: `VCP` $\rightarrow$ `Cup & Handle` $\rightarrow$ `Double Bottom` $\rightarrow$ `Flat Base` $\rightarrow$ `None` (all matched patterns preserved in `detectedPatterns` metadata).
+    - **Sector Grounding**: Reuses standard 8-sector taxonomy (`BANKING`, `IT`, `AUTO`, `PHARMA`, `METALS`, `ENERGY`, `REALTY`, `INFRA`, `OTHERS`) from `getSymbolSector()`.
+  - **API & UI Dashboard** (`src/app/api/market-tools/pattern-breakout/route.ts`, `src/app/market-tools/pattern-breakout/page.tsx`):
+    - Exposes cache-only endpoint `/api/market-tools/pattern-breakout` with pattern, status, and tier query filters.
+    - Dark-theme dashboard with KPI cards (Total Scanned, Breakout Candidates, Near High, A+ Setups), pattern filter pills, status dropdown, tier dropdown, sector selector, live search, and expandable structural detail cards.
+  - **Platform Integration**:
+    - `src/components/layout/Navbar.tsx`: Added **52W Patterns `[NEW]`** link under `Market Tools ▼` dropdown and mobile drawer.
+    - `src/middleware.ts`: Added public route exemption for `/api/market-tools/pattern-breakout`.
+  - **Unit Tests & Live Verification** (`src/tests/unit/pattern-breakout.test.ts`):
+    - 9/9 unit tests passing (24/24 across all Market Tools modules).
+    - Real database sequential run scanned 2,636 symbols (261 trading days) yielding 221 qualified setups with clean natural distribution (83 Flat Base, 27 VCP, 21 Double Bottom, 17 Cup & Handle, 73 Raw 52W Breakouts).
 - **25 Aug Market Tools Phase 2 — Multi-Year Breakout Scanner Module (PR #144)**:
   - **`MultiYearBreakoutService`** (`src/services/market-tools/multi-year-breakout.service.ts`): Scans 2,600+ NSE `series = 'EQ'` symbols from `DailyOhlcv` history. Computes trailing max highs across 1Y (250d), 2Y (500d), 3Y (750d), 5Y (1250d), 10Y (2500d), and ATH windows using SQL window functions (`ROWS BETWEEN N PRECEDING AND 1 PRECEDING`, excluding current day to prevent self-comparison).
   - **Strict History-Depth Guards**: For windows where symbol history is insufficient (`availableDays < requiredDays`), the engine returns `null` (`INSUFFICIENT_DATA`) rather than calculating false breakout metrics over truncated datasets. 1Y and ATH are fully active on current dataset (~261 days); 2Y–10Y are built with strict guards and will self-activate automatically as daily Bhavcopy records accumulate.
