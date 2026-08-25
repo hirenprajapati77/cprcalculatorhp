@@ -101,9 +101,10 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
         continue;
       }
 
-      // Filter: Only equity segment ('STK')
+      // Filter: Only equity segment ('STK') and standard equity series ('EQ')
       const finInstrmTp = getCol(cols, colIndex.FinInstrmTp);
-      if (finInstrmTp && finInstrmTp !== 'STK') {
+      const series = getCol(cols, colIndex.SctySrs);
+      if ((finInstrmTp && finInstrmTp !== 'STK') || series !== 'EQ') {
         rowsSkipped++;
         continue;
       }

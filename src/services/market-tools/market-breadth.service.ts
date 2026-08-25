@@ -117,7 +117,7 @@ export class MarketBreadthService {
         high52w,
         low52w
       FROM RankedHistory
-      WHERE date = ${latestDate} AND rn = 1
+      WHERE date = ${latestDate} AND series = 'EQ' AND rn = 1
     `;
 
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
