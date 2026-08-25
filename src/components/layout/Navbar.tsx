@@ -35,7 +35,8 @@ const NAV_GROUPS = [
     label: 'Analysis',
     links: [
       { href: '/market-tools/breadth', label: 'Market Breadth', icon: <TrendingUp size={13} />, badge: null },
-      { href: '/market-tools/breakout', label: 'Breakouts', icon: <Zap size={13} />, badge: 'NEW' },
+      { href: '/market-tools/breakout', label: 'Multi-Year Breakouts', icon: <Zap size={13} />, badge: null },
+      { href: '/market-tools/pattern-breakout', label: '52W Patterns', icon: <Zap size={13} />, badge: 'NEW' },
       { href: '/heatmap', label: 'Heatmap', icon: <LayoutGrid size={13} />, badge: null },
       { href: '/backtest', label: 'Backtest', icon: <FlaskConical size={13} />, badge: null },
       { href: '/compare', label: 'Compare', icon: <Columns size={13} />, badge: null },
@@ -52,8 +53,6 @@ const NAV_GROUPS = [
     ],
   },
 ];
-
-const ALL_LINKS = NAV_GROUPS.flatMap(g => g.links);
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
@@ -248,6 +247,24 @@ export const Navbar: React.FC = () => {
               >
                 <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
                   <Link
+                    href="/market-tools/pattern-breakout"
+                    onClick={() => setToolsOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/market-tools/pattern-breakout'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap size={13} className="text-amber-400" />
+                      <span>52W Patterns</span>
+                    </div>
+                    <span className="px-1 py-0.2 rounded text-[8px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      NEW
+                    </span>
+                  </Link>
+
+                  <Link
                     href="/market-tools/breakout"
                     onClick={() => setToolsOpen(false)}
                     className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
@@ -257,12 +274,9 @@ export const Navbar: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Zap size={13} className="text-amber-400" />
-                      <span>Breakouts</span>
+                      <Zap size={13} className="text-blue-400" />
+                      <span>Multi-Year Breakouts</span>
                     </div>
-                    <span className="px-1 py-0.2 rounded text-[8px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                      NEW
-                    </span>
                   </Link>
 
                   <Link
