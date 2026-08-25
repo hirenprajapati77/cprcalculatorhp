@@ -121,7 +121,6 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
       const value = valueStr ? parseFloat(valueStr) : null;
       const tradesStr = getCol(cols, colIndex.TtlNbOfTxsExctd);
       const trades = tradesStr ? parseInt(tradesStr, 10) : null;
-      const series = getCol(cols, colIndex.SctySrs) || 'EQ';
       const isin = getCol(cols, colIndex.ISIN) || null;
 
       if (!symbol || isNaN(close) || close <= 0) {
