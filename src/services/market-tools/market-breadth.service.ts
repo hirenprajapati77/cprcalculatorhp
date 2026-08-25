@@ -85,6 +85,7 @@ export class MarketBreadthService {
         close: number;
         prevClose: number;
         changePct: number;
+        historyDays: bigint | number;
         ma10: number | null;
         ma20: number | null;
         ma50: number | null;
@@ -195,6 +196,7 @@ function computeUniverseBreadth(
     close: number;
     prevClose: number;
     changePct: number;
+    historyDays?: bigint | number;
     ma10: number | null;
     ma20: number | null;
     ma50: number | null;
@@ -213,12 +215,16 @@ function computeUniverseBreadth(
       unchanged: 0,
       adRatio: 0,
       aboveMa10Count: 0,
+      ma10EligibleCount: 0,
       aboveMa10Pct: 0,
       aboveMa20Count: 0,
+      ma20EligibleCount: 0,
       aboveMa20Pct: 0,
       aboveMa50Count: 0,
+      ma50EligibleCount: 0,
       aboveMa50Pct: 0,
       aboveMa200Count: 0,
+      ma200EligibleCount: 0,
       aboveMa200Pct: 0,
       up4PctCount: 0,
       down4PctCount: 0,
