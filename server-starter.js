@@ -4,10 +4,14 @@ const fs = require('fs');
 const path = require('path');
 
 const nextDir = path.join(__dirname, '.next');
+const staticDir = path.join(nextDir, 'static');
 const buildIdFile = path.join(nextDir, 'BUILD_ID');
 
 if (!fs.existsSync(nextDir)) {
   fs.mkdirSync(nextDir, { recursive: true });
+}
+if (!fs.existsSync(staticDir)) {
+  fs.mkdirSync(staticDir, { recursive: true });
 }
 if (!fs.existsSync(buildIdFile)) {
   fs.writeFileSync(buildIdFile, 'cpr-platform-prod', 'utf8');
