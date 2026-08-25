@@ -13,13 +13,10 @@ describe('breakout-suppression.persist', () => {
     const originalUpdateMany = prisma.scannerResult.updateMany;
     const calls: Array<{ where: unknown; data: unknown }> = [];
 
-    prisma.scannerResult.updateMany = (async (args: {
-      where: unknown;
-      data: unknown;
-    }) => {
-      calls.push(args);
+    prisma.scannerResult.updateMany = (async (args: unknown) => {
+      calls.push(args as { where: unknown; data: unknown });
       return { count: 1 };
-    }) as typeof prisma.scannerResult.updateMany;
+    }) as unknown as typeof prisma.scannerResult.updateMany;
 
     try {
       await persistBreakoutAlertSuppressions(
@@ -31,12 +28,12 @@ describe('breakout-suppression.persist', () => {
         date,
         OR: [{ symbol: 'TESTSUPP' }, { symbol: 'TESTSUPP:BSE' }],
       });
-      assert.equal(calls[0]?.data?.alertSuppressedReason, 'EXTENDED');
+      assert.equal((calls[0]?.data as Record<string, unknown>)?.alertSuppressedReason, 'EXTENDED');
 
       calls.length = 0;
       await clearBreakoutAlertSuppressions([symbol], date);
       assert.equal(calls.length, 1);
-      assert.equal(calls[0]?.data?.alertSuppressedReason, null);
+      assert.equal((calls[0]?.data as Record<string, unknown>)?.alertSuppressedReason, null);
     } finally {
       prisma.scannerResult.updateMany = originalUpdateMany;
     }
