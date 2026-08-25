@@ -67,6 +67,7 @@ export async function middleware(request: NextRequest) {
     if (
       url.pathname.startsWith('/api/health') ||
       url.pathname.startsWith('/api/market-tools/breadth') ||
+      url.pathname.startsWith('/api/market-tools/breakout') ||
       isCronSecretExemptApiPath(url.pathname) ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
       url.pathname.startsWith('/api/share/') ||
