@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import {
-  MultiYearBreakoutService,
   BreakoutWindow,
 } from '../../services/market-tools/multi-year-breakout.service';
 
