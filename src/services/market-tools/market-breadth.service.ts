@@ -92,6 +92,7 @@ export class MarketBreadthService {
       WITH RankedHistory AS (
         SELECT 
           symbol,
+          series,
           date,
           close,
           "prevClose",
@@ -107,6 +108,7 @@ export class MarketBreadthService {
       )
       SELECT 
         symbol,
+        series,
         close,
         "prevClose",
         "changePct",
