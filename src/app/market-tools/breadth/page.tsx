@@ -103,7 +103,7 @@ export default function MarketBreadthPage() {
         <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Market Regime Score</span>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-white">{report.overallScore}<span className="text-lg text-gray-500 font-normal">/100</span></span>
+            <span className="text-3xl font-black text-white">{report.overallScore > 0 ? `+${report.overallScore}` : report.overallScore}<span className="text-lg text-gray-500 font-normal">/10</span></span>
             <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${getRegimeBadgeClass(report.marketRegime)}`}>
               {report.marketRegime.replace('_', ' ')}
             </span>
@@ -111,7 +111,7 @@ export default function MarketBreadthPage() {
           <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-500 ${getRegimeBarClass(report.marketRegime)}`}
-              style={{ width: `${report.overallScore}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, ((report.overallScore + 10) / 20) * 100))}%` }}
             ></div>
           </div>
         </div>
