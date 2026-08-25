@@ -317,6 +317,12 @@ export class OvernightService {
     const dateStr = DATE_FORMATTER.format(currentTime); // "YYYY-MM-DD"
     const timeStr = TIME_FORMATTER.format(currentTime); // "HH:MM"
 
+    // Determine if the signal date is a Friday (day of week = 5 in IST).
+    // Friday overnight holds carry 60+ hours of weekend gap risk vs. 18 hours on weekdays.
+    const istDayOfWeek = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+      .format(currentTime);
+    const isFriday = istDayOfWeek === 'Fri';
+
     const state = this.determineState(currentTime);
     const regime = await RegimeService.getMarketRegime(dateStr);
     
@@ -574,6 +580,34 @@ export class OvernightService {
           if (finalDir === 'LONG' && regime.trend === 'BEAR') {
             continue;
           }
+
+          // ── FRIDAY WEEKEND GATE ─────────────────────────────────────────────────
+          // Friday holds carry 60+ hours of weekend gap risk (Mon open gap-against
+          // traps have caused repeated option losses: BSE Aug 10, BSE Aug 21).
+          //
+          // Rule 1 — STBT/SHORT block: Friday SHORTs are blocked in CHOPPY and BULL
+          //   regimes. Only a confirmed BEAR regime (Nifty close < EMA20, EMA sloping
+          //   down) provides enough downtrend conviction to hold a Friday PUT overnight.
+          //
+          // Rule 2 — BTST/LONG weekend premium: Friday LONGs require Score >= 85
+          //   (vs normal 75) to survive the weekend gap risk on any non-BEAR session.
+          if (isFriday) {
+            if (finalDir === 'SHORT' && regime.trend !== 'BEAR') {
+              console.warn(
+                `[OvernightScan] FRIDAY_STBT_GATE: ${fullStock.symbol} SHORT blocked — ` +
+                `regime=${regime.trend} on Friday (weekend gap risk). Only BEAR regime permits Friday STBT.`
+              );
+              continue;
+            }
+            if (finalDir === 'LONG' && (finalSig.score ?? 0) < 85 && regime.trend !== 'BULL') {
+              console.warn(
+                `[OvernightScan] FRIDAY_BTST_GATE: ${fullStock.symbol} LONG blocked — ` +
+                `score=${finalSig.score} < 85 required on Friday (weekend premium threshold).`
+              );
+              continue;
+            }
+          }
+          // ── END FRIDAY WEEKEND GATE ─────────────────────────────────────────────
 
           const ext = EntryManagerService.evaluateExtension(fullStock, finalDir);
           if (!ext.eligible) {

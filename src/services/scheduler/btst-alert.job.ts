@@ -529,3 +529,137 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   }
 }
 
+// ─── 9:16 AM Gap-Failure Exit Alert ────────────────────────────────────────────
+/**
+ * Checks overnight signals from the previous session for gap-failure conditions
+ * at market open (9:16 AM IST). If the underlying stock has gapped > 1% AGAINST
+ * the trade direction, sends a Telegram ⚠️ GAP_FAILURE_EXIT alert and marks the
+ * signal as executed with the open LTP as actual exit.
+ *
+ * Root cause: BSE STBT Aug 21 (Score 85 PE open) gapped UP at Monday open — 60+
+ * hours of weekend gap risk created a losing exit. This catches that scenario
+ * immediately at 9:16 AM rather than letting the option decay all morning.
+ *
+ * Gap thresholds:
+ *   LONG  (CE): trigger exit if LTP < entry × 0.99  (stock gapped DOWN > 1%)
+ *   SHORT (PE): trigger exit if LTP > entry × 1.01  (stock gapped UP   > 1%)
+ */
+export async function checkGapFailureExits(): Promise<{ checked: number; exited: string[] }> {
+  const yesterday = (() => {
+    const d = new Date();
+    // Walk backwards to find the last trading session date (skip weekends)
+    for (let i = 1; i <= 4; i++) {
+      const candidate = new Date(d);
+      candidate.setDate(d.getDate() - i);
+      const dow = candidate.getDay(); // 0=Sun, 6=Sat
+      if (dow !== 0 && dow !== 6) {
+        return candidate.toISOString().split('T')[0];
+      }
+    }
+    return null;
+  })();
+
+  if (!yesterday) return { checked: 0, exited: [] };
+
+  // Load all unexecuted overnight signals from the previous session
+  const pendingSignals = await prisma.overnightSignal.findMany({
+    where: {
+      signalDate: yesterday,
+      executed: false,
+      entry: { not: null },
+      qualityBucket: { in: ['TRADEABLE', 'WATCHLIST'] },
+    },
+  });
+
+  if (pendingSignals.length === 0) return { checked: 0, exited: [] };
+
+  const exited: string[] = [];
+  const GAP_THRESHOLD = 0.01; // 1% gap against trade direction triggers exit
+
+  for (const sig of pendingSignals) {
+    try {
+      const entry = sig.entry;
+      if (!entry || !sig.direction) continue;
+
+      // Fetch current spot LTP
+      const stockData = await MarketService.getStockData(sig.symbol);
+      if (!stockData) continue;
+      const ltp = stockData.ltp;
+
+      // Evaluate gap direction
+      const gappedAgainst =
+        sig.direction === 'LONG'
+          ? ltp < entry * (1 - GAP_THRESHOLD)  // Long: stock gapped down > 1%
+          : ltp > entry * (1 + GAP_THRESHOLD); // Short: stock gapped up > 1%
+
+      if (!gappedAgainst) continue;
+
+      const gapPct = ((ltp - entry) / entry) * 100;
+      const optionType = sig.direction === 'SHORT' ? 'PE' : 'CE';
+
+      console.warn(
+        `[GapFailureExit] ${sig.symbol} ${sig.direction} — entry=${entry}, open LTP=${ltp}, ` +
+        `gap=${gapPct.toFixed(2)}% against trade. Triggering GAP_FAILURE_EXIT.`
+      );
+
+      const signedReturn =
+        sig.direction === 'SHORT'
+          ? ((entry - ltp) / entry) * 100
+          : gapPct;
+
+      await prisma.overnightSignal.update({
+        where: { id: sig.id },
+        data: {
+          executed: true,
+          actualExit: ltp,
+          actualReturn: parseFloat(signedReturn.toFixed(2)),
+        },
+      });
+
+      // Update TradeJournal row if one exists
+      try {
+        await prisma.tradeJournal.updateMany({
+          where: {
+            symbol: sig.symbol,
+            tradeDate: new Date(`${yesterday}T18:30:00.000Z`),
+            signalType: sig.direction === 'SHORT' ? 'STBT' : 'BTST',
+            cmp916: null,
+          },
+          data: {
+            cmp916: ltp,
+            exitCmp: ltp,
+            pnlPct: parseFloat(
+              sig.direction === 'SHORT'
+                ? (((entry - ltp) / entry) * 100).toFixed(2)
+                : gapPct.toFixed(2)
+            ),
+            executionOutcome: 'GAP_FAILURE',
+          },
+        });
+      } catch (journalErr) {
+        console.warn(`[GapFailureExit] Journal update failed for ${sig.symbol}:`, journalErr);
+      }
+
+      // Send Telegram exit alert
+      try {
+        const gapDir = sig.direction === 'LONG' ? '📉 GAP DOWN' : '📈 GAP UP';
+        const message =
+          `⚠️ <b>GAP FAILURE EXIT</b>\n` +
+          `<b>${sig.symbol}</b> ${optionType} — Exit Immediately at Open\n\n` +
+          `${gapDir} against your ${sig.direction} position:\n` +
+          `• Entry: ₹${entry.toFixed(2)}\n` +
+          `• Open LTP: ₹${ltp.toFixed(2)}\n` +
+          `• Gap: ${gapPct.toFixed(2)}%\n\n` +
+          `<i>Signal from ${yesterday}. Weekend gap risk triggered. Exit at market open to protect capital.</i>`;
+        await TelegramService.sendRawMessage(message);
+        exited.push(sig.symbol);
+      } catch (tgErr) {
+        console.warn(`[GapFailureExit] Telegram alert failed for ${sig.symbol}:`, tgErr);
+      }
+    } catch (err) {
+      console.error(`[GapFailureExit] Error processing ${sig.symbol}:`, err);
+    }
+  }
+
+  return { checked: pendingSignals.length, exited };
+}

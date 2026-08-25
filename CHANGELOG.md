@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **24 Aug Friday Weekend Gate + 9:16 AM Gap-Failure Exit Alert (PR #143)**:
+  Addresses repeated Friday STBT option losses (BSE Aug 10 `GAP_FAILURE`, BSE Aug 21 `GAP_UP` on STBT PE) caused by 60+ hours of unhedged weekend gap risk in non-BEAR regimes.
+  - **Friday Weekend Gate** (`src/services/overnight/overnight.service.ts`): Added `FRIDAY_STBT_GATE` — in `CHOPPY` or `BULL` regime, all SHORT/STBT overnight signals on Friday are hard-blocked before persisting. Only a confirmed `BEAR` regime (Nifty close < EMA20, EMA sloping down) permits Friday STBT signals. Added `FRIDAY_BTST_GATE` — Friday BTST/LONG signals require Score ≥ 85 (vs normal 75) in any non-BULL regime to survive weekend gap risk. IST day-of-week determined via `Intl.DateTimeFormat` with `timeZone: 'Asia/Kolkata'` to handle UTC offset correctly.
+  - **9:16 AM Gap-Failure Exit Alert** (`src/services/scheduler/btst-alert.job.ts`): New `checkGapFailureExits()` function runs at market open (09:16–09:20 IST) and scans all unexecuted TRADEABLE/WATCHLIST overnight signals from the previous session. If the underlying has gapped > 1% against the trade direction (LONG: LTP < entry × 0.99; SHORT: LTP > entry × 1.01), sends a Telegram `⚠️ GAP_FAILURE_EXIT` alert immediately and marks the `OvernightSignal` and `TradeJournal` rows with `executionOutcome = 'GAP_FAILURE'`. Direction-aware signed return `((entry - ltp) / entry) * 100` stored in `OvernightSignal.actualReturn`.
+  - **TelegramService** (`src/services/alert/telegram.service.ts`): Added `sendRawMessage()` static alias for pre-formatted HTML message delivery.
+  - **Cron Scheduler** (`src/services/scheduler/market-cron.scheduler.ts`): Hooked `checkGapFailureExits` into the 60s poll tick under a `09:16–09:20 IST` time window with a `gap-failure-exit:{date}` deduplication claim key.
+
 - **24 Aug Scanner API Option Suggestion Timeout Ceiling (PR #142)**:
   - Fixed an issue where `GET /api/scanner` hung for 2+ minutes when Fyers option chain HTTP requests stalled or rate-limited, causing the live site scanner UI to show a continuous loading spinner.
   - **Route Timeout Ceiling** (`src/app/api/scanner/route.ts`): Wrapped `enrichWithOptionSuggestions` in a hard 2.5s `Promise.race` timeout ceiling and parallelized top candidate lookups with `Promise.allSettled`. If option chain lookups exceed 2.5s, the route returns full scanner coordinates immediately without option suggestion badges instead of blocking the client response.
