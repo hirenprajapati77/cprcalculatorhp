@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { cache } from '@/lib/redis';
 
 const prisma = new PrismaClient();
 
@@ -65,9 +66,23 @@ export class MarketBreadthService {
       return cachedReport;
     }
 
+    if (!forceRefresh) {
+      try {
+        const redisCached = await cache.get('market_breadth:report');
+        if (redisCached) {
+          const parsed = JSON.parse(redisCached) as MarketBreadthReport;
+          cachedReport = parsed;
+          lastComputedTime = now;
+          return parsed;
+        }
+      } catch {
+        // Fall through to live compute
+      }
+    }
+
     // 1. Fetch available trading dates sorted descending
     const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
-      SELECT DISTINCT date FROM "DailyOhlcv" ORDER BY date DESC LIMIT 250
+      SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 250
     `;
 
     if (dateRows.length === 0) {
@@ -111,6 +126,7 @@ export class MarketBreadthService {
           MIN(low) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) as low52w,
           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
         FROM "DailyOhlcv"
+        WHERE series = 'EQ'
       )
       SELECT 
         symbol,
@@ -126,7 +142,7 @@ export class MarketBreadthService {
         high52w,
         low52w
       FROM RankedHistory
-      WHERE date = ${latestDate} AND series = 'EQ' AND rn = 1
+      WHERE date = ${latestDate} AND rn = 1
     `;
 
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
@@ -185,6 +201,13 @@ export class MarketBreadthService {
 
     cachedReport = report;
     lastComputedTime = now;
+
+    try {
+      await cache.set('market_breadth:report', JSON.stringify(report), 3600);
+    } catch {
+      // Ignore cache write errors
+    }
+
     return report;
   }
 }
