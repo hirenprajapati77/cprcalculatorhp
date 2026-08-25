@@ -419,3 +419,27 @@ model MarketEvent {
   @@index([symbol, date])
   @@index([date])
 }
+
+// ─── Market Tools: Full Universe Daily Bhavcopy ──────────────────────────────
+model DailyOhlcv {
+  id           String   @id @default(cuid())
+  symbol       String
+  date         String   // YYYY-MM-DD
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  prevClose    Float
+  volume       BigInt
+  value        Float?   // Total traded value (TtlTrfVal)
+  trades       Int?     // Total execution count (TtlNbOfTxsExctd)
+  series       String   // EQ, BE, etc.
+  isin         String?
+
+  createdAt    DateTime @default(now())
+
+  @@unique([symbol, date])
+  @@index([date])
+  @@index([symbol, date])
+}
+

@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Added
+- **24 Aug Market Tools Phase 1 — Daily NSE Bhavcopy Ingestion**:
+  - **`DailyOhlcv` Prisma Model** (`prisma/schema.prisma`): Added full-universe daily OHLCV storage schema (`symbol`, `date`, `open`, `high`, `low`, `close`, `prevClose`, `volume`, `value`, `trades`, `series`, `isin`) with unique `[symbol, date]` constraint and indexes on `date` and `[symbol, date]`. Tracked via Prisma migration `20260824195700_add_daily_ohlcv`.
+  - **Standalone Ingestion Pipeline** (`scripts/market-tools/bhavcopy-ingest.ts`): Standalone Node entrypoint for fetching, decompressing (`adm-zip`), parsing, and persisting NSE UDiFF CM Bhavcopy zips. Features bounded 250-row batching, in-batch key deduplication (preferring `EQ` series), and raw SQL `ON CONFLICT (symbol, date) DO UPDATE SET ...` for authoritative idempotency on re-run.
+  - **Memory Budget & Performance**: Runs strictly standalone outside `cpr-platform` to prevent memory retention. Features active memory ticker tracking peak RSS memory (`~44.15 MB` measured via `/usr/bin/time -v` on 3,645 inserted rows over 2.8s wall-clock runtime).
+  - **Crontab Registration**: Scheduled via OS crontab at `19:00 IST` (`13:30 UTC` / `0 13 * * 1-5`), completely collision-free with `cpr-platform`'s trading hours polling loop (09:15–15:30 IST).
+- **24 Aug Market Tools — Staged Historical Backfill & Market Breadth Scanner**:
+  - **Staged Backfill Pipeline** (`scripts/market-tools/bhavcopy-backfill.ts`): Resumable sequential backfill engine supporting custom `--start` / `--end` dates with courtesy delay and automatic weekend/holiday skipping. Ingested 264 distinct trading dates (`924,158` rows across `2025-08-01` to `2026-08-21`) with 0 duplicate keys and 0 errors in 4 minutes runtime.
+  - **`MarketBreadthService`** (`src/services/market-tools/market-breadth.service.ts`): Read-only market breadth calculator computing MA10/20/50/200 percentage breadth, advance/decline counts and ratio, 4% extreme moves, 52-week highs/lows, sector strength ranking, and market regime score (0-100).
+  - **API & UI Route** (`src/app/api/market-tools/breadth/route.ts`, `src/app/market-tools/breadth/page.tsx`): Exposes read-only JSON endpoint and dark-theme dashboard page with Moving Average breadth gauges, A/D ratio cards, 52W high/low status badges, and sector rank table.
+
 - **24 Aug Scanner API Option Suggestion Timeout Ceiling (PR #142)**:
   - Fixed an issue where `GET /api/scanner` hung for 2+ minutes when Fyers option chain HTTP requests stalled or rate-limited, causing the live site scanner UI to show a continuous loading spinner.
   - **Route Timeout Ceiling** (`src/app/api/scanner/route.ts`): Wrapped `enrichWithOptionSuggestions` in a hard 2.5s `Promise.race` timeout ceiling and parallelized top candidate lookups with `Promise.allSettled`. If option chain lookups exceed 2.5s, the route returns full scanner coordinates immediately without option suggestion badges instead of blocking the client response.
