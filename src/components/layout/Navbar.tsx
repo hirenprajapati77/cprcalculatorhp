@@ -136,48 +136,244 @@ export const Navbar: React.FC = () => {
           </Link>
 
           {/* ── Desktop Nav ──────────────────────────────────────── */}
-          <nav className="hidden md:flex items-center gap-1 flex-1">
-            {/* Divider dot */}
-            <div className="w-px h-5 bg-slate-800 mx-2" />
+          <nav className="hidden md:flex items-center gap-1.5 flex-1">
+            {/* Divider */}
+            <div className="w-px h-5 bg-slate-800 mx-1" />
 
-            {ALL_LINKS.map((link) => {
-              const active = isActive(link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`relative flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
-                    active
-                      ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
-                  }`}
-                >
-                  <span className={active ? 'text-blue-400' : 'text-slate-500'}>
-                    {link.icon}
-                  </span>
-                  <span className="hidden lg:inline">{link.label}</span>
-                  {link.badge === 'LIVE' && (
-                    <span className={`flex items-center gap-0.5 px-1 py-0 rounded text-[7px] font-bold uppercase tracking-wider ${
-                      marketStatus.cashSessionState === 'LIVE'
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
-                        : marketStatus.cashSessionState === 'PRESESSION'
-                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
-                        : 'bg-slate-500/15 text-slate-400 border border-slate-500/25'
-                    }`}>
-                      <Zap size={7} />
-                      {marketStatus.cashSessionState === 'LIVE'
-                        ? 'LIVE'
-                        : marketStatus.cashSessionState === 'PRESESSION'
-                        ? 'PRE-OPEN'
-                        : 'CLOSED'}
+            {/* Direct Trading Links */}
+            <Link
+              href="/calculate"
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                isActive('/calculate')
+                  ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Activity size={13} className={isActive('/calculate') ? 'text-blue-400' : 'text-slate-500'} />
+              <span>Calculator</span>
+              {isActive('/calculate') && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+              )}
+            </Link>
+
+            <Link
+              href="/scanner"
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                isActive('/scanner')
+                  ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Radar size={13} className={isActive('/scanner') ? 'text-blue-400' : 'text-slate-500'} />
+              <span>Scanner</span>
+              <span className={`flex items-center gap-0.5 px-1 py-0 rounded text-[7px] font-bold uppercase tracking-wider ${
+                marketStatus.cashSessionState === 'LIVE'
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                  : marketStatus.cashSessionState === 'PRESESSION'
+                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                  : 'bg-slate-500/15 text-slate-400 border border-slate-500/25'
+              }`}>
+                <Zap size={7} />
+                {marketStatus.cashSessionState === 'LIVE'
+                  ? 'LIVE'
+                  : marketStatus.cashSessionState === 'PRESESSION'
+                  ? 'PRE-OPEN'
+                  : 'CLOSED'}
+              </span>
+              {isActive('/scanner') && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+              )}
+            </Link>
+
+            <Link
+              href="/watchlist"
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                isActive('/watchlist')
+                  ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <Star size={13} className={isActive('/watchlist') ? 'text-blue-400' : 'text-slate-500'} />
+              <span>Watchlist</span>
+              {isActive('/watchlist') && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+              )}
+            </Link>
+
+            {/* Analysis / Market Tools Dropdown */}
+            <div className="relative group">
+              <button
+                type="button"
+                className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                  pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <TrendingUp size={13} className={pathname.startsWith('/market-tools') ? 'text-blue-400' : 'text-slate-500'} />
+                <span>Market Tools</span>
+                <span className="px-1 py-0 text-[7px] font-extrabold bg-blue-500/20 text-blue-300 border border-blue-500/40 rounded uppercase">
+                  NEW
+                </span>
+                <span className="text-[10px] text-slate-500 group-hover:text-slate-300">▼</span>
+                {(pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare') && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              <div className="absolute top-full left-0 pt-1.5 hidden group-hover:block z-50 min-w-[200px]">
+                <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
+                  <Link
+                    href="/market-tools/breakout"
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/market-tools/breakout'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap size={13} className="text-amber-400" />
+                      <span>Breakouts</span>
+                    </div>
+                    <span className="px-1 py-0.2 rounded text-[8px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      NEW
                     </span>
-                  )}
-                  {active && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
-                  )}
-                </Link>
-              );
-            })}
+                  </Link>
+
+                  <Link
+                    href="/market-tools/breadth"
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/market-tools/breadth'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <TrendingUp size={13} className="text-emerald-400" />
+                      <span>Market Breadth</span>
+                    </div>
+                  </Link>
+
+                  <div className="h-px bg-slate-800 my-1" />
+
+                  <Link
+                    href="/heatmap"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/heatmap'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <LayoutGrid size={13} className="text-purple-400" />
+                    <span>Sector Heatmap</span>
+                  </Link>
+
+                  <Link
+                    href="/backtest"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/backtest'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <FlaskConical size={13} className="text-blue-400" />
+                    <span>Backtest Engine</span>
+                  </Link>
+
+                  <Link
+                    href="/compare"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/compare'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <Columns size={13} className="text-cyan-400" />
+                    <span>Compare CPR</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Direct Journal & History */}
+            <Link
+              href="/journal"
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                isActive('/journal')
+                  ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <BookOpen size={13} className={isActive('/journal') ? 'text-blue-400' : 'text-slate-500'} />
+              <span>Journal</span>
+              {isActive('/journal') && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+              )}
+            </Link>
+
+            <Link
+              href="/history"
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                isActive('/history')
+                  ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              }`}
+            >
+              <History size={13} className={isActive('/history') ? 'text-blue-400' : 'text-slate-500'} />
+              <span>History</span>
+              {isActive('/history') && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-blue-400" />
+              )}
+            </Link>
+
+            {/* More Menu (About, FAQ, Settings) */}
+            <div className="relative group">
+              <button
+                type="button"
+                className={`relative flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+                  pathname === '/about' || pathname === '/faq'
+                    ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <Info size={13} className="text-slate-500" />
+                <span>More</span>
+                <span className="text-[10px] text-slate-500 group-hover:text-slate-300">▼</span>
+              </button>
+
+              <div className="absolute top-full right-0 pt-1.5 hidden group-hover:block z-50 min-w-[140px]">
+                <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
+                  <Link
+                    href="/about"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/about' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <Info size={12} className="text-slate-400" />
+                    <span>About</span>
+                  </Link>
+                  <Link
+                    href="/faq"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/faq' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <HelpCircle size={12} className="text-slate-400" />
+                    <span>FAQ</span>
+                  </Link>
+                  <Link
+                    href="/settings"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/settings' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <Settings size={12} className="text-slate-400" />
+                    <span>Settings</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
           </nav>
 
           {/* ── Right Cluster ─────────────────────────────────────── */}
