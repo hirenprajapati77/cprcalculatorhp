@@ -1,22 +1,17 @@
 module.exports = {
   apps: [
     {
-      name: 'cpr-pro',
-      script: '.next/standalone/server.js',
+      name: 'cpr-platform',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3000',
       cwd: '/home/ubuntu/cpr-calculator-platform',
       env: {
-        NEXT_PUBLIC_BASE_URL: 'https://129-159-230-41.nip.io',
-        APP_BASE_URL: 'https://129-159-230-41.nip.io',
         NODE_ENV: 'production',
-        RATE_LIMIT_MAX: '100',
-        RATE_LIMIT_WINDOW_MS: '60000',
-        MARKET_DATA_MODE: 'live',
-        CACHE_PROVIDER: 'redis',
-        BACKTEST_EXECUTION_MODE: 'sync',
-        BTST_BYPASS_WINDOW: 'true',
-        RETENTION_DRY_RUN: 'true',
-        HISTORICAL_MODE: 'live'
-      }
-    }
-  ]
+        PORT: 3000,
+        NODE_OPTIONS: '--max-old-space-size=512',
+      },
+      max_memory_restart: '650M',
+      autorestart: true,
+    },
+  ],
 };
