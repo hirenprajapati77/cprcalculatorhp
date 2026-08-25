@@ -7,7 +7,7 @@ import {
 } from '@/lib/market-hours';
 import { env } from '@/config/env';
 import { CPR_JOURNAL_WINDOW } from '@/config/trading-constants';
-import { runBtstAlertJob } from '@/services/scheduler/btst-alert.job';
+import { runBtstAlertJob, checkGapFailureExits } from '@/services/scheduler/btst-alert.job';
 import { runBtstJournalJob } from '@/services/scheduler/btst-journal.job';
 import { runCprJournalJob } from '@/services/scheduler/cpr-journal.job';
 import { runCprScanJob } from '@/services/scheduler/cpr-scan.job';
@@ -188,6 +188,18 @@ export function startMarketCronScheduler(): void {
           `earnings-populate:${dateKey}`,
           () => EarningsPopulatorService.populate(),
           'earnings-populate'
+        );
+      }
+
+      // 09:16 AM IST — gap-failure exit alert for previous-session overnight signals.
+      // Runs once per day immediately after market open. Checks if any TRADEABLE/WATCHLIST
+      // overnight signals from the prior session have gapped > 1% against their trade
+      // direction, and sends a Telegram ⚠️ GAP_FAILURE_EXIT alert if so.
+      if (istTime.hour === 9 && istTime.minute >= 16 && istTime.minute <= 20) {
+        await runClaimedJob(
+          `gap-failure-exit:${dateKey}`,
+          () => checkGapFailureExits(),
+          'gap-failure-exit'
         );
       }
     } finally {

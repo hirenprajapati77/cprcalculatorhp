@@ -89,6 +89,15 @@ export class TelegramService {
   }
 
   /**
+   * Sends a pre-formatted HTML message to the configured Telegram chat.
+   * Alias for sendMessage — use this when the caller has already built the
+   * full message string (e.g., gap-failure exit alerts, system notifications).
+   */
+  static async sendRawMessage(text: string): Promise<{ ok: boolean; reason?: string }> {
+    return TelegramService.sendMessage(text);
+  }
+
+  /**
    * Chat targets for BTST alerts. Alerts are delivered to the group chat only
    * (TELEGRAM_GROUP_CHAT_ID — same destination breakout alerts use); the
    * personal chat is kept solely as a fallback when no group is configured.
