@@ -74,6 +74,26 @@ export const cache = {
     });
   },
 
+  async setNX(key: string, value: string, ttlSeconds: number = 120): Promise<boolean> {
+    if (redis && redis.status === 'ready') {
+      try {
+        const res = await redis.set(key, value, 'EX', ttlSeconds, 'NX');
+        return res === 'OK';
+      } catch (err) {
+        console.warn('Redis SETNX failed, falling back to memory cache:', err);
+      }
+    }
+    const cached = memoryCache.get(key);
+    if (cached && cached.expiry > Date.now()) {
+      return false;
+    }
+    memoryCache.set(key, {
+      value,
+      expiry: Date.now() + ttlSeconds * 1000,
+    });
+    return true;
+  },
+
   async del(key: string): Promise<void> {
     if (redis && redis.status === 'ready') {
       try {

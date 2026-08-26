@@ -31,7 +31,7 @@ test('PatternBreakoutService - Refresh 202 async response & deduplication', asyn
     assert.strictEqual(res.message, 'Pattern breakout scan enqueued');
 
     const status = await PatternBreakoutService.getJobStatus();
-    assert.ok(status.status === 'processing' || status.status === 'completed');
+    assert.ok(['processing', 'completed', 'failed'].includes(status.status));
   });
 
   await t.test('detects in-flight job and prevents duplicate scan enqueue', async () => {

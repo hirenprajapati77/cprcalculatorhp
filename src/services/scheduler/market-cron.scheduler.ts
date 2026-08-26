@@ -21,6 +21,7 @@ import {
   releaseCronRun,
 } from '@/services/scheduler/cron-run-claim';
 import { EarningsPopulatorService } from '@/services/earnings-populator.service';
+import { runMarketToolsPrecomputeJob } from '@/services/market-tools/market-tools-precompute.job';
 
 let started = false;
 /** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
@@ -200,6 +201,16 @@ export function startMarketCronScheduler(): void {
           `gap-failure-exit:${dateKey}`,
           () => checkGapFailureExits(),
           'gap-failure-exit'
+        );
+      }
+
+      // 19:15 IST — post-bhavcopy market tools pre-computation window.
+      // Runs once daily after Bhavcopy ingestion updates DailyOhlcv records.
+      if (istTime.hour === 19 && istTime.minute >= 15 && istTime.minute <= 30) {
+        await runClaimedJob(
+          `market-tools-precompute:${dateKey}`,
+          () => runMarketToolsPrecomputeJob(),
+          'market-tools-precompute'
         );
       }
     } finally {

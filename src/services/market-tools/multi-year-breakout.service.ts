@@ -85,8 +85,23 @@ export class MultiYearBreakoutService {
           return parsed;
         }
       } catch {
-        // Fall through to live compute
+        // Ignore cache lookup errors
       }
+
+      // Memory fallback if Redis is temporarily unreachable
+      if (cachedReport) {
+        return cachedReport;
+      }
+
+      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
+      // Return empty baseline report until background precompute job runs.
+      return {
+        date: new Date().toISOString().split('T')[0],
+        totalScanned: 0,
+        breakoutCounts: { '1Y': 0, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
+        stocks: [],
+        computedAt: new Date().toISOString(),
+      };
     }
 
     // 1. Fetch available trading dates sorted descending

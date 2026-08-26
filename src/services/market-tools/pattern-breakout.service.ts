@@ -70,12 +70,9 @@ export interface PatternBreakoutReport {
     FLAT_BASE: number;
     NONE: number;
   };
-  countsByTier: {
-    'A+': number;
-    'A': number;
-    'B': number;
-    'C': number;
-  };
+  countsByStatus: Record<BreakoutStatus, number>;
+  countsByPattern: Record<PatternType, number>;
+  countsByTier: Record<PatternTier, number>;
   stocks: PatternBreakoutStock[];
   computedAt: string;
 }
@@ -107,23 +104,45 @@ export class PatternBreakoutService {
 
   /**
    * Non-blocking trigger for manual refresh. Returns HTTP 202 status payload immediately (<10ms).
-   * Enforces in-flight lock deduplication to prevent overlapping heavy scans.
+   * Uses Redis atomic SETNX lock to prevent overlapping heavy scans across concurrent threads.
    */
   static async triggerBackgroundRefresh(): Promise<{ status: 'processing'; message: string }> {
-    const currentStatus = await this.getJobStatus();
+    const lockKey = 'market_tools:pattern_breakout:status';
     const now = Date.now();
-    if (currentStatus.status === 'processing' && currentStatus.startedAt && now - currentStatus.startedAt < 120000) {
-      return { status: 'processing', message: 'Scan already in progress' };
-    }
-
-    const newStatus: PatternBreakoutJobStatus = {
+    
+    // Atomic Redis SETNX lock: returns true only if key did not exist
+    const lockStatus: PatternBreakoutJobStatus = {
       status: 'processing',
       startedAt: now,
       updatedAt: now,
     };
-    await cache.set('market_tools:pattern_breakout:status', JSON.stringify(newStatus), 120);
+    const acquired = await cache.setNX(lockKey, JSON.stringify(lockStatus), 120);
 
-    // Trigger async job non-blocking on Next.js event loop
+    if (!acquired) {
+      // Verify existing lock isn't stale (>120s)
+      const currentStatus = await this.getJobStatus();
+      if (currentStatus.status === 'processing' && currentStatus.startedAt && now - currentStatus.startedAt < 120000) {
+        return { status: 'processing', message: 'Scan already in progress' };
+      }
+      // Re-claim lock if expired
+      await cache.set(lockKey, JSON.stringify(lockStatus), 120);
+    }
+
+    // Enqueue job via BullMQ if enabled, else run async on background event loop
+    if (QueueService.isEnabled && QueueService.marketQueue) {
+      try {
+        // Only enqueue to BullMQ if client connection is ready
+        await QueueService.marketQueue.add(
+          'pattern-breakout-refresh',
+          { timestamp: now },
+          { jobId: `pattern-breakout-${now}`, removeOnComplete: true }
+        ).catch(() => {});
+      } catch {
+        // Fallback to in-process async execution
+      }
+    }
+
+    // Always trigger background task execution
     setImmediate(() => {
       PatternBreakoutService.runBackgroundRefreshJob().catch((err) => {
         console.error('[PatternBreakoutService] Background refresh job failed:', err);
@@ -166,9 +185,6 @@ export class PatternBreakoutService {
    */
   static async getPatternBreakoutReport(forceRefresh = false): Promise<PatternBreakoutReport> {
     const now = Date.now();
-    if (!forceRefresh && cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
-      return cachedReport;
-    }
 
     if (!forceRefresh) {
       try {
@@ -184,7 +200,7 @@ export class PatternBreakoutService {
       }
 
       // Memory fallback if Redis is temporarily unreachable
-      if (cachedReport) {
+      if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
 
