@@ -65,8 +65,8 @@ export default function PatternBreakoutPage() {
         setIsRefreshing(false);
         setLoading(false);
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       if (isMounted.current) {
         setError(err instanceof Error ? err.message : String(err));
         setIsRefreshing(false);
@@ -97,8 +97,8 @@ export default function PatternBreakoutPage() {
       } else {
         setError(json.error || 'Failed to fetch pattern breakout report');
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       if (isMounted.current) {
         setError(err instanceof Error ? err.message : String(err));
       }

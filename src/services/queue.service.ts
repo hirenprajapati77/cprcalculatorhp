@@ -1,6 +1,6 @@
 import redis from '@/lib/redis';
 import { env } from '@/config/env';
-import { Queue, QueueOptions, Worker, Job } from 'bullmq';
+import { Queue, QueueOptions } from 'bullmq';
 
 
 const connection = {
