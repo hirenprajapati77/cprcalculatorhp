@@ -406,13 +406,17 @@ export default function PatternBreakoutPage() {
                             ? `+${stock.distanceToHighPct}%`
                             : `${stock.distanceToHighPct}%`}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span
-                            className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${getPatternBadgeStyle(
+                            className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap border ${getPatternBadgeStyle(
                               stock.primaryPattern
                             )}`}
                           >
-                            {stock.primaryPattern === 'NONE' ? 'Raw 52W' : stock.primaryPatternLabel}
+                            {stock.primaryPattern === 'VCP'
+                              ? 'VCP Pattern'
+                              : stock.primaryPattern === 'NONE'
+                              ? 'Raw 52W'
+                              : stock.primaryPatternLabel}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right font-mono">
