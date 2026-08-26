@@ -123,7 +123,7 @@ export const Navbar: React.FC = () => {
   return (
     <>
       <header
-        className={`w-full sticky top-0 z-50 select-none transition-all duration-300 ${
+        className={`w-full sticky top-0 z-[60] select-none pt-[env(safe-area-inset-top,0px)] transition-all duration-300 ${
           scrolled
             ? 'bg-[#08090c]/95 backdrop-blur-xl border-b border-[#1b1e2a] shadow-[0_1px_30px_rgba(0,0,0,0.6)]'
             : 'bg-[#08090c] border-b border-[#1b1e2a]'
@@ -507,7 +507,7 @@ export const Navbar: React.FC = () => {
 
         {/* Drawer Panel */}
         <div
-          className={`absolute top-[52px] left-0 right-0 max-h-[85vh] overflow-y-auto bg-[#0d0f18] border-b border-slate-800 shadow-2xl transition-transform duration-300 ${
+          className={`absolute top-[calc(52px+env(safe-area-inset-top,0px))] left-0 right-0 max-h-[85vh] overflow-y-auto bg-[#0d0f18] border-b border-slate-800 shadow-2xl transition-transform duration-300 ${
             mobileOpen ? 'translate-y-0' : '-translate-y-4'
           }`}
         >
