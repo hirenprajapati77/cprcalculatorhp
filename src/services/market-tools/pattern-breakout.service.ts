@@ -403,11 +403,11 @@ export class PatternBreakoutService {
 
   static getPatternLabel(type: PatternType): string {
     switch (type) {
-      case 'VCP': return 'Volatility Contraction (VCP)';
+      case 'VCP': return 'VCP Pattern';
       case 'CUP_AND_HANDLE': return 'Cup & Handle';
       case 'DOUBLE_BOTTOM': return 'Double Bottom';
       case 'FLAT_BASE': return 'Flat Base';
-      default: return 'Raw 52W Breakout';
+      default: return 'Raw 52W';
     }
   }
 
