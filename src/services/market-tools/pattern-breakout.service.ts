@@ -80,11 +80,86 @@ export interface PatternBreakoutReport {
   computedAt: string;
 }
 
+export interface PatternBreakoutJobStatus {
+  status: 'idle' | 'processing' | 'completed' | 'failed';
+  error?: string;
+  startedAt?: number;
+  updatedAt: number;
+}
+
 let cachedReport: PatternBreakoutReport | null = null;
 let lastComputedTime = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export class PatternBreakoutService {
+  /**
+   * Fetch current background scan job status from Redis / memory cache.
+   */
+  static async getJobStatus(): Promise<PatternBreakoutJobStatus> {
+    try {
+      const raw = await cache.get('market_tools:pattern_breakout:status');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // Ignore cache lookup error
+    }
+    return { status: 'idle', updatedAt: Date.now() };
+  }
+
+  /**
+   * Non-blocking trigger for manual refresh. Returns HTTP 202 status payload immediately (<10ms).
+   * Enforces in-flight lock deduplication to prevent overlapping heavy scans.
+   */
+  static async triggerBackgroundRefresh(): Promise<{ status: 'processing'; message: string }> {
+    const currentStatus = await this.getJobStatus();
+    const now = Date.now();
+    if (currentStatus.status === 'processing' && currentStatus.startedAt && now - currentStatus.startedAt < 120000) {
+      return { status: 'processing', message: 'Scan already in progress' };
+    }
+
+    const newStatus: PatternBreakoutJobStatus = {
+      status: 'processing',
+      startedAt: now,
+      updatedAt: now,
+    };
+    await cache.set('market_tools:pattern_breakout:status', JSON.stringify(newStatus), 120);
+
+    // Trigger async job non-blocking on Next.js event loop
+    setImmediate(() => {
+      PatternBreakoutService.runBackgroundRefreshJob().catch((err) => {
+        console.error('[PatternBreakoutService] Background refresh job failed:', err);
+      });
+    });
+
+    return { status: 'processing', message: 'Pattern breakout scan enqueued' };
+  }
+
+  /**
+   * Run background refresh scan and save output to Redis cache upon completion.
+   */
+  static async runBackgroundRefreshJob(): Promise<PatternBreakoutReport> {
+    try {
+      const report = await PatternBreakoutService.computePatternBreakoutReport();
+      cachedReport = report;
+      lastComputedTime = Date.now();
+      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), 3600);
+      const doneStatus: PatternBreakoutJobStatus = {
+        status: 'completed',
+        updatedAt: Date.now(),
+      };
+      await cache.set('market_tools:pattern_breakout:status', JSON.stringify(doneStatus), 300);
+      return report;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const failStatus: PatternBreakoutJobStatus = {
+        status: 'failed',
+        error: errorMsg,
+        updatedAt: Date.now(),
+      };
+      await cache.set('market_tools:pattern_breakout:status', JSON.stringify(failStatus), 300);
+      throw err;
+    }
+  }
+
   /**
    * Main entrypoint to get precomputed / cached pattern breakout report.
    * Enforces 250-day history depth guard and zero live heavy computation on unauthenticated requests.
@@ -105,11 +180,30 @@ export class PatternBreakoutService {
           return parsed;
         }
       } catch {
-        // Fall through to compute
+        // Ignore cache lookup errors
       }
+
+      // Memory fallback if Redis is temporarily unreachable
+      if (cachedReport) {
+        return cachedReport;
+      }
+
+      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
+      // Return empty baseline report until background precompute job runs.
+      return {
+        date: new Date().toISOString().split('T')[0],
+        tradingDaysAvailable: 0,
+        totalScanned: 0,
+        qualifiedCount: 0,
+        countsByStatus: { BREAKOUT: 0, NEAR_HIGH: 0 },
+        countsByPattern: { VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
+        countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
+        stocks: [],
+        computedAt: new Date().toISOString(),
+      };
     }
 
-    return this.computePatternBreakoutReport();
+    return this.runBackgroundRefreshJob();
   }
 
   /**

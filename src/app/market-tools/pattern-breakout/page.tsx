@@ -20,17 +20,62 @@ export default function PatternBreakoutPage() {
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   useEffect(() => {
     fetchReport();
   }, []);
 
+  async function pollForReport(attempt = 1, maxAttempts = 30) {
+    if (attempt > maxAttempts) {
+      setError('Pattern scan timed out. Please try refreshing again later.');
+      setIsRefreshing(false);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/market-tools/pattern-breakout');
+      const json = await res.json();
+
+      if (res.status === 202 || json.status === 'processing') {
+        setTimeout(() => pollForReport(attempt + 1, maxAttempts), 3000);
+        return;
+      }
+
+      if (json.success && json.data) {
+        setReport(json.data);
+        setIsRefreshing(false);
+        setLoading(false);
+      } else {
+        setError(json.error || 'Background pattern scan failed');
+        setIsRefreshing(false);
+        setLoading(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setIsRefreshing(false);
+      setLoading(false);
+    }
+  }
+
   async function fetchReport(forceRefresh = false) {
-    setLoading(true);
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else if (!report) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await fetch(`/api/market-tools/pattern-breakout${forceRefresh ? '?refresh=true' : ''}`);
       const json = await res.json();
-      if (json.success) {
+
+      if (res.status === 202 || json.status === 'processing') {
+        pollForReport(1, 30);
+        return;
+      }
+
+      if (json.success && json.data) {
         setReport(json.data);
       } else {
         setError(json.error || 'Failed to fetch pattern breakout report');
@@ -38,7 +83,9 @@ export default function PatternBreakoutPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (!forceRefresh) {
+        setLoading(false);
+      }
     }
   }
 
@@ -82,7 +129,7 @@ export default function PatternBreakoutPage() {
       <div className="min-h-screen bg-gray-950 text-gray-100 p-8 flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-gray-400 font-medium">Scanning 52W High Patterns (Cup & Handle, VCP, Flat Base, Double Bottom)...</p>
+          <p className="text-gray-400 font-medium">Scanning 52W High Patterns (Cup &amp; Handle, VCP, Flat Base, Double Bottom)...</p>
         </div>
       </div>
     );
@@ -130,11 +177,10 @@ export default function PatternBreakoutPage() {
           </span>
           <button
             onClick={() => fetchReport(true)}
-            disabled={loading}
+            disabled={loading || isRefreshing}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
           >
-            <span className={loading ? 'animate-spin' : ''}>🔄</span> Refresh
-          </button>
+            <span className={loading || isRefreshing ? 'animate-spin' : ''}>🔄</span> {isRefreshing ? 'Scanning...' : 'Refresh'}
         </div>
       </div>
 
