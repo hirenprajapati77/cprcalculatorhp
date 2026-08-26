@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 26 Aug Deep Code Review: 18 Bug Fixes (PR #147)
+
+A systematic deep code review of all commits from 2026-08-19 to 2026-08-26 identified 18 bugs across services, API routes, ingest scripts, infrastructure, and tests. All 18 resolved in commit `a7a467f` on branch `fix/code-review-18-bugs`.
+
+#### 🔴 Critical
+- **BUG-01 · Auth gate on `?refresh=true`** (`src/app/api/market-tools/pattern-breakout/route.ts`): Unauthenticated callers could hammer the Pattern Breakout `?refresh=true` endpoint, triggering a full 2,636-symbol DB scan on every request (DDoS vector). Now requires valid `app_access_token` cookie or `Authorization: Bearer` header for forced refreshes.
+- **BUG-02 · Null dereference crash in scanner** (`src/app/api/scanner/route.ts`): `r.signalSummary.includes('BEARISH')` threw `TypeError` when `signalSummary` is `null`, crashing the entire scanner API response. Fixed with optional chaining (`?.includes`).
+- **BUG-03 · Journal retry storm** (`src/services/scheduler/cpr-journal.job.ts`): Returning `success: logged.length > 0` caused the cron scheduler to release its lock and re-fire every 60 seconds when all signals were suppressed by regime/staleness logic, hammering the DB. Changed to `success: true` on clean completion.
+
+#### 🟠 High
+- **BUG-04 · `BigInt(NaN)` crash** (`scripts/market-tools/bhavcopy-ingest.ts`): `parseFloat` on `"-"` volume cells returns `NaN`; passing it to `BigInt()` throws `TypeError`. Added `isNaN` guard before cast.
+- **BUG-05 · OHLC NaN propagation** (`scripts/market-tools/bhavcopy-ingest.ts`): `open`, `high`, `low` were not validated for `NaN`, causing SQL syntax errors in raw batch upserts. Added `[open, high, low, close].some(isNaN)` row-skip guard.
+- **BUG-06 · Non-transactional batch upserts** (`scripts/market-tools/bhavcopy-ingest.ts`): A crash mid-batch left partial-day data permanently in the DB. Wrapped all batch upserts for a single date in `prisma.$transaction()`.
+- **BUG-07 · Backfill skip threshold too low** (`scripts/market-tools/bhavcopy-backfill.ts`): Threshold `> 500` would skip a date that only had 600/2,600 rows ingested, leaving a permanent data hole. Raised to `> 2000`.
+- **BUG-08 · Fake `.next/BUILD_ID` masks missing build** (`server-starter.js`): Creating a dummy `BUILD_ID` allowed a server to "start" with no real build artifacts, then crash mysteriously under traffic. Replaced with a fail-fast `process.exit(1)` check.
+- **BUG-09 · Middleware `startsWith` auth bypass** (`src/middleware.ts`): `startsWith('/market-tools')` matched `/market-tools-admin`. Changed to exact path or required trailing slash.
+- **BUG-10 · Redis TTL race condition** (`src/lib/redis.ts`): `EXPIRE` called outside the pipeline allowed a permanent key with no TTL if the process crashed between `pipeline.exec()` and `redis.expire()`. Moved into a single `redis.multi()` pipeline using `EXPIRE ... NX`.
+- **BUG-11 · Single `try/catch` kills all precompute caches** (`src/services/market-tools/market-tools-precompute.job.ts`): One service failure aborted all three cache jobs. Wrapped each service call in its own `try/catch` so failures are isolated.
+
+#### 🟡 Medium
+- **BUG-12 · `memInterval` lifecycle + `prisma.$disconnect` in ingest** (`scripts/market-tools/bhavcopy-ingest.ts`): Module-scoped interval was destroyed after the first backfill iteration; `prisma.$disconnect()` in `finally` thrashed the connection pool for every date in the loop. Both moved to correct lifecycle scope.
+- **BUG-13 · Cup & Handle off-by-one** (`src/services/market-tools/pattern-breakout.service.ts`): Handle depth loop started at `rightPeakIdx` (the peak candle itself), artificially widening depth and rejecting valid tight handles. Changed to `rightPeakIdx + 1`.
+- **BUG-14 · Missing `force-dynamic` on breadth route** (`src/app/api/market-tools/breadth/route.ts`): Without `export const dynamic = 'force-dynamic'`, Next.js could statically cache the route, breaking live market data updates. Added.
+- **BUG-15 · `useEffect` missing `AbortController` cleanup** (`src/app/market-tools/pattern-breakout/page.tsx`): Dangling fetch promises called `setState` on unmounted component. Added `AbortController` + `isMounted` ref pattern with cleanup return.
+
+#### 🟢 Low
+- **BUG-16 · Redundant `@@index` in `DailyOhlcv` schema** (`prisma/schema.prisma`): `@@unique([symbol, date])` already creates a B-Tree index; the explicit `@@index([symbol, date])` was an identical duplicate wasting disk space and write overhead. Removed.
+- **BUG-17 · Missing `server.on('error')` handler** (`server-starter.js`): Port conflicts and uncaught exceptions produced cryptic stack dumps. Added `EADDRINUSE` handler and `process.on('uncaughtException')`.
+- **BUG-18 · Test coverage gaps for edge inputs** (`src/tests/unit/pattern-breakout.test.ts`): No tests for empty candle arrays, single-candle inputs, or `selectPrimaryPattern([])`. Added three edge-case assertions.
+
 ### Added
 - **26 Aug Market Tools Phase 3 — 52W High Pattern Breakout Scanner Module (PR #145)**:
   - **`PatternBreakoutService`** (`src/services/market-tools/pattern-breakout.service.ts`):
