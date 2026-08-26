@@ -171,7 +171,6 @@ export class PatternBreakoutService {
         updatedAt: Date.now(),
       };
       await cache.set(statusKey, JSON.stringify(doneStatus), 300);
-      await cache.del(lockKey);
       return report;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -181,8 +180,10 @@ export class PatternBreakoutService {
         updatedAt: Date.now(),
       };
       await cache.set(statusKey, JSON.stringify(failStatus), 300);
-      await cache.del(lockKey);
       throw err;
+    } finally {
+      // Guaranteed lock release on both success and failure paths
+      await cache.del(lockKey);
     }
   }
 
