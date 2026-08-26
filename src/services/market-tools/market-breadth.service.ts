@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { cache } from '@/lib/redis';
+import { NSE_SECTOR_MAP } from './nse-sector-map';
 
 const prisma = new PrismaClient();
 
@@ -76,8 +77,28 @@ export class MarketBreadthService {
           return parsed;
         }
       } catch {
-        // Fall through to live compute
+        // Ignore cache lookup errors
       }
+
+      // Memory fallback if Redis is temporarily unreachable
+      if (cachedReport) {
+        return cachedReport;
+      }
+
+      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
+      // Return empty baseline report until background precompute job runs.
+      return {
+        date: new Date().toISOString().split('T')[0],
+        tradingDaysAvailable: 0,
+        nifty50: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
+        nifty500: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
+        allNse: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
+        overallScore: 5,
+        marketRegime: 'NEUTRAL',
+        regimeDescription: 'Pre-computation pending. Data will update automatically after post-market ingestion.',
+        sectors: [],
+        computedAt: new Date().toISOString(),
+      };
     }
 
     // 1. Fetch available trading dates sorted descending
@@ -418,6 +439,7 @@ const INFRA_SYMBOLS = new Set([
 
 export function getSymbolSector(symbol: string): string {
   const base = symbol.split('-')[0]!;
+  if (NSE_SECTOR_MAP[base]) return NSE_SECTOR_MAP[base];
   if (BANKING_SYMBOLS.has(base)) return 'BANKING';
   if (IT_SYMBOLS.has(base)) return 'IT';
   if (AUTO_SYMBOLS.has(base)) return 'AUTO';

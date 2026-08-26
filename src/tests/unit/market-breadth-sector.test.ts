@@ -17,5 +17,13 @@ test('getSymbolSector - sector classification and false-positive prevention', as
     assert.strictEqual(getSymbolSector('BANDHANBNK'), 'BANKING');
     assert.strictEqual(getSymbolSector('PNB'), 'BANKING');
     assert.strictEqual(getSymbolSector('CANBK'), 'BANKING');
+    assert.strictEqual(getSymbolSector('DCBBANK'), 'BANKING');
+    assert.strictEqual(getSymbolSector('AUBANK'), 'BANKING');
+  });
+
+  await t.test('correctly classifies newly mapped symbols from NSE master', () => {
+    assert.strictEqual(getSymbolSector('ENTERO'), 'PHARMA');
+    assert.strictEqual(getSymbolSector('MAXESTATES'), 'REALTY');
+    assert.strictEqual(getSymbolSector('IDEA'), 'TELECOMMUNICATION');
   });
 });
