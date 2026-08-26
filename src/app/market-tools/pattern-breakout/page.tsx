@@ -175,7 +175,7 @@ export default function PatternBreakoutPage() {
   if (!report) return null;
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-gray-100 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="w-full min-w-0 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-5">
         <div>

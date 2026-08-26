@@ -107,7 +107,7 @@ export default function MultiYearBreakoutPage() {
     selectedWindow !== 'ALL' && !report.windowAvailability[selectedWindow]?.available;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 p-6 space-y-8 max-w-7xl mx-auto">
+    <div className="w-full min-w-0 space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
         <div>
