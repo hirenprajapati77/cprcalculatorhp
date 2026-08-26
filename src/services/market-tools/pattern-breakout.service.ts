@@ -723,14 +723,4 @@ export class PatternBreakoutService {
       qualityTier,
     };
   }
-
-  private static async saveCache(report: PatternBreakoutReport): Promise<void> {
-    cachedReport = report;
-    lastComputedTime = Date.now();
-    try {
-      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), 3600);
-    } catch {
-      // Memory fallback active
-    }
-  }
 }
