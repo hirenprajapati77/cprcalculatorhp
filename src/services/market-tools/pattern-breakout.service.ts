@@ -2,7 +2,6 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { computeRvol } from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
-import { QueueService } from '../queue.service';
 
 const prisma = new PrismaClient();
 
@@ -68,118 +67,27 @@ export interface PatternBreakoutReport {
   computedAt: string;
 }
 
-export interface PatternBreakoutJobStatus {
-  status: 'idle' | 'processing' | 'completed' | 'failed';
-  error?: string;
-  startedAt?: number;
-  updatedAt: number;
-}
-
 let cachedReport: PatternBreakoutReport | null = null;
 let lastComputedTime = 0;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export class PatternBreakoutService {
   /**
-   * Fetch current background scan job status from Redis / memory cache.
+   * Save computed report to Redis cache (24h TTL) and in-memory cache.
    */
-  static async getJobStatus(): Promise<PatternBreakoutJobStatus> {
+  static async saveCache(report: PatternBreakoutReport): Promise<void> {
+    cachedReport = report;
+    lastComputedTime = Date.now();
     try {
-      const raw = await cache.get('market_tools:pattern_breakout:status');
-      if (raw) return JSON.parse(raw);
+      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), 86400);
     } catch {
-      // Ignore cache lookup error
-    }
-    return { status: 'idle', updatedAt: Date.now() };
-  }
-
-  /**
-   * Non-blocking trigger for manual refresh. Returns HTTP 202 status payload immediately (<10ms).
-   * Uses a dedicated Redis atomic SETNX lock key (market_tools:pattern_breakout:lock) to ensure 
-   * strict single-execution concurrency control without conflating completed/failed status entries.
-   */
-  static async triggerBackgroundRefresh(): Promise<{ status: 'processing'; message: string }> {
-    const lockKey = 'market_tools:pattern_breakout:lock';
-    const statusKey = 'market_tools:pattern_breakout:status';
-    const now = Date.now();
-
-    // 1. Atomic SETNX Mutex Lock: Returns true only if lock key did not exist
-    const acquired = await cache.setNX(lockKey, 'locked', 120);
-    if (!acquired) {
-      return { status: 'processing', message: 'Scan already in progress' };
-    }
-
-    // 2. Record status board entry
-    const processingStatus: PatternBreakoutJobStatus = {
-      status: 'processing',
-      startedAt: now,
-      updatedAt: now,
-    };
-    await cache.set(statusKey, JSON.stringify(processingStatus), 120);
-
-    // 3. Single Execution Dispatcher: Enqueue to BullMQ worker if enabled, else single in-process fallback
-    let enqueuedToQueue = false;
-    if (QueueService.isEnabled && QueueService.marketQueue) {
-      try {
-        await QueueService.marketQueue.add(
-          'pattern-breakout-refresh',
-          { timestamp: now },
-          { jobId: `pattern-breakout-${now}`, removeOnComplete: true }
-        );
-        enqueuedToQueue = true;
-      } catch (err) {
-        console.error('[PatternBreakoutService] BullMQ enqueue failed, using in-process execution:', err);
-      }
-    }
-
-    if (!enqueuedToQueue) {
-      setImmediate(() => {
-        PatternBreakoutService.runBackgroundRefreshJob().catch((err) => {
-          console.error('[PatternBreakoutService] In-process fallback scan job failed:', err);
-        });
-      });
-    }
-
-    return { status: 'processing', message: 'Pattern breakout scan enqueued' };
-  }
-
-  /**
-   * Run background refresh scan and save output to Redis cache upon completion.
-   * Releases dedicated SETNX lock key upon completion or failure.
-   */
-  static async runBackgroundRefreshJob(): Promise<PatternBreakoutReport> {
-    const lockKey = 'market_tools:pattern_breakout:lock';
-    const statusKey = 'market_tools:pattern_breakout:status';
-
-    try {
-      const report = await PatternBreakoutService.computePatternBreakoutReport();
-      cachedReport = report;
-      lastComputedTime = Date.now();
-      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), 3600);
-      const doneStatus: PatternBreakoutJobStatus = {
-        status: 'completed',
-        updatedAt: Date.now(),
-      };
-      await cache.set(statusKey, JSON.stringify(doneStatus), 300);
-      return report;
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      const failStatus: PatternBreakoutJobStatus = {
-        status: 'failed',
-        error: errorMsg,
-        updatedAt: Date.now(),
-      };
-      await cache.set(statusKey, JSON.stringify(failStatus), 300);
-      throw err;
-    } finally {
-      // Guaranteed lock release on both success and failure paths
-      await cache.del(lockKey);
+      // Ignore cache write errors
     }
   }
 
   /**
    * Main entrypoint to get precomputed / cached pattern breakout report.
-   * Enforces 250-day history depth guard and zero live heavy computation on unauthenticated requests.
+   * Enforces 250-day history depth guard and zero live heavy computation on unauthenticated web requests.
    */
   static async getPatternBreakoutReport(forceRefresh = false): Promise<PatternBreakoutReport> {
     const now = Date.now();
@@ -217,7 +125,9 @@ export class PatternBreakoutService {
       };
     }
 
-    return this.runBackgroundRefreshJob();
+    const report = await PatternBreakoutService.computePatternBreakoutReport();
+    await PatternBreakoutService.saveCache(report);
+    return report;
   }
 
   /**

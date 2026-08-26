@@ -11,42 +11,7 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get('status') as BreakoutStatus | 'ALL' | null;
     const tierFilter = searchParams.get('tier') as 'A+' | 'A' | 'B' | 'C' | 'ALL' | null;
 
-    if (forceRefresh) {
-      const jobRes = await PatternBreakoutService.triggerBackgroundRefresh();
-      return NextResponse.json(
-        {
-          success: true,
-          status: 'processing',
-          message: jobRes.message,
-        },
-        { status: 202 }
-      );
-    }
-
-    const jobStatus = await PatternBreakoutService.getJobStatus();
-    if (jobStatus.status === 'processing') {
-      return NextResponse.json(
-        {
-          success: true,
-          status: 'processing',
-          message: 'Pattern breakout scan in progress',
-        },
-        { status: 202 }
-      );
-    }
-
-    if (jobStatus.status === 'failed') {
-      return NextResponse.json(
-        {
-          success: false,
-          status: 'failed',
-          error: jobStatus.error || 'Background scan job failed',
-        },
-        { status: 500 }
-      );
-    }
-
-    const report = await PatternBreakoutService.getPatternBreakoutReport(false);
+    const report = await PatternBreakoutService.getPatternBreakoutReport(forceRefresh);
 
     let filteredStocks = report.stocks;
     if (patternFilter && patternFilter !== 'ALL') {

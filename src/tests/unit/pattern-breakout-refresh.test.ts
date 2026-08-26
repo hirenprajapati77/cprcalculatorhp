@@ -18,64 +18,26 @@ PatternBreakoutService.computePatternBreakoutReport = async () => {
   };
 };
 
-test('PatternBreakoutService - Dedicated SETNX lock & status key isolation', async (t) => {
-  // Prevent background job from mutating cache during sync test steps
-  const origRunJob = PatternBreakoutService.runBackgroundRefreshJob;
-  PatternBreakoutService.runBackgroundRefreshJob = async () => {
-    return {} as unknown as Awaited<ReturnType<typeof origRunJob>>;
-  };
+test('PatternBreakoutService - Pre-computed Redis Cache Read Path', async (t) => {
+  await t.test('returns empty baseline report when cache is missing and forceRefresh is false', async () => {
+    await cache.clear();
 
-  t.after(() => {
-    PatternBreakoutService.runBackgroundRefreshJob = origRunJob;
+    const report = await PatternBreakoutService.getPatternBreakoutReport(false);
+    assert.strictEqual(report.totalScanned, 0);
+    assert.strictEqual(report.qualifiedCount, 0);
+    assert.strictEqual(report.stocks.length, 0);
   });
 
-  await t.test('triggerBackgroundRefresh enqueues job and returns processing status in <200ms', async () => {
+  await t.test('computes and caches report when forceRefresh is true', async () => {
     await cache.clear();
 
-    const start = Date.now();
-    const res = await PatternBreakoutService.triggerBackgroundRefresh();
-    const elapsed = Date.now() - start;
+    const report = await PatternBreakoutService.getPatternBreakoutReport(true);
+    assert.strictEqual(report.totalScanned, 2636);
+    assert.strictEqual(report.qualifiedCount, 15);
 
-    assert.ok(elapsed < 200, `Expected fast async response < 200ms, got ${elapsed}ms`);
-    assert.strictEqual(res.status, 'processing');
-    assert.strictEqual(res.message, 'Pattern breakout scan enqueued');
-  });
-
-  await t.test('detects active in-flight lock key and prevents duplicate scan enqueue', async () => {
-    await cache.clear();
-    await cache.set('market_tools:pattern_breakout:lock', 'locked', 120);
-
-    const res = await PatternBreakoutService.triggerBackgroundRefresh();
-    assert.strictEqual(res.status, 'processing');
-    assert.strictEqual(res.message, 'Scan already in progress');
-
-    await cache.clear();
-  });
-
-  await t.test('allows new scan trigger when previous status is completed but lock key is released', async () => {
-    await cache.clear();
-    const doneStatus = {
-      status: 'completed',
-      updatedAt: Date.now(),
-    };
-    await cache.set('market_tools:pattern_breakout:status', JSON.stringify(doneStatus), 300);
-
-    const res = await PatternBreakoutService.triggerBackgroundRefresh();
-    assert.strictEqual(res.status, 'processing');
-    assert.strictEqual(res.message, 'Pattern breakout scan enqueued');
-  });
-
-  await t.test('surfaces job failure state when background scan errors out', async () => {
-    await cache.clear();
-    const failStatus = {
-      status: 'failed',
-      error: 'Simulated DB connection failure',
-      updatedAt: Date.now(),
-    };
-    await cache.set('market_tools:pattern_breakout:status', JSON.stringify(failStatus), 300);
-
-    const status = await PatternBreakoutService.getJobStatus();
-    assert.strictEqual(status.status, 'failed');
-    assert.strictEqual(status.error, 'Simulated DB connection failure');
+    // Subsequent read without forceRefresh uses cached output
+    const cachedReport = await PatternBreakoutService.getPatternBreakoutReport(false);
+    assert.strictEqual(cachedReport.totalScanned, 2636);
+    assert.strictEqual(cachedReport.qualifiedCount, 15);
   });
 });
