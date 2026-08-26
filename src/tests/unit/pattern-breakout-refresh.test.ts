@@ -22,7 +22,7 @@ test('PatternBreakoutService - Dedicated SETNX lock & status key isolation', asy
   // Prevent background job from mutating cache during sync test steps
   const origRunJob = PatternBreakoutService.runBackgroundRefreshJob;
   PatternBreakoutService.runBackgroundRefreshJob = async () => {
-    return {} as any;
+    return {} as unknown as Awaited<ReturnType<typeof origRunJob>>;
   };
 
   t.after(() => {
