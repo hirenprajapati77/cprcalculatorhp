@@ -90,12 +90,11 @@ export class MarketBreadthService {
       return {
         date: new Date().toISOString().split('T')[0],
         tradingDaysAvailable: 0,
-        nifty50: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
-        nifty500: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
-        allNse: { totalCount: 0, advances: 0, declines: 0, unchanged: 0, advanceDeclineRatio: 0, pctAboveSma20: 0, pctAboveSma50: 0, pctAboveSma200: 0, pctAt52wHigh: 0, pctAt52wLow: 0 },
+        nifty50: { universe: 'NIFTY_50', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
+        nseFno: { universe: 'NSE_FNO', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
+        allNse: { universe: 'ALL_NSE', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
         overallScore: 5,
         marketRegime: 'NEUTRAL',
-        regimeDescription: 'Pre-computation pending. Data will update automatically after post-market ingestion.',
         sectors: [],
         computedAt: new Date().toISOString(),
       };

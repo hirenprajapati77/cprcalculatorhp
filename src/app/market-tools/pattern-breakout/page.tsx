@@ -181,6 +181,7 @@ export default function PatternBreakoutPage() {
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
           >
             <span className={loading || isRefreshing ? 'animate-spin' : ''}>🔄</span> {isRefreshing ? 'Scanning...' : 'Refresh'}
+          </button>
         </div>
       </div>
 

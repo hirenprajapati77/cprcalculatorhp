@@ -6,9 +6,6 @@ import { QueueService } from '../queue.service';
 
 const prisma = new PrismaClient();
 
-export type PatternType = 'VCP' | 'CUP_AND_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'NONE';
-export type BreakoutStatus = 'BREAKOUT' | 'NEAR_HIGH';
-
 export interface OhlcvCandle {
   date: string;
   open: number;
@@ -55,22 +52,15 @@ export interface PatternBreakoutStock {
   patternDetails: PatternDetails | null;
 }
 
+export type PatternType = 'VCP' | 'CUP_AND_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'NONE';
+export type BreakoutStatus = 'BREAKOUT' | 'NEAR_HIGH';
+export type PatternTier = 'A+' | 'A' | 'B' | 'C';
+
 export interface PatternBreakoutReport {
   date: string;
   tradingDaysAvailable: number;
   totalScanned: number;
   qualifiedCount: number;
-  countsByStatus: {
-    BREAKOUT: number;
-    NEAR_HIGH: number;
-  };
-  countsByPattern: {
-    VCP: number;
-    CUP_AND_HANDLE: number;
-    DOUBLE_BOTTOM: number;
-    FLAT_BASE: number;
-    NONE: number;
-  };
   countsByStatus: Record<BreakoutStatus, number>;
   countsByPattern: Record<PatternType, number>;
   countsByTier: Record<PatternTier, number>;

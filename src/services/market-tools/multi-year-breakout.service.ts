@@ -95,8 +95,18 @@ export class MultiYearBreakoutService {
 
       // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
       // Return empty baseline report until background precompute job runs.
+      const defaultWin = { label: '1Y', available: false, requiredDays: 250, availableDays: 0 };
       return {
         date: new Date().toISOString().split('T')[0],
+        tradingDaysAvailable: 0,
+        windowAvailability: {
+          '1Y': { ...defaultWin, label: '1Y', requiredDays: 250 },
+          '2Y': { ...defaultWin, label: '2Y', requiredDays: 500 },
+          '3Y': { ...defaultWin, label: '3Y', requiredDays: 750 },
+          '5Y': { ...defaultWin, label: '5Y', requiredDays: 1250 },
+          '10Y': { ...defaultWin, label: '10Y', requiredDays: 2500 },
+          ATH: { ...defaultWin, label: 'ATH', requiredDays: 2500 },
+        },
         totalScanned: 0,
         breakoutCounts: { '1Y': 0, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
         stocks: [],
