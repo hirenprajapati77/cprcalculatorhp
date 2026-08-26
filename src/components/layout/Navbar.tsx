@@ -436,7 +436,7 @@ export const Navbar: React.FC = () => {
             {/* Quick Market Tools shortcut button for mobile screens */}
             <Link
               href="/market-tools/breakout"
-              className="md:hidden flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono"
+              className="xl:hidden flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono"
             >
               <Zap size={11} className="text-amber-400" />
               <span>Breakouts</span>
@@ -484,7 +484,7 @@ export const Navbar: React.FC = () => {
                 e.stopPropagation();
                 setMobileOpen(v => !v);
               }}
-              className="md:hidden h-8 w-8 flex items-center justify-center rounded-lg border border-slate-800 text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition-all cursor-pointer"
+              className="xl:hidden h-8 w-8 flex items-center justify-center rounded-lg border border-slate-800 text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/20 transition-all cursor-pointer"
               aria-label="Toggle Navigation Menu"
             >
               {mobileOpen ? <X size={16} /> : <Menu size={16} />}
@@ -495,7 +495,7 @@ export const Navbar: React.FC = () => {
 
       {/* ── Mobile Drawer ────────────────────────────────────────── */}
       <div
-        className={`md:hidden fixed inset-0 z-50 transition-all duration-300 ${
+        className={`xl:hidden fixed inset-0 z-50 transition-all duration-300 ${
           mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
