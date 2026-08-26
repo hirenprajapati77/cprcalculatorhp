@@ -293,5 +293,5 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
     }
   });
 
-  return { success: logged.length > 0, logged, skipped };
+  return { success: true, logged, skipped };
 }

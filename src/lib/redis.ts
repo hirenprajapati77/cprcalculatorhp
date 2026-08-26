@@ -146,16 +146,10 @@ export const cache = {
       try {
         const pipeline = redis.multi();
         pipeline.incr(key);
-        pipeline.ttl(key);
+        pipeline.expire(key, ttlSeconds, 'NX'); // sets TTL only if not already set
         const results = await pipeline.exec();
-        if (results && results[0] && results[0][1] !== undefined) {
-          const count = results[0][1] as number;
-          const ttl = results[1][1] as number;
-          if (ttl < 0) {
-            await redis.expire(key, ttlSeconds);
-          }
-          return count;
-        }
+        const count = results?.[0]?.[1] as number ?? 1;
+        return count;
       } catch (err) {
         console.warn('Redis INCR failed, falling back to memory cache:', err);
       }

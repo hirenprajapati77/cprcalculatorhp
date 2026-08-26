@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
     for (const r of fullStats) {
       if (r.score >= 75) strongBuyCount++;
       if (r.score >= 60 && r.score < 75) breakoutReadyCount++;
-      if (r.score < 40 || (r.signalSummary.includes('BEARISH') && r.signalSummary.includes('WIDE'))) avoidCount++;
+      if (r.score < 40 || (r.signalSummary?.includes('BEARISH') && r.signalSummary?.includes('WIDE'))) avoidCount++;
 
       const cleanSymbol = r.symbol.split(':')[0];
       const snap = snapshotMapEarly.get(r.symbol);

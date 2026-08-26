@@ -463,7 +463,7 @@ export class PatternBreakoutService {
     // Handle pullback check: from rightPeakIdx to end
     let handleLowVal = Infinity;
     let handleCount = 0;
-    for (let i = rightPeakIdx; i < n; i++) {
+    for (let i = rightPeakIdx + 1; i < n; i++) {
       if (window[i].low < handleLowVal) handleLowVal = window[i].low;
       handleCount++;
     }
