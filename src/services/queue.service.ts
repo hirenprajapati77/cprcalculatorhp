@@ -1,5 +1,5 @@
 import { env } from '@/config/env';
-import { Queue, QueueOptions } from 'bullmq';
+import { Queue, QueueOptions, Worker, Job } from 'bullmq';
 
 
 const connection = {
@@ -32,6 +32,7 @@ class QueueServiceImpl {
   public scannerQueue: Queue | null = null;
   public marketQueue: Queue | null = null;
   public historyQueue: Queue | null = null;
+  public marketWorker: Worker | null = null;
 
   constructor() {
     if (isQueueEnabled) {
@@ -39,7 +40,23 @@ class QueueServiceImpl {
         this.scannerQueue = new Queue('scanner', defaultQueueOptions);
         this.marketQueue = new Queue('market', defaultQueueOptions);
         this.historyQueue = new Queue('history', defaultQueueOptions);
-        console.log('Queues initialized successfully.');
+
+        this.marketWorker = new Worker(
+          'market',
+          async (job: Job) => {
+            if (job.name === 'pattern-breakout-refresh') {
+              const { PatternBreakoutService } = await import('@/services/market-tools/pattern-breakout.service');
+              await PatternBreakoutService.runBackgroundRefreshJob();
+            }
+          },
+          { connection }
+        );
+
+        this.marketWorker.on('failed', (job, err) => {
+          console.error(`[BullMQ] Market worker job ${job?.id} failed:`, err);
+        });
+
+        console.log('Queues and workers initialized successfully.');
         this.setupGracefulShutdown();
       } catch (e) {
         console.error('Failed to initialize queues, running in sync mode.', e);
@@ -59,6 +76,7 @@ class QueueServiceImpl {
           this.scannerQueue?.close(),
           this.marketQueue?.close(),
           this.historyQueue?.close(),
+          this.marketWorker?.close(),
         ]);
         console.log('BullMQ connections closed successfully.');
       } catch (e) {
@@ -70,7 +88,13 @@ class QueueServiceImpl {
   }
 
   get isEnabled() {
-    return isQueueEnabled && this.scannerQueue !== null;
+    try {
+      const redis = require('@/lib/redis').default;
+      const isRedisReady = redis && redis.status === 'ready';
+      return isQueueEnabled && this.scannerQueue !== null && isRedisReady;
+    } catch {
+      return false;
+    }
   }
 
   async getQueueStatus() {
