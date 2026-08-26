@@ -440,6 +440,5 @@ model DailyOhlcv {
 
   @@unique([symbol, date])
   @@index([date])
-  @@index([symbol, date])
 }
 

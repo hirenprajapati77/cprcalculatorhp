@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   PatternBreakoutReport,
   PatternType,
@@ -22,25 +22,37 @@ export default function PatternBreakoutPage() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const isMounted = useRef(true);
+
   useEffect(() => {
-    fetchReport();
+    isMounted.current = true;
+    const abortController = new AbortController();
+    fetchReport(false, abortController.signal);
+    return () => {
+      isMounted.current = false;
+      abortController.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function pollForReport(attempt = 1, maxAttempts = 30) {
+  async function pollForReport(attempt = 1, maxAttempts = 30, signal?: AbortSignal) {
+    if (!isMounted.current) return;
     if (attempt > maxAttempts) {
-      setError('Pattern scan timed out. Please try refreshing again later.');
-      setIsRefreshing(false);
-      setLoading(false);
+      if (isMounted.current) {
+        setError('Pattern scan timed out. Please try refreshing again later.');
+        setIsRefreshing(false);
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      const res = await fetch('/api/market-tools/pattern-breakout');
+      const res = await fetch('/api/market-tools/pattern-breakout', { signal: signal ?? null });
       const json = await res.json();
+      if (!isMounted.current) return;
 
       if (res.status === 202 || json.status === 'processing') {
-        setTimeout(() => pollForReport(attempt + 1, maxAttempts), 3000);
+        setTimeout(() => pollForReport(attempt + 1, maxAttempts, signal), 3000);
         return;
       }
 
@@ -53,14 +65,17 @@ export default function PatternBreakoutPage() {
         setIsRefreshing(false);
         setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setIsRefreshing(false);
-      setLoading(false);
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      if (isMounted.current) {
+        setError(err instanceof Error ? err.message : String(err));
+        setIsRefreshing(false);
+        setLoading(false);
+      }
     }
   }
 
-  async function fetchReport(forceRefresh = false) {
+  async function fetchReport(forceRefresh = false, signal?: AbortSignal) {
     if (forceRefresh) {
       setIsRefreshing(true);
     } else if (!report) {
@@ -68,11 +83,12 @@ export default function PatternBreakoutPage() {
     }
     setError(null);
     try {
-      const res = await fetch(`/api/market-tools/pattern-breakout${forceRefresh ? '?refresh=true' : ''}`);
+      const res = await fetch(`/api/market-tools/pattern-breakout${forceRefresh ? '?refresh=true' : ''}`, { signal: signal ?? null });
       const json = await res.json();
+      if (!isMounted.current) return;
 
       if (res.status === 202 || json.status === 'processing') {
-        pollForReport(1, 30);
+        pollForReport(1, 30, signal);
         return;
       }
 
@@ -81,10 +97,13 @@ export default function PatternBreakoutPage() {
       } else {
         setError(json.error || 'Failed to fetch pattern breakout report');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      if (isMounted.current) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      if (!forceRefresh) {
+      if (isMounted.current && !forceRefresh) {
         setLoading(false);
       }
     }

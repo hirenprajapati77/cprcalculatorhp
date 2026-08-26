@@ -77,7 +77,7 @@ export async function runBhavcopyBackfill(
       existingCount = 0;
     }
 
-    if (existingCount > 500) {
+    if (existingCount > 2000) {
       console.log(`[BhavcopyBackfill] Skipping ${dateStr} (Already ingested: ${existingCount} rows)`);
       stats.push({
         date: dateStr,

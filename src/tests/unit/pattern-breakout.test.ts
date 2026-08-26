@@ -257,4 +257,22 @@ describe('PatternBreakoutService - Pattern Detection & Scoring Unit Tests', () =
       assert.equal(primary, 'VCP', 'VCP must take top priority in deterministic tiebreak');
     });
   });
+
+  describe('Edge Cases & Empty Inputs', () => {
+    it('should handle empty candles array without throwing', () => {
+      const results = PatternBreakoutService.detectAllPatterns([], 100);
+      assert.deepEqual(results, []);
+    });
+
+    it('should handle single candle array without throwing', () => {
+      const singleCandle = [{ date: '2024-01-01', open: 100, high: 105, low: 95, close: 102, volume: 1000 }];
+      const results = PatternBreakoutService.detectAllPatterns(singleCandle, 105);
+      assert.deepEqual(results, []);
+    });
+
+    it('should return NONE when no patterns are provided to selectPrimaryPattern', () => {
+      const primary = PatternBreakoutService.selectPrimaryPattern([]);
+      assert.equal(primary, 'NONE');
+    });
+  });
 });

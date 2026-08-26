@@ -14,16 +14,15 @@ export interface IngestResult {
   error?: string;
 }
 
-/** Track peak RSS memory in MB during execution via active ticker. */
-let peakRssBytes = 0;
-const memInterval = setInterval(() => {
-  const rss = process.memoryUsage().rss;
-  if (rss > peakRssBytes) {
-    peakRssBytes = rss;
-  }
-}, 100);
-
 export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestResult> {
+  let peakRssBytes = 0;
+  const memInterval = setInterval(() => {
+    const rss = process.memoryUsage().rss;
+    if (rss > peakRssBytes) {
+      peakRssBytes = rss;
+    }
+  }, 100);
+
   const startTime = Date.now();
   const dateStr = targetDateStr || getLatestTradingDateStr();
   const yyyymmdd = dateStr.replace(/-/g, '');
@@ -91,74 +90,77 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
     const BATCH_SIZE = 250;
     const batchMap = new Map<string, Record<string, unknown>>();
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i]?.trim();
-      if (!line) continue;
+    await prisma.$transaction(async (tx) => {
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i]?.trim();
+        if (!line) continue;
 
-      const cols = line.split(',');
-      if (cols.length < 15) {
-        rowsSkipped++;
-        continue;
-      }
+        const cols = line.split(',');
+        if (cols.length < 15) {
+          rowsSkipped++;
+          continue;
+        }
 
-      // Filter: Only equity segment ('STK') and standard equity series ('EQ')
-      const finInstrmTp = getCol(cols, colIndex.FinInstrmTp);
-      const series = getCol(cols, colIndex.SctySrs);
-      if ((finInstrmTp && finInstrmTp !== 'STK') || series !== 'EQ') {
-        rowsSkipped++;
-        continue;
-      }
+        // Filter: Only equity segment ('STK') and standard equity series ('EQ')
+        const finInstrmTp = getCol(cols, colIndex.FinInstrmTp);
+        const series = getCol(cols, colIndex.SctySrs);
+        if ((finInstrmTp && finInstrmTp !== 'STK') || series !== 'EQ') {
+          rowsSkipped++;
+          continue;
+        }
 
-      const symbol = getCol(cols, colIndex.TckrSymb);
-      const open = parseFloat(getCol(cols, colIndex.OpnPric) || '0');
-      const high = parseFloat(getCol(cols, colIndex.HghPric) || '0');
-      const low = parseFloat(getCol(cols, colIndex.LwPric) || '0');
-      const close = parseFloat(getCol(cols, colIndex.ClsPric) || '0');
-      const prevClose = parseFloat(getCol(cols, colIndex.PrvsClsgPric) || '0');
-      const volumeStr = getCol(cols, colIndex.TtlTradgVol) || '0';
-      const volume = BigInt(Math.round(parseFloat(volumeStr)));
-      const valueStr = getCol(cols, colIndex.TtlTrfVal);
-      const value = valueStr ? parseFloat(valueStr) : null;
-      const tradesStr = getCol(cols, colIndex.TtlNbOfTxsExctd);
-      const trades = tradesStr ? parseInt(tradesStr, 10) : null;
-      const isin = getCol(cols, colIndex.ISIN) || null;
+        const symbol = getCol(cols, colIndex.TckrSymb);
+        const open = parseFloat(getCol(cols, colIndex.OpnPric) || '0');
+        const high = parseFloat(getCol(cols, colIndex.HghPric) || '0');
+        const low = parseFloat(getCol(cols, colIndex.LwPric) || '0');
+        const close = parseFloat(getCol(cols, colIndex.ClsPric) || '0');
+        const prevClose = parseFloat(getCol(cols, colIndex.PrvsClsgPric) || '0');
+        const volumeStr = getCol(cols, colIndex.TtlTradgVol) || '0';
+        const parsedVol = parseFloat(volumeStr);
+        const volume = BigInt(isNaN(parsedVol) ? 0 : Math.floor(parsedVol));
+        const valueStr = getCol(cols, colIndex.TtlTrfVal);
+        const value = valueStr ? parseFloat(valueStr) : null;
+        const tradesStr = getCol(cols, colIndex.TtlNbOfTxsExctd);
+        const trades = tradesStr ? parseInt(tradesStr, 10) : null;
+        const isin = getCol(cols, colIndex.ISIN) || null;
 
-      if (!symbol || isNaN(close) || close <= 0) {
-        rowsSkipped++;
-        continue;
-      }
+        if (!symbol || close <= 0 || [open, high, low, close].some(isNaN)) {
+          rowsSkipped++;
+          continue;
+        }
 
-      rowsProcessed++;
-      const key = `${symbol}_${dateStr}`;
+        rowsProcessed++;
+        const key = `${symbol}_${dateStr}`;
 
-      // Deduplication within same date: prefer EQ series over BE/SM
-      if (batchMap.has(key)) {
-        const existing = batchMap.get(key)!;
-        if (existing.series !== 'EQ' && series === 'EQ') {
+        // Deduplication within same date: prefer EQ series over BE/SM
+        if (batchMap.has(key)) {
+          const existing = batchMap.get(key)!;
+          if (existing.series !== 'EQ' && series === 'EQ') {
+            batchMap.set(key, {
+              id: key, symbol, date: dateStr, open, high, low, close, prevClose, volume, value, trades, series, isin
+            });
+          }
+        } else {
           batchMap.set(key, {
             id: key, symbol, date: dateStr, open, high, low, close, prevClose, volume, value, trades, series, isin
           });
         }
-      } else {
-        batchMap.set(key, {
-          id: key, symbol, date: dateStr, open, high, low, close, prevClose, volume, value, trades, series, isin
-        });
+
+        if (batchMap.size >= BATCH_SIZE) {
+          const items = Array.from(batchMap.values());
+          await upsertBatch(items, tx);
+          rowsInserted += items.length;
+          batchMap.clear();
+        }
       }
 
-      if (batchMap.size >= BATCH_SIZE) {
+      if (batchMap.size > 0) {
         const items = Array.from(batchMap.values());
-        await upsertBatch(items);
+        await upsertBatch(items, tx);
         rowsInserted += items.length;
         batchMap.clear();
       }
-    }
-
-    if (batchMap.size > 0) {
-      const items = Array.from(batchMap.values());
-      await upsertBatch(items);
-      rowsInserted += items.length;
-      batchMap.clear();
-    }
+    }, { timeout: 300000 });
 
     const durationMs = Date.now() - startTime;
     const peakRssMb = Math.round((peakRssBytes / 1024 / 1024) * 100) / 100;
@@ -195,7 +197,6 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
     };
   } finally {
     clearInterval(memInterval);
-    await prisma.$disconnect();
   }
 }
 
@@ -225,7 +226,7 @@ function buildColumnIndex(headers: string[]) {
  * Perform bulk raw SQL upsert using Postgres ON CONFLICT (symbol, date) DO UPDATE SET ...
  * Guarantees authoritative overwrite if re-run for a date (Option B idempotency).
  */
-async function upsertBatch(items: Record<string, unknown>[]): Promise<void> {
+async function upsertBatch(items: Record<string, unknown>[], tx: any = prisma): Promise<void> {
   if (items.length === 0) return;
 
   const valueTuples: string[] = [];
@@ -265,7 +266,7 @@ async function upsertBatch(items: Record<string, unknown>[]): Promise<void> {
       isin = EXCLUDED.isin;
   `;
 
-  await prisma.$executeRawUnsafe(query);
+  await tx.$executeRawUnsafe(query);
 }
 
 function escapeSql(val: string): string {

@@ -18,26 +18,45 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
   console.log('[MarketToolsPrecomputeJob] Starting background pre-computation pass...');
 
   try {
-    // 1. Market Breadth
-    const breadth = await MarketBreadthService.getMarketBreadth(true);
-    console.log(`[MarketToolsPrecomputeJob] Breadth completed for date ${breadth.date} (Overall Score: ${breadth.overallScore})`);
+    let breadthDate: string | undefined;
+    let multiYearCount: number | undefined;
+    let patternCount: number | undefined;
 
-    // 2. Multi-Year Breakout
-    const multiYear = await MultiYearBreakoutService.getBreakoutReport(true);
-    console.log(`[MarketToolsPrecomputeJob] Multi-Year Breakout completed (${multiYear.stocks.length} candidates)`);
+    try {
+      // 1. Market Breadth
+      const breadth = await MarketBreadthService.getMarketBreadth(true);
+      console.log(`[MarketToolsPrecomputeJob] Breadth completed for date ${breadth.date} (Overall Score: ${breadth.overallScore})`);
+      breadthDate = breadth.date;
+    } catch (err) {
+      console.error('[MarketToolsPrecomputeJob] Failed Market Breadth:', err);
+    }
 
-    // 3. 52W Pattern Breakout
-    const pattern = await PatternBreakoutService.getPatternBreakoutReport(true);
-    console.log(`[MarketToolsPrecomputeJob] Pattern Breakout completed (${pattern.qualifiedCount} candidates)`);
+    try {
+      // 2. Multi-Year Breakout
+      const multiYear = await MultiYearBreakoutService.getBreakoutReport(true);
+      console.log(`[MarketToolsPrecomputeJob] Multi-Year Breakout completed (${multiYear.stocks.length} candidates)`);
+      multiYearCount = multiYear.stocks.length;
+    } catch (err) {
+      console.error('[MarketToolsPrecomputeJob] Failed Multi-Year Breakout:', err);
+    }
+
+    try {
+      // 3. 52W Pattern Breakout
+      const pattern = await PatternBreakoutService.getPatternBreakoutReport(true);
+      console.log(`[MarketToolsPrecomputeJob] Pattern Breakout completed (${pattern.qualifiedCount} candidates)`);
+      patternCount = pattern.qualifiedCount;
+    } catch (err) {
+      console.error('[MarketToolsPrecomputeJob] Failed Pattern Breakout:', err);
+    }
 
     const elapsedMs = Date.now() - startTime;
-    console.log(`[MarketToolsPrecomputeJob] Pre-computation completed successfully in ${elapsedMs}ms`);
+    console.log(`[MarketToolsPrecomputeJob] Pre-computation completed in ${elapsedMs}ms`);
 
     return {
       success: true,
-      breadthDate: breadth.date,
-      multiYearCount: multiYear.stocks.length,
-      patternCount: pattern.qualifiedCount,
+      ...(breadthDate !== undefined && { breadthDate }),
+      ...(multiYearCount !== undefined && { multiYearCount }),
+      ...(patternCount !== undefined && { patternCount }),
       elapsedMs,
     };
   } catch (err) {
