@@ -24,6 +24,7 @@ export default function PatternBreakoutPage() {
 
   useEffect(() => {
     fetchReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pollForReport(attempt = 1, maxAttempts = 30) {

@@ -1,3 +1,4 @@
+import redis from '@/lib/redis';
 import { env } from '@/config/env';
 import { Queue, QueueOptions, Worker, Job } from 'bullmq';
 
@@ -89,7 +90,6 @@ class QueueServiceImpl {
 
   get isEnabled() {
     try {
-      const redis = require('@/lib/redis').default;
       const isRedisReady = redis && redis.status === 'ready';
       return isQueueEnabled && this.scannerQueue !== null && isRedisReady;
     } catch {
