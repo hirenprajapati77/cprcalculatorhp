@@ -19,6 +19,7 @@ export default function PatternBreakoutPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+  const [tradeReadyOnly, setTradeReadyOnly] = useState(false);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -116,6 +117,11 @@ export default function PatternBreakoutPage() {
     return ['ALL', ...Array.from(set).sort()];
   }, [report]);
 
+  // TEMP client-side heuristic until backend Item 6 fix (ETF/liquid-fund exclusion
+  // in pattern-breakout.service.ts) lands. Not authoritative — just keeps noisy
+  // passive-fund symbols out of the "Trade-Ready" view.
+  const ETF_HEURISTIC = /ETF$|BEES$|^LIQUID|^GSEC|^MOM(100|30IETF|ENTUM)$|^EQUAL|^NEXT50$|^MID(CAP|SMALL|SEL|150)|^AONETOTAL$|^GROWW/i;
+
   const filteredStocks = useMemo(() => {
     if (!report) return [];
     return report.stocks.filter((stock) => {
@@ -140,9 +146,19 @@ export default function PatternBreakoutPage() {
         return false;
       }
 
+      // Trade-Ready filter: Tier A/A+, RVOL >= 1.75x, real chart pattern (not
+      // Raw 52W High), and ETF/liquid-fund symbols excluded (see heuristic above).
+      if (tradeReadyOnly) {
+        const tier = stock.scoreBreakdown.qualityTier;
+        if (tier !== 'A+' && tier !== 'A') return false;
+        if (stock.rvol20d === null || stock.rvol20d < 1.75) return false;
+        if (stock.primaryPattern === 'NONE') return false;
+        if (ETF_HEURISTIC.test(stock.symbol)) return false;
+      }
+
       return true;
     });
-  }, [report, selectedPattern, selectedStatus, selectedTier, selectedSector, searchQuery]);
+  }, [report, selectedPattern, selectedStatus, selectedTier, selectedSector, searchQuery, tradeReadyOnly]);
 
   if (loading && !report) {
     return (
@@ -309,6 +325,18 @@ export default function PatternBreakoutPage() {
 
           {/* Search and Secondary Dropdowns */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTradeReadyOnly((v) => !v)}
+              title="Tier A/A+ · RVOL ≥ 1.75x · real chart pattern (excludes Raw 52W High) · ETF/liquid-fund symbols filtered out"
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                tradeReadyOnly
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200'
+              }`}
+            >
+              ⚡ Trade-Ready Only
+            </button>
+
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value as BreakoutStatus | 'ALL')}
