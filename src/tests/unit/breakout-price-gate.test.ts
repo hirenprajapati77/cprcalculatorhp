@@ -107,16 +107,47 @@ describe('breakout price gate — gap invalidation', () => {
 });
 
 describe('breakout price gate — extension / chase', () => {
-  it('reuses BTST EXTENSION_LIMITS (3.5%) for entry-chase distance', () => {
+  it('CPR/Telegram gate uses its own tighter 1.5% cap, independent of shared BTST EXTENSION_LIMITS (3.5%)', () => {
+    // BTST's shared cap is unchanged (still 3.5%) -- the CPR/Telegram path
+    // just no longer defaults to it (see breakout-price-gate.ts chaseCap fix).
     assert.equal(EXTENSION_LIMITS.MAX_DAY_RETURN_PCT, 3.5);
     assert.equal(
       isBreakoutEntryExtended({ entry: 389.1, ltp: 416.65, direction: 'LONG' }),
       true
     );
+    // 1.2% chase — under the new 1.5% CPR cap, not extended.
     assert.equal(
-      isBreakoutEntryExtended({ entry: 100, ltp: 103.4, direction: 'LONG' }),
+      isBreakoutEntryExtended({ entry: 100, ltp: 101.2, direction: 'LONG' }),
       false
     );
+    // 3.4% chase — was allowed under the old 3.5% cap (AMBER-style case,
+    // 27 Aug 2026: 2.66% chase slipped through). Now correctly suppressed
+    // under the tightened 1.5% cap.
+    assert.equal(
+      isBreakoutEntryExtended({ entry: 100, ltp: 103.4, direction: 'LONG' }),
+      true
+    );
+  });
+
+  it('AMBER-style case: 2.66% chase distance now suppressed (was previously allowed under 3.5%)', () => {
+    const result = filterBreakoutsForPriceActionability([
+      base({
+        symbol: 'AMBER',
+        alertKind: 'BREAKOUT',
+        signals: ['BREAKOUT'],
+        ltp: 7701.0,
+        entry: 7501.25,
+        sl: 7463.74,
+        target: 7575.0,
+        high: 7750,
+        low: 7501,
+        previousClose: 7501.25,
+        open: 7750,
+      }),
+    ]);
+    assert.equal(result.actionable.length, 0);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'EXTENDED');
   });
 
   it('NATIONALUM-style LONG: LTP far past entry is suppressed as EXTENDED', () => {
@@ -133,7 +164,8 @@ describe('breakout price gate — extension / chase', () => {
         high: 418,
         low: 388,
         // previousClose near entry so day-return gate alone is not the only path;
-        // entry-chase distance (~7%) still trips EXTENSION_LIMITS.
+        // entry-chase distance (~7%) still trips the CPR-specific chase cap
+        // (previously the shared BTST EXTENSION_LIMITS -- see breakout-price-gate.ts).
         previousClose: 410,
         open: 391,
       }),
@@ -238,14 +270,14 @@ describe('breakout price gate — against prior close', () => {
 });
 
 describe('atrScaledExtensionCap', () => {
-  it('defaults to 3.5% when ATR is missing', () => {
-    assert.equal(atrScaledExtensionCap(undefined), 3.5);
-    assert.equal(atrScaledExtensionCap(0), 3.5);
+  it('defaults to 1.5% (CPR_ENTRY_EXTENSION_PCT) when ATR is missing', () => {
+    assert.equal(atrScaledExtensionCap(undefined), 1.5);
+    assert.equal(atrScaledExtensionCap(0), 1.5);
   });
 
-  it('scales 1.5× ATR and clamps to 2–6%', () => {
-    assert.equal(atrScaledExtensionCap(2.5), 3.75);
-    assert.equal(atrScaledExtensionCap(1.0), 2.0);
-    assert.equal(atrScaledExtensionCap(5.0), 6.0);
+  it('scales 1.5x ATR and clamps to 1-3% (tightened from 2-6%)', () => {
+    assert.equal(atrScaledExtensionCap(2.5), 3.0);
+    assert.equal(atrScaledExtensionCap(1.0), 1.5);
+    assert.equal(atrScaledExtensionCap(5.0), 3.0);
   });
 });

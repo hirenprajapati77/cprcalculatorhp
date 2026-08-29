@@ -1,9 +1,10 @@
-import { EXTENSION_LIMITS, EntryManagerService } from '@/services/overnight/entry-manager.service';
+import { EntryManagerService } from '@/services/overnight/entry-manager.service';
 import type { BreakoutScanResult, BreakoutAlertKind } from '@/services/alert/breakout-watcher.service';
 import type { MarketStockData } from '@/services/market.service';
 import {
   evaluateCprSetupPriceStalenessBasic,
   isBreakoutEntryExtended,
+  CPR_ENTRY_EXTENSION_PCT,
   type CprSetupStaleReason,
 } from '@/lib/cpr-setup-staleness';
 
@@ -100,7 +101,10 @@ export function evaluateCprSetupPriceStaleness(args: {
       history: [],
       ...(previousClose != null ? { previousClose } : {}),
     };
-    const ext = EntryManagerService.evaluateExtension(stock, direction);
+    const ext = EntryManagerService.evaluateExtension(stock, direction, undefined, {
+      maxDayReturnPct: entryExtensionPct ?? CPR_ENTRY_EXTENSION_PCT,
+      maxDayDropPct: entryExtensionPct ?? CPR_ENTRY_EXTENSION_PCT,
+    });
     if (!ext.eligible) {
       return { stale: true, reason: 'EXTENDED', detail: ext.reason ?? 'EXTENDED' };
     }
@@ -108,8 +112,10 @@ export function evaluateCprSetupPriceStaleness(args: {
 
   if (basic.stale) return basic;
 
-  // Defensive: keep detail wording aligned with EXTENSION_LIMITS if constants drift.
-  const chaseCap = entryExtensionPct ?? EXTENSION_LIMITS.MAX_DAY_RETURN_PCT;
+  // Falls back to the CPR/Telegram-specific cap (not the shared BTST
+  // EXTENSION_LIMITS) — this previously defaulted to EXTENSION_LIMITS.MAX_DAY_RETURN_PCT
+  // even though a CPR-specific constant already existed for this exact purpose.
+  const chaseCap = entryExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
   if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct: chaseCap })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
     return {
