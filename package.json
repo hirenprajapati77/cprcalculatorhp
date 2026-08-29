@@ -8,6 +8,7 @@
     "build:clean": "rm -rf .next && next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "regression-lock": "tsx scripts/regression_lock.ts",
     "release:check": "tsc --noEmit && npm run lint && npm run test:unit && npm run test:coverage:core && npm run test:coverage:services && npm run regression-lock && npm run security:check && npm run build:clean",
     "test": "npm run test:unit",

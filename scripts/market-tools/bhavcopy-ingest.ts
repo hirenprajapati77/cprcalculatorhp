@@ -1,5 +1,5 @@
 import AdmZip from 'adm-zip';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -226,7 +226,10 @@ function buildColumnIndex(headers: string[]) {
  * Perform bulk raw SQL upsert using Postgres ON CONFLICT (symbol, date) DO UPDATE SET ...
  * Guarantees authoritative overwrite if re-run for a date (Option B idempotency).
  */
-async function upsertBatch(items: Record<string, unknown>[], tx: any = prisma): Promise<void> {
+async function upsertBatch(
+  items: Record<string, unknown>[],
+  tx: PrismaClient | Prisma.TransactionClient = prisma
+): Promise<void> {
   if (items.length === 0) return;
 
   const valueTuples: string[] = [];
