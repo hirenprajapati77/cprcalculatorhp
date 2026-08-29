@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { computeRvol } from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
 const prisma = new PrismaClient();
 
@@ -210,6 +211,7 @@ export class PatternBreakoutService {
     let totalScanned = 0;
 
     for (const row of rawCandidates) {
+      if (isLikelyEtfOrFund(row.symbol)) continue;
       totalScanned++;
       const historyDays = Number(row.historyDays);
       const close = Number(row.close);

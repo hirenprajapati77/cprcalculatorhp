@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import {
   PatternBreakoutReport,
   PatternType,
@@ -117,10 +118,11 @@ export default function PatternBreakoutPage() {
     return ['ALL', ...Array.from(set).sort()];
   }, [report]);
 
-  // TEMP client-side heuristic until backend Item 6 fix (ETF/liquid-fund exclusion
-  // in pattern-breakout.service.ts) lands. Not authoritative — just keeps noisy
-  // passive-fund symbols out of the "Trade-Ready" view.
-  const ETF_HEURISTIC = /ETF$|BEES$|^LIQUID|^GSEC|^MOM(100|30IETF|ENTUM)$|^EQUAL|^NEXT50$|^MID(CAP|SMALL|SEL|150)|^AONETOTAL$|^GROWW/i;
+  // Server-side exclusion now lands via isLikelyEtfOrFund in
+  // pattern-breakout.service.ts (item 6) -- this is now just a client-side
+  // safety net for reports cached before that fix deployed. Uses the same
+  // shared heuristic, not a separate duplicate, so there's one source of
+  // truth to update if the heuristic needs tuning.
 
   const filteredStocks = useMemo(() => {
     if (!report) return [];
@@ -153,7 +155,7 @@ export default function PatternBreakoutPage() {
         if (tier !== 'A+' && tier !== 'A') return false;
         if (stock.rvol20d === null || stock.rvol20d < 1.75) return false;
         if (stock.primaryPattern === 'NONE') return false;
-        if (ETF_HEURISTIC.test(stock.symbol)) return false;
+        if (isLikelyEtfOrFund(stock.symbol)) return false;
       }
 
       return true;

@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { getSymbolSector } from './market-breadth.service';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
 const prisma = new PrismaClient();
 
@@ -185,6 +186,12 @@ export class MultiYearBreakoutService {
       WHERE date = ${latestDate} AND rn = 1
     `;
 
+    // Exclude ETFs/liquid/debt funds -- see nse-fund-exclusion.ts for rationale.
+    // Filtering rawStocks directly (rather than inside the loop below) keeps
+    // totalScanned = rawStocks.length accurate to the real operating-company
+    // universe rather than the raw series='EQ' row count.
+    const rawStocksFiltered = rawStocks.filter((r: { symbol: string }) => !isLikelyEtfOrFund(r.symbol));
+
     const WINDOW_SPECS: Record<BreakoutWindow, number> = {
       '1Y': 250,
       '2Y': 500,
@@ -241,7 +248,7 @@ export class MultiYearBreakoutService {
     let count10Y: number | null = windowAvailability['10Y'].available ? 0 : null;
     let countATH = 0;
 
-    for (const raw of rawStocks) {
+    for (const raw of rawStocksFiltered) {
       const historyDays = Number(raw.historyDays || 0);
       const close = Number(raw.close || 0);
       const prevClose = Number(raw.prevClose || 0);
@@ -394,7 +401,7 @@ export class MultiYearBreakoutService {
     const report: MultiYearBreakoutReport = {
       date: latestDate,
       tradingDaysAvailable,
-      totalScanned: rawStocks.length,
+      totalScanned: rawStocksFiltered.length,
       breakoutCounts: {
         '1Y': count1Y,
         '2Y': count2Y,
