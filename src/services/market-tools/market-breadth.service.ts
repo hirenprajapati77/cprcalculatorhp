@@ -49,7 +49,11 @@ export interface MarketBreadthReport {
   allNse: UniverseBreadth;
   nifty50: UniverseBreadth;
   nseFno: UniverseBreadth;
-  sectors: SectorBreadth[];
+  sectors: {
+    allNse: SectorBreadth[];
+    nifty50: SectorBreadth[];
+    nseFno: SectorBreadth[];
+  };
   computedAt: string;
 }
 
@@ -95,7 +99,7 @@ export class MarketBreadthService {
         allNse: { universe: 'ALL_NSE', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
         overallScore: 5,
         marketRegime: 'NEUTRAL',
-        sectors: [],
+        sectors: { allNse: [], nifty50: [], nseFno: [] },
         computedAt: new Date().toISOString(),
       };
     }
@@ -181,8 +185,16 @@ export class MarketBreadthService {
       fnoStats.length > 0 ? fnoStats : stockStats.slice(0, 180)
     );
 
-    // 4. Compute Sector Rankings
-    const sectors = computeSectorBreadth(stockStats);
+    // 4. Compute Sector Rankings — once per universe, so switching universe
+    // tabs on the frontend actually changes the sector breakdown. Previously
+    // computed once against the full unfiltered stockStats and reused across
+    // all three tabs (verified live: totals summed to the ALL_NSE count of
+    // 2632 even while the Nifty 50 / F&O tabs were selected).
+    const sectors = {
+      allNse: computeSectorBreadth(stockStats),
+      nifty50: computeSectorBreadth(nifty50Stats.length > 0 ? nifty50Stats : stockStats.slice(0, 50)),
+      nseFno: computeSectorBreadth(fnoStats.length > 0 ? fnoStats : stockStats.slice(0, 180)),
+    };
 
     // 5. Compute Overall Signed Signal-Agreement Score & Regime (matching reference tool -10 to +10 scale)
     const signals = [
@@ -360,7 +372,7 @@ function computeUniverseBreadth(
   };
 }
 
-function computeSectorBreadth(
+export function computeSectorBreadth(
   stats: Array<{ symbol: string; changePct: number }>
 ): SectorBreadth[] {
   const sectorMap = new Map<string, { total: number; adv: number; dec: number; sumChange: number }>();

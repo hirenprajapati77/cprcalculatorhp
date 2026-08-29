@@ -218,7 +218,12 @@ export default function MarketBreadthPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">
-              {report.sectors.map((sec) => (
+              {(selectedUniverse === 'ALL_NSE'
+                ? report.sectors.allNse
+                : selectedUniverse === 'NIFTY_50'
+                  ? report.sectors.nifty50
+                  : report.sectors.nseFno
+              ).map((sec) => (
                 <tr key={sec.sector} className="hover:bg-gray-800/40 transition">
                   <td className="py-3 px-4 font-bold text-gray-300">#{sec.rank}</td>
                   <td className="py-3 px-4 font-bold text-white">{sec.sector}</td>
