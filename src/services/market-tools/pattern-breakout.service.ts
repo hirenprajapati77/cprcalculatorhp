@@ -254,7 +254,10 @@ export class PatternBreakoutService {
       return emptyReport;
     }
 
-    // 3. Query trailing 90 candles for qualifying symbols to perform pattern analysis
+    // 3. Query trailing ~100 calendar days of candles for qualifying symbols
+    // (buffer above the largest pattern window, which slices at most -75).
+    // Bounded by date, NOT full history — full-history fetch here previously
+    // grew unbounded as DailyOhlcv accumulated more trading days over time.
     const qualifyingSymbols = qualifyingList.map(s => s.symbol);
     const candleRows = await prisma.$queryRaw<
       Array<{
@@ -270,6 +273,7 @@ export class PatternBreakoutService {
       SELECT symbol, date, open, high, low, close, volume
       FROM "DailyOhlcv"
       WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
+        AND date >= (${latestDate}::date - INTERVAL '100 days')
       ORDER BY symbol ASC, date ASC
     `;
 
