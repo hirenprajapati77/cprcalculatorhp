@@ -109,6 +109,12 @@ export default function MultiYearBreakoutPage() {
   return (
     <div className="w-full min-w-0 space-y-8">
       {/* Header */}
+      {report.status === 'pending' && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
+          <span>⏳</span>
+          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. This isn&apos;t a &quot;no breakouts&quot; result; check back shortly.
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
         <div>
           <div className="flex items-center gap-3">

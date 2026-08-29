@@ -55,6 +55,12 @@ export interface MarketBreadthReport {
     nseFno: SectorBreadth[];
   };
   computedAt: string;
+  /**
+   * 'pending' when Redis cache is cold and no report has been computed yet.
+   * Optional for backward compatibility with reports cached before this
+   * field existed -- absence should be treated as 'ready' by consumers.
+   */
+  status?: 'ready' | 'pending';
 }
 
 let cachedReport: MarketBreadthReport | null = null;
@@ -101,6 +107,7 @@ export class MarketBreadthService {
         marketRegime: 'NEUTRAL',
         sectors: { allNse: [], nifty50: [], nseFno: [] },
         computedAt: new Date().toISOString(),
+        status: 'pending',
       };
     }
 
@@ -229,6 +236,7 @@ export class MarketBreadthService {
       nseFno,
       sectors,
       computedAt: new Date().toISOString(),
+      status: 'ready',
     };
 
     cachedReport = report;

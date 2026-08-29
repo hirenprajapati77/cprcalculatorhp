@@ -26,6 +26,7 @@ test('PatternBreakoutService - Pre-computed Redis Cache Read Path', async (t) =>
     assert.strictEqual(report.totalScanned, 0);
     assert.strictEqual(report.qualifiedCount, 0);
     assert.strictEqual(report.stocks.length, 0);
+    assert.strictEqual(report.status, 'pending');
   });
 
   await t.test('computes and caches report when forceRefresh is true', async () => {

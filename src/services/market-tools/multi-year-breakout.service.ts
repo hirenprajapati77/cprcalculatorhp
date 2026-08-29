@@ -59,6 +59,12 @@ export interface MultiYearBreakoutReport {
   windowAvailability: Record<BreakoutWindow, WindowAvailabilityInfo>;
   stocks: BreakoutStock[];
   computedAt: string;
+  /**
+   * 'pending' when Redis cache is cold and no report has been computed yet.
+   * Optional for backward compatibility with reports cached before this
+   * field existed -- absence should be treated as 'ready' by consumers.
+   */
+  status?: 'ready' | 'pending';
 }
 
 let cachedReport: MultiYearBreakoutReport | null = null;
@@ -111,6 +117,7 @@ export class MultiYearBreakoutService {
         breakoutCounts: { '1Y': 0, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'pending',
       };
     }
 
@@ -399,6 +406,7 @@ export class MultiYearBreakoutService {
       windowAvailability,
       stocks: processedStocks,
       computedAt: new Date().toISOString(),
+      status: 'ready',
     };
 
     cachedReport = report;

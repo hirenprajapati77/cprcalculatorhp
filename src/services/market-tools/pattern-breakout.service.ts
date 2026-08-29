@@ -65,6 +65,14 @@ export interface PatternBreakoutReport {
   countsByTier: Record<PatternTier, number>;
   stocks: PatternBreakoutStock[];
   computedAt: string;
+  /**
+   * 'pending' when Redis cache is cold and no report has been computed yet
+   * (e.g. fresh deploy, restart before the 19:15 IST precompute cron has
+   * run). Distinguishes "not computed yet" from a genuine zero-signal day.
+   * Optional for backward compatibility with reports cached before this
+   * field existed -- absence should be treated as 'ready' by consumers.
+   */
+  status?: 'ready' | 'pending';
 }
 
 let cachedReport: PatternBreakoutReport | null = null;
@@ -122,6 +130,7 @@ export class PatternBreakoutService {
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'pending',
       };
     }
 
@@ -249,6 +258,7 @@ export class PatternBreakoutService {
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'ready', // genuinely computed -- zero qualifying stocks today, not a cold cache
       };
       await this.saveCache(emptyReport);
       return emptyReport;
@@ -363,6 +373,7 @@ export class PatternBreakoutService {
       countsByTier,
       stocks,
       computedAt: new Date().toISOString(),
+      status: 'ready',
     };
 
     await this.saveCache(report);
