@@ -123,7 +123,10 @@ export const cache = {
         console.warn('Redis delPattern failed, falling back to memory cache:', err);
       }
     }
-    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    const regex = new RegExp(
+      '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'
+    );
+
     for (const key of Array.from(memoryCache.keys())) {
       if (regex.test(key)) {
         memoryCache.delete(key);

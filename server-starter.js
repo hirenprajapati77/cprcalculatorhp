@@ -1,11 +1,18 @@
+// C-04: Register crash handlers BEFORE any async work so they catch startup failures too
+process.on('uncaughtException', (err) => {
+  console.error('[server-starter] Uncaught exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[server-starter] Unhandled promise rejection:', reason);
+  process.exit(1);
+});
+
 const { createServer } = require('http');
 const next = require('next');
 const fs = require('fs');
 const path = require('path');
-
-const nextDir = path.join(__dirname, '.next');
-const staticDir = path.join(nextDir, 'static');
-const buildIdFile = path.join(nextDir, 'BUILD_ID');
 
 const buildIdPath = path.join(__dirname, '.next', 'BUILD_ID');
 if (!fs.existsSync(buildIdPath)) {
@@ -32,8 +39,9 @@ app.prepare().then(() => {
     process.exit(1);
   });
 
-  server.listen(port, hostname, (err) => {
-    if (err) throw err;
+  // M-02: listen() callback does not receive an error argument in Node.js 14+;
+  // errors are emitted on the 'error' event above — removed dead `if (err) throw err`.
+  server.listen(port, hostname, () => {
     console.log(`> CPR PRO Platform ready on http://${hostname}:${port}`);
   });
 }).catch((err) => {
@@ -41,7 +49,3 @@ app.prepare().then(() => {
   process.exit(1);
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('[server-starter] Uncaught exception:', err);
-  process.exit(1);
-});

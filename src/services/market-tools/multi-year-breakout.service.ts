@@ -1,9 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
-const prisma = new PrismaClient();
 
 export type BreakoutWindow = '1Y' | '2Y' | '3Y' | '5Y' | '10Y' | 'ATH';
 
@@ -95,8 +94,8 @@ export class MultiYearBreakoutService {
         // Ignore cache lookup errors
       }
 
-      // Memory fallback if Redis is temporarily unreachable
-      if (cachedReport) {
+      // Memory fallback if Redis is temporarily unreachable — respect the same 1-hour TTL
+      if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
 

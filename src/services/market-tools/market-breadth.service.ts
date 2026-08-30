@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { NSE_SECTOR_MAP } from './nse-sector-map';
-
-const prisma = new PrismaClient();
 
 export interface SectorBreadth {
   sector: string;
@@ -97,8 +95,10 @@ export class MarketBreadthService {
 
       // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
       // Return empty baseline report until background precompute job runs.
+      // Use 'N/A' for date — today's wall-clock date is wrong after midnight
+      // before the 19:15 precompute runs and would mislead consumers.
       return {
-        date: new Date().toISOString().split('T')[0],
+        date: 'N/A',
         tradingDaysAvailable: 0,
         nifty50: { universe: 'NIFTY_50', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
         nseFno: { universe: 'NSE_FNO', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },

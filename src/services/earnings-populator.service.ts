@@ -22,13 +22,22 @@ function parseNseDate(dateStr: string): string {
 
 /** Prefer getSetCookie(); never split Set-Cookie on commas (Expires contains commas). */
 function extractCookieHeader(headers: Headers): string {
-  const headersAny = headers as Headers & { getSetCookie?: () => string[] };
+  const headersAny = headers as Headers & { getSetCookie?: () => string[]; getAll?: (name: string) => string[] };
+  // Node 18.14+: getSetCookie() returns all Set-Cookie headers correctly
   if (typeof headersAny.getSetCookie === 'function') {
     const list = headersAny.getSetCookie();
     if (list.length > 0) {
       return list.map((c) => c.split(';')[0].trim()).filter(Boolean).join('; ');
     }
   }
+  // Undici/fetch: getAll() returns an array of header values
+  if (typeof headersAny.getAll === 'function') {
+    const list = headersAny.getAll('set-cookie');
+    if (list.length > 0) {
+      return list.map((c) => c.split(';')[0].trim()).filter(Boolean).join('; ');
+    }
+  }
+  // Last resort: get() returns only the first Set-Cookie value
   const raw = headers.get('set-cookie');
   if (!raw) return '';
   return raw.split(';')[0].trim();

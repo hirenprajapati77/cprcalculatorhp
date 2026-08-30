@@ -249,7 +249,7 @@ export const Navbar: React.FC = () => {
               <div
                 onClick={(e) => e.stopPropagation()}
                 className={`absolute top-full left-0 pt-1.5 z-50 min-w-[220px] transition-all ${
-                  toolsOpen ? 'block' : 'hidden group-hover:block'
+                  toolsOpen ? 'block' : 'hidden'
                 }`}
               >
                 <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">
@@ -399,7 +399,7 @@ export const Navbar: React.FC = () => {
               <div
                 onClick={(e) => e.stopPropagation()}
                 className={`absolute top-full right-0 pt-1.5 z-50 min-w-[150px] transition-all ${
-                  moreOpen ? 'block' : 'hidden group-hover:block'
+                  moreOpen ? 'block' : 'hidden'
                 }`}
               >
                 <div className="bg-[#0f111a] border border-slate-800 rounded-lg shadow-2xl p-1.5 space-y-0.5 backdrop-blur-xl">

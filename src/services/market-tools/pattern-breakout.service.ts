@@ -1,10 +1,9 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { computeRvol } from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
-
-const prisma = new PrismaClient();
 
 export interface OhlcvCandle {
   date: string;
@@ -285,7 +284,7 @@ export class PatternBreakoutService {
       SELECT symbol, date, open, high, low, close, volume
       FROM "DailyOhlcv"
       WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
-        AND date >= (${latestDate}::date - INTERVAL '100 days')
+        AND date >= (${latestDate}::date - INTERVAL '150 days')
       ORDER BY symbol ASC, date ASC
     `;
 
@@ -703,8 +702,11 @@ export class PatternBreakoutService {
     if (params.candles.length >= 20) {
       const c = params.candles;
       const currentClose = c[c.length - 1].close;
-      const close20dAgo = c[Math.max(0, c.length - 20)].close;
-      const ret20d = close20dAgo > 0 ? ((currentClose - close20dAgo) / close20dAgo) * 100 : 0;
+      // Guard: only compute 20d return when at least 20 candles are available
+      const close20dAgo = c.length >= 20 ? c[c.length - 20].close : null;
+      const ret20d = (close20dAgo !== null && close20dAgo > 0)
+        ? ((currentClose - close20dAgo) / close20dAgo) * 100
+        : 0;
 
       if (ret20d >= 10.0) momentumScore += 10;
       else if (ret20d >= 5.0) momentumScore += 7;

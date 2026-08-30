@@ -59,8 +59,8 @@ export async function runBhavcopyBackfill(
         rowsInserted: 0,
         peakRssMb: Math.round((process.memoryUsage().rss / 1024 / 1024) * 100) / 100,
         durationMs: 0,
-        status: 'SKIPPED_EXISTS',
-        reason: 'Weekend',
+        status: 'HOLIDAY_404',
+        reason: 'Weekend (non-trading day)',
       });
       skippedDates++;
       continue;

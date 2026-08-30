@@ -224,7 +224,8 @@ function buildColumnIndex(headers: string[]) {
 
 /**
  * Perform bulk raw SQL upsert using Postgres ON CONFLICT (symbol, date) DO UPDATE SET ...
- * Guarantees authoritative overwrite if re-run for a date (Option B idempotency).
+ * Uses Prisma.sql tagged template literal for full parameterization — no string interpolation
+ * on user-derived data. Guarantees authoritative overwrite if re-run for a date (idempotent).
  */
 async function upsertBatch(
   items: Record<string, unknown>[],
@@ -232,62 +233,65 @@ async function upsertBatch(
 ): Promise<void> {
   if (items.length === 0) return;
 
-  const valueTuples: string[] = [];
-  for (const r of items) {
-    const id = `'${escapeSql(String(r.id))}'`;
-    const symbol = `'${escapeSql(String(r.symbol))}'`;
-    const date = `'${escapeSql(String(r.date))}'`;
-    const open = r.open;
-    const high = r.high;
-    const low = r.low;
-    const close = r.close;
-    const prevClose = r.prevClose;
-    const volume = r.volume;
-    const value = r.value === null ? 'NULL' : r.value;
-    const trades = r.trades === null ? 'NULL' : r.trades;
-    const series = `'${escapeSql(String(r.series))}'`;
-    const isin = r.isin === null ? 'NULL' : `'${escapeSql(String(r.isin))}'`;
+  // Build one parameterized VALUES row per item and combine with Prisma.join.
+  // Prisma.sql automatically escapes every interpolated value as a query parameter.
+  const rows = items.map((r) =>
+    Prisma.sql`(
+      ${String(r.id)},
+      ${String(r.symbol)},
+      ${String(r.date)},
+      ${Number(r.open)},
+      ${Number(r.high)},
+      ${Number(r.low)},
+      ${Number(r.close)},
+      ${Number(r.prevClose)},
+      ${BigInt(String(r.volume))}::bigint,
+      ${r.value === null ? null : Number(r.value)},
+      ${r.trades === null ? null : Number(r.trades)},
+      ${String(r.series)},
+      ${r.isin === null ? null : String(r.isin)},
+      NOW()
+    )`
+  );
 
-    valueTuples.push(
-      `(${id}, ${symbol}, ${date}, ${open}, ${high}, ${low}, ${close}, ${prevClose}, ${volume}, ${value}, ${trades}, ${series}, ${isin}, NOW())`
-    );
-  }
-
-  const query = `
-    INSERT INTO "DailyOhlcv" (id, symbol, date, open, high, low, close, "prevClose", volume, value, trades, series, isin, "createdAt")
-    VALUES ${valueTuples.join(',\n')}
+  await tx.$executeRaw`
+    INSERT INTO "DailyOhlcv"
+      (id, symbol, date, open, high, low, close, "prevClose", volume, value, trades, series, isin, "createdAt")
+    VALUES ${Prisma.join(rows)}
     ON CONFLICT (symbol, date) DO UPDATE SET
-      open = EXCLUDED.open,
-      high = EXCLUDED.high,
-      low = EXCLUDED.low,
-      close = EXCLUDED.close,
+      open        = EXCLUDED.open,
+      high        = EXCLUDED.high,
+      low         = EXCLUDED.low,
+      close       = EXCLUDED.close,
       "prevClose" = EXCLUDED."prevClose",
-      volume = EXCLUDED.volume,
-      value = EXCLUDED.value,
-      trades = EXCLUDED.trades,
-      series = EXCLUDED.series,
-      isin = EXCLUDED.isin;
+      volume      = EXCLUDED.volume,
+      value       = EXCLUDED.value,
+      trades      = EXCLUDED.trades,
+      series      = EXCLUDED.series,
+      isin        = EXCLUDED.isin
   `;
-
-  await tx.$executeRawUnsafe(query);
 }
 
+/** @deprecated No longer needed — replaced by Prisma parameterization. */
 function escapeSql(val: string): string {
   return val.replace(/'/g, "''");
 }
 
 function getLatestTradingDateStr(): string {
+  // IST = UTC+5:30. Shift by 5h30m so we can safely use UTC date getters.
   const d = new Date();
-  // If run before 18:30 IST, default to yesterday
-  const istHour = (d.getUTCHours() + 5 + Math.floor((d.getUTCMinutes() + 30) / 60)) % 24;
-  if (istHour < 18) {
-    d.setDate(d.getDate() - 1);
-  }
-  // Skip weekends
-  if (d.getDay() === 0) d.setDate(d.getDate() - 2); // Sun -> Fri
-  if (d.getDay() === 6) d.setDate(d.getDate() - 1); // Sat -> Fri
+  const istMs = d.getTime() + 5.5 * 60 * 60 * 1000;
+  const ist = new Date(istMs);
 
-  return d.toISOString().split('T')[0]!;
+  // If run before 18:30 IST, default to yesterday's bhavcopy
+  if (ist.getUTCHours() < 18 || (ist.getUTCHours() === 18 && ist.getUTCMinutes() < 30)) {
+    ist.setUTCDate(ist.getUTCDate() - 1);
+  }
+  // Skip weekends (0 = Sunday, 6 = Saturday in IST)
+  if (ist.getUTCDay() === 0) ist.setUTCDate(ist.getUTCDate() - 2); // Sun -> Fri
+  if (ist.getUTCDay() === 6) ist.setUTCDate(ist.getUTCDate() - 1); // Sat -> Fri
+
+  return ist.toISOString().split('T')[0]!;
 }
 
 // ── CLI Direct Invocation ──────────────────────────────────────────────────

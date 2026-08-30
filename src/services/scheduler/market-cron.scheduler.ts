@@ -232,7 +232,7 @@ export function startMarketCronScheduler(): void {
     }
   };
 
-  setInterval(() => {
+  _cronInterval = setInterval(() => {
     void tick();
   }, 60_000);
 
@@ -243,4 +243,18 @@ export function startMarketCronScheduler(): void {
     'btst-alert 15:10–15:25, cpr-journal 15:20–15:24, btst-journal 15:25–15:30, ' +
     'snapshots 09:16/09:30/09:45 IST, earnings-populate 14:15–14:25 IST'
   );
+}
+
+let _cronInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Stop the in-process cron scheduler and reset state.
+ * Primarily for use in test suite teardown to prevent interval leaks.
+ */
+export function stopMarketCronScheduler(): void {
+  if (_cronInterval !== null) {
+    clearInterval(_cronInterval);
+    _cronInterval = null;
+  }
+  started = false;
 }
