@@ -1,0 +1,45 @@
+# Runs type-checking, lint, and unit tests on every PR.
+#
+# Why this exists: next.config.ts sets `typescript.ignoreBuildErrors: true`
+# and `eslint.ignoreDuringBuilds: true` in production, because the 1GB Oracle
+# Cloud VM this app deploys to OOMs if the build also runs type-checking and
+# linting. That's a reasonable tradeoff for the deploy step, but it means
+# NOTHING currently catches type errors or lint issues before merge. This
+# workflow is the substitute -- it runs on GitHub's runners, not the VM, so
+# there's no memory constraint here.
+#
+# NEW FILE -- no CI existed before this. First run may surface pre-existing
+# issues unrelated to whatever PR introduces this file; that's expected, not
+# a regression. Treat failures here as informational until the backlog of
+# pre-existing tsc/lint issues is triaged, then make it required.
+name: Verify (typecheck, lint, test)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit

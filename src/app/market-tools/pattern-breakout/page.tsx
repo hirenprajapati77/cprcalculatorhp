@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import {
   PatternBreakoutReport,
   PatternType,
@@ -19,6 +20,7 @@ export default function PatternBreakoutPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+  const [tradeReadyOnly, setTradeReadyOnly] = useState(false);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -116,6 +118,12 @@ export default function PatternBreakoutPage() {
     return ['ALL', ...Array.from(set).sort()];
   }, [report]);
 
+  // Server-side exclusion now lands via isLikelyEtfOrFund in
+  // pattern-breakout.service.ts (item 6) -- this is now just a client-side
+  // safety net for reports cached before that fix deployed. Uses the same
+  // shared heuristic, not a separate duplicate, so there's one source of
+  // truth to update if the heuristic needs tuning.
+
   const filteredStocks = useMemo(() => {
     if (!report) return [];
     return report.stocks.filter((stock) => {
@@ -140,9 +148,19 @@ export default function PatternBreakoutPage() {
         return false;
       }
 
+      // Trade-Ready filter: Tier A/A+, RVOL >= 1.75x, real chart pattern (not
+      // Raw 52W High), and ETF/liquid-fund symbols excluded (see heuristic above).
+      if (tradeReadyOnly) {
+        const tier = stock.scoreBreakdown.qualityTier;
+        if (tier !== 'A+' && tier !== 'A') return false;
+        if (stock.rvol20d === null || stock.rvol20d < 1.75) return false;
+        if (stock.primaryPattern === 'NONE') return false;
+        if (isLikelyEtfOrFund(stock.symbol)) return false;
+      }
+
       return true;
     });
-  }, [report, selectedPattern, selectedStatus, selectedTier, selectedSector, searchQuery]);
+  }, [report, selectedPattern, selectedStatus, selectedTier, selectedSector, searchQuery, tradeReadyOnly]);
 
   if (loading && !report) {
     return (
@@ -177,6 +195,12 @@ export default function PatternBreakoutPage() {
   return (
     <div className="w-full min-w-0 space-y-6">
       {/* Header */}
+      {report.status === 'pending' && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
+          <span>⏳</span>
+          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. This isn&apos;t a &quot;no breakouts&quot; result; check back shortly.
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-5">
         <div>
           <div className="flex items-center gap-3">
@@ -309,6 +333,18 @@ export default function PatternBreakoutPage() {
 
           {/* Search and Secondary Dropdowns */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTradeReadyOnly((v) => !v)}
+              title="Tier A/A+ · RVOL ≥ 1.75x · real chart pattern (excludes Raw 52W High) · ETF/liquid-fund symbols filtered out"
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
+                tradeReadyOnly
+                  ? 'bg-emerald-600 text-white border-emerald-500'
+                  : 'bg-gray-900 text-gray-400 border-gray-800 hover:text-gray-200'
+              }`}
+            >
+              ⚡ Trade-Ready Only
+            </button>
+
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value as BreakoutStatus | 'ALL')}

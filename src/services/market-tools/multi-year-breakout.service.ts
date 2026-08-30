@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { getSymbolSector } from './market-breadth.service';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
 const prisma = new PrismaClient();
 
@@ -59,6 +60,12 @@ export interface MultiYearBreakoutReport {
   windowAvailability: Record<BreakoutWindow, WindowAvailabilityInfo>;
   stocks: BreakoutStock[];
   computedAt: string;
+  /**
+   * 'pending' when Redis cache is cold and no report has been computed yet.
+   * Optional for backward compatibility with reports cached before this
+   * field existed -- absence should be treated as 'ready' by consumers.
+   */
+  status?: 'ready' | 'pending';
 }
 
 let cachedReport: MultiYearBreakoutReport | null = null;
@@ -111,6 +118,7 @@ export class MultiYearBreakoutService {
         breakoutCounts: { '1Y': 0, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'pending',
       };
     }
 
@@ -178,6 +186,12 @@ export class MultiYearBreakoutService {
       WHERE date = ${latestDate} AND rn = 1
     `;
 
+    // Exclude ETFs/liquid/debt funds -- see nse-fund-exclusion.ts for rationale.
+    // Filtering rawStocks directly (rather than inside the loop below) keeps
+    // totalScanned = rawStocks.length accurate to the real operating-company
+    // universe rather than the raw series='EQ' row count.
+    const rawStocksFiltered = rawStocks.filter((r: { symbol: string }) => !isLikelyEtfOrFund(r.symbol));
+
     const WINDOW_SPECS: Record<BreakoutWindow, number> = {
       '1Y': 250,
       '2Y': 500,
@@ -234,7 +248,7 @@ export class MultiYearBreakoutService {
     let count10Y: number | null = windowAvailability['10Y'].available ? 0 : null;
     let countATH = 0;
 
-    for (const raw of rawStocks) {
+    for (const raw of rawStocksFiltered) {
       const historyDays = Number(raw.historyDays || 0);
       const close = Number(raw.close || 0);
       const prevClose = Number(raw.prevClose || 0);
@@ -387,7 +401,7 @@ export class MultiYearBreakoutService {
     const report: MultiYearBreakoutReport = {
       date: latestDate,
       tradingDaysAvailable,
-      totalScanned: rawStocks.length,
+      totalScanned: rawStocksFiltered.length,
       breakoutCounts: {
         '1Y': count1Y,
         '2Y': count2Y,
@@ -399,6 +413,7 @@ export class MultiYearBreakoutService {
       windowAvailability,
       stocks: processedStocks,
       computedAt: new Date().toISOString(),
+      status: 'ready',
     };
 
     cachedReport = report;

@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { computeRvol } from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
 const prisma = new PrismaClient();
 
@@ -65,6 +66,14 @@ export interface PatternBreakoutReport {
   countsByTier: Record<PatternTier, number>;
   stocks: PatternBreakoutStock[];
   computedAt: string;
+  /**
+   * 'pending' when Redis cache is cold and no report has been computed yet
+   * (e.g. fresh deploy, restart before the 19:15 IST precompute cron has
+   * run). Distinguishes "not computed yet" from a genuine zero-signal day.
+   * Optional for backward compatibility with reports cached before this
+   * field existed -- absence should be treated as 'ready' by consumers.
+   */
+  status?: 'ready' | 'pending';
 }
 
 let cachedReport: PatternBreakoutReport | null = null;
@@ -122,6 +131,7 @@ export class PatternBreakoutService {
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'pending',
       };
     }
 
@@ -201,6 +211,7 @@ export class PatternBreakoutService {
     let totalScanned = 0;
 
     for (const row of rawCandidates) {
+      if (isLikelyEtfOrFund(row.symbol)) continue;
       totalScanned++;
       const historyDays = Number(row.historyDays);
       const close = Number(row.close);
@@ -249,12 +260,16 @@ export class PatternBreakoutService {
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
+        status: 'ready', // genuinely computed -- zero qualifying stocks today, not a cold cache
       };
       await this.saveCache(emptyReport);
       return emptyReport;
     }
 
-    // 3. Query trailing 90 candles for qualifying symbols to perform pattern analysis
+    // 3. Query trailing ~100 calendar days of candles for qualifying symbols
+    // (buffer above the largest pattern window, which slices at most -75).
+    // Bounded by date, NOT full history — full-history fetch here previously
+    // grew unbounded as DailyOhlcv accumulated more trading days over time.
     const qualifyingSymbols = qualifyingList.map(s => s.symbol);
     const candleRows = await prisma.$queryRaw<
       Array<{
@@ -270,6 +285,7 @@ export class PatternBreakoutService {
       SELECT symbol, date, open, high, low, close, volume
       FROM "DailyOhlcv"
       WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
+        AND date >= (${latestDate}::date - INTERVAL '100 days')
       ORDER BY symbol ASC, date ASC
     `;
 
@@ -359,6 +375,7 @@ export class PatternBreakoutService {
       countsByTier,
       stocks,
       computedAt: new Date().toISOString(),
+      status: 'ready',
     };
 
     await this.saveCache(report);

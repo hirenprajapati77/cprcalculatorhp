@@ -56,6 +56,8 @@ const NAV_GROUPS = [
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
+  const toolsRef = React.useRef<HTMLDivElement>(null);
+  const moreRef = React.useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -109,9 +111,14 @@ export const Navbar: React.FC = () => {
   }, [pathname]);
 
   useEffect(() => {
-    const handleOutsideClick = () => {
-      setToolsOpen(false);
-      setMoreOpen(false);
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (toolsRef.current && !toolsRef.current.contains(target)) {
+        setToolsOpen(false);
+      }
+      if (moreRef.current && !moreRef.current.contains(target)) {
+        setMoreOpen(false);
+      }
     };
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
@@ -213,7 +220,7 @@ export const Navbar: React.FC = () => {
             </Link>
 
             {/* Analysis / Market Tools Dropdown (Hover + Click) */}
-            <div className="relative group">
+            <div className="relative group" ref={toolsRef}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -370,7 +377,7 @@ export const Navbar: React.FC = () => {
             </Link>
 
             {/* More Menu (About, FAQ, Settings) */}
-            <div className="relative group">
+            <div className="relative group" ref={moreRef}>
               <button
                 type="button"
                 onClick={(e) => {

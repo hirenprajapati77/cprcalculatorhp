@@ -3,18 +3,24 @@
  * Keep this module free of Node/Prisma/MarketService so client components can import it.
  */
 
-/** Absolute day-return / chase cap (%). Matches EntryManager EXTENSION_LIMITS. */
-export const CPR_ENTRY_EXTENSION_PCT = 3.5;
+/** Absolute day-return / chase cap (%) for CPR/Telegram breakout alerts.
+ *  Deliberately tighter than the shared BTST EXTENSION_LIMITS.MAX_DAY_RETURN_PCT
+ *  (3.5%) -- verified live that a 2.66% gap between alert-delivery-time LTP and
+ *  the CPR entry level still produced an unfillable "stale" alert (AMBER,
+ *  27 Aug 2026). Tightened from 3.5 -> 1.5. Revisit after a week of live
+ *  observation if this suppresses too many legitimate signals. */
+export const CPR_ENTRY_EXTENSION_PCT = 1.5;
 
 /** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
 export const BREAKOUT_GAP_BUFFER = 0.002;
 
 /**
- * ATR-scaled chase cap in percent. `atrPct` is percent (2.5 = 2.5%), bounded 2–6.
+ * ATR-scaled chase cap in percent. `atrPct` is percent (2.5 = 2.5%), bounded
+ * 1-3 (tightened from 2-6 alongside CPR_ENTRY_EXTENSION_PCT -- see above).
  */
 export function atrScaledExtensionCap(atrPct?: number): number {
   if (!(atrPct && Number.isFinite(atrPct) && atrPct > 0)) return CPR_ENTRY_EXTENSION_PCT;
-  return Math.min(6.0, Math.max(2.0, atrPct * 1.5));
+  return Math.min(3.0, Math.max(1.0, atrPct * 1.5));
 }
 
 export type CprSetupStaleReason = 'GAP_INVALIDATED' | 'EXTENDED' | 'AGAINST_PRIOR_CLOSE';
@@ -58,7 +64,8 @@ export function isBreakoutEntryGapInvalidated(args: {
 }
 
 /**
- * LTP already chased past entry by more than the extension cap (default 3.5%, or ATR-scaled if atrPct provided).
+ * LTP already chased past entry by more than the extension cap
+ * (default CPR_ENTRY_EXTENSION_PCT, 1.5%, or ATR-scaled if atrPct provided).
  */
 export function isBreakoutEntryExtended(args: {
   entry: number;

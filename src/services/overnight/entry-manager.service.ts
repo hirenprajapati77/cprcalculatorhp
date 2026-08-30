@@ -97,11 +97,17 @@ export class EntryManagerService {
   /**
    * Directional extension / exhaustion gate.
    * Rejects BTST after vertical up days and STBT after vertical down days.
+   *
+   * @param override Optional caller-specific caps for the flat day-return
+   *   checks (MAX_DAY_RETURN_PCT / MAX_DAY_DROP_PCT only — the ATR-multiple
+   *   checks below remain shared with the default BTST/overnight limits).
+   *   Omit to use the shared EXTENSION_LIMITS everywhere as before.
    */
   static evaluateExtension(
     stock: MarketStockData,
     direction: 'LONG' | 'SHORT',
-    asOfDate?: string
+    asOfDate?: string,
+    override?: { maxDayReturnPct?: number; maxDayDropPct?: number }
   ): ExclusionCheckResult {
     const close = stock.ltp || stock.close || 0;
     if (!close || close <= 0 || !stock.high || !stock.low) {
@@ -116,14 +122,16 @@ export class EntryManagerService {
 
     const dayReturnPct = ((close - prevClose) / prevClose) * 100;
     const dayRangePct = ((stock.high - stock.low) / close) * 100;
+    const maxDayReturnPct = override?.maxDayReturnPct ?? EXTENSION_LIMITS.MAX_DAY_RETURN_PCT;
+    const maxDayDropPct = override?.maxDayDropPct ?? EXTENSION_LIMITS.MAX_DAY_DROP_PCT;
 
     const completed = getCompletedHistory(stock.history || []);
     const atrPctFrac = getAtrPct(completed.length ? completed : [{ high: stock.high, low: stock.low, close }], close);
     const atrPct = atrPctFrac * 100;
 
     if (direction === 'LONG') {
-      if (dayReturnPct >= EXTENSION_LIMITS.MAX_DAY_RETURN_PCT) {
-        const reason = `EXTENDED_UP dayReturn=${dayReturnPct.toFixed(2)}% >= ${EXTENSION_LIMITS.MAX_DAY_RETURN_PCT}%`;
+      if (dayReturnPct >= maxDayReturnPct) {
+        const reason = `EXTENDED_UP dayReturn=${dayReturnPct.toFixed(2)}% >= ${maxDayReturnPct}%`;
         console.log(`[ExtensionGate] ${stock.symbol} LONG rejected: ${reason}`);
         return { eligible: false, reason };
       }
@@ -140,8 +148,8 @@ export class EntryManagerService {
     }
 
     if (direction === 'SHORT') {
-      if (dayReturnPct <= -EXTENSION_LIMITS.MAX_DAY_DROP_PCT) {
-        const reason = `EXTENDED_DOWN dayReturn=${dayReturnPct.toFixed(2)}% <= -${EXTENSION_LIMITS.MAX_DAY_DROP_PCT}%`;
+      if (dayReturnPct <= -maxDayDropPct) {
+        const reason = `EXTENDED_DOWN dayReturn=${dayReturnPct.toFixed(2)}% <= -${maxDayDropPct}%`;
         console.log(`[ExtensionGate] ${stock.symbol} SHORT rejected: ${reason}`);
         return { eligible: false, reason };
       }
