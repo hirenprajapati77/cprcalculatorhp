@@ -155,7 +155,7 @@ export const Navbar: React.FC = () => {
           </Link>
 
           {/* ── Desktop Nav ──────────────────────────────────────── */}
-          <nav className="hidden xl:flex items-center gap-1.5 flex-1 overflow-x-auto min-w-0">
+          <nav className="hidden xl:flex items-center gap-1.5 flex-1 min-w-0">
             {/* Divider */}
             <div className="w-px h-5 bg-slate-800 mx-1 shrink-0" />
 
