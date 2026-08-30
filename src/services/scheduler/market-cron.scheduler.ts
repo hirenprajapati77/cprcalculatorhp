@@ -22,6 +22,7 @@ import {
 } from '@/services/scheduler/cron-run-claim';
 import { EarningsPopulatorService } from '@/services/earnings-populator.service';
 import { runMarketToolsPrecomputeJob } from '@/services/market-tools/market-tools-precompute.job';
+import { withTimeout } from '@/lib/with-timeout';
 
 let started = false;
 /** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
@@ -82,11 +83,22 @@ async function runClaimedJob<T>(
   claimKey: string,
   job: () => Promise<T>,
   label: string,
-  retainClaim = true
+  retainClaim = true,
+  timeoutMs = 60_000
 ): Promise<void> {
   if (!await tryClaimCronRun(claimKey)) return;
   try {
-    const result = await job();
+    // Hard timeout so a hung job (e.g. an un-timeouted external fetch) can
+    // never leave tickInFlight stuck permanently -- confirmed root cause,
+    // 27-28 Aug 2026: EarningsPopulatorService.populate()'s fetch() to
+    // nseindia.com had no timeout at all, hung indefinitely, and blocked the
+    // 60s poll loop from ever reaching the 19:15 IST precompute window for
+    // two full days. withTimeout() races the job against a timeout; it does
+    // NOT cancel the underlying job, so the individual offending call site
+    // should also get its own AbortController-based timeout where possible
+    // (see earnings-populator.service.ts) to actually release the stuck
+    // socket rather than just stop waiting on it here.
+    const result = await withTimeout(job(), timeoutMs, label);
     if (shouldCompleteClaimedJob(result)) {
       await completeCronRun(claimKey, retainClaim);
     } else {
@@ -210,7 +222,9 @@ export function startMarketCronScheduler(): void {
         await runClaimedJob(
           `market-tools-precompute:${dateKey}`,
           () => runMarketToolsPrecomputeJob(),
-          'market-tools-precompute'
+          'market-tools-precompute',
+          true,
+          240_000 // observed real duration ~118s; generous margin above that, not the 60s default
         );
       }
     } finally {

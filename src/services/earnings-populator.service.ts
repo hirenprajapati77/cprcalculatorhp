@@ -56,7 +56,12 @@ export class EarningsPopulatorService {
         'Referer': 'https://www.nseindia.com/'
       };
 
-      const homeRes = await fetch('https://www.nseindia.com/', { headers });
+      const homeRes = await fetch('https://www.nseindia.com/', {
+        headers,
+        signal: AbortSignal.timeout(15_000), // was unguarded -- confirmed root cause of
+        // the scheduler tickInFlight hang, 27-28 Aug 2026 (see market-cron.scheduler.ts
+        // for the accompanying defensive timeout at the runClaimedJob choke point).
+      });
       const cookieStr = extractCookieHeader(homeRes.headers);
 
       const apiHeaders = {
@@ -66,7 +71,10 @@ export class EarningsPopulatorService {
       };
 
       console.log('[EarningsPopulator] Fetching NSE Event Calendar API...');
-      const res = await fetch('https://www.nseindia.com/api/event-calendar', { headers: apiHeaders });
+      const res = await fetch('https://www.nseindia.com/api/event-calendar', {
+        headers: apiHeaders,
+        signal: AbortSignal.timeout(15_000),
+      });
       if (!res.ok) {
         throw new Error(`NSE API returned status ${res.status}`);
       }
