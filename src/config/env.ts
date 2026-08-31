@@ -33,6 +33,12 @@ const envSchema = z.object({
    */
   CRON_SECRET: z.string().optional(),
   APP_ACCESS_TOKEN: z.string().optional(),
+  INDEX_BTST_ENABLED: z
+    .preprocess((v) => (v === 'false' ? false : v === 'true' ? true : v), z.boolean().optional())
+    .default(true),
+  INDEX_STBT_ENABLED: z
+    .preprocess((v) => (v === 'false' ? false : v === 'true' ? true : v), z.boolean().optional())
+    .default(true),
   
   APP_BASE_URL: optionalUrl,
   NEXT_PUBLIC_BASE_URL: optionalUrl,

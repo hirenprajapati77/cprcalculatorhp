@@ -1,7 +1,8 @@
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { IndexDiscoverService, INDEX_INSTRUMENTS } from '../../services/overnight/index-discover.service';
 import { INDEX_INTRA_SCORE } from '../../services/overnight/index-intra-ranking.service';
+import { env } from '../../config/env';
 
 /**
  * These tests run against HistoricalProvider's deterministic mock mode
@@ -211,3 +212,58 @@ describe('IndexDiscoverService.discoverIntraday', () => {
     }
   });
 });
+
+describe('IndexDiscoverService.discover - Gating Flags', () => {
+  const originalBtst = env.INDEX_BTST_ENABLED;
+  const originalStbt = env.INDEX_STBT_ENABLED;
+
+  afterEach(() => {
+    env.INDEX_BTST_ENABLED = originalBtst;
+    env.INDEX_STBT_ENABLED = originalStbt;
+  });
+
+  it('gating INDEX_BTST_ENABLED=false filters out all LONG results, leaves SHORT intact', async () => {
+    env.INDEX_BTST_ENABLED = false;
+    env.INDEX_STBT_ENABLED = true;
+    const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
+    
+    const longSignals = results.filter(r => r.direction === 'LONG');
+    const shortSignals = results.filter(r => r.direction === 'SHORT');
+    
+    assert.equal(longSignals.length, 0);
+    assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
+  });
+
+  it('gating INDEX_STBT_ENABLED=false filters out all SHORT results, leaves LONG intact', async () => {
+    env.INDEX_BTST_ENABLED = true;
+    env.INDEX_STBT_ENABLED = false;
+    const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
+    
+    const longSignals = results.filter(r => r.direction === 'LONG');
+    const shortSignals = results.filter(r => r.direction === 'SHORT');
+    
+    assert.equal(longSignals.length, INDEX_INSTRUMENTS.length);
+    assert.equal(shortSignals.length, 0);
+  });
+
+  it('gating both false filters out both directions entirely', async () => {
+    env.INDEX_BTST_ENABLED = false;
+    env.INDEX_STBT_ENABLED = false;
+    const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
+    
+    assert.equal(results.length, 0);
+  });
+
+  it('both flags default to true and preserve existing behaviour', async () => {
+    env.INDEX_BTST_ENABLED = true;
+    env.INDEX_STBT_ENABLED = true;
+    const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
+    
+    const longSignals = results.filter(r => r.direction === 'LONG');
+    const shortSignals = results.filter(r => r.direction === 'SHORT');
+    
+    assert.equal(longSignals.length, INDEX_INSTRUMENTS.length);
+    assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
+  });
+});
+

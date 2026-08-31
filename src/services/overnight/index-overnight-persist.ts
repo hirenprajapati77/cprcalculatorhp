@@ -1,5 +1,6 @@
 import type { OvernightSignal } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { env } from '@/config/env';
 import type { IndexSignalResult } from './index-discover.service';
 import { IndexDiscoverService } from './index-discover.service';
 import { INDEX_SCORE } from './index-ranking.service';
@@ -87,7 +88,7 @@ export function selectTradableIndexBtstPicks(
   const minScore = opts.minScore ?? INDEX_SCORE.READY;
   const take = opts.take ?? 2;
 
-  if (opts.suppressLong) {
+  if (opts.suppressLong || !env.INDEX_BTST_ENABLED) {
     return [];
   }
 
@@ -124,7 +125,7 @@ export function selectTradableIndexStbtPicks(
   const minScore = opts.minScore ?? INDEX_SCORE.READY;
   const take = opts.take ?? 2;
 
-  if (opts.suppressShort) {
+  if (opts.suppressShort || !env.INDEX_STBT_ENABLED) {
     return [];
   }
 

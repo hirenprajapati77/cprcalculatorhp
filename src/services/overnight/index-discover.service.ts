@@ -588,52 +588,22 @@ export class IndexDiscoverService {
           atrPct
         );
 
-        if (skipLongForElevatedVix) {
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'LONG',
-              buildBtstReasons(null, true, longRegime),
-              longRegime
-            )
-          );
-        } else if (isIndexBtstRedSession(sessionChangePct)) {
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'LONG',
-              [
-                `Red session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — BTST CALL blocked`,
-              ],
-              longRegime
-            )
-          );
+        // BTST LONG
+        if (!env.INDEX_BTST_ENABLED) {
+          console.log(`[IndexDiscover] Skipping LONG / BTST discovery for ${instrument.symbol} because INDEX_BTST_ENABLED is false`);
         } else {
-          const details = IndexRankingService.calculateScoreDetails({
-            tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
-            tomorrowBc: tomorrowCpr.bc,
-            tomorrowTc: tomorrowCpr.tc,
-            todayBc: todayCpr.bc,
-            todayTc: todayCpr.tc,
-            close: todayCandle.close,
-            high: todayCandle.high,
-            low: todayCandle.low,
-            vwap: intraday.vwap,
-            last15mHigh: intraday.last15mHigh,
-            vixCalm: vixState.vixCalm,
-            hasConfirmationCandles: intraday.hasIntraday,
-          });
-
-          const cls = IndexRankingService.getClassification(details.score);
-          const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
-          const risk = todayCandle.close - sl;
-          // risk <= 0 ⇒ SL at/through entry — invalid geometry; IGNORE (do not
-          // persist a null target that the journal layer silently drops).
-          if (risk <= 0) {
+          if (skipLongForElevatedVix) {
+            results.push(
+              this.ignoreResult(
+                instrument.symbol,
+                dateStr,
+                timeStr,
+                'LONG',
+                buildBtstReasons(null, true, longRegime),
+                longRegime
+              )
+            );
+          } else if (isIndexBtstRedSession(sessionChangePct)) {
             results.push(
               this.ignoreResult(
                 instrument.symbol,
@@ -641,72 +611,79 @@ export class IndexDiscoverService {
                 timeStr,
                 'LONG',
                 [
-                  `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${sl.toFixed(2)}) — invalid BTST geometry`,
+                  `Red session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — BTST CALL blocked`,
                 ],
                 longRegime
               )
             );
           } else {
-            const target = todayCandle.close + risk * 2;
-            const reasons = buildBtstReasons(details.breakdown, false, longRegime);
-            if (usesLiveSession) {
-              reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
-            }
+            const details = IndexRankingService.calculateScoreDetails({
+              tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
+              tomorrowBc: tomorrowCpr.bc,
+              tomorrowTc: tomorrowCpr.tc,
+              todayBc: todayCpr.bc,
+              todayTc: todayCpr.tc,
+              close: todayCandle.close,
+              high: todayCandle.high,
+              low: todayCandle.low,
+              vwap: intraday.vwap,
+              last15mHigh: intraday.last15mHigh,
+              vixCalm: vixState.vixCalm,
+              hasConfirmationCandles: intraday.hasIntraday,
+            });
 
-            results.push(
-              this.buildSignalResult({
-                symbol: instrument.symbol,
-                signalDate: dateStr,
-                signalTime: timeStr,
-                direction: 'LONG',
-                score: details.score,
-                classification: cls,
-                entry: details.score !== null ? todayCandle.close : null,
-                stopLoss: details.score !== null ? sl : null,
-                target: details.score !== null ? target : null,
-                scoreBreakdown: details.breakdown,
-                reasons,
-                regime: longRegime,
-                maxScore: INDEX_SCORE.MAX,
-              })
-            );
+            const cls = IndexRankingService.getClassification(details.score);
+            const sl = Math.min(todayCandle.low, tomorrowCpr.bc);
+            const risk = todayCandle.close - sl;
+            // risk <= 0 ⇒ SL at/through entry — invalid geometry; IGNORE (do not
+            // persist a null target that the journal layer silently drops).
+            if (risk <= 0) {
+              results.push(
+                this.ignoreResult(
+                  instrument.symbol,
+                  dateStr,
+                  timeStr,
+                  'LONG',
+                  [
+                    `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${sl.toFixed(2)}) — invalid BTST geometry`,
+                  ],
+                  longRegime
+                )
+              );
+            } else {
+              const target = todayCandle.close + risk * 2;
+              const reasons = buildBtstReasons(details.breakdown, false, longRegime);
+              if (usesLiveSession) {
+                reasons.unshift('Live session OHLC used for BTST scoring (close = LTP)');
+              }
+
+              results.push(
+                this.buildSignalResult({
+                  symbol: instrument.symbol,
+                  signalDate: dateStr,
+                  signalTime: timeStr,
+                  direction: 'LONG',
+                  score: details.score,
+                  classification: cls,
+                  entry: details.score !== null ? todayCandle.close : null,
+                  stopLoss: details.score !== null ? sl : null,
+                  target: details.score !== null ? target : null,
+                  scoreBreakdown: details.breakdown,
+                  reasons,
+                  regime: longRegime,
+                  maxScore: INDEX_SCORE.MAX,
+                })
+              );
+            }
           }
         }
 
-        if (isIndexStbtGreenSession(sessionChangePct)) {
-          console.log(`[IndexDiscover] ${instrument.symbol} green session block fired (session move ${(sessionChangePct * 100).toFixed(2)}%) for STBT SHORT`);
-          results.push(
-            this.ignoreResult(
-              instrument.symbol,
-              dateStr,
-              timeStr,
-              'SHORT',
-              [
-                `Green session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — STBT PUT blocked`,
-              ],
-              shortRegime
-            )
-          );
+        // STBT SHORT
+        if (!env.INDEX_STBT_ENABLED) {
+          console.log(`[IndexDiscover] Skipping SHORT / STBT discovery for ${instrument.symbol} because INDEX_STBT_ENABLED is false`);
         } else {
-          const shortDetails = IndexRankingService.calculateShortScoreDetails({
-            tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
-            tomorrowBc: tomorrowCpr.bc,
-            tomorrowTc: tomorrowCpr.tc,
-            todayBc: todayCpr.bc,
-            todayTc: todayCpr.tc,
-            close: todayCandle.close,
-            high: todayCandle.high,
-            low: todayCandle.low,
-            vwap: intraday.vwap,
-            last15mLow: intraday.last15mLow,
-            vixElevated: vixState.elevated,
-            hasConfirmationCandles: intraday.hasIntraday,
-          });
-
-          const shortCls = IndexRankingService.getShortClassification(shortDetails.score);
-          const shortSl = Math.max(todayCandle.high, tomorrowCpr.tc);
-          const shortRisk = shortSl - todayCandle.close;
-          if (shortRisk <= 0) {
+          if (isIndexStbtGreenSession(sessionChangePct)) {
+            console.log(`[IndexDiscover] ${instrument.symbol} green session block fired (session move ${(sessionChangePct * 100).toFixed(2)}%) for STBT SHORT`);
             results.push(
               this.ignoreResult(
                 instrument.symbol,
@@ -714,35 +691,68 @@ export class IndexDiscoverService {
                 timeStr,
                 'SHORT',
                 [
-                  `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${shortSl.toFixed(2)}) — invalid STBT geometry`,
+                  `Green session ${(sessionChangePct * 100).toFixed(2)}% vs prev close — STBT PUT blocked`,
                 ],
                 shortRegime
               )
             );
           } else {
-            const shortTarget = todayCandle.close - shortRisk * 2;
-            const shortReasons = buildStbtReasons(shortDetails.breakdown, shortRegime);
-            if (usesLiveSession) {
-              shortReasons.unshift('Live session OHLC used for STBT scoring (close = LTP)');
-            }
+            const shortDetails = IndexRankingService.calculateShortScoreDetails({
+              tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
+              tomorrowBc: tomorrowCpr.bc,
+              tomorrowTc: tomorrowCpr.tc,
+              todayBc: todayCpr.bc,
+              todayTc: todayCpr.tc,
+              close: todayCandle.close,
+              high: todayCandle.high,
+              low: todayCandle.low,
+              vwap: intraday.vwap,
+              last15mLow: intraday.last15mLow,
+              vixElevated: vixState.elevated,
+              hasConfirmationCandles: intraday.hasIntraday,
+            });
 
-            results.push(
-              this.buildSignalResult({
-                symbol: instrument.symbol,
-                signalDate: dateStr,
-                signalTime: timeStr,
-                direction: 'SHORT',
-                score: shortDetails.score,
-                classification: shortCls,
-                entry: shortDetails.score !== null ? todayCandle.close : null,
-                stopLoss: shortDetails.score !== null ? shortSl : null,
-                target: shortDetails.score !== null ? shortTarget : null,
-                scoreBreakdown: shortDetails.breakdown,
-                reasons: shortReasons,
-                regime: shortRegime,
-                maxScore: INDEX_SCORE.MAX,
-              })
-            );
+            const shortCls = IndexRankingService.getShortClassification(shortDetails.score);
+            const shortSl = Math.max(todayCandle.high, tomorrowCpr.tc);
+            const shortRisk = shortSl - todayCandle.close;
+            if (shortRisk <= 0) {
+              results.push(
+                this.ignoreResult(
+                  instrument.symbol,
+                  dateStr,
+                  timeStr,
+                  'SHORT',
+                  [
+                    `Risk <= 0 (close ${todayCandle.close.toFixed(2)} vs SL ${shortSl.toFixed(2)}) — invalid STBT geometry`,
+                  ],
+                  shortRegime
+                )
+              );
+            } else {
+              const shortTarget = todayCandle.close - shortRisk * 2;
+              const shortReasons = buildStbtReasons(shortDetails.breakdown, shortRegime);
+              if (usesLiveSession) {
+                shortReasons.unshift('Live session OHLC used for STBT scoring (close = LTP)');
+              }
+
+              results.push(
+                this.buildSignalResult({
+                  symbol: instrument.symbol,
+                  signalDate: dateStr,
+                  signalTime: timeStr,
+                  direction: 'SHORT',
+                  score: shortDetails.score,
+                  classification: shortCls,
+                  entry: shortDetails.score !== null ? todayCandle.close : null,
+                  stopLoss: shortDetails.score !== null ? shortSl : null,
+                  target: shortDetails.score !== null ? shortTarget : null,
+                  scoreBreakdown: shortDetails.breakdown,
+                  reasons: shortReasons,
+                  regime: shortRegime,
+                  maxScore: INDEX_SCORE.MAX,
+                })
+              );
+            }
           }
         }
       } catch (err) {
