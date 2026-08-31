@@ -7,7 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed — 31 Aug Production Validation: ETF Exclusion Gaps & Database Migration Fixes (PR #150 / Commit `441d5123` & `441d5123`)
+### Fixed — 31 Aug 10-Day Deep Code Review: 25 Bug Fixes (PR #151 / Commit `9381c945`)
+
+A systematic deep code review covering all ~70 commits across PRs #141–#149 (Aug 22–31, 2026) identified 25 bugs spanning 4 domains: market-tools services, overnight/index services, API routes, and infrastructure. All 25 resolved and verified with 709/710 unit tests passing.
+
+#### 🔴 Critical
+
+- **B1 — Prisma Decimal comparisons silently false** (`src/services/market-tools/market-breadth.service.ts`): `$queryRaw` returns Postgres `NUMERIC` columns as `Prisma.Decimal` objects, not JS numbers. All advance/decline and moving-average comparisons (`s.changePct > 0.05`, `s.close >= s.ma10`) were silently evaluating as false, producing a permanently zero-breadth report. Fixed by coercing all numeric fields immediately after the query with `Number()`.
+
+- **B2 — Unauthenticated breadth refresh DoS** (`src/app/api/market-tools/breadth/route.ts`): The `?refresh=true` parameter triggered a full DB recompute with no auth check, creating a DDoS vector even though the route is middleware-exempted. Added `APP_ACCESS_TOKEN` header/cookie gate before the refresh branch.
+
+- **B3 — Unauthenticated breakout refresh DoS** (`src/app/api/market-tools/breakout/route.ts`): Same pattern — `?refresh=true` scanned 2,636 symbols with no auth. Added identical token gate.
+
+- **B4 — Kill switches leave stale DB signals active** (`src/services/overnight/index-discover.service.ts`): When `INDEX_BTST_ENABLED=false` or `INDEX_STBT_ENABLED=false`, the code only logged a skip message and returned early — leaving any previously written `BTST_READY`/`SHORT_READY` signals in the DB active for downstream journal and alert jobs to pick up. Fixed by pushing `IGNORE` signals so the upsert overwrites stale entries.
+
+- **B5 — Unit tests test their own mocks, not the service** (`src/tests/unit/multi-year-breakout.service.test.ts` + `src/services/market-tools/multi-year-breakout.service.ts`): The test file redefined `computeWindowBreakout` and `getStrongestBreakout` as local functions and tested those — any regression in the real service was invisible. Extracted both functions as exported helpers from the service; rewritten tests import and test the actual production code.
+
+#### 🟠 High
+
+- **B6 — Precompute job reports success when sub-jobs fail** (`src/services/market-tools/market-tools-precompute.job.ts`): `anySucceeded` used OR logic — one passing sub-job masked the other two failing, letting the scheduler mark the day complete and never retry. Changed to `allSucceeded` (AND): any sub-job failure now propagates `success: false` so the scheduler retries.
+
+- **B7 — Zod `z.coerce.number().optional()` produces NaN** (`src/config/env.ts`): Zod's `.coerce` runs before `.optional()`, so when `CPR_WEIGHT` is missing from the environment, `coerce` turns `undefined` into `NaN` before `.optional()` can short-circuit. Replaced with `z.preprocess()`.
+
+- **B8 — Telegram breakout alerts silently truncated** (`src/services/alert/telegram.service.ts`): On high-volume days, joining all stock lines into a single string exceeded Telegram's 4,096-char API limit, causing the entire message to be silently dropped. Refactored to chunk at 3,900 chars with continuation headers.
+
+- **B9 — Dangling `setTimeout` in scanner enrichment** (`src/app/api/scanner/route.ts`): The `timeoutPromise` created a `setTimeout` that was never cleared after `Promise.race` resolved, keeping the event loop alive and leaking memory in serverless contexts. Stored the timer ID and added `.finally(() => clearTimeout(timeoutId))`.
+
+- **B10 — `evaluateExtension` uses live clock during backtests** (`src/services/overnight/overnight.service.ts`): `EntryManagerService.evaluateExtension(fullStock, finalDir)` was called without `dateStr`, causing it to fall back to `getISTDateString()` (today's live date). During historical backtests this produces ~0% intraday return for every historical date, silently disabling the extension gate. Added `dateStr` as the third argument.
+
+- **B11 — Next.js hostname poisoning** (`server-starter.js`): `hostname: '0.0.0.0'` was passed to the `next()` constructor, which uses it for canonical URL generation (SSR redirects, `next/image` URLs). This poisoned all generated absolute URLs. Separated: `next({ hostname: 'localhost' })` for canonical URLs; `server.listen(port, '0.0.0.0')` for network binding.
+
+- **B12 — CI unit tests crash before any test runs** (`.github/workflows/verify.yml`): `env.ts` validates required environment variables at module load time via Zod. Without `DATABASE_URL`, `APP_ACCESS_TOKEN`, etc., Zod throws before a single test case runs — reporting 0 tests rather than failures, silently masking regressions. Added required dummy vars to the CI env block.
+
+#### 🟡 Medium
+
+- **B13 — Holiday comment ambiguity** (`src/lib/market-hours.ts`): Improved comment for the Oct 2, 2026 holiday entry to clearly note that Vijaya Dashami and Gandhi Jayanti coincide on Oct 2 per the NSE 2026 circular, and that a prior erroneous Oct 20 entry was already removed.
+
+- **B14 — 20-day return off by one candle** (`src/services/market-tools/pattern-breakout.service.ts`): `c[c.length - 20].close` retrieves 19 trading days ago (today is index `c.length-1`). Changed to `c[c.length - 21]` with guard `>= 21`. All 20-day momentum scores were overstated by one day.
+
+- **B15 — ETF regex comment clarification** (`src/lib/nse-fund-exclusion.ts`): Clarified that `LIQUID` is intentionally unanchored (catches `HDFCLIQUID`, `GROWWLIQID` etc.) and `^GROWW.` uses an intentional regex wildcard (matches any Groww ETF symbol with ≥1 char after "GROWW", while correctly excluding bare "GROWW"). No logic change.
+
+- **B16a/B16b — Missing `AbortController` cleanup on market-tools pages** (`src/app/market-tools/breadth/page.tsx`, `src/app/market-tools/breakout/page.tsx`): Both pages lacked `AbortController` and `isMounted` ref in their `useEffect` fetch calls, causing `setState` calls on unmounted components during fast navigation (React warning + potential memory leak). Fixed with proper cleanup return.
+
+- **B17 — BE/SM series stocks excluded before dedup** (`scripts/market-tools/bhavcopy-ingest.ts`): The hard filter `|| series !== 'EQ'` dropped all BE (Trade-to-Trade) and SM (SME) series rows before the deduplication logic could run. The dedup block correctly prefers EQ over BE/SM when both exist for the same symbol — but it was dead code. Removed the series filter from the hard drop so BE/SM-only stocks are now ingested.
+
+- **B18 — No PM2 log files configured** (`ecosystem.config.js`): Without explicit `out_file`/`error_file` paths, PM2 uses default temp locations that can silently rotate away. Added explicit log paths under `logs/`. Kept `fork` mode (not `cluster`) — the scheduler uses in-process claim state that would break under multiple PM2 workers.
+
+- **B19 — Missing cross-sectional query index** (`prisma/schema.prisma`): The existing `@@unique([symbol, date])` index is symbol-first and cannot serve `WHERE date = X` efficiently across all 2,636 symbols. Added `@@index([date, symbol])` to `DailyOhlcv` making Market Breadth and Multi-Year Breakout queries O(symbols_on_date) instead of O(all_rows). **Action required on deploy:** run `npx prisma migrate dev --name add_date_symbol_idx`.
+
+- **B20 — Gap-failure test has no Friday gate coverage** (`src/tests/unit/gap-failure-exit.test.ts`): Added Friday BTST signal test verifying `checkGapFailureExits` skips signals entered on Friday (weekend position, gap-failure doesn't apply), plus a stub cleanup verification test.
+
+- **B21 — iOS PWA landscape void** (`src/app/globals.css`): The `html` element had no `background-color`, causing the overscroll area in landscape mode to show white/black depending on system theme. Added `background-color: var(--background)` matching the body.
+
+#### 🔵 Low
+
+- **B22 — `with-timeout.ts` already correct**: `clearTimeout` already runs in the `finally` block. No change.
+- **B23 — `timingSafeEqual` already safe**: The custom string-comparison implementation is already length-guarded and constant-time. No change.
+- **B24 — `themeColor` missing from viewport** (`src/app/layout.tsx`): In Next.js 14+, `themeColor` must be in the `viewport` export (not `metadata`) for iOS Safari PWA status bar coloring. Added `themeColor: '#06070b'`.
+- **B25 — Edge-case test coverage for candle prices** (`src/tests/unit/multi-year-breakout.service.test.ts`): Added tests for `NaN` close (must not count as breakout), `null` priorHigh (must return null), and `priorHigh=0` (documents that `100 >= 0` is true — caller is responsible for filtering degenerate zero-high data).
+
 
 A follow-up review of the August 30 code review fixes and live production telemetry identified additional critical issues and gaps, which have all been resolved and verified with 100% test coverage:
 
