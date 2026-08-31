@@ -26,9 +26,9 @@ type ScannerRow = {
 function makeSignal(overrides: Partial<ScannerRow> = {}): ScannerRow {
   return {
     symbol: 'TEST',
-    // Keep LTP within ±3.5% of entry so the price-staleness gate does not fire
+    // Keep LTP within ±1.2% of entry so the price-staleness gate does not fire
     // unless a test intentionally extends/gaps.
-    ltp: 103,
+    ltp: 101.2,
     entry: 100,
     sl: 98,
     target: 110,
@@ -144,7 +144,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
   await t.test('skips signal whose LTP never reached the entry trigger', async () => {
     const mocks = mockJobDeps([
       makeSignal({ symbol: 'NOTRIG', ltp: 95, entry: 100 }),
-      makeSignal({ symbol: 'TRIG', ltp: 103, entry: 100 }),
+      makeSignal({ symbol: 'TRIG', ltp: 101.2, entry: 100 }),
     ]);
     try {
       const result = await runCprJournalJob();
@@ -242,7 +242,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
   });
 
   await t.test('journals UNDERLYING stock LTP when option chain is unavailable', async () => {
-    const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 103, entry: 100 })]);
+    const mocks = mockJobDeps([makeSignal({ symbol: 'NOCHAIN', ltp: 101.2, entry: 100 })]);
     OptionSuggestionService.suggestOption = (async () => ({
       error: 'NO_CHAIN',
     })) as unknown as typeof OptionSuggestionService.suggestOption;
@@ -253,7 +253,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       const logCall = mocks.logCalls[0] as any;
       assert.strictEqual(logCall.optionContract, 'UNDERLYING CE');
       assert.strictEqual(logCall.optionStrike, 0);
-      assert.strictEqual(logCall.entryCmp, 103);
+      assert.strictEqual(logCall.entryCmp, 101.2);
     } finally {
       mocks.restore();
     }
@@ -372,12 +372,12 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
   await t.test('uses live LTP for option suggest when market data is fresh', async () => {
     const mocks = mockJobDeps(
       [makeSignal({ symbol: 'LIVE', ltp: 101, entry: 100 })],
-      { LIVE: { ltp: 102.5, high: 103, low: 99.8, open: 101, previousClose: 99.5 } }
+      { LIVE: { ltp: 101.2, high: 103, low: 99.8, open: 101, previousClose: 100.5 } }
     );
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['LIVE']);
-      assert.strictEqual(mocks.suggestArgs[0]?.ltp, 102.5);
+      assert.strictEqual(mocks.suggestArgs[0]?.ltp, 101.2);
     } finally {
       mocks.restore();
     }
@@ -385,8 +385,8 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
 
   await t.test('parallel execution: one signal throwing an unexpected error does not block the rest', async () => {
     const mocks = mockJobDeps([
-      makeSignal({ symbol: 'ERRORSYMBOL', ltp: 103, entry: 100 }),
-      makeSignal({ symbol: 'GOODSYMBOL', ltp: 103, entry: 100 }),
+      makeSignal({ symbol: 'ERRORSYMBOL', ltp: 101.2, entry: 100 }),
+      makeSignal({ symbol: 'GOODSYMBOL', ltp: 101.2, entry: 100 }),
     ]);
 
     const originalLog = TradeJournalService.logSignal;
@@ -408,7 +408,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
 
   await t.test('skips signal when OptionSuggestion PCR contradicts direction', async () => {
     const mocks = mockJobDeps([
-      makeSignal({ symbol: 'AMBER', ltp: 103, entry: 100 }),
+      makeSignal({ symbol: 'AMBER', ltp: 101.2, entry: 100 }),
     ]);
 
     const originalSuggest = OptionSuggestionService.suggestOption;
@@ -460,7 +460,7 @@ test('runCprJournalJob regime suppression gate', async (t) => {
   await t.test('BULL regime allows LONG (CE) signals through', async () => {
     const bullRegime: MarketRegime = { trend: 'BULL', volatility: 'LOW', score: 80, reliable: true };
     const mocks = mockJobDeps(
-      [makeSignal({ symbol: 'RELIANCE', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
+      [makeSignal({ symbol: 'RELIANCE', ltp: 101.2, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
       {},
       bullRegime
     );
@@ -475,7 +475,7 @@ test('runCprJournalJob regime suppression gate', async (t) => {
   await t.test('BEAR regime suppresses LONG (CE) signals', async () => {
     const bearRegime: MarketRegime = { trend: 'BEAR', volatility: 'LOW', score: 20, reliable: true };
     const mocks = mockJobDeps(
-      [makeSignal({ symbol: 'HDFC', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
+      [makeSignal({ symbol: 'HDFC', ltp: 101.2, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC' })],
       {},
       bearRegime
     );
@@ -507,7 +507,7 @@ test('runCprJournalJob regime suppression gate', async (t) => {
     const unreliableRegime: MarketRegime = { trend: 'CHOPPY', volatility: 'LOW', score: 50, reliable: false };
     const mocks = mockJobDeps(
       [
-        makeSignal({ symbol: 'LONG_SYM', ltp: 103, entry: 100, tc: 100, bc: 98 }),
+        makeSignal({ symbol: 'LONG_SYM', ltp: 101.2, entry: 100, tc: 100, bc: 98 }),
         makeSignal({ symbol: 'SHORT_SYM', ltp: 97, entry: 98, bc: 98, tc: 100 }),
       ],
       {},
@@ -579,7 +579,7 @@ test('runCprJournalJob signal confluence gate', async (t) => {
 
   await t.test('rejects LONG setup with GAP_DOWN tag', async () => {
     const mocks = mockJobDeps(
-      [makeSignal({ symbol: 'SBIN', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,GAP_DOWN,ABOVE_TC' })],
+      [makeSignal({ symbol: 'SBIN', ltp: 101.2, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,GAP_DOWN,ABOVE_TC' })],
       {},
       choppyRegime
     );
@@ -607,7 +607,7 @@ test('runCprJournalJob signal confluence gate', async (t) => {
 
   await t.test('allows LONG setup with no contradictory tags', async () => {
     const mocks = mockJobDeps(
-      [makeSignal({ symbol: 'CLEANLONG', ltp: 103, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC,RSI_BULLISH' })],
+      [makeSignal({ symbol: 'CLEANLONG', ltp: 101.2, entry: 100, tc: 100, bc: 98, signalSummary: 'BULLISH,ABOVE_TC,RSI_BULLISH' })],
       {},
       choppyRegime
     );

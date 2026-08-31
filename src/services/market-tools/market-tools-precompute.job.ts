@@ -52,8 +52,13 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     const elapsedMs = Date.now() - startTime;
     console.log(`[MarketToolsPrecomputeJob] Pre-computation completed in ${elapsedMs}ms`);
 
+    const anySucceeded = breadthDate !== undefined || multiYearCount !== undefined || patternCount !== undefined;
+    if (!anySucceeded) {
+      console.error('[MarketToolsPrecomputeJob] All three sub-jobs failed — reporting failure so the scheduler retries.');
+    }
+
     return {
-      success: true,
+      success: anySucceeded,
       ...(breadthDate !== undefined && { breadthDate }),
       ...(multiYearCount !== undefined && { multiYearCount }),
       ...(patternCount !== undefined && { patternCount }),

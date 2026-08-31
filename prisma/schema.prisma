@@ -440,10 +440,10 @@ model DailyOhlcv {
 
   @@unique([symbol, date])
   @@index([date])
-  // H-01: Composite indexes required by market-tools raw SQL queries.
-  // [symbol, date] covers ORDER BY symbol ASC, date ASC in candle range fetches.
-  // [date, series] covers WHERE series = 'EQ' ORDER BY date DESC LIMIT N.
-  @@index([symbol, date])
+  // H-01: [date, series] covers WHERE series = 'EQ' ORDER BY date DESC LIMIT N.
+  // (No [symbol, date] index here — @@unique([symbol, date]) above already
+  // provides a covering index for that column order. This exact duplicate
+  // was already removed once as BUG-16 on 2026-08-26; do not reintroduce it.)
   @@index([date, series])
 }
 
