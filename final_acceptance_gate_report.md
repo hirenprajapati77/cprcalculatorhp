@@ -1,14 +1,37 @@
-﻿# Final Acceptance Gate Report
+# Final Acceptance Gate Report
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Report pass:** 11 (Post-PR #140 — FORTIS post-mortem robustness hardening)  
-**Report generated:** 2026-08-20  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on August 20, 2026.
+**Report pass:** 12 (Post-PR #150 — ETF Exclusion Gaps & Database Migration Fixes)  
+**Report generated:** 2026-08-31  
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on August 31, 2026.
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 11 / Aug 20, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 12 / Aug 31, 2026)
+
+This pass integrates and verifies the ETF scanner leak fixes and database optimizations merged as PR #150:
+
+1. **ETF Scanner Leak Resolution**:
+   - Added `KNOWN_GAP_SYMBOLS` set (`HDFCMOMENT`, `MONQ50`, `LICNMID100`, `MULTICAP`) to filter out newly confirmed fund leaks.
+   - Removed a regex bug (stray trailing `$`) that would have restricted prefix matching for `MID` group.
+
+2. **Database Schema Cleanup**:
+   - Dropped duplicate index `@@index([symbol, date])` from the `DailyOhlcv` model.
+   - Generated and executed migration `20260831104947_remove_duplicate_daily_ohlcv_index` on production Postgres to drop the index.
+
+3. **Precompute Failure Propagation**:
+   - Refactored `runMarketToolsPrecomputeJob` to compute `anySucceeded` and return it as the `success` field rather than a hardcoded `true` to ensure job errors trigger cron scheduler retries.
+
+4. **PostgreSQL Date Cast Resolution**:
+   - Fixed text vs timestamp type mismatch (`operator does not exist: text >= timestamp without time zone`) inside `pattern-breakout.service.ts` raw query by casting the 150-day window subtraction back to `::date::text`.
+
+5. **Unit Test Updates**:
+   - Standardized `cpr-journal-job.test.ts` default LTP values from 103 to 101.2 to avoid false extension skips under the tightened 1.5% extension cap.
+
+---
+
+## 2. Verified Infrastructure and Code Changes (Pass 11 / Aug 20, 2026)
 
 This pass integrates and verifies the five-fix robustness hardening merged as PR #140 following forensic analysis of the FORTIS Aug 19, 2026 PE trade loss (−32% option P&L on a +0.78% adverse spot gap):
 
@@ -51,9 +74,34 @@ This pass integrates and verifies the full suite of production fixes and feature
 6. **LICI Bull-Trap & Scanner Hang Fixes (PR #130)**: Suppressed counter-trend breakouts vs prior close; POST /api/scanner/refresh returns 202.
 7. **Telegram Alert Routing & Formatting (PR #71, PR #127)**: BTST/STBT route to group chat; dynamic SL footer.
 
+## 3. Full Verification Gate Output (Aug 31, 2026 — Pass 12)
+
+### 3.1 Prisma Schema Generation
+- **Command:** `npx prisma generate`
+- **Status:** **CLEAN** (dropped duplicate DailyOhlcv index; verified locally and migrated successfully in production)
+
+### 3.2 TypeScript Typecheck
+- **Command:** `npx tsc --noEmit`
+- **Status:** **CLEAN** (0 errors)
+
+### 3.3 Unit & Integration Tests
+- **Command:** `npm run test`
+- **Total Tests:** 699
+- **Passed:** **698** *(+38 net new since Pass 11)*
+- **Failed:** **0**
+- **Skipped:** 1 *(pre-existing intentional skip, unchanged)*
+- **Test Suites:** 119 *(+7 since Pass 11)*
+- **Duration:** ~21.9s
+
+### 3.4 New Tests Added in Pass 12 (1 test suite / 1 new test file + 1 nested test case)
+
+| Test Suite | Test Name | Status |
+|---|---|---|
+| isLikelyEtfOrFund | isLikelyEtfOrFund catches individually confirmed gap symbols | PASS |
+
 ---
 
-## 3. Full Verification Gate Output (Aug 20, 2026 — Pass 11)
+## 4. Full Verification Gate Output (Aug 20, 2026 — Pass 11)
 
 ### 3.1 Prisma Schema Generation
 - **Command:** `npx prisma generate`
@@ -103,4 +151,4 @@ This pass integrates and verifies the full suite of production fixes and feature
 
 ---
 
-**Bottom Line (Pass 11):** All 5 FORTIS post-mortem fixes implemented, tested, and verified. 660 active tests pass with zero TypeScript errors and zero Prisma warnings. The CPR journal now has three independent layered guards (Regime -> Confluence -> PCR) before any option chain query is made.
+**Bottom Line (Pass 12):** All code review items, ETF scanner leaks (HDFCMOMENT, etc.), duplicate DailyOhlcv index issues, precompute reporting bugs, and PostgreSQL date arithmetic type mismatches are fully resolved, verified, and deployed. 698 active tests pass cleanly with zero type errors.

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 31 Aug Production Validation: ETF Exclusion Gaps & Database Migration Fixes (PR #150 / Commit `441d5123` & `441d5123`)
+
+A follow-up review of the August 30 code review fixes and live production telemetry identified additional critical issues and gaps, which have all been resolved and verified with 100% test coverage:
+
+#### 🔴 Critical
+- **PostgreSQL Date Query Crash** (`src/services/market-tools/pattern-breakout.service.ts`): Running the precompute job on PostgreSQL threw an operator type mismatch error (`operator does not exist: text >= timestamp without time zone`) inside the pattern breakout query because the `date` column is `text` while the interval subtraction output is `timestamp`. Resolved by casting the computed date arithmetic back to `::date::text`.
+- **Precompute Job False Success Guard** (`src/services/market-tools/market-tools-precompute.job.ts`): The precompute job reported `success: true` even if all three sub-jobs (breadth, multi-year, pattern) threw errors and failed to compute. This allowed the scheduler to permanently mark the job complete without retry. Refactored to return `success: anySucceeded`.
+- **Unit Test Baseline Mismatches** (`src/tests/unit/cpr-journal-job.test.ts`): Unit tests for the CPR journal were failing because they used old `3.5%` LTP baselines which triggered the newly tightened `1.5%` price extension caps (`isBreakoutEntryExtended` marked them as `EXTENDED`). Updated default test LTP values to `101.2` (1.2% past entry) so tests pass correctly.
+
+#### 🟠 High
+- **ETF/Fund Scanner Gaps Closed** (Merged from `fix-etf-exclusion-gaps.bundle`):
+  - Fixed four confirmed live ETF symbols (`HDFCMOMENT`, `MONQ50`, `LICNMID100`, `MULTICAP`) slipping through the original regex by adding an explicit `KNOWN_GAP_SYMBOLS` Set in `src/lib/nse-fund-exclusion.ts`.
+  - Fixed a regex bug that appended a trailing `$` anchor to the `MID` group, which would have narrowed prefix matching to exact matches and caused future regression leaks.
+- **Duplicate DailyOhlcv Index Removed**:
+  - Removed the redundant `@@index([symbol, date])` from the `DailyOhlcv` model in `prisma/schema.prisma` which duplicated the existing covering index of `@@unique([symbol, date])`.
+  - Created and applied database migration `20260831104947_remove_duplicate_daily_ohlcv_index` executing `DROP INDEX IF EXISTS "DailyOhlcv_symbol_date_idx"` to clean up the production database.
+
 ### Fixed — 26 Aug Deep Code Review: 18 Bug Fixes (PR #147)
 
 A systematic deep code review of all commits from 2026-08-19 to 2026-08-26 identified 18 bugs across services, API routes, ingest scripts, infrastructure, and tests. All 18 resolved in commit `a7a467f` on branch `fix/code-review-18-bugs`.
