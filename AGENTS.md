@@ -1,8 +1,11 @@
 # Agent Instructions — CPR Calculator Platform
 
-## DEPLOY — One Command, ~2-3 Minutes
+## DEPLOY — Authorization required, ~2-3 Minutes
 
-**To deploy to production, run ONE command:**
+> [!IMPORTANT]
+> **DEPLOY BOUNDARY:** NEVER run `.\ops\deploy.ps1` or deploy/restart PM2 on the production server without explicit review and sign-off/approval from Hiren. Prepare code changes, run verification (`npx tsc --noEmit` and tests) locally, and wait for confirmation before deploying.
+
+**To deploy to production (ONLY after receiving explicit user sign-off):**
 
 ```powershell
 .\ops\deploy.ps1
