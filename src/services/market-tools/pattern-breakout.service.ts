@@ -702,8 +702,10 @@ export class PatternBreakoutService {
     if (params.candles.length >= 20) {
       const c = params.candles;
       const currentClose = c[c.length - 1].close;
-      // Guard: only compute 20d return when at least 20 candles are available
-      const close20dAgo = c.length >= 20 ? c[c.length - 20].close : null;
+      // B14 fix: off-by-one. c[c.length-1] is today (index 0 from end).
+      // To get the close 20 trading days ago, we need c[c.length-21], not c[c.length-20].
+      // Guard updated to >= 21 to ensure the 20-day-ago candle exists.
+      const close20dAgo = c.length >= 21 ? c[c.length - 21].close : null;
       const ret20d = (close20dAgo !== null && close20dAgo > 0)
         ? ((currentClose - close20dAgo) / close20dAgo) * 100
         : 0;

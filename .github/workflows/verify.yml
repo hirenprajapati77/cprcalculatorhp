@@ -43,3 +43,12 @@ jobs:
 
       - name: Unit tests
         run: npm run test:unit
+        env:
+          # B12 fix: env.ts validates required vars at module load time.
+          # Without these, Zod crashes before a single test runs (or exits 0 with 0 tests).
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+          APP_ACCESS_TOKEN: "dummy-ci-token-for-testing"
+          REDIS_URL: "redis://localhost:6379"
+          TELEGRAM_BOT_TOKEN: "dummy"
+          TELEGRAM_CHAT_ID: "0"
+          NODE_ENV: "test"

@@ -21,8 +21,11 @@ if (!fs.existsSync(buildIdPath)) {
 }
 
 const port = parseInt(process.env.PORT || '3000', 10);
-const hostname = '0.0.0.0';
-const app = next({ dev: false, dir: __dirname, hostname, port });
+// B11 fix: hostname passed to next() controls canonical URL generation (used by
+// next/image, SSR redirects). Must be 'localhost', NOT '0.0.0.0' (a network
+// interface bind address that would poison all absolute URL generation).
+// The actual 0.0.0.0 bind happens in server.listen() below.
+const app = next({ dev: false, dir: __dirname, hostname: 'localhost', port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {

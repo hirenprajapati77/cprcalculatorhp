@@ -427,3 +427,52 @@ export class MultiYearBreakoutService {
     return report;
   }
 }
+
+// ─── Pure helper exports (used by unit tests via B5 fix) ─────────────────────
+//
+// B5 fix: these were previously inline anonymous logic inside the for-loop of
+// getBreakoutReport(). By extracting and exporting them we let the test file
+// import and exercise the REAL production logic rather than locally-redefined mocks.
+
+/**
+ * Determines whether a stock has broken out above its prior N-year high.
+ * Returns `null` when there is insufficient history (availableDays < requiredDays)
+ * or no prior high data, `true` for a breakout, `false` for no breakout.
+ */
+export function computeWindowBreakout(
+  close: number,
+  priorHigh: number | null,
+  requiredDays: number,
+  availableDays: number
+): boolean | null {
+  if (availableDays < requiredDays || priorHigh === null) {
+    return null;
+  }
+  return close >= priorHigh;
+}
+
+/**
+ * Returns the label of the strongest (longest) window a stock has broken out of,
+ * with ATH acting as an upgrade when present alongside any multi-year breakout.
+ */
+export function getStrongestBreakout(flags: {
+  is10Y: boolean | null;
+  is5Y: boolean | null;
+  is3Y: boolean | null;
+  is2Y: boolean | null;
+  is1Y: boolean | null;
+  isATH: boolean | null;
+}): 'ATH' | '10Y' | '5Y' | '3Y' | '2Y' | '1Y' | null {
+  // Priority order matches the inline service logic:
+  // longer windows win; ATH only applies when no multi-year window is broken.
+  if (flags.is10Y) return '10Y';
+  if (flags.is5Y) return '5Y';
+  if (flags.is3Y) return '3Y';
+  if (flags.is2Y) return '2Y';
+  // 1Y alongside ATH: ATH wins (a symbol can't be at a 1Y high without also being at ATH;
+  // the label ATH is more informative when breakoutATH is also set)
+  if (flags.is1Y && flags.isATH) return 'ATH';
+  if (flags.is1Y) return '1Y';
+  if (flags.isATH) return 'ATH';
+  return null;
+}

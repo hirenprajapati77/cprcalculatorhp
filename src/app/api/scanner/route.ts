@@ -53,14 +53,18 @@ async function enrichWithOptionSuggestions(
     return suggestionMap;
   })();
 
-  const timeoutPromise = new Promise<Map<string, unknown>>((resolve) =>
-    setTimeout(() => {
+  // B9 fix: Always clear the timeout timer after the race resolves.
+  // A dangling setTimeout prevents GC and keeps the event loop alive
+  // in serverless environments even after the response is sent.
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<Map<string, unknown>>((resolve) => {
+    timeoutId = setTimeout(() => {
       console.warn('[OptionSuggestion] Enrichment timed out after 2500ms — returning partial/empty suggestions');
       resolve(suggestionMap);
-    }, 2500)
-  );
+    }, 2500);
+  });
 
-  return Promise.race([enrichPromise, timeoutPromise]);
+  return Promise.race([enrichPromise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 }
 
 

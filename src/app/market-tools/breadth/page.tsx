@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MarketBreadthReport, UniverseBreadth } from '@/services/market-tools/market-breadth.service';
 
 export default function MarketBreadthPage() {
@@ -10,26 +10,41 @@ export default function MarketBreadthPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedUniverse, setSelectedUniverse] = useState<'ALL_NSE' | 'NIFTY_50' | 'NSE_FNO'>('ALL_NSE');
+  // B16a: track mounted state to prevent setState on unmounted component
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    fetchBreadth();
+    isMounted.current = true;
+    const controller = new AbortController();
+    fetchBreadth(false, controller.signal);
+    return () => {
+      isMounted.current = false;
+      controller.abort();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function fetchBreadth(forceRefresh = false) {
+  async function fetchBreadth(forceRefresh = false, signal?: AbortSignal) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/market-tools/breadth${forceRefresh ? '?refresh=true' : ''}`);
+      const res = await fetch(
+        `/api/market-tools/breadth${forceRefresh ? '?refresh=true' : ''}`,
+        signal ? { signal } : {}
+      );
       const json = await res.json();
+      if (!isMounted.current) return;
       if (json.success) {
         setReport(json.data);
       } else {
         setError(json.error || 'Failed to fetch breadth report');
       }
     } catch (err) {
+      if (!isMounted.current) return;
+      if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   }
 

@@ -609,7 +609,12 @@ export class OvernightService {
           }
           // ── END FRIDAY WEEKEND GATE ─────────────────────────────────────────────
 
-          const ext = EntryManagerService.evaluateExtension(fullStock, finalDir);
+          // B10 fix: pass dateStr so evaluateExtension uses the correct historical
+          // date during backtests rather than falling back to getISTDateString()
+          // (live clock), which would silently disable the extension gate on all
+          // historical dates by producing a ~0% day return.
+          const ext = EntryManagerService.evaluateExtension(fullStock, finalDir, dateStr);
+
           if (!ext.eligible) {
             console.warn(`[OvernightScan] ${fullStock.symbol} ${finalDir} skipped: ${ext.reason}`);
             continue;

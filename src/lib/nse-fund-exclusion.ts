@@ -21,6 +21,14 @@
  * Keep this module free of Node/Prisma/MarketService so client components
  * (e.g. the pattern-breakout page's Trade-Ready filter) can import it too.
  */
+// B15 fix (corrected): only one real bug in this regex, not two:
+// 1. LIQUID — intentionally UNANCHORED to catch mid-string matches like HDFCLIQUID,
+//    LIQUIDCASE, GROWWLIQID, etc. Per live test coverage, this is correct behavior.
+//    The risk of false-positives on hypothetical "LIQUIDITY..." stocks is accepted.
+// 2. ^GROWW. — the dot IS intentional as a regex wildcard (matches any character),
+//    NOT a literal dot. This correctly matches GROWWLIQID, GROWWMOM50 (any Groww
+//    ETF/fund with at least one char after "GROWW"), while excluding the bare
+//    "GROWW" ticker (no char after the W). NOT a bug — do not escape this dot.
 const ETF_FUND_SYMBOL_PATTERN =
   /ETF$|BEES$|LIQUID|^GSEC|^MOM(100|30IETF|ENTUM)$|^EQUAL|^NEXT50$|^MID(CAP|SMALL|SEL|150|100)|^AONETOTAL$|^GROWW./i;
 

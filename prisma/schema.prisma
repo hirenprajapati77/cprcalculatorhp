@@ -439,11 +439,14 @@ model DailyOhlcv {
   createdAt    DateTime @default(now())
 
   @@unique([symbol, date])
-  @@index([date])
+  @@index([date])\r
   // H-01: [date, series] covers WHERE series = 'EQ' ORDER BY date DESC LIMIT N.
-  // (No [symbol, date] index here — @@unique([symbol, date]) above already
-  // provides a covering index for that column order. This exact duplicate
-  // was already removed once as BUG-16 on 2026-08-26; do not reintroduce it.)
   @@index([date, series])
+  // B19 fix: cross-sectional queries (Market Breadth, Breakout scans) filter by date
+  // across all ~2,636 symbols. The @@unique([symbol, date]) index is symbol-first
+  // so it can't efficiently serve WHERE date = X across all symbols — it requires
+  // a full index scan. This [date, symbol] index makes those queries O(symbols_on_date)
+  // instead of O(all_rows). Generate migration: npx prisma migrate dev --name add_date_symbol_idx
+  @@index([date, symbol])
 }
 

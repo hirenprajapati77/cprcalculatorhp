@@ -589,8 +589,22 @@ export class IndexDiscoverService {
         );
 
         // BTST LONG
+        // B4 fix: when kill switch is off, push an IGNORE result so the upsert
+        // overwrites any stale BTST_READY signals already in DB from earlier scans.
+        // Previously just logging and skipping left stale signals active, defeating
+        // the kill switch — downstream journal/alert code would still pick them up.
         if (!env.INDEX_BTST_ENABLED) {
           console.log(`[IndexDiscover] Skipping LONG / BTST discovery for ${instrument.symbol} because INDEX_BTST_ENABLED is false`);
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              ['INDEX_BTST_ENABLED kill switch is false'],
+              longRegime
+            )
+          );
         } else {
           if (skipLongForElevatedVix) {
             results.push(
@@ -679,8 +693,19 @@ export class IndexDiscoverService {
         }
 
         // STBT SHORT
+        // B4 fix: same as BTST — push IGNORE to overwrite stale SHORT signals.
         if (!env.INDEX_STBT_ENABLED) {
           console.log(`[IndexDiscover] Skipping SHORT / STBT discovery for ${instrument.symbol} because INDEX_STBT_ENABLED is false`);
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'SHORT',
+              ['INDEX_STBT_ENABLED kill switch is false'],
+              shortRegime
+            )
+          );
         } else {
           if (isIndexStbtGreenSession(sessionChangePct)) {
             console.log(`[IndexDiscover] ${instrument.symbol} green session block fired (session move ${(sessionChangePct * 100).toFixed(2)}%) for STBT SHORT`);

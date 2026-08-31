@@ -95,7 +95,13 @@ const envSchema = z.object({
   RETENTION_DRY_RUN: z.string().optional(),
   RETENTION_LIMIT: z.coerce.number().optional(),
   SAVE_IGNORE_SIGNALS: z.string().optional(),
-  CPR_WEIGHT: z.coerce.number().optional(),
+  // B7 fix: z.coerce.number().optional() coerces undefined to NaN before
+  // .optional() gets a chance to short-circuit — crashes Zod or stores NaN.
+  // Use preprocess to skip coercion entirely when the value is absent.
+  CPR_WEIGHT: z.preprocess(
+    (val) => (val === undefined || val === '' ? undefined : Number(val)),
+    z.number().optional()
+  ),
 
   /**
    * VPA confirmation layer.

@@ -24,6 +24,9 @@ export const viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
+  // B24 fix: themeColor must be in viewport (not metadata) in Next.js 14+
+  // for PWA status bar coloring to work on iOS Safari.
+  themeColor: '#06070b',
 };
 
 export const metadata: Metadata = {

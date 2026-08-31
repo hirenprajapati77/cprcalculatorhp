@@ -59,6 +59,10 @@ html {
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
+  /* B21 fix: iOS PWA overscroll in landscape reveals the html element background.
+   * Without this, the void shows as white/black depending on system dark mode.
+   * Matching body background-color ensures the overscroll area blends in. */
+  background-color: var(--background);
 }
 
 body {

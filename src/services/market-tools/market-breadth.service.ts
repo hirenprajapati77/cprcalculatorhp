@@ -125,7 +125,7 @@ export class MarketBreadthService {
 
     // 2. Fetch today's records with historical MA calculations
     // SQL query computes 10, 20, 50, 200 SMA and 52W High/Low per symbol
-    const stockStats = await prisma.$queryRaw<
+    const rawStockStats = await prisma.$queryRaw<
       Array<{
         symbol: string;
         close: number;
@@ -175,6 +175,23 @@ export class MarketBreadthService {
       FROM RankedHistory
       WHERE date = ${latestDate} AND rn = 1
     `;
+
+    // B1 fix: Prisma $queryRaw returns Postgres NUMERIC columns as Prisma.Decimal
+    // objects, not primitive JS numbers. Coerce every numeric field immediately
+    // after the query so all downstream comparisons (>, >=, !== null) are correct.
+    const stockStats = rawStockStats.map((s) => ({
+      ...s,
+      close: Number(s.close),
+      prevClose: Number(s.prevClose),
+      changePct: Number(s.changePct),
+      historyDays: Number(s.historyDays ?? 0),
+      ma10: s.ma10 !== null ? Number(s.ma10) : null,
+      ma20: s.ma20 !== null ? Number(s.ma20) : null,
+      ma50: s.ma50 !== null ? Number(s.ma50) : null,
+      ma200: s.ma200 !== null ? Number(s.ma200) : null,
+      high52w: s.high52w !== null ? Number(s.high52w) : null,
+      low52w: s.low52w !== null ? Number(s.low52w) : null,
+    }));
 
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
     const allNse = computeUniverseBreadth('ALL_NSE', stockStats);

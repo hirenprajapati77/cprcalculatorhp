@@ -101,10 +101,15 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
           continue;
         }
 
-        // Filter: Only equity segment ('STK') and standard equity series ('EQ')
+        // Filter: Only equity segment ('STK') instruments.
+        // B17 fix: removed `|| series !== 'EQ'` here — it incorrectly hard-dropped
+        // BE (Trade-to-Trade) and SM (SME) series stocks before the deduplication
+        // logic could run. The dedup block below prefers EQ over BE/SM when both
+        // exist for the same symbol; without this fix, that block was dead code
+        // and BE/SM stocks were permanently excluded from ingestion.
         const finInstrmTp = getCol(cols, colIndex.FinInstrmTp);
         const series = getCol(cols, colIndex.SctySrs);
-        if ((finInstrmTp && finInstrmTp !== 'STK') || series !== 'EQ') {
+        if (finInstrmTp && finInstrmTp !== 'STK') {
           rowsSkipped++;
           continue;
         }

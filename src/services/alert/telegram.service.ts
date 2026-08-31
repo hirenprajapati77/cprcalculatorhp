@@ -271,7 +271,7 @@ export class TelegramService {
       return { ok: false, reason: 'missing_config' };
     }
 
-    const lines = stocks.map((s) => {
+    const stockLines = stocks.map((s) => {
       const isBreakdown =
         s.alertKind === 'BREAKDOWN' || s.signals?.includes('BREAKDOWN');
       const icon = isBreakdown ? '📉' : '🚀';
@@ -303,7 +303,7 @@ export class TelegramService {
         `   RR: ${escapeTelegramHtml(s.rr)}${optionText}\n` +
         `   <i>${escapeTelegramHtml(slFooter)}</i>`
       );
-    }).join('\n\n');
+    });
 
     const timeStr = new Date().toLocaleString('en-IN', {
       timeZone: 'Asia/Kolkata',
@@ -337,12 +337,49 @@ export class TelegramService {
         ? escapeTelegramHtml(`⚠️ ${classifications} CPR${volText} at CPR band edge. Verify before trading.`)
         : escapeTelegramHtml(`⚠️ ${classifications} CPR${volText} + Price > TC. Verify before trading.`);
 
-    const message =
-      `⚡ <b>${headline}</b>\n` +
-      `📅 ${timeStr} IST\n\n` +
-      `${lines}\n\n` +
-      footnote;
+    // B8 fix: Telegram hard-limits messages to 4096 chars. On high-volume days
+    // joining all results into one string silently drops the entire alert.
+    // Chunk into multiple messages staying safely under the limit.
+    const TELEGRAM_MAX_CHARS = 3900;
+    const header = `⚡ <b>${headline}</b>\n📅 ${timeStr} IST\n\n`;
+    const headerLen = header.length + footnote.length + 4; // +4 for '\n\n' separators
 
-    return await this.sendMessage(message, chatId, overrideToken);
+    let allOk = true;
+    let firstMessage = true;
+    let chunk = '';
+    const sendChunk = async (text: string, isLast: boolean) => {
+      const prefix = firstMessage ? header : `⚡ <b>${headline} (cont.)</b>\n\n`;
+      const suffix = isLast ? `\n\n${footnote}` : '';
+      const result = await this.sendMessage(prefix + text + suffix, chatId, overrideToken);
+      if (!result) allOk = false;
+      firstMessage = false;
+    };
+
+    for (let i = 0; i < stockLines.length; i++) {
+      const line = stockLines[i]!;
+      const separator = chunk.length > 0 ? '\n\n' : '';
+      const candidate = chunk + separator + line;
+      const isLast = i === stockLines.length - 1;
+
+      if (candidate.length + headerLen > TELEGRAM_MAX_CHARS && chunk.length > 0) {
+        await sendChunk(chunk, false);
+        chunk = line;
+      } else {
+        chunk = candidate;
+      }
+
+      if (isLast && chunk.length > 0) {
+        await sendChunk(chunk, true);
+      }
+    }
+
+    // Edge case: empty stock list (should be caught by the guard at line 236,
+    // but just in case the list is empty after mapping)
+    if (stockLines.length === 0) {
+      const message = `${header}${footnote}`;
+      await this.sendMessage(message, chatId, overrideToken);
+    }
+
+    return { ok: allOk };
   }
 }

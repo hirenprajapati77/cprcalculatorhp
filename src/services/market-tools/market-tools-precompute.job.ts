@@ -52,13 +52,22 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     const elapsedMs = Date.now() - startTime;
     console.log(`[MarketToolsPrecomputeJob] Pre-computation completed in ${elapsedMs}ms`);
 
-    const anySucceeded = breadthDate !== undefined || multiYearCount !== undefined || patternCount !== undefined;
-    if (!anySucceeded) {
-      console.error('[MarketToolsPrecomputeJob] All three sub-jobs failed — reporting failure so the scheduler retries.');
+    // B6 fix: require ALL three sub-jobs to succeed. Previously used OR logic
+    // (anySucceeded) — if just one succeeded, the scheduler marked the day's
+    // claim complete, silently suppressing retries for the two that failed.
+    // Now: success=false if any sub-job failed, so the scheduler can retry.
+    const allSucceeded = breadthDate !== undefined && multiYearCount !== undefined && patternCount !== undefined;
+    if (!allSucceeded) {
+      const failed = [
+        breadthDate === undefined && 'Breadth',
+        multiYearCount === undefined && 'Multi-Year Breakout',
+        patternCount === undefined && 'Pattern Breakout',
+      ].filter(Boolean).join(', ');
+      console.error(`[MarketToolsPrecomputeJob] Partial failure — sub-jobs failed: ${failed}. Reporting failure so the scheduler can retry.`);
     }
 
     return {
-      success: anySucceeded,
+      success: allSucceeded,
       ...(breadthDate !== undefined && { breadthDate }),
       ...(multiYearCount !== undefined && { multiYearCount }),
       ...(patternCount !== undefined && { patternCount }),

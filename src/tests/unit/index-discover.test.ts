@@ -227,10 +227,14 @@ describe('IndexDiscoverService.discover - Gating Flags', () => {
     env.INDEX_STBT_ENABLED = true;
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     
+    // B4 fix: kill switch now returns IGNORE signals (not empty array) so the upsert
+    // can overwrite stale DB signals. Filter by IGNORE classification for LONG.
     const longSignals = results.filter(r => r.direction === 'LONG');
     const shortSignals = results.filter(r => r.direction === 'SHORT');
     
-    assert.equal(longSignals.length, 0);
+    // All LONG signals must be IGNORE (kill switch nullified them)
+    assert.ok(longSignals.every(r => r.classification === 'IGNORE'),
+      'All LONG signals must be IGNORE when INDEX_BTST_ENABLED=false');
     assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
   });
 
@@ -243,7 +247,9 @@ describe('IndexDiscoverService.discover - Gating Flags', () => {
     const shortSignals = results.filter(r => r.direction === 'SHORT');
     
     assert.equal(longSignals.length, INDEX_INSTRUMENTS.length);
-    assert.equal(shortSignals.length, 0);
+    // All SHORT signals must be IGNORE (kill switch nullified them)
+    assert.ok(shortSignals.every(r => r.classification === 'IGNORE'),
+      'All SHORT signals must be IGNORE when INDEX_STBT_ENABLED=false');
   });
 
   it('gating both false filters out both directions entirely', async () => {
@@ -251,7 +257,9 @@ describe('IndexDiscoverService.discover - Gating Flags', () => {
     env.INDEX_STBT_ENABLED = false;
     const results = await IndexDiscoverService.discover(new Date('2026-07-21T10:00:00+05:30'));
     
-    assert.equal(results.length, 0);
+    // All results must be IGNORE when both kill switches are off
+    assert.ok(results.every(r => r.classification === 'IGNORE'),
+      'All signals must be IGNORE when both kill switches are false');
   });
 
   it('both flags default to true and preserve existing behaviour', async () => {

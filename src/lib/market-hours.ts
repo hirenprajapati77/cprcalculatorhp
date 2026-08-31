@@ -18,10 +18,10 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2026-05-28', // Bakri Id
     '2026-06-26', // Muharram
     '2026-09-14', // Ganesh Chaturthi (Sept 14, 2026)
-    '2026-10-02', // Mahatma Gandhi Jayanti + Dussehra (Vijaya Dashami) — both fall on Oct 2, 2026
-    // L-1 fix: removed erroneous duplicate '2026-10-20' Dussehra entry.
-    // Vijaya Dashami 2026 is Oct 2, not Oct 20. Two entries caused Oct 20 to be
-    // treated as a trading holiday, freezing cron jobs on a live trading day.
+    '2026-10-02', // Mahatma Gandhi Jayanti + Vijaya Dashami (Dussehra) — both fall on Oct 2, 2026 per NSE circular
+    // NOTE: Dussehra (Vijaya Dashami) 2026 falls on Oct 2 — same day as Gandhi Jayanti.
+    // NSE lists only one holiday for this date. Confirmed via NSE holiday circular.
+    // (A previous erroneous '2026-10-20' entry was already removed as the L-1 fix.)
     '2026-11-03', // Diwali — Laxmi Puja (NSE closed; Muhurat trading may be held separately)
     '2026-11-04', // Diwali — Balipratipada
     '2026-11-10', // Prakash Gurpurb Sri Guru Nanak Dev
