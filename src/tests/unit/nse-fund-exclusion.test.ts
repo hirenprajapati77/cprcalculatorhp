@@ -48,6 +48,22 @@ test('isLikelyEtfOrFund does not false-positive on a bare GROWW ticker', () => {
   assert.strictEqual(isLikelyEtfOrFund('GROWWMOM50'), true);
 });
 
+test('isLikelyEtfOrFund catches individually confirmed gap symbols', () => {
+  // These slipped through the original regex -- confirmed live in a
+  // Pattern Breakout screenshot, 29 Aug 2026 (Double Bottom tab). None of
+  // them match any generalizable pattern without risking a false positive
+  // on a real stock ticker, so they're an explicit allowlist rather than a
+  // broadened regex. This test exists so future gap-closures land the same
+  // way: confirm live, add to KNOWN_GAP_SYMBOLS, add a case here.
+  const gaps = ['HDFCMOMENT', 'MONQ50', 'LICNMID100', 'MULTICAP'];
+  for (const s of gaps) {
+    assert.strictEqual(isLikelyEtfOrFund(s), true, `expected ${s} to be excluded`);
+  }
+  // Case-insensitivity check on the explicit set (the regex path is already
+  // case-insensitive via the /i flag; the Set lookup needs its own check).
+  assert.strictEqual(isLikelyEtfOrFund('hdfcmoment'), true);
+});
+
 test('isLikelyEtfOrFund does not exclude ordinary operating-company stock symbols', () => {
   const shouldKeep = [
     'ARIES',
