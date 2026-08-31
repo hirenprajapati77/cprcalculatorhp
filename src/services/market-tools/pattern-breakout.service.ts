@@ -284,7 +284,7 @@ export class PatternBreakoutService {
       SELECT symbol, date, open, high, low, close, volume
       FROM "DailyOhlcv"
       WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
-        AND date >= (${latestDate}::date - INTERVAL '150 days')
+        AND date >= (${latestDate}::date - INTERVAL '150 days')::date::text
       ORDER BY symbol ASC, date ASC
     `;
 
