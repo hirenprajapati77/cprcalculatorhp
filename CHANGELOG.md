@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 01 Sep 1-Month Deep Code Review: 11 Issues Resolved across Domains 1–4
+
+An exhaustive line-by-line deep code review covering all 303 commits and ~70 modified files over the 30-day period (Aug 1 – Sep 1, 2026) across Overnight/Index Engine, Market Tools & Bhavcopy Ingestion, Realtime Scanner/Alerts, and Infrastructure/Watchdogs. Verified with 715/716 passing unit tests and GitHub Actions CI.
+
+#### 🔴 Critical
+
+- **B34 — Index BTST/STBT Discovery Disabled Before 15:15 IST** (`src/services/overnight/index-ranking.service.ts`): `calculateScoreDetails` strictly rejected scoring (`null`) when `inputs.last15mHigh` or `last15mLow` was `null`. Because the 15:15–15:30 closing window has not formed during the 15:10–15:15 discovery window, index setups were unconditionally classified as `IGNORE`. Fixed by conditionally evaluating Rule 5 liquidity points only when the candle is present, allowing full discovery of Rules 1–4 and 6 before 15:15 IST.
+- **B35 — Scheduler Lock Release on Timeout Causes Socket/OOM Leak** (`src/services/scheduler/market-cron.scheduler.ts`, `src/lib/with-timeout.ts`): When an external request hung and triggered `withTimeout`, the error handler called `releaseCronRun(claimKey)` while the underlying socket remained open. On subsequent cron ticks, the scheduler re-acquired the lock and spawned duplicate overlapping jobs. Defined `TimeoutError` and retained claim locks on timeouts to prevent duplicate job accumulation under network latency.
+- **B36 — Unbounded CTE Window Scan on 626K+ Rows** (`src/services/market-tools/pattern-breakout.service.ts`): CTE queries over `DailyOhlcv` partitioned across all 265 dates without an initial date bound, forcing full table sequential scans in PostgreSQL. Added `WHERE date >= ${oldestDate}` to restrict scans to the trailing ~265–300 dates.
+
+#### 🟠 High
+
+- **B37 — Inverted Option Theta Risk Buffer Formula** (`src/services/option-suggestion.service.ts`): Stop loss distance was multiplied by `(1 + thetaBuffer)` instead of `(1 - thetaBuffer)`. Because `optionSl = ltp - adjustedSlDistance`, this resulted in a 10% *wider* stop loss during expiry week rather than the documented tighter stop loss. Corrected formula to `(1 - thetaBuffer)`.
+- **B38 — Extension Gate Historical Backtest Clock Bypassed** (`src/services/overnight/entry-manager.service.ts`): `resolvePreviousClose` prioritized today's live `stock.previousClose` even when an `asOfDate` was passed. Fixed to resolve from historical series relative to `asOfDate`.
+- **B39 — Missing Single-Flight Deduplication on Pattern Breakout** (`src/services/market-tools/pattern-breakout.service.ts`): Added `inFlightCompute` singleton promise wrapper to prevent concurrent refresh requests from launching duplicate heavy database scans.
+- **B40 — Bhavcopy Ingestion Batch Rollback on Non-Numeric Fields** (`scripts/market-tools/bhavcopy-ingest.ts`): Added `isNaN` sanitization on `value` and `trades` parsing to protect batch transactions against malformed rows.
+- **B41 — Memory Watchdog Redis Pruning Evicted Market Tools Caches** (`ops/mem_watchdog.sh`): `is_protected_redis_key` matched `market:*` but missed `market_tools:*` and `market_breadth:*`, causing off-hours watchdog pruning. Added `market_tools:*|market_breadth:*` to protected key patterns.
+
+#### 🟡 Medium
+
+- **B42 — Telegram Breakout Alert Silent Drop Without Group Chat** (`src/services/alert/telegram.service.ts`): `sendBreakoutAlert` aborted with `missing_config` if `TELEGRAM_GROUP_CHAT_ID` was unset. Added fallback to `TELEGRAM_CHAT_ID` and `settings.telegramChatId`.
+- **B43 — Memory Leak in BTST Retry Map** (`src/services/scheduler/btst-alert.job.ts`): Added `pruneSendAttemptCounts()` to automatically prune `sendAttemptCounts` map entries.
+- **B44 — Flat Base Pattern Window Truncation** (`src/services/market-tools/pattern-breakout.service.ts`): Expanded `detectFlatBase` slice window from 30 to 45 candles per Minervini/O'Neil specifications.
+
+#### 🟢 Low
+
+- **B45 — Client-Side Refresh Missing AbortSignal on Unmount** (`src/app/market-tools/pattern-breakout/page.tsx`): Attached `AbortController` to manual refresh button clicks with unmount cleanup.
+
 ### Fixed — 01 Sep 10-Day Deep Code Review: 7 Bug Fixes (Pass 2)
 
 A comprehensive follow-up deep code review covering all 91 commits across the 10-day period (Aug 22 – Sep 1, 2026) identified and resolved 7 additional confirmed bugs across 4 domains. All verified with 714/715 unit tests passing.

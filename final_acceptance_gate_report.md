@@ -2,13 +2,51 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Report pass:** 12 (Post-PR #150 — ETF Exclusion Gaps & Database Migration Fixes)  
-**Report generated:** 2026-08-31  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on August 31, 2026.
+**Report pass:** 13 (Post-1-Month Deep Code Review & Hardening)  
+**Report generated:** 2026-09-01  
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 1, 2026.
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 12 / Aug 31, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 13 / Sep 1, 2026)
+
+This pass integrates and verifies the 1-month comprehensive deep review across all 303 commits (Aug 1 – Sep 1, 2026):
+
+1. **Index BTST/STBT Discovery Window Parity**:
+   - Updated `index-ranking.service.ts` to allow index scoring when `last15mHigh`/`last15mLow` is `null`, enabling signal discovery during 15:10–15:15 IST before the closing window forms.
+
+2. **Scheduler Timeout Lock Retain & Hang Protection**:
+   - Defined `TimeoutError` in `with-timeout.ts` and updated `market-cron.scheduler.ts` to retain the claim lock when timeouts occur, preventing overlapping duplicate background processes from leaking sockets and memory.
+
+3. **Pattern Breakout Deduplication & Date Bounding**:
+   - Added `inFlightCompute` promise singleton to `pattern-breakout.service.ts` to deduplicate concurrent requests.
+   - Bounded CTE queries with `WHERE date >= :oldestDate` across the 626K+ row `DailyOhlcv` table.
+   - Expanded `detectFlatBase` window to 45 candles.
+
+4. **Option Theta Risk Buffer Mathematical Correction**:
+   - Corrected formula in `option-suggestion.service.ts` to `(1 - thetaBuffer)` so options with $\le 4$ DTE receive a 10% tighter stop loss during expiry week.
+
+5. **Extension Gate Historical Backtesting Clock Alignment**:
+   - Updated `resolvePreviousClose` in `entry-manager.service.ts` to prioritize historical series data relative to `asOfDate` rather than today's live close.
+
+6. **Bhavcopy Ingest NaN Sanitization**:
+   - Added `isNaN` guards for `value` and `trades` in `bhavcopy-ingest.ts` to protect batch transactions.
+
+7. **Memory Watchdog Redis Key Protection**:
+   - Updated `ops/mem_watchdog.sh` `is_protected_redis_key` to include `market_tools:*|market_breadth:*`, preventing off-hours cache pruning.
+
+8. **Telegram Breakout Alert Fallback**:
+   - Added fallback to `TELEGRAM_CHAT_ID` when group chat ID is unconfigured.
+
+9. **Verification Metrics**:
+   - TypeScript `tsc --noEmit`: 0 errors.
+   - Unit Tests: 715/716 pass, 0 failures, 1 skipped.
+   - GitHub Actions CI: Run #24 passed on hosted runners (1m 23s).
+   - Production URL: `https://129-159-230-41.nip.io` (healthy).
+
+---
+
+## 2. Verified Infrastructure and Code Changes (Pass 12 / Aug 31, 2026)
 
 This pass integrates and verifies the ETF scanner leak fixes and database optimizations merged as PR #150:
 
