@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
+import { ExportActions } from '@/components/market-tools/ExportActions';
+import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import {
   PatternBreakoutReport,
   PatternType,
@@ -204,6 +206,55 @@ export default function PatternBreakoutPage() {
     );
   }
 
+  const handleExportCsv = () => {
+    if (!report) return;
+    const headers = [
+      '#',
+      'Symbol',
+      'Sector',
+      'CMP (INR)',
+      'Day Change %',
+      'Status',
+      '52W High (INR)',
+      'Distance to 52W %',
+      'Primary Pattern',
+      'RVOL 20D',
+      'VPA Footprint',
+      'CLV',
+      '52W Proximity Score',
+      'Volume Score',
+      'Pattern Score',
+      'Momentum Score',
+      'VPA Modifier',
+      'Total Score',
+      'Quality Tier',
+    ];
+    const rows = filteredStocks.map((s, idx) => [
+      idx + 1,
+      s.symbol,
+      s.sector,
+      s.close,
+      s.changePct,
+      s.status,
+      s.high52w,
+      s.distanceToHighPct,
+      s.primaryPatternLabel,
+      s.rvol20d !== null ? s.rvol20d : '',
+      s.vpaFootprint?.label ?? 'Standard',
+      s.clv !== null ? s.clv : '',
+      s.scoreBreakdown.proximityScore,
+      s.scoreBreakdown.volumeScore,
+      s.scoreBreakdown.patternScore,
+      s.scoreBreakdown.momentumScore,
+      s.scoreBreakdown.vpaModifier,
+      s.scoreBreakdown.totalScore,
+      s.scoreBreakdown.qualityTier,
+    ]);
+    const csvContent = generateCsvContent(headers, rows);
+    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    downloadFile(csvContent, `pattern_breakout_${dateStr}.csv`);
+  };
+
   if (!report) return null;
 
   return (
@@ -229,10 +280,11 @@ export default function PatternBreakoutPage() {
             Detects stocks at or near 52-week highs with classical institutional chart patterns (VCP, Cup &amp; Handle, Flat Base, Double Bottom) and 20D Volume confirmation.
           </p>
         </div>
-        <div className="flex items-center gap-3 self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
           <span className="text-xs font-mono text-gray-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg">
             Date: <strong className="text-white">{report.date}</strong>
           </span>
+          <ExportActions onExportCsv={handleExportCsv} disabled={filteredStocks.length === 0} />
           <button
             onClick={handleRefresh}
             disabled={loading || isRefreshing}

@@ -176,3 +176,64 @@ option {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
+
+/* ── Print Stylesheet ────────────────────────────────────────────── */
+@media print {
+  nav,
+  header,
+  aside,
+  button,
+  select,
+  input,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 10pt;
+  }
+
+  .bg-gray-950,
+  .bg-gray-900,
+  .bg-gray-900\/80,
+  .bg-gray-950\/60,
+  .glass-card {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    color: #111827 !important;
+    box-shadow: none !important;
+  }
+
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #d1d5db !important;
+    color: #111827 !important;
+    padding: 4px 8px !important;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    font-weight: bold !important;
+  }
+
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .text-white,
+  .text-gray-100,
+  .text-gray-200,
+  .text-gray-300,
+  .text-gray-400 {
+    color: #1f2937 !important;
+  }
+}

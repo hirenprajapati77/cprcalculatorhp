@@ -3,6 +3,8 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { ExportActions } from '@/components/market-tools/ExportActions';
+import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import { MarketBreadthReport, UniverseBreadth } from '@/services/market-tools/market-breadth.service';
 
 export default function MarketBreadthPage() {
@@ -86,6 +88,45 @@ export default function MarketBreadthPage() {
 
   if (!report) return null;
 
+  const handleExportCsv = () => {
+    if (!report) return;
+    const sectors =
+      selectedUniverse === 'ALL_NSE'
+        ? report.sectors.allNse
+        : selectedUniverse === 'NIFTY_50'
+        ? report.sectors.nifty50
+        : report.sectors.nseFno;
+
+    const headers = [
+      'Rank',
+      'Sector',
+      'Universe',
+      'Average Change %',
+      'Advances',
+      'Declines',
+      'Total Stocks',
+      'Advance Ratio %',
+      'Status',
+    ];
+    const rows = sectors.map((s, idx) => [
+      idx + 1,
+      s.sector,
+      selectedUniverse,
+      s.avgChangePct,
+      s.advances,
+      s.declines,
+      s.totalStocks,
+      s.totalStocks > 0 ? ((s.advances / s.totalStocks) * 100).toFixed(1) : '0',
+      s.status,
+    ]);
+    const csvContent = generateCsvContent(headers, rows);
+    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    downloadFile(
+      csvContent,
+      `market_breadth_sectors_${selectedUniverse.toLowerCase()}_${dateStr}.csv`
+    );
+  };
+
   const currentUniverseData: UniverseBreadth =
     selectedUniverse === 'ALL_NSE'
       ? report.allNse
@@ -121,7 +162,8 @@ export default function MarketBreadthPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <ExportActions onExportCsv={handleExportCsv} />
           <button
             onClick={() => fetchBreadth(true)}
             disabled={loading || isRefreshing}

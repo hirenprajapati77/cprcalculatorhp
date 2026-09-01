@@ -3,6 +3,8 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { ExportActions } from '@/components/market-tools/ExportActions';
+import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import {
   MultiYearBreakoutReport,
   BreakoutStock,
@@ -124,6 +126,55 @@ export default function MultiYearBreakoutPage() {
     );
   }
 
+  const handleExportCsv = () => {
+    if (!report) return;
+    const headers = [
+      '#',
+      'Symbol',
+      'Sector',
+      'CMP (INR)',
+      'Day Change %',
+      'Strongest Breakout',
+      'VPA Footprint',
+      'CLV',
+      'RVOL 20D',
+      'Breakout Reference Price (INR)',
+      'Gain over Breakout %',
+      '1Y Breakout',
+      '2Y Breakout',
+      '3Y Breakout',
+      '5Y Breakout',
+      '10Y Breakout',
+      'ATH Breakout',
+      'Volume',
+      'History Days',
+    ];
+    const rows = filteredStocks.map((s, idx) => [
+      idx + 1,
+      s.symbol,
+      s.sector,
+      s.close,
+      s.changePct,
+      s.strongestBreakout ?? '',
+      s.vpaFootprint?.label ?? 'Standard',
+      s.clv !== null ? s.clv : '',
+      s.rvol20d !== null ? s.rvol20d : '',
+      s.breakoutPrice !== null ? s.breakoutPrice : '',
+      s.breakoutGainPct !== null ? s.breakoutGainPct : '',
+      s.breakout1Y === true ? 'YES' : s.breakout1Y === false ? 'NO' : 'N/A',
+      s.breakout2Y === true ? 'YES' : s.breakout2Y === false ? 'NO' : 'N/A',
+      s.breakout3Y === true ? 'YES' : s.breakout3Y === false ? 'NO' : 'N/A',
+      s.breakout5Y === true ? 'YES' : s.breakout5Y === false ? 'NO' : 'N/A',
+      s.breakout10Y === true ? 'YES' : s.breakout10Y === false ? 'NO' : 'N/A',
+      s.breakoutATH === true ? 'YES' : s.breakoutATH === false ? 'NO' : 'N/A',
+      s.volume,
+      s.historyDays,
+    ]);
+    const csvContent = generateCsvContent(headers, rows);
+    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    downloadFile(csvContent, `multi_year_breakout_${dateStr}.csv`);
+  };
+
   if (!report) return null;
 
   const isSelectedWindowUnavailable =
@@ -158,7 +209,8 @@ export default function MultiYearBreakoutPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <ExportActions onExportCsv={handleExportCsv} disabled={filteredStocks.length === 0} />
           <button
             onClick={() => fetchBreakouts(true)}
             disabled={loading || isRefreshing}

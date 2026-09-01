@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 01 Sep: Export to Excel/CSV & Print-Ready PDF across Market Tools
+
+Added comprehensive client-side data export capabilities across all three Market Tools modules:
+
+- **RFC 4180 CSV Engine with UTF-8 BOM** (`src/lib/export-utils.ts`): Implemented RFC 4180 cell escaping (commas, double quotes, newlines) and prepended UTF-8 Byte Order Mark (`\uFEFF`) ensuring Microsoft Excel and Google Sheets open Indian Rupee symbols (₹), percentages, and floating-point metrics with zero encoding corruption.
+- **Dedicated Print Stylesheet** (`src/app/globals.css`): Added comprehensive `@media print` rules that suppress navigation bars, search inputs, refresh buttons, and action chrome while transforming dark mode tables into clean, high-contrast black-and-white layouts with page-break protection (`break-inside: avoid`).
+- **Interactive Export Dropdown Action** (`src/components/market-tools/ExportActions.tsx`): Reusable UI component with paired `Export to Excel / CSV` and `Print / Save as PDF` actions, integrated seamlessly into the header toolbars of:
+  - **52W Pattern Breakout** (`/market-tools/pattern-breakout`): Exports Symbol, Sector, CMP, Day Change %, Status, 52W High, Distance to 52W %, Pattern, RVOL 20D, VPA Footprint, CLV, Sub-scores, and Quality Tier.
+  - **Multi-Year Breakout** (`/market-tools/breakout`): Exports Symbol, Sector, CMP, Day Change %, Strongest BO, VPA Footprint, CLV, RVOL 20D, BO Reference Price, Gain over BO %, 1Y/2Y/3Y/5Y/10Y/ATH status, and Volume.
+  - **Market Breadth** (`/market-tools/breadth`): Exports full Sector Strength & Ranking table for the selected universe (ALL NSE / Nifty 50 / F&O).
+- **Unit Test Suite** (`src/tests/unit/export-utils.test.ts`): Added unit tests covering RFC 4180 escaping, quotes, comma handling, and UTF-8 BOM verification (724/725 passing).
+
 ### Added — 01 Sep: Volume Price Analysis (VPA) in Market Tools
 
 Integrated institutional **Volume Price Analysis (VPA)** into the Market Tools suite (`/market-tools/pattern-breakout` and `/market-tools/breakout`):
