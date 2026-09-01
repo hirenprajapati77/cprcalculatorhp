@@ -118,7 +118,6 @@ export class IndexRankingService {
   static calculateScoreDetails(inputs: IndexScoringInputs): IndexScoreDetails {
     if (
       inputs.vwap === undefined || inputs.vwap === null ||
-      inputs.last15mHigh === undefined || inputs.last15mHigh === null ||
       inputs.vixCalm === undefined || inputs.vixCalm === null ||
       !inputs.hasConfirmationCandles
     ) {
@@ -154,8 +153,8 @@ export class IndexRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window
-    if (inputs.close > inputs.last15mHigh) {
+    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window (if window available)
+    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close > inputs.last15mHigh) {
       breakdown.liquidity = 20;
     }
 
@@ -198,7 +197,6 @@ export class IndexRankingService {
   static calculateShortScoreDetails(inputs: IndexShortScoringInputs): { score: number | null; breakdown: IndexShortScoreBreakdown | null } {
     if (
       inputs.vwap === undefined || inputs.vwap === null ||
-      inputs.last15mLow === undefined || inputs.last15mLow === null ||
       inputs.vixElevated === undefined || inputs.vixElevated === null ||
       !inputs.hasConfirmationCandles
     ) {
@@ -230,7 +228,7 @@ export class IndexRankingService {
       breakdown.vwap = 20;
     }
 
-    if (inputs.close < inputs.last15mLow) {
+    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close < inputs.last15mLow) {
       breakdown.liquidity = 20;
     }
 

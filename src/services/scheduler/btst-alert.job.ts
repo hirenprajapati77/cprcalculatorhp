@@ -33,8 +33,14 @@ function isUniqueConstraintError(err: unknown): boolean {
 }
 
 const SEND_ATTEMPTS_LIMIT = 2;
-/** Survives cron re-entry in the same process. Lost on PM2 restart (one extra retry at most). */
+/** Survives cron re-entry in the same process. Pruned periodically to prevent memory leaks. */
 const sendAttemptCounts = new Map<string, number>();
+
+function pruneSendAttemptCounts(): void {
+  if (sendAttemptCounts.size > 100) {
+    sendAttemptCounts.clear();
+  }
+}
 
 export function resetBtstAlertSendAttemptsForTests(): void {
   sendAttemptCounts.clear();
@@ -253,6 +259,7 @@ async function buildEnrichedPicks(picks: OvernightSignal[], direction: 'LONG' | 
 
 /** Shared BTST Telegram alert pipeline for cron route and in-process scheduler. */
 export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
+  pruneSendAttemptCounts();
   const signalDate = getISTDateString();
   const regime = await RegimeService.getMarketRegime(signalDate);
   const regimeUnknown = regime.reliable === false;

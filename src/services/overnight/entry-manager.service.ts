@@ -78,15 +78,22 @@ export class EntryManagerService {
    * (do not use n-2 when the last bar is already the prior completed session).
    */
   static resolvePreviousClose(stock: MarketStockData, asOfDate?: string): number | null {
-    if (stock.previousClose && stock.previousClose > 0) {
+    const todayStr = getISTDateString();
+    // Only prefer stock.previousClose if asOfDate is not provided or matches today's live session date
+    if ((!asOfDate || asOfDate === todayStr) && stock.previousClose && stock.previousClose > 0) {
       return stock.previousClose;
     }
     const hist = stock.history || [];
-    if (hist.length === 0) return null;
+    if (hist.length === 0) return stock.previousClose && stock.previousClose > 0 ? stock.previousClose : null;
 
-    const todayStr = asOfDate || getISTDateString();
+    const targetDate = asOfDate || todayStr;
+    const targetIdx = hist.findIndex((h) => h.date === targetDate);
+    if (targetIdx > 0) {
+      return hist[targetIdx - 1].close > 0 ? hist[targetIdx - 1].close : null;
+    }
+
     const last = hist[hist.length - 1];
-    if (last.date === todayStr) {
+    if (last.date === targetDate) {
       return hist.length >= 2 ? hist[hist.length - 2].close : null;
     }
     // Last bar is a completed prior session (today not appended) — that close is

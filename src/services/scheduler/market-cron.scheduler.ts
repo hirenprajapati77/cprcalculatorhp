@@ -22,7 +22,7 @@ import {
 } from '@/services/scheduler/cron-run-claim';
 import { EarningsPopulatorService } from '@/services/earnings-populator.service';
 import { runMarketToolsPrecomputeJob } from '@/services/market-tools/market-tools-precompute.job';
-import { withTimeout } from '@/lib/with-timeout';
+import { withTimeout, TimeoutError } from '@/lib/with-timeout';
 
 let started = false;
 /** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
@@ -106,8 +106,14 @@ async function runClaimedJob<T>(
     }
     console.log(`[MarketCronScheduler] ${label} completed`, summarizeResult(result));
   } catch (err) {
-    await releaseCronRun(claimKey);
-    console.error(`[MarketCronScheduler] ${label} failed:`, err);
+    if (err instanceof TimeoutError) {
+      // Retain claim for timeout errors so the scheduler does not accumulate duplicate hanging jobs on subsequent ticks
+      await completeCronRun(claimKey, retainClaim);
+      console.error(`[MarketCronScheduler] ${label} timed out after ${timeoutMs}ms (claim retained to prevent overlapping retry):`, err);
+    } else {
+      await releaseCronRun(claimKey);
+      console.error(`[MarketCronScheduler] ${label} failed:`, err);
+    }
   }
 }
 

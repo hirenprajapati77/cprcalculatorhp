@@ -78,6 +78,7 @@ export interface PatternBreakoutReport {
 let cachedReport: PatternBreakoutReport | null = null;
 let lastComputedTime = 0;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+let inFlightCompute: Promise<PatternBreakoutReport> | null = null;
 
 export class PatternBreakoutService {
   /**
@@ -95,7 +96,7 @@ export class PatternBreakoutService {
 
   /**
    * Main entrypoint to get precomputed / cached pattern breakout report.
-   * Enforces 250-day history depth guard and zero live heavy computation on unauthenticated web requests.
+   * Enforces 250-day history depth guard and deduplicated compute.
    */
   static async getPatternBreakoutReport(forceRefresh = false): Promise<PatternBreakoutReport> {
     const now = Date.now();
@@ -118,25 +119,31 @@ export class PatternBreakoutService {
         return cachedReport;
       }
 
-      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
-      // Return empty baseline report until background precompute job runs.
-      return {
-        date: new Date().toISOString().split('T')[0],
-        tradingDaysAvailable: 0,
-        totalScanned: 0,
-        qualifiedCount: 0,
-        countsByStatus: { BREAKOUT: 0, NEAR_HIGH: 0 },
-        countsByPattern: { VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
-        countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
-        stocks: [],
-        computedAt: new Date().toISOString(),
-        status: 'pending',
-      };
+      // If cache is cold, compute live on-the-fly via deduplicated in-flight promise
+      if (!inFlightCompute) {
+        inFlightCompute = PatternBreakoutService.computePatternBreakoutReport()
+          .then(async (report) => {
+            await PatternBreakoutService.saveCache(report);
+            return report;
+          })
+          .finally(() => {
+            inFlightCompute = null;
+          });
+      }
+      return inFlightCompute;
     }
 
-    const report = await PatternBreakoutService.computePatternBreakoutReport();
-    await PatternBreakoutService.saveCache(report);
-    return report;
+    if (!inFlightCompute) {
+      inFlightCompute = PatternBreakoutService.computePatternBreakoutReport()
+        .then(async (report) => {
+          await PatternBreakoutService.saveCache(report);
+          return report;
+        })
+        .finally(() => {
+          inFlightCompute = null;
+        });
+    }
+    return inFlightCompute;
   }
 
   /**
@@ -153,6 +160,7 @@ export class PatternBreakoutService {
     }
 
     const latestDate = dateRows[0]!.date;
+    const oldestDate = dateRows[dateRows.length - 1]!.date;
     const tradingDaysAvailable = dateRows.length;
 
     // 2. Fetch candidates with 52W High using exact prior 250-day window (excluding current day)
@@ -180,7 +188,7 @@ export class PatternBreakoutService {
           AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
         FROM "DailyOhlcv"
-        WHERE series = 'EQ'
+        WHERE series = 'EQ' AND date >= ${oldestDate}
       )
       SELECT 
         symbol,
@@ -509,7 +517,7 @@ export class PatternBreakoutService {
   static detectFlatBase(candles: OhlcvCandle[], high52w: number): PatternDetails | null {
     if (candles.length < 25) return null;
     // Inspect trailing 20 to 45 candles
-    const baseWindow = candles.slice(-30);
+    const baseWindow = candles.slice(-45);
     const n = baseWindow.length;
     if (n < 20) return null;
 

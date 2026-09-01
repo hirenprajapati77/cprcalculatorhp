@@ -19,11 +19,16 @@ describe('IndexRankingService (STBT SHORT)', () => {
   };
 
   describe('calculateShortScoreDetails', () => {
-    it('returns null if any safety gate fails (vwap, last15mLow, vixElevated, hasConfirmationCandles)', () => {
+    it('returns null if any safety gate fails (vwap, vixElevated, hasConfirmationCandles)', () => {
       assert.strictEqual(IndexRankingService.calculateShortScoreDetails({ ...baseInputs, vwap: null }).score, null);
-      assert.strictEqual(IndexRankingService.calculateShortScoreDetails({ ...baseInputs, last15mLow: null }).score, null);
       assert.strictEqual(IndexRankingService.calculateShortScoreDetails({ ...baseInputs, vixElevated: null }).score, null);
       assert.strictEqual(IndexRankingService.calculateShortScoreDetails({ ...baseInputs, hasConfirmationCandles: false }).score, null);
+    });
+
+    it('awards 0 liquidity points when last15mLow is null (before 15:15 IST)', () => {
+      const res = IndexRankingService.calculateShortScoreDetails({ ...baseInputs, last15mLow: null });
+      assert.notStrictEqual(res.score, null);
+      assert.strictEqual(res.breakdown?.liquidity, 0);
     });
 
     it('Rule 1: VIX Elevated (25 pts)', () => {

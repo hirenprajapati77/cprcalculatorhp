@@ -54,10 +54,10 @@ describe('IndexRankingService.calculateScoreDetails — score safety', () => {
     assert.equal(result.breakdown, null);
   });
 
-  it('returns null score when last15mHigh is missing', () => {
+  it('awards 0 liquidity points when last15mHigh is missing (before 15:15 IST)', () => {
     const result = IndexRankingService.calculateScoreDetails(baseInputs({ last15mHigh: null }));
-    assert.equal(result.score, null);
-    assert.equal(result.breakdown, null);
+    assert.notEqual(result.score, null);
+    assert.equal(result.breakdown?.liquidity, 0);
   });
 
   it('returns null score when vixCalm is null/undefined', () => {

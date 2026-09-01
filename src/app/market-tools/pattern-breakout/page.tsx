@@ -25,6 +25,7 @@ export default function PatternBreakoutPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isMounted = useRef(true);
+  const refreshControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
@@ -33,6 +34,9 @@ export default function PatternBreakoutPage() {
     return () => {
       isMounted.current = false;
       abortController.abort();
+      if (refreshControllerRef.current) {
+        refreshControllerRef.current.abort();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -105,11 +109,21 @@ export default function PatternBreakoutPage() {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      if (isMounted.current && !forceRefresh) {
-        setLoading(false);
+      if (isMounted.current) {
+        if (!forceRefresh) setLoading(false);
+        if (forceRefresh) setIsRefreshing(false);
       }
     }
   }
+
+  const handleRefresh = () => {
+    if (refreshControllerRef.current) {
+      refreshControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    refreshControllerRef.current = controller;
+    fetchReport(true, controller.signal);
+  };
 
   const sectors = useMemo(() => {
     if (!report) return [];
@@ -220,7 +234,7 @@ export default function PatternBreakoutPage() {
             Date: <strong className="text-white">{report.date}</strong>
           </span>
           <button
-            onClick={() => fetchReport(true)}
+            onClick={handleRefresh}
             disabled={loading || isRefreshing}
             className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
           >

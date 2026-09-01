@@ -635,7 +635,7 @@ export class OptionSuggestionService {
     const optionTarget = parseFloat((selected.option.ltp + stockMoveTarget * delta).toFixed(2));
     // thetaBuffer shrinks the distance between ltp and SL so we exit earlier in expiry week.
     const rawSlDistance = stockMoveSl * delta;
-    const adjustedSlDistance = rawSlDistance * (1 + thetaBuffer);
+    const adjustedSlDistance = rawSlDistance * (1 - thetaBuffer);
     const optionSl = parseFloat(Math.max(0.05, selected.option.ltp - adjustedSlDistance).toFixed(2));
 
     console.log(

@@ -237,15 +237,15 @@ export class TelegramService {
   ): Promise<{ ok: boolean; reason?: string }> {
     if (!stocks.length) return { ok: false, reason: 'no_breakouts' };
 
-    let chatId = overrideChatId || env.TELEGRAM_GROUP_CHAT_ID;
+    let chatId = overrideChatId || env.TELEGRAM_GROUP_CHAT_ID || env.TELEGRAM_CHAT_ID;
     let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
 
     if (!chatId || !token) {
       try {
         const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
         if (settings) {
-          if (!chatId && settings.telegramGroupChatId) {
-            chatId = settings.telegramGroupChatId;
+          if (!chatId) {
+            chatId = settings.telegramGroupChatId || settings.telegramChatId || undefined;
           }
           if (!token && settings.telegramToken) {
             try {
@@ -269,7 +269,7 @@ export class TelegramService {
     }
 
     if (!chatId) {
-      console.warn('[Telegram] TELEGRAM_GROUP_CHAT_ID not set, skipping breakout alert');
+      console.warn('[Telegram] Neither TELEGRAM_GROUP_CHAT_ID nor TELEGRAM_CHAT_ID is set, skipping breakout alert');
       return { ok: false, reason: 'missing_config' };
     }
 

@@ -40,10 +40,11 @@ is_protected_redis_key() {
     calc:share:*)
       return 0
       ;;
-    stock_data_*|market:*)
+    stock_data_*|market:*|market_tools:*|market_breadth:*)
       # H5 fix: stock data is read mid-scan by overnight BTST/STBT jobs.
       # Pruning these during an active scan causes partial OHLC loss —
       # mismatched entries, missing option suggestions, and wrong CPR values.
+      # Also protect market_tools:* and market_breadth:* daily reports.
       return 0
       ;;
     option_chain_*)

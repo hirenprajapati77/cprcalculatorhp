@@ -19,14 +19,12 @@ PatternBreakoutService.computePatternBreakoutReport = async () => {
 };
 
 test('PatternBreakoutService - Pre-computed Redis Cache Read Path', async (t) => {
-  await t.test('returns empty baseline report when cache is missing and forceRefresh is false', async () => {
+  await t.test('computes report on cold cache and returns valid data without pending state', async () => {
     await cache.clear();
 
     const report = await PatternBreakoutService.getPatternBreakoutReport(false);
-    assert.strictEqual(report.totalScanned, 0);
-    assert.strictEqual(report.qualifiedCount, 0);
-    assert.strictEqual(report.stocks.length, 0);
-    assert.strictEqual(report.status, 'pending');
+    assert.strictEqual(report.totalScanned, 2636);
+    assert.strictEqual(report.qualifiedCount, 15);
   });
 
   await t.test('computes and caches report when forceRefresh is true', async () => {
