@@ -8,6 +8,7 @@ import { MarketBreadthReport, UniverseBreadth } from '@/services/market-tools/ma
 export default function MarketBreadthPage() {
   const [report, setReport] = useState<MarketBreadthReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedUniverse, setSelectedUniverse] = useState<'ALL_NSE' | 'NIFTY_50' | 'NSE_FNO'>('ALL_NSE');
   // B16a: track mounted state to prevent setState on unmounted component
@@ -25,7 +26,11 @@ export default function MarketBreadthPage() {
   }, []);
 
   async function fetchBreadth(forceRefresh = false, signal?: AbortSignal) {
-    setLoading(true);
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await fetch(
@@ -44,7 +49,10 @@ export default function MarketBreadthPage() {
       if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (isMounted.current) setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }
 
@@ -88,10 +96,16 @@ export default function MarketBreadthPage() {
   return (
     <div className="w-full min-w-0 space-y-8">
       {/* Header */}
-      {report.status === 'pending' && (
+      {isRefreshing && (
+        <div className="flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2.5 text-xs font-semibold text-blue-300 animate-pulse">
+          <span className="inline-block animate-spin">🔄</span>
+          Computing Market Breadth metrics across 2,600+ symbols... Please wait.
+        </div>
+      )}
+      {!isRefreshing && report.status === 'pending' && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
           <span>⏳</span>
-          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. This isn&apos;t a &quot;flat market&quot; result; check back shortly.
+          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. Click Refresh to scan now.
         </div>
       )}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
@@ -110,10 +124,11 @@ export default function MarketBreadthPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fetchBreadth(true)}
-            disabled={loading}
-            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium rounded-lg text-xs border border-gray-700 transition flex items-center gap-2"
+            disabled={loading || isRefreshing}
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition flex items-center gap-2 shadow-sm"
           >
-            🔄 Refresh
+            <span className={loading || isRefreshing ? 'inline-block animate-spin' : ''}>🔄</span>
+            {isRefreshing ? 'Scanning...' : 'Refresh'}
           </button>
         </div>
       </div>
