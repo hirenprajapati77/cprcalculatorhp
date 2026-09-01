@@ -100,7 +100,7 @@ const envSchema = z.object({
   // Use preprocess to skip coercion entirely when the value is absent.
   CPR_WEIGHT: z.preprocess(
     (val) => (val === undefined || val === '' ? undefined : Number(val)),
-    z.number().optional()
+    z.number().finite().optional()
   ),
 
   /**

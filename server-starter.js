@@ -28,6 +28,7 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev: false, dir: __dirname, hostname: 'localhost', port });
 const handle = app.getRequestHandler();
 
+const bindHost = '0.0.0.0';
 app.prepare().then(() => {
   const server = createServer((req, res) => {
     handle(req, res);
@@ -44,8 +45,8 @@ app.prepare().then(() => {
 
   // M-02: listen() callback does not receive an error argument in Node.js 14+;
   // errors are emitted on the 'error' event above — removed dead `if (err) throw err`.
-  server.listen(port, hostname, () => {
-    console.log(`> CPR PRO Platform ready on http://${hostname}:${port}`);
+  server.listen(port, bindHost, () => {
+    console.log(`> CPR PRO Platform ready on http://${bindHost}:${port}`);
   });
 }).catch((err) => {
   console.error('Failed to start Next.js custom server:', err);

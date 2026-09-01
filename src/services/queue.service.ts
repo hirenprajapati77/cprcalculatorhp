@@ -3,10 +3,27 @@ import { env } from '@/config/env';
 import { Queue, QueueOptions } from 'bullmq';
 
 
-const connection = {
-  host: env.REDIS_HOST || 'localhost',
-  port: parseInt(env.REDIS_PORT || '6379'),
-};
+function parseRedisConnection() {
+  if (env.REDIS_URL) {
+    try {
+      const parsed = new URL(env.REDIS_URL);
+      return {
+        host: parsed.hostname || 'localhost',
+        port: parsed.port ? parseInt(parsed.port, 10) : 6379,
+        password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+        username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      };
+    } catch {
+      // If URL parsing fails, fall back to host/port
+    }
+  }
+  return {
+    host: env.REDIS_HOST || 'localhost',
+    port: parseInt(env.REDIS_PORT || '6379', 10),
+  };
+}
+
+const connection = parseRedisConnection();
 
 const defaultQueueOptions: QueueOptions = {
   connection,

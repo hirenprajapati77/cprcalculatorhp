@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 01 Sep 10-Day Deep Code Review: 7 Bug Fixes (Pass 2)
+
+A comprehensive follow-up deep code review covering all 91 commits across the 10-day period (Aug 22 – Sep 1, 2026) identified and resolved 7 additional confirmed bugs across 4 domains. All verified with 714/715 unit tests passing.
+
+#### 🔴 Critical
+
+- **B26 — Undeclared `hostname` in `server-starter.js`** (`server-starter.js`): `server.listen(port, hostname, ...)` referenced `hostname` which was never declared as a variable in the script scope, causing an immediate `ReferenceError: hostname is not defined` crash when launched via Node. Fixed by explicitly defining `const bindHost = '0.0.0.0'` and passing `bindHost` to `server.listen()`.
+
+#### 🟠 High
+
+- **B27 — BullMQ connection ignores `REDIS_URL` in production** (`src/services/queue.service.ts`): Queue connection configuration only checked `REDIS_HOST` and `REDIS_PORT`, silently falling back to `localhost:6379` in environments where `REDIS_URL` is used. Added URL parsing to support `REDIS_URL`.
+- **B28 — `overflow-x: hidden` disables sticky Navbar** (`src/app/globals.css`): `overflow-x: hidden` on `html` and `body` created a scroll container formatting context that disabled `position: sticky` on the desktop navbar header. Replaced with modern `overflow-x: clip`.
+- **B29 — Missing `ltp <= 0` guard in Gap Failure Exits** (`src/services/scheduler/btst-alert.job.ts`): If stock data returns 0 LTP due to feed delay or symbol tick unavailability at 9:16 AM, `0 < entry * 0.99` evaluated to `true`, triggering false GAP_FAILURE_EXIT alerts. Added guard `if (!stockData || !stockData.ltp || stockData.ltp <= 0) continue`.
+
+#### 🟡 Medium
+
+- **B30 — `tradeDate` timestamp mismatch in Gap Failure journal updates** (`src/services/scheduler/btst-alert.job.ts`): `new Date('${yesterday}T18:30:00.000Z')` evaluated to 24 hours ahead of stored IST midnight timestamps in `TradeJournal`. Refactored to match `TradeJournalService.todayMidnightIST()` for exact matching. Also made previous trading session discovery holiday-aware via `getISTTime()`.
+- **B31 — `CPR_WEIGHT` NaN validation bypass in Zod** (`src/config/env.ts`): `z.preprocess((val) => Number(val), z.number().optional())` allowed `NaN` values to pass validation. Added `z.number().finite().optional()`.
+- **B32 — `sendRawMessage` Telegram routing to group** (`src/services/alert/telegram.service.ts`): `sendRawMessage` defaulted strictly to personal DM (`TELEGRAM_CHAT_ID`). Updated to target `TELEGRAM_GROUP_CHAT_ID || TELEGRAM_CHAT_ID` so Gap Failure Exit and system alerts reach the subscriber channel.
+
+#### 🟢 Low
+
+- **B33 — Cup & Handle tightness bonus threshold unreachable** (`src/services/market-tools/pattern-breakout.service.ts`): Scoring required `baseDepthPct <= 12.0` for tightness bonus, but Cup & Handle detection filters `baseDepthPct < 12.0`. Adjusted threshold to `<= 15.0` for Cup & Handle.
+
 ### Fixed — 31 Aug 10-Day Deep Code Review: 25 Bug Fixes (PR #151 / Commit `9381c945`)
 
 A systematic deep code review covering all ~70 commits across PRs #141–#149 (Aug 22–31, 2026) identified 25 bugs spanning 4 domains: market-tools services, overnight/index services, API routes, and infrastructure. All 25 resolved and verified with 709/710 unit tests passing.

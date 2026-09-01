@@ -18,7 +18,7 @@ import {
   selectTradableIndexStbtPicks,
 } from '@/services/overnight/index-overnight-persist';
 import { INDEX_SCORE } from '@/services/overnight/index-ranking.service';
-import { getISTDateString, getCompletedHistory } from '@/lib/market-hours';
+import { getISTDateString, getCompletedHistory, getISTTime } from '@/lib/market-hours';
 import { prisma } from '@/lib/db';
 import { BtstService } from '@/services/backtest/btst.service';
 import { VpaConfirmationService } from '@/services/vpa';
@@ -547,13 +547,12 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
 export async function checkGapFailureExits(): Promise<{ checked: number; exited: string[] }> {
   const yesterday = (() => {
     const d = new Date();
-    // Walk backwards to find the last trading session date (skip weekends)
-    for (let i = 1; i <= 4; i++) {
-      const candidate = new Date(d);
-      candidate.setDate(d.getDate() - i);
-      const dow = candidate.getDay(); // 0=Sun, 6=Sat
-      if (dow !== 0 && dow !== 6) {
-        return candidate.toISOString().split('T')[0];
+    // Walk backwards to find the last trading session date (skip weekends & NSE holidays)
+    for (let i = 1; i <= 10; i++) {
+      const candidate = new Date(d.getTime() - i * 24 * 60 * 60 * 1000);
+      const { isTradingDay, dateString } = getISTTime(candidate);
+      if (isTradingDay) {
+        return dateString;
       }
     }
     return null;
@@ -583,7 +582,7 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
       // Fetch current spot LTP
       const stockData = await MarketService.getStockData(sig.symbol);
-      if (!stockData) continue;
+      if (!stockData || !stockData.ltp || stockData.ltp <= 0) continue;
       const ltp = stockData.ltp;
 
       // Evaluate gap direction
@@ -618,10 +617,13 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
       // Update TradeJournal row if one exists
       try {
+        const [y, m, d] = yesterday.split('-').map(Number);
+        const journalTradeDate = new Date(Date.UTC(y, m - 1, d, 0, -330, 0, 0));
+
         await prisma.tradeJournal.updateMany({
           where: {
             symbol: sig.symbol,
-            tradeDate: new Date(`${yesterday}T18:30:00.000Z`),
+            tradeDate: journalTradeDate,
             signalType: sig.direction === 'SHORT' ? 'STBT' : 'BTST',
             cmp916: null,
           },

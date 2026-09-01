@@ -685,7 +685,8 @@ export class PatternBreakoutService {
     let patternScore = 0;
     if (params.primaryPattern === 'VCP' || params.primaryPattern === 'CUP_AND_HANDLE') {
       patternScore = 20;
-      if (params.patternDetails && params.patternDetails.baseDepthPct <= 12.0) {
+      const maxTightnessDepth = params.primaryPattern === 'CUP_AND_HANDLE' ? 15.0 : 12.0;
+      if (params.patternDetails && params.patternDetails.baseDepthPct <= maxTightnessDepth) {
         patternScore += 5; // Tightness bonus
       }
     } else if (params.primaryPattern === 'DOUBLE_BOTTOM' || params.primaryPattern === 'FLAT_BASE') {

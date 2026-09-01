@@ -90,11 +90,13 @@ export class TelegramService {
 
   /**
    * Sends a pre-formatted HTML message to the configured Telegram chat.
+   * Targets group chat (TELEGRAM_GROUP_CHAT_ID) first, falling back to personal chat (TELEGRAM_CHAT_ID).
    * Alias for sendMessage — use this when the caller has already built the
    * full message string (e.g., gap-failure exit alerts, system notifications).
    */
-  static async sendRawMessage(text: string): Promise<{ ok: boolean; reason?: string }> {
-    return TelegramService.sendMessage(text);
+  static async sendRawMessage(text: string, chatId?: string): Promise<{ ok: boolean; reason?: string }> {
+    const targetChatId = chatId || env.TELEGRAM_GROUP_CHAT_ID || env.TELEGRAM_CHAT_ID;
+    return TelegramService.sendMessage(text, targetChatId);
   }
 
   /**
