@@ -30,21 +30,50 @@
 //    ETF/fund with at least one char after "GROWW"), while excluding the bare
 //    "GROWW" ticker (no char after the W). NOT a bug — do not escape this dot.
 const ETF_FUND_SYMBOL_PATTERN =
-  /ETF$|BEES$|LIQUID|^GSEC|^MOM(100|30IETF|ENTUM)$|^EQUAL|^NEXT50$|^MID(CAP|SMALL|SEL|150|100)|^AONETOTAL$|^GROWW./i;
+  /ETF\d*$|IETF\d*$|BEES$|LIQUID|\b(GSEC|GILT)\d*|\b(NEXT50|MIDCAP|SMALLCAP|LOWVOL|QUALITY|MOMENTUM|VALUE|DEFENCE|NV20)\d*|^BBETF|^EBBETF|^LICN|^MASP|^MAFANG|^GROWW.|^SETF|^MON100|^MONEXT50|^MOSMALL|^MODEFENCE|^MOLOWVOL|^MOQUALITY|^MOVALUE|^MOGSEC|^MOM(100|30|50|ENTUM|MID|NC|OMENTUM)|^MONQ50|^EQUAL|^MID(CAP|SMALL|SEL|150|100)|^HDFC(NEXT50|LOWVOL|QUAL|VALUE|LIQUID|MOMENT|MNC)|^SBI(ETF|LIQ|NEQ|SML|VAL)|^AXIS(BNK|BPS|C|HC|TEC|VALUE)|^ABSL(BAN|LIQUID)|^UTI(BANK|NEXT50|NIFT|SENS)|^KAVDEFENCE|^AONETOTAL|^ALPHAETF|^ALPL30|^CASHIETF|^COMMOIETF|^CONSUMIETF|^DIVOPP|^EVIETF|^FINIETF|^FMCGIETF|^HEALTHIETF|^INFRAIETF|^INSUREIETF|^METALIETF|^OILIETF|^PSUBNKIETF|^PVTBANIETF|^QUAL30|^TOP15|^VAL30|^BSE500|^TNID|^TWCGOLD|^NETF$|^MNC$|^MULTICAP$/i;
+
+/**
+ * Operating company stocks that might accidentally match parts of the fund regex
+ * but must ALWAYS be preserved for trading scanners.
+ */
+const REAL_STOCK_WHITELIST = new Set([
+  'PNBGILTS',
+  'JETFREIGHT',
+  'MOREPENLAB',
+  'MOIL',
+  'MOTHERSON',
+  'MOTILALOFS',
+  'MOLDTKPAC',
+  'MOLDTECH',
+  'MONTECARLO',
+  'MORARJEE',
+  'MOSCHIP',
+  'MANINFRA',
+]);
 
 /**
  * Individually confirmed gaps in the regex above -- real ETF/index-fund
  * symbols that don't match any generalizable pattern without risking a
- * false positive on a real stock ticker. Add here as spotted; each entry
- * should have a comment noting where/when it was confirmed.
+ * false positive on a real stock ticker.
  */
 const KNOWN_GAP_SYMBOLS = new Set([
   'HDFCMOMENT',  // HDFC NIFTY200 Momentum 30 ETF -- confirmed live 29 Aug 2026
   'MONQ50',      // Motilal Oswal NASDAQ Q50 ETF -- confirmed live 29 Aug 2026
   'LICNMID100',  // LIC MF Nifty Midcap 100 Index Fund -- confirmed live 29 Aug 2026
   'MULTICAP',    // Multi-cap index fund/ETF -- confirmed live 29 Aug 2026
+  'BBETF0432',   // Bharat Bond ETF
+  'MASPTOP50',   // Mirae Asset S&P Top 50 ETF
+  'MON100',      // Motilal Oswal Nasdaq 100 ETF
+  'MOSMALL250',  // Motilal Oswal Smallcap 250 ETF
+  'MODEFENCE',   // Motilal Oswal Defence ETF
+  'HDFCNEXT50',  // HDFC Nifty Next 50 ETF
+  'LICNETFGSC',  // LIC MF Nifty ETF G-Sec
+  'HDFCQUAL',    // HDFC Quality ETF
+  'MNC',         // MNC Index ETF
 ]);
 
 export function isLikelyEtfOrFund(symbol: string): boolean {
-  return ETF_FUND_SYMBOL_PATTERN.test(symbol) || KNOWN_GAP_SYMBOLS.has(symbol.toUpperCase());
+  const upper = symbol.toUpperCase();
+  if (REAL_STOCK_WHITELIST.has(upper)) return false;
+  return ETF_FUND_SYMBOL_PATTERN.test(symbol) || KNOWN_GAP_SYMBOLS.has(upper);
 }

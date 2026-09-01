@@ -55,7 +55,21 @@ test('isLikelyEtfOrFund catches individually confirmed gap symbols', () => {
   // on a real stock ticker, so they're an explicit allowlist rather than a
   // broadened regex. This test exists so future gap-closures land the same
   // way: confirm live, add to KNOWN_GAP_SYMBOLS, add a case here.
-  const gaps = ['HDFCMOMENT', 'MONQ50', 'LICNMID100', 'MULTICAP'];
+  const gaps = [
+    'HDFCMOMENT',
+    'MONQ50',
+    'LICNMID100',
+    'MULTICAP',
+    'BBETF0432',
+    'MASPTOP50',
+    'MON100',
+    'MOSMALL250',
+    'MODEFENCE',
+    'HDFCNEXT50',
+    'LICNETFGSC',
+    'HDFCQUAL',
+    'MNC',
+  ];
   for (const s of gaps) {
     assert.strictEqual(isLikelyEtfOrFund(s), true, `expected ${s} to be excluded`);
   }
@@ -80,6 +94,12 @@ test('isLikelyEtfOrFund does not exclude ordinary operating-company stock symbol
     'INFY',
     'AMBER',
     'NATIONALUM',
+    'PNBGILTS',
+    'JETFREIGHT',
+    'MOREPENLAB',
+    'MOIL',
+    'MOTHERSON',
+    'MOTILALOFS',
   ];
   for (const s of shouldKeep) {
     assert.strictEqual(isLikelyEtfOrFund(s), false, `expected ${s} NOT to be excluded`);
