@@ -69,7 +69,9 @@ export interface MultiYearBreakoutReport {
 
 let cachedReport: MultiYearBreakoutReport | null = null;
 let lastComputedTime = 0;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+let inFlightCompute: Promise<MultiYearBreakoutReport> | null = null;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (Bhavcopy updates once daily)
+const REDIS_TTL_SEC = 24 * 3600; // 24 hours
 
 export class MultiYearBreakoutService {
   /**
@@ -94,32 +96,26 @@ export class MultiYearBreakoutService {
         // Ignore cache lookup errors
       }
 
-      // Memory fallback if Redis is temporarily unreachable — respect the same 1-hour TTL
+      // Memory fallback if Redis is temporarily unreachable
       if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
-
-      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
-      // Return empty baseline report until background precompute job runs.
-      const defaultWin = { label: '1Y', available: false, requiredDays: 250, availableDays: 0 };
-      return {
-        date: new Date().toISOString().split('T')[0],
-        tradingDaysAvailable: 0,
-        windowAvailability: {
-          '1Y': { ...defaultWin, label: '1Y', requiredDays: 250 },
-          '2Y': { ...defaultWin, label: '2Y', requiredDays: 500 },
-          '3Y': { ...defaultWin, label: '3Y', requiredDays: 750 },
-          '5Y': { ...defaultWin, label: '5Y', requiredDays: 1250 },
-          '10Y': { ...defaultWin, label: '10Y', requiredDays: 2500 },
-          ATH: { ...defaultWin, label: 'ATH', requiredDays: 2500 },
-        },
-        totalScanned: 0,
-        breakoutCounts: { '1Y': 0, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
-        stocks: [],
-        computedAt: new Date().toISOString(),
-        status: 'pending',
-      };
     }
+
+    // If forceRefresh=true or cache is missing, compute with single-flight deduplication
+    if (inFlightCompute) {
+      return await inFlightCompute;
+    }
+
+    inFlightCompute = MultiYearBreakoutService.computeBreakoutReport(now)
+      .finally(() => {
+        inFlightCompute = null;
+      });
+
+    return await inFlightCompute;
+  }
+
+  private static async computeBreakoutReport(now: number): Promise<MultiYearBreakoutReport> {
 
     // 1. Fetch available trading dates sorted descending
     const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
@@ -419,7 +415,7 @@ export class MultiYearBreakoutService {
     lastComputedTime = now;
 
     try {
-      await cache.set('market_tools:breakout:report', JSON.stringify(report), 3600);
+      await cache.set('market_tools:breakout:report', JSON.stringify(report), REDIS_TTL_SEC);
     } catch {
       // Ignore cache write errors
     }

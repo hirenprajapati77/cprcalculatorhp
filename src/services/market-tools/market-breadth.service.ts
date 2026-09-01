@@ -63,7 +63,9 @@ export interface MarketBreadthReport {
 
 let cachedReport: MarketBreadthReport | null = null;
 let lastComputedTime = 0;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+let inFlightCompute: Promise<MarketBreadthReport> | null = null;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (Bhavcopy updates once daily)
+const REDIS_TTL_SEC = 24 * 3600; // 24 hours
 
 export class MarketBreadthService {
   /**
@@ -89,27 +91,25 @@ export class MarketBreadthService {
       }
 
       // Memory fallback if Redis is temporarily unreachable
-      if (cachedReport) {
+      if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
-
-      // If cache is missing and forceRefresh=false, do NOT trigger heavy live compute on HTTP thread.
-      // Return empty baseline report until background precompute job runs.
-      // Use 'N/A' for date — today's wall-clock date is wrong after midnight
-      // before the 19:15 precompute runs and would mislead consumers.
-      return {
-        date: 'N/A',
-        tradingDaysAvailable: 0,
-        nifty50: { universe: 'NIFTY_50', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
-        nseFno: { universe: 'NSE_FNO', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
-        allNse: { universe: 'ALL_NSE', totalCount: 0, advances: 0, declines: 0, unchanged: 0, adRatio: 0, aboveMa10Count: 0, ma10EligibleCount: 0, aboveMa10Pct: 0, aboveMa20Count: 0, ma20EligibleCount: 0, aboveMa20Pct: 0, aboveMa50Count: 0, ma50EligibleCount: 0, aboveMa50Pct: 0, aboveMa200Count: 0, ma200EligibleCount: 0, aboveMa200Pct: 0, up4PctCount: 0, down4PctCount: 0, new52wHighCount: 0, new52wLowCount: 0, netNewHighs: 0, status52w: 'NEUTRAL' },
-        overallScore: 5,
-        marketRegime: 'NEUTRAL',
-        sectors: { allNse: [], nifty50: [], nseFno: [] },
-        computedAt: new Date().toISOString(),
-        status: 'pending',
-      };
     }
+
+    // If forceRefresh=true or cache is missing, compute with single-flight deduplication
+    if (inFlightCompute) {
+      return await inFlightCompute;
+    }
+
+    inFlightCompute = MarketBreadthService.computeMarketBreadth(now)
+      .finally(() => {
+        inFlightCompute = null;
+      });
+
+    return await inFlightCompute;
+  }
+
+  private static async computeMarketBreadth(now: number): Promise<MarketBreadthReport> {
 
     // 1. Fetch available trading dates sorted descending
     const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
@@ -260,7 +260,7 @@ export class MarketBreadthService {
     lastComputedTime = now;
 
     try {
-      await cache.set('market_breadth:report', JSON.stringify(report), 3600);
+      await cache.set('market_breadth:report', JSON.stringify(report), REDIS_TTL_SEC);
     } catch {
       // Ignore cache write errors
     }
