@@ -2,7 +2,13 @@ import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
-
+import {
+  computeRvol,
+  computeClv,
+  computeRangePct,
+  classifyBreakoutVpa,
+  type BreakoutVpaFootprint,
+} from '@/services/vpa/vpa.math';
 
 export type BreakoutWindow = '1Y' | '2Y' | '3Y' | '5Y' | '10Y' | 'ATH';
 
@@ -13,6 +19,8 @@ export interface BreakoutStock {
   prevClose: number;
   changePct: number;
   volume: number;
+  rvol20d: number | null;
+  clv: number | null;
   historyDays: number;
   breakout1Y: boolean | null;
   high1Y: number | null;
@@ -35,6 +43,7 @@ export interface BreakoutStock {
   strongestBreakout: 'ATH' | '10Y' | '5Y' | '3Y' | '2Y' | '1Y' | null;
   breakoutPrice: number | null;
   breakoutGainPct: number | null;
+  vpaFootprint: BreakoutVpaFootprint;
 }
 
 export interface WindowAvailabilityInfo {
@@ -134,9 +143,13 @@ export class MultiYearBreakoutService {
     const rawStocks = await prisma.$queryRaw<
       Array<{
         symbol: string;
+        open: number;
+        high: number;
+        low: number;
         close: number;
         prevClose: number;
         volume: bigint | number;
+        avgVol20: number | null;
         historyDays: bigint | number;
         high1Y: number | null;
         high2Y: number | null;
@@ -151,10 +164,14 @@ export class MultiYearBreakoutService {
           symbol,
           series,
           date,
+          open,
+          high,
+          low,
           close,
           "prevClose",
           volume,
           COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
+          AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
           MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as "high1Y",
           MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 499 PRECEDING AND 1 PRECEDING) as "high2Y",
           MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 749 PRECEDING AND 1 PRECEDING) as "high3Y",
@@ -167,9 +184,13 @@ export class MultiYearBreakoutService {
       )
       SELECT 
         symbol,
+        open,
+        high,
+        low,
         close,
         "prevClose",
         volume,
+        "avgVol20",
         "historyDays",
         "high1Y",
         "high2Y",
@@ -246,10 +267,21 @@ export class MultiYearBreakoutService {
     for (const raw of rawStocksFiltered) {
       const historyDays = Number(raw.historyDays || 0);
       const close = Number(raw.close || 0);
+      const open = Number(raw.open || 0);
+      const high = Number(raw.high || 0);
+      const low = Number(raw.low || 0);
       const prevClose = Number(raw.prevClose || 0);
       const changePct = prevClose > 0 ? Math.round(((close - prevClose) / prevClose) * 10000) / 100 : 0;
       const volume = Number(raw.volume || 0);
+      const avgVol20 = Number(raw.avgVol20 || 0);
       const sector = getSymbolSector(raw.symbol);
+
+      const rvol20dRaw = avgVol20 > 0 ? computeRvol(volume, avgVol20) : null;
+      const rvol20d = rvol20dRaw !== null ? Number(rvol20dRaw.toFixed(2)) : null;
+      const clvRaw = (high > low) ? computeClv(close, high, low) : null;
+      const clv = clvRaw !== null ? Number(clvRaw.toFixed(2)) : null;
+      const rangePct = (close > 0 && high > low) ? computeRangePct(high, low, close) : null;
+      const vpaFootprint = classifyBreakoutVpa(rvol20d, clv, rangePct);
 
       // --- 1Y Window ---
       let breakout1Y: boolean | null = null;
@@ -364,6 +396,8 @@ export class MultiYearBreakoutService {
           prevClose,
           changePct,
           volume,
+          rvol20d,
+          clv,
           historyDays,
           breakout1Y,
           high1Y,
@@ -386,6 +420,7 @@ export class MultiYearBreakoutService {
           strongestBreakout,
           breakoutPrice,
           breakoutGainPct,
+          vpaFootprint,
         });
       }
     }

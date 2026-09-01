@@ -1,7 +1,13 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
-import { computeRvol } from '@/services/vpa/vpa.math';
+import {
+  computeRvol,
+  computeClv,
+  computeRangePct,
+  classifyBreakoutVpa,
+  type BreakoutVpaFootprint,
+} from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 
@@ -28,6 +34,7 @@ export interface ScoreBreakdown {
   volumeScore: number;     // 0 - 25
   patternScore: number;    // 0 - 25
   momentumScore: number;   // 0 - 20
+  vpaModifier: number;     // -10 to +5
   totalScore: number;      // 0 - 100
   qualityTier: 'A+' | 'A' | 'B' | 'C';
 }
@@ -40,6 +47,7 @@ export interface PatternBreakoutStock {
   changePct: number;
   volume: number;
   rvol20d: number | null;
+  clv: number | null;
   historyDays: number;
   high52w: number;
   distanceToHighPct: number;
@@ -49,6 +57,7 @@ export interface PatternBreakoutStock {
   detectedPatterns: PatternDetails[];
   scoreBreakdown: ScoreBreakdown;
   patternDetails: PatternDetails | null;
+  vpaFootprint: BreakoutVpaFootprint;
 }
 
 export type PatternType = 'VCP' | 'CUP_AND_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'NONE';
@@ -334,6 +343,12 @@ export class PatternBreakoutService {
       const primaryPatternLabel = this.getPatternLabel(primaryPattern);
       const primaryPatternDetails = detectedPatterns.find(p => p.type === primaryPattern) || null;
 
+      const latestCandle = candles.length > 0 ? candles[candles.length - 1] : null;
+      const clvRaw = latestCandle ? computeClv(latestCandle.close, latestCandle.high, latestCandle.low) : null;
+      const clv = clvRaw !== null ? Number(clvRaw.toFixed(2)) : null;
+      const rangePct = latestCandle ? computeRangePct(latestCandle.high, latestCandle.low, latestCandle.close) : null;
+      const vpaFootprint = classifyBreakoutVpa(rvol20d, clv, rangePct);
+
       // Compute Total Score
       const scoreBreakdown = this.computeScore({
         status: q.status,
@@ -342,6 +357,7 @@ export class PatternBreakoutService {
         primaryPattern,
         patternDetails: primaryPatternDetails,
         candles,
+        vpaFootprint,
       });
 
       // Update counters
@@ -357,6 +373,7 @@ export class PatternBreakoutService {
         changePct,
         volume: q.volume,
         rvol20d,
+        clv,
         historyDays: q.historyDays,
         high52w: q.high52w,
         distanceToHighPct: q.distanceToHighPct,
@@ -366,6 +383,7 @@ export class PatternBreakoutService {
         detectedPatterns,
         scoreBreakdown,
         patternDetails: primaryPatternDetails,
+        vpaFootprint,
       });
     }
 
@@ -664,6 +682,7 @@ export class PatternBreakoutService {
     primaryPattern: PatternType;
     patternDetails: PatternDetails | null;
     candles: OhlcvCandle[];
+    vpaFootprint?: BreakoutVpaFootprint;
   }): ScoreBreakdown {
     // 1. Proximity Score (Max 30)
     let proximityScore = 0;
@@ -737,7 +756,10 @@ export class PatternBreakoutService {
       }
     }
 
-    const totalScore = Math.min(100, Math.max(0, proximityScore + volumeScore + patternScore + momentumScore));
+    // 5. VPA Footprint Modifier (-10 to +5)
+    const vpaModifier = params.vpaFootprint?.scoreModifier ?? 0;
+
+    const totalScore = Math.min(100, Math.max(0, proximityScore + volumeScore + patternScore + momentumScore + vpaModifier));
 
     let qualityTier: 'A+' | 'A' | 'B' | 'C' = 'C';
     if (totalScore >= 85) qualityTier = 'A+';
@@ -749,6 +771,7 @@ export class PatternBreakoutService {
       volumeScore,
       patternScore,
       momentumScore,
+      vpaModifier,
       totalScore,
       qualityTier,
     };

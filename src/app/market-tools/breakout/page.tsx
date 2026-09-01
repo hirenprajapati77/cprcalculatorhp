@@ -332,6 +332,7 @@ export default function MultiYearBreakoutPage() {
                 <th className="py-3 px-4 text-right">CMP (₹)</th>
                 <th className="py-3 px-4 text-right">Day Chg</th>
                 <th className="py-3 px-4 text-center">Strongest BO</th>
+                <th className="py-3 px-4 text-center">VPA Footprint</th>
                 <th className="py-3 px-4 text-right">BO Price (₹)</th>
                 <th className="py-3 px-4 text-right">Gain over BO</th>
                 <th className="py-3 px-4 text-center">1Y</th>
@@ -346,7 +347,7 @@ export default function MultiYearBreakoutPage() {
             <tbody className="divide-y divide-gray-800/60">
               {filteredStocks.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-gray-500">
+                  <td colSpan={16} className="py-12 text-center text-gray-500">
                     No breakout stocks match the selected filter.
                   </td>
                 </tr>
@@ -374,6 +375,28 @@ export default function MultiYearBreakoutPage() {
                       >
                         {stock.strongestBreakout || '—'}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                      {stock.vpaFootprint ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            stock.vpaFootprint.badgeVariant === 'success'
+                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
+                              : stock.vpaFootprint.badgeVariant === 'info'
+                              ? 'bg-blue-950/80 text-blue-300 border-blue-700'
+                              : stock.vpaFootprint.badgeVariant === 'danger'
+                              ? 'bg-rose-950/80 text-rose-300 border-rose-700'
+                              : stock.vpaFootprint.badgeVariant === 'warning'
+                              ? 'bg-amber-950/80 text-amber-300 border-amber-700'
+                              : 'bg-gray-800 text-gray-400 border-gray-700'
+                          }`}
+                          title={stock.vpaFootprint.description}
+                        >
+                          {stock.vpaFootprint.label}
+                        </span>
+                      ) : (
+                        <span className="text-gray-600">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-gray-300">
                       {stock.breakoutPrice

@@ -419,6 +419,7 @@ export default function PatternBreakoutPage() {
                 <th className="py-3 px-4 text-right">Dist to 52W</th>
                 <th className="py-3 px-4 text-center">Primary Pattern</th>
                 <th className="py-3 px-4 text-right">RVOL 20D</th>
+                <th className="py-3 px-4 text-center">VPA Footprint</th>
                 <th className="py-3 px-4 text-center">Score</th>
                 <th className="py-3 px-4 text-center">Tier</th>
                 <th className="py-3 px-4 text-center">Action</th>
@@ -427,13 +428,14 @@ export default function PatternBreakoutPage() {
             <tbody className="divide-y divide-gray-800/60">
               {filteredStocks.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-gray-500">
+                  <td colSpan={14} className="py-12 text-center text-gray-500">
                     No stocks match the selected pattern, status, or search filters.
                   </td>
                 </tr>
               ) : (
                 filteredStocks.map((stock, idx) => {
                   const isExpanded = expandedSymbol === stock.symbol;
+                  const vpa = stock.vpaFootprint;
                   return (
                     <React.Fragment key={stock.symbol}>
                       <tr className="hover:bg-gray-800/40 transition group">
@@ -501,6 +503,28 @@ export default function PatternBreakoutPage() {
                             <span className="text-gray-600">—</span>
                           )}
                         </td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {vpa ? (
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                vpa.badgeVariant === 'success'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
+                                  : vpa.badgeVariant === 'info'
+                                  ? 'bg-blue-950/80 text-blue-300 border-blue-700'
+                                  : vpa.badgeVariant === 'danger'
+                                  ? 'bg-rose-950/80 text-rose-300 border-rose-700'
+                                  : vpa.badgeVariant === 'warning'
+                                  ? 'bg-amber-950/80 text-amber-300 border-amber-700'
+                                  : 'bg-gray-800 text-gray-400 border-gray-700'
+                              }`}
+                              title={vpa.description}
+                            >
+                              {vpa.label}
+                            </span>
+                          ) : (
+                            <span className="text-gray-600">—</span>
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-center font-mono font-black text-white">
                           {stock.scoreBreakdown.totalScore}
                         </td>
@@ -526,8 +550,8 @@ export default function PatternBreakoutPage() {
                       {/* Expandable Row Detail */}
                       {isExpanded && (
                         <tr className="bg-gray-950/90 border-b border-gray-800">
-                          <td colSpan={13} className="p-4 space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <td colSpan={14} className="p-4 space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               {/* Pattern Details */}
                               <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-2">
                                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
@@ -552,12 +576,46 @@ export default function PatternBreakoutPage() {
                                 )}
                               </div>
 
+                              {/* VPA Footprint Details */}
+                              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-2">
+                                <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                  Volume Price Analysis (VPA)
+                                </h4>
+                                {vpa ? (
+                                  <div className="space-y-1.5 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-gray-400">Footprint Signal:</span>
+                                      <span className="font-bold text-white">{vpa.label}</span>
+                                    </div>
+                                    <p className="text-gray-300 text-[11px]">{vpa.description}</p>
+                                    <div className="grid grid-cols-3 gap-1.5 pt-1 text-center font-mono text-[10px]">
+                                      <div className="bg-gray-950 p-1.5 rounded border border-gray-800">
+                                        <div className="text-gray-500">CLV</div>
+                                        <div className="font-bold text-white">{stock.clv !== null ? stock.clv : '—'}</div>
+                                      </div>
+                                      <div className="bg-gray-950 p-1.5 rounded border border-gray-800">
+                                        <div className="text-gray-500">RVOL 20D</div>
+                                        <div className="font-bold text-white">{stock.rvol20d !== null ? `${stock.rvol20d}x` : '—'}</div>
+                                      </div>
+                                      <div className="bg-gray-950 p-1.5 rounded border border-gray-800">
+                                        <div className="text-gray-500">VPA Score</div>
+                                        <div className={`font-bold ${stock.scoreBreakdown.vpaModifier >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                          {stock.scoreBreakdown.vpaModifier > 0 ? `+${stock.scoreBreakdown.vpaModifier}` : stock.scoreBreakdown.vpaModifier} pts
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-500">No VPA footprint available for this setup.</p>
+                                )}
+                              </div>
+
                               {/* Score Breakdown */}
                               <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-2">
                                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                  Score Component Breakdown (Total: {stock.scoreBreakdown.totalScore} / 100)
+                                  Score Breakdown (Total: {stock.scoreBreakdown.totalScore} / 100)
                                 </h4>
-                                <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                                <div className="grid grid-cols-2 gap-2 text-center text-xs">
                                   <div className="bg-gray-950 p-2 rounded border border-gray-800">
                                     <div className="text-gray-500 text-[10px]">52W Proximity</div>
                                     <div className="text-white font-bold font-mono">
@@ -577,7 +635,7 @@ export default function PatternBreakoutPage() {
                                     </div>
                                   </div>
                                   <div className="bg-gray-950 p-2 rounded border border-gray-800">
-                                    <div className="text-gray-500 text-[10px]">Momentum/MA</div>
+                                    <div className="text-gray-500 text-[10px]">Momentum & MA</div>
                                     <div className="text-white font-bold font-mono">
                                       {stock.scoreBreakdown.momentumScore} / 20
                                     </div>

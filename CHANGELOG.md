@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 01 Sep: Volume Price Analysis (VPA) in Market Tools
+
+Integrated institutional **Volume Price Analysis (VPA)** into the Market Tools suite (`/market-tools/pattern-breakout` and `/market-tools/breakout`):
+
+- **VPA Footprint Engine** (`src/services/vpa/vpa.math.ts`): Added `classifyBreakoutVpa()` helper evaluating Close Location Value (CLV $\in [-1, 1]$), RVOL 20D, and candle range expansion. Classifies breakouts into 5 institutional footprints:
+  - 🟢 **`CONFIRMED`** ($\text{RVOL} \ge 1.5$ & $\text{CLV} \ge 0.3$): Volume-backed institutional breakout closing strong near high (+5 pts).
+  - 🔵 **`ABSORPTION`** ($\text{RVOL} \ge 1.2$ & $\text{CLV} \ge 0.0$ & $\text{Range} \le 2.5\%$): Tight price consolidation under accumulation (+5 pts).
+  - 🔴 **`CLIMAX_REJECT`** ($\text{RVOL} \ge 1.5$ & $\text{CLV} \le -0.2$): High-volume upper-wick rejection / bull trap (-10 pts).
+  - 🟡 **`NO_DEMAND`** ($\text{RVOL} < 0.8$): Low volume test lacking institutional buying (-3 pts).
+  - ⚪ **`NEUTRAL`**: Standard volume flow.
+- **52W Pattern Breakout Integration** (`src/services/market-tools/pattern-breakout.service.ts`): Computes daily CLV and attaches `vpaFootprint` to each stock. Composite 0–100 quality score applies `vpaModifier` to reward volume confirmation and demote upper-wick traps.
+- **Multi-Year Breakout Integration** (`src/services/market-tools/multi-year-breakout.service.ts`): Added OHLC and 20-day average volume to the SQL CTE query, attaching instant VPA footprint badges across 1Y, 2Y, 3Y, 5Y, 10Y, and ATH breakouts.
+- **Interactive UI Badges & Drawer Analytics** (`src/app/market-tools/pattern-breakout/page.tsx`, `src/app/market-tools/breakout/page.tsx`): Added responsive VPA Footprint status pills to main tables and dedicated VPA breakdown cards in the pattern details drawer.
+- **Unit Test Suite** (`src/tests/unit/vpa-breakout.test.ts`): Added comprehensive test coverage across all 5 footprint conditions and scoring modifiers (721/722 passing).
+
 ### Fixed — 01 Sep 1-Month Deep Code Review: 11 Issues Resolved across Domains 1–4
 
 An exhaustive line-by-line deep code review covering all 303 commits and ~70 modified files over the 30-day period (Aug 1 – Sep 1, 2026) across Overnight/Index Engine, Market Tools & Bhavcopy Ingestion, Realtime Scanner/Alerts, and Infrastructure/Watchdogs. Verified with 715/716 passing unit tests and GitHub Actions CI.
