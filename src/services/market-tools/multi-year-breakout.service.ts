@@ -267,7 +267,7 @@ export class MultiYearBreakoutService {
     for (const raw of rawStocksFiltered) {
       const historyDays = Number(raw.historyDays || 0);
       const close = Number(raw.close || 0);
-      const open = Number(raw.open || 0);
+      const _open = Number(raw.open || 0);
       const high = Number(raw.high || 0);
       const low = Number(raw.low || 0);
       const prevClose = Number(raw.prevClose || 0);

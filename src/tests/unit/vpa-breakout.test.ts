@@ -2,9 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classifyBreakoutVpa,
-  computeClv,
-  computeRvol,
-  computeRangePct,
 } from '@/services/vpa/vpa.math';
 import { PatternBreakoutService } from '@/services/market-tools/pattern-breakout.service';
 
