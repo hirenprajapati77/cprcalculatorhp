@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MultiYearBreakoutService, BreakoutWindow } from '@/services/market-tools/multi-year-breakout.service';
-import { env } from '@/config/env';
+import { isAuthorizedForRefresh } from '@/lib/market-tools-refresh-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,17 +11,9 @@ export async function GET(request: NextRequest) {
 
     // B3 fix: ?refresh=true scans 2,636 symbols × multiple year windows.
     // Gate behind auth even though middleware exempts this route for page loads.
-    if (forceRefresh && env.APP_ACCESS_TOKEN) {
-      const expectedToken = env.APP_ACCESS_TOKEN.trim();
-      const authHeader = request.headers.get('authorization');
-      const authCookie = request.cookies.get('app_access_token')?.value;
-      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-      const provided = bearerToken ?? authCookie ?? '';
-      if (provided !== expectedToken) {
-        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-      }
+    if (forceRefresh && !(await isAuthorizedForRefresh(request))) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-
 
     const windowFilter = searchParams.get('window') as BreakoutWindow | 'ALL' | null;
     const report = await MultiYearBreakoutService.getBreakoutReport(forceRefresh);
