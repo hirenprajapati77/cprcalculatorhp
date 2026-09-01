@@ -100,6 +100,13 @@ test('isLikelyEtfOrFund does not exclude ordinary operating-company stock symbol
     'MOIL',
     'MOTHERSON',
     'MOTILALOFS',
+    'VALUEIND',
+    'QUALITYINF',
+    'DEFENCELTD',
+    'MOMENTUMTECH',
+    'LOWVOLIND',
+    'MIDCAPCORP',
+    'SMALLCAPCORP',
   ];
   for (const s of shouldKeep) {
     assert.strictEqual(isLikelyEtfOrFund(s), false, `expected ${s} NOT to be excluded`);
