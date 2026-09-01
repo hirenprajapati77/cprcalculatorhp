@@ -60,7 +60,7 @@ export interface PatternBreakoutStock {
   vpaFootprint: BreakoutVpaFootprint;
 }
 
-export type PatternType = 'VCP' | 'CUP_AND_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'NONE';
+export type PatternType = 'FLAG_POLE' | 'VCP' | 'CUP_AND_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'NONE';
 export type BreakoutStatus = 'BREAKOUT' | 'NEAR_HIGH';
 export type PatternTier = 'A+' | 'A' | 'B' | 'C';
 
@@ -272,7 +272,7 @@ export class PatternBreakoutService {
         totalScanned,
         qualifiedCount: 0,
         countsByStatus: { BREAKOUT: 0, NEAR_HIGH: 0 },
-        countsByPattern: { VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
+        countsByPattern: { FLAG_POLE: 0, VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
         stocks: [],
         computedAt: new Date().toISOString(),
@@ -326,7 +326,7 @@ export class PatternBreakoutService {
     // 4. Run pattern heuristics and composite scoring on each stock
     const stocks: PatternBreakoutStock[] = [];
     const countsByStatus = { BREAKOUT: 0, NEAR_HIGH: 0 };
-    const countsByPattern = { VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 };
+    const countsByPattern = { FLAG_POLE: 0, VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 };
     const countsByTier = { 'A+': 0, A: 0, B: 0, C: 0 };
 
     for (const q of qualifyingList) {
@@ -412,7 +412,10 @@ export class PatternBreakoutService {
    */
   static detectAllPatterns(candles: OhlcvCandle[], high52w: number): PatternDetails[] {
     const results: PatternDetails[] = [];
-    if (candles.length < 30) return results;
+    if (candles.length < 20) return results;
+
+    const flagAndPole = this.detectFlagAndPole(candles, high52w);
+    if (flagAndPole) results.push(flagAndPole);
 
     const vcp = this.detectVcp(candles, high52w);
     if (vcp) results.push(vcp);
@@ -434,7 +437,7 @@ export class PatternBreakoutService {
    */
   static selectPrimaryPattern(detected: PatternDetails[]): PatternType {
     if (detected.length === 0) return 'NONE';
-    const hierarchy: PatternType[] = ['VCP', 'CUP_AND_HANDLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
+    const hierarchy: PatternType[] = ['FLAG_POLE', 'VCP', 'CUP_AND_HANDLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
     for (const type of hierarchy) {
       if (detected.some(d => d.type === type)) {
         return type;
@@ -445,12 +448,114 @@ export class PatternBreakoutService {
 
   static getPatternLabel(type: PatternType): string {
     switch (type) {
+      case 'FLAG_POLE': return 'Bull Flag & Pole';
       case 'VCP': return 'VCP Pattern';
       case 'CUP_AND_HANDLE': return 'Cup & Handle';
       case 'DOUBLE_BOTTOM': return 'Double Bottom';
       case 'FLAT_BASE': return 'Flat Base';
       default: return 'Raw 52W';
     }
+  }
+
+  /**
+   * Bull Flag & Pole (High Tight Flag) Detection Algorithm
+   *
+   * 1. Pole (Momentum Surge):
+   *    - Sharp advance >= 15.0% over compact 8-25 candles
+   *    - Pole base low -> pole peak high
+   * 2. Flag (Consolidation Channel):
+   *    - Tight pullback <= 12.0% from pole peak (duration 4-18 candles)
+   *    - Pullback stays in upper 55% of pole advance
+   * 3. Volume Contraction:
+   *    - Average volume during flag <= 0.85x average volume during pole
+   */
+  static detectFlagAndPole(candles: OhlcvCandle[], high52w: number): PatternDetails | null {
+    if (candles.length < 20) return null;
+    const window = candles.slice(-40);
+    const n = window.length;
+    if (n < 15) return null;
+
+    // Flag duration: trailing 4 to 18 candles
+    let bestPattern: PatternDetails | null = null;
+
+    for (let flagLen = 4; flagLen <= Math.min(18, n - 8); flagLen++) {
+      const polePeakIdx = n - flagLen;
+      const polePeakCandle = window[polePeakIdx];
+      const polePeakVal = polePeakCandle.high;
+
+      // Pole peak must be within 10% of 52W High
+      if (polePeakVal < high52w * 0.90) continue;
+
+      // Pole base: lowest low in the 8 to 22 candles leading up to pole peak
+      let poleBaseVal = Infinity;
+      let poleBaseIdx = -1;
+      const poleStartIdx = Math.max(0, polePeakIdx - 22);
+
+      for (let i = poleStartIdx; i <= polePeakIdx - 4; i++) {
+        if (window[i].low < poleBaseVal) {
+          poleBaseVal = window[i].low;
+          poleBaseIdx = i;
+        }
+      }
+
+      if (poleBaseIdx === -1 || poleBaseVal <= 0) continue;
+
+      // Pole height percentage
+      const poleGainPct = ((polePeakVal - poleBaseVal) / poleBaseVal) * 100;
+      if (poleGainPct < 15.0) continue; // Must be a powerful momentum surge
+
+      // Flag consolidation: candles from polePeakIdx + 1 to n - 1
+      let flagLowVal = Infinity;
+      let flagHighVal = -Infinity;
+      let flagVolSum = 0;
+      let flagVolCount = 0;
+
+      for (let i = polePeakIdx + 1; i < n; i++) {
+        if (window[i].low < flagLowVal) flagLowVal = window[i].low;
+        if (window[i].high > flagHighVal) flagHighVal = window[i].high;
+        flagVolSum += window[i].volume;
+        flagVolCount++;
+      }
+
+      if (flagVolCount < 3) continue;
+
+      // Flag pullback depth from pole peak
+      const flagDepthPct = ((polePeakVal - flagLowVal) / polePeakVal) * 100;
+      if (flagDepthPct > 12.0) continue; // Flag must be tight and orderly
+
+      // Flag must retain at least 55% of pole surge
+      const poleHeight = polePeakVal - poleBaseVal;
+      const retracementRatio = (polePeakVal - flagLowVal) / poleHeight;
+      if (retracementRatio > 0.45) continue;
+
+      // Volume dry-up check: average flag volume vs pole volume
+      let poleVolSum = 0;
+      let poleVolCount = 0;
+      for (let i = poleBaseIdx; i <= polePeakIdx; i++) {
+        poleVolSum += window[i].volume;
+        poleVolCount++;
+      }
+      const avgPoleVol = poleVolCount > 0 ? poleVolSum / poleVolCount : 1;
+      const avgFlagVol = flagVolCount > 0 ? flagVolSum / flagVolCount : 1;
+      const volDryUpRatio = avgPoleVol > 0 ? avgFlagVol / avgPoleVol : 1.0;
+
+      const totalBaseDays = n - poleBaseIdx;
+      const confidence = Number(
+        Math.min(95, Math.max(65, 90 - flagDepthPct * 2 + (volDryUpRatio < 0.85 ? 5 : 0))).toFixed(0)
+      );
+
+      bestPattern = {
+        type: 'FLAG_POLE',
+        label: 'Bull Flag & Pole',
+        baseDepthPct: Number(flagDepthPct.toFixed(1)),
+        baseDays: totalBaseDays,
+        confidence,
+        description: `Explosive pole (+${poleGainPct.toFixed(1)}%) with tight ${flagDepthPct.toFixed(1)}% flag consolidation (${flagVolCount}d)`,
+      };
+      break; // Found tightest valid flag
+    }
+
+    return bestPattern;
   }
 
   /**
@@ -710,7 +815,12 @@ export class PatternBreakoutService {
 
     // 3. Pattern Quality Score (Max 25)
     let patternScore = 0;
-    if (params.primaryPattern === 'VCP' || params.primaryPattern === 'CUP_AND_HANDLE') {
+    if (params.primaryPattern === 'FLAG_POLE') {
+      patternScore = 22;
+      if (params.patternDetails && params.patternDetails.baseDepthPct <= 7.0) {
+        patternScore += 3; // Tight flag consolidation bonus
+      }
+    } else if (params.primaryPattern === 'VCP' || params.primaryPattern === 'CUP_AND_HANDLE') {
       patternScore = 20;
       const maxTightnessDepth = params.primaryPattern === 'CUP_AND_HANDLE' ? 15.0 : 12.0;
       if (params.patternDetails && params.patternDetails.baseDepthPct <= maxTightnessDepth) {

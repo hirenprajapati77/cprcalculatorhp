@@ -250,11 +250,76 @@ describe('PatternBreakoutService - Pattern Detection & Scoring Unit Tests', () =
       const detected = [
         { type: 'FLAT_BASE' as const, label: 'Flat Base', baseDepthPct: 10, baseDays: 25, confidence: 80, description: '' },
         { type: 'VCP' as const, label: 'VCP', baseDepthPct: 8, baseDays: 50, confidence: 90, description: '' },
+        { type: 'FLAG_POLE' as const, label: 'Bull Flag & Pole', baseDepthPct: 5, baseDays: 20, confidence: 92, description: '' },
         { type: 'CUP_AND_HANDLE' as const, label: 'Cup & Handle', baseDepthPct: 20, baseDays: 60, confidence: 85, description: '' },
       ];
 
       const primary = PatternBreakoutService.selectPrimaryPattern(detected);
-      assert.equal(primary, 'VCP', 'VCP must take top priority in deterministic tiebreak');
+      assert.equal(primary, 'FLAG_POLE', 'FLAG_POLE must take top priority in deterministic tiebreak');
+    });
+  });
+
+  describe('Bull Flag & Pole (High Tight Flag) Detection', () => {
+    it('should detect a valid Flag & Pole with explosive advance and tight flag', () => {
+      // 35 candles:
+      // Candles 0-14: Base around 100
+      // Candles 15-25: Pole surge from 100 to 125 (+25% gain) on 200k vol
+      // Candles 26-34: Flag pullback from 125 to 119 (4.8% depth) on 50k vol
+      const candles: OhlcvCandle[] = [];
+      for (let i = 0; i < 35; i++) {
+        const dateStr = `2026-02-${String(i + 1).padStart(2, '0')}`;
+        let open = 100, high = 101, low = 99, close = 100, volume = 80000;
+
+        if (i < 15) {
+          open = 100; high = 101; low = 99; close = 100; volume = 80000;
+        } else if (i <= 25) {
+          // Pole surge
+          const prog = (i - 15) / 10;
+          const price = 100 + prog * 25; // 100 -> 125
+          open = price - 1; high = price + 0.5; low = price - 1.5; close = price;
+          volume = 200000;
+        } else {
+          // Flag consolidation
+          const prog = (i - 25) / 9;
+          const price = 125 - prog * 5; // drifts from 125 down to 120
+          open = price; high = price + 0.5; low = price - 0.5; close = price;
+          volume = 50000; // Low volume dry-up
+        }
+
+        candles.push({ date: dateStr, open, high, low, close, volume });
+      }
+
+      const pattern = PatternBreakoutService.detectFlagAndPole(candles, 125.5);
+      assert.ok(pattern !== null, 'Pattern should be detected');
+      assert.equal(pattern.type, 'FLAG_POLE');
+      assert.ok(pattern.baseDepthPct <= 10.0, 'Flag depth should be tight');
+      assert.ok(pattern.confidence >= 75, 'Confidence should be high for clean flag');
+    });
+
+    it('should reject flag with excessive pullback depth (>15%)', () => {
+      const candles: OhlcvCandle[] = [];
+      for (let i = 0; i < 35; i++) {
+        const dateStr = `2026-02-${String(i + 1).padStart(2, '0')}`;
+        let open = 100, high = 101, low = 99, close = 100, volume = 80000;
+
+        if (i <= 25) {
+          const prog = Math.max(0, (i - 15) / 10);
+          const price = 100 + prog * 25;
+          open = price - 1; high = price + 0.5; low = price - 1.5; close = price;
+          volume = 200000;
+        } else {
+          // Deep drop from 125 down to 102 (> 18% pullback)
+          const prog = (i - 25) / 9;
+          const price = 125 - prog * 23;
+          open = price; high = price + 0.5; low = price - 0.5; close = price;
+          volume = 50000;
+        }
+
+        candles.push({ date: dateStr, open, high, low, close, volume });
+      }
+
+      const pattern = PatternBreakoutService.detectFlagAndPole(candles, 125.5);
+      assert.equal(pattern, null, 'Deep pullback should not qualify as a bull flag');
     });
   });
 

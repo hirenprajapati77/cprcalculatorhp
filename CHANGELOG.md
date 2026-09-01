@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 01 Sep: Bull Flag & Pole (High Tight Flag) Pattern Detection in Market Tools
+
+Added institutional **Bull Flag & Pole** (High Tight Flag) chart pattern detection to the **52W High Pattern Breakout Scanner** (`/market-tools/pattern-breakout`):
+
+- **High Tight Flag Detection Engine** (`src/services/market-tools/pattern-breakout.service.ts`):
+  - **The Pole (Momentum Surge):** Detects sharp institutional advances ($\ge 15.0\%$) over compact 8–25 candle windows leading up to the 52W high baseline.
+  - **The Flag (Consolidation Channel):** Detects tight, controlled pullbacks ($\le 12.0\%$ from pole peak, retaining $\ge 55\%$ of the pole height) over 4–18 candles.
+  - **Volume Signature:** Enforces volume contraction during flag consolidation ($\text{avg flag volume} \le 0.85\times \text{avg pole volume}$).
+- **Deterministic Pattern Hierarchy & Composite Scoring**:
+  - `FLAG_POLE` ranks at the top of the deterministic tie-breaking hierarchy (`FLAG_POLE > VCP > CUP_AND_HANDLE > DOUBLE_BOTTOM > FLAT_BASE`).
+  - Awards 22 base pattern quality points + 3 points tightness bonus when flag consolidation depth is $\le 7.0\%$.
+- **Interactive UI Dashboard & Badging** (`src/app/market-tools/pattern-breakout/page.tsx`):
+  - Added **🚩 Bull Flag** quick-filter pill with live stock counter.
+  - Added high-contrast Cyan/Sky badge styling (`bg-cyan-950 text-cyan-300 border-cyan-700`).
+- **Unit Test Suite** (`src/tests/unit/pattern-breakout.test.ts`): Added comprehensive test cases verifying detection of synthetic flag-and-pole advances, rejection of deep pullbacks ($>15\%$), and hierarchy priority (726/727 passing).
+
 ### Added — 01 Sep: Export to Excel/CSV & Print-Ready PDF across Market Tools
 
 Added comprehensive client-side data export capabilities across all three Market Tools modules:

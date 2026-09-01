@@ -356,6 +356,14 @@ export default function PatternBreakoutPage() {
               All Patterns ({report.stocks.length})
             </button>
             <button
+              onClick={() => setSelectedPattern('FLAG_POLE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                selectedPattern === 'FLAG_POLE' ? 'bg-cyan-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              🚩 Bull Flag ({report.countsByPattern.FLAG_POLE ?? 0})
+            </button>
+            <button
               onClick={() => setSelectedPattern('VCP')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
                 selectedPattern === 'VCP' ? 'bg-indigo-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-gray-200'
@@ -712,6 +720,8 @@ export default function PatternBreakoutPage() {
 
 function getPatternBadgeStyle(pattern: PatternType): string {
   switch (pattern) {
+    case 'FLAG_POLE':
+      return 'bg-cyan-950 text-cyan-300 border-cyan-700';
     case 'VCP':
       return 'bg-indigo-950 text-indigo-300 border-indigo-700';
     case 'CUP_AND_HANDLE':

@@ -11,7 +11,7 @@ PatternBreakoutService.computePatternBreakoutReport = async () => {
     totalScanned: 2636,
     qualifiedCount: 15,
     countsByStatus: { BREAKOUT: 10, NEAR_HIGH: 5 },
-    countsByPattern: { VCP: 5, CUP_AND_HANDLE: 5, DOUBLE_BOTTOM: 2, FLAT_BASE: 3, NONE: 0 },
+    countsByPattern: { FLAG_POLE: 0, VCP: 5, CUP_AND_HANDLE: 5, DOUBLE_BOTTOM: 2, FLAT_BASE: 3, NONE: 0 },
     countsByTier: { 'A+': 4, A: 6, B: 5, C: 0 },
     stocks: [],
     computedAt: new Date().toISOString(),
