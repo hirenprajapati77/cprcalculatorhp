@@ -470,10 +470,24 @@ export async function GET(request: NextRequest) {
       const cleanSymbol = r.symbol.split(':')[0];
       const risk = eventRisks[cleanSymbol];
 
+      const entry = r.entry ?? 0;
+      const tc = r.tc ?? 0;
+      const bc = r.bc ?? 0;
+      let direction: 'LONG' | 'SHORT' | undefined;
+      if (entry > 0) {
+        if (entry === tc && tc !== bc) direction = 'LONG';
+        else if (entry === bc && tc !== bc) direction = 'SHORT';
+        else if (r.sl != null && r.sl > entry) direction = 'SHORT';
+        else if (r.target != null && r.target < entry) direction = 'SHORT';
+        else if (r.signalSummary?.includes('BEARISH') || r.signalSummary?.includes('BREAKDOWN')) direction = 'SHORT';
+        else if (r.signalSummary?.includes('BULLISH') || r.signalSummary?.includes('BREAKOUT')) direction = 'LONG';
+      }
+
       return {
         ...r,
         symbol: cleanSymbol,
         market,
+        direction,
         sector: snap ? snap.sector : 'Other',
         // sessionOpen = exchange open; price/previousClose = prior close for day %
         open: snap
