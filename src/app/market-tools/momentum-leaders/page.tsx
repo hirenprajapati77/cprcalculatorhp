@@ -6,6 +6,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   MomentumLeadersReport,
   MomentumTier,
+  MomentumUniverse,
 } from '@/services/market-tools/momentum-leaders.service';
 import { BreakoutVpaStatus } from '@/services/vpa/vpa.math';
 import { ExportActions } from '@/components/market-tools/ExportActions';
@@ -28,7 +29,7 @@ export default function MomentumLeadersPage() {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Filters
+  const [selectedUniverse, setSelectedUniverse] = useState<MomentumUniverse>('NSE_FNO');
   const [selectedTier, setSelectedTier] = useState<MomentumTier | 'ALL'>('ALL');
   const [selectedWindows, setSelectedWindows] = useState<'ALL' | '4' | '3' | '2'>('ALL');
   const [selectedVpa, setSelectedVpa] = useState<BreakoutVpaStatus | 'ALL'>('ALL');
@@ -42,7 +43,7 @@ export default function MomentumLeadersPage() {
   useEffect(() => {
     isMounted.current = true;
     const abortController = new AbortController();
-    fetchReport(false, abortController.signal);
+    fetchReport(false, selectedUniverse, abortController.signal);
     return () => {
       isMounted.current = false;
       abortController.abort();
@@ -50,9 +51,10 @@ export default function MomentumLeadersPage() {
         refreshControllerRef.current.abort();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchReport = async (forceRefresh = false, signal?: AbortSignal) => {
+  const fetchReport = async (forceRefresh = false, universe = selectedUniverse, signal?: AbortSignal) => {
     if (forceRefresh) {
       setIsRefreshing(true);
       if (refreshControllerRef.current) {
@@ -68,8 +70,8 @@ export default function MomentumLeadersPage() {
 
     try {
       const url = forceRefresh
-        ? '/api/market-tools/momentum-leaders?refresh=true'
-        : '/api/market-tools/momentum-leaders';
+        ? `/api/market-tools/momentum-leaders?universe=${universe}&refresh=true`
+        : `/api/market-tools/momentum-leaders?universe=${universe}`;
       const res = await fetch(url, signal ? { signal } : {});
       if (!res.ok) {
         if (res.status === 401 && forceRefresh) {
@@ -96,6 +98,12 @@ export default function MomentumLeadersPage() {
         setIsRefreshing(false);
       }
     }
+  };
+
+  const handleUniverseChange = (universe: MomentumUniverse) => {
+    if (universe === selectedUniverse) return;
+    setSelectedUniverse(universe);
+    fetchReport(false, universe);
   };
 
   // Extract unique sectors
@@ -180,7 +188,7 @@ export default function MomentumLeadersPage() {
 
     const csvContent = generateCsvContent(headers, rows);
     const dateStr = report?.date || new Date().toISOString().slice(0, 10);
-    downloadFile(csvContent, `momentum-leaders-${dateStr}.csv`, 'text/csv');
+    downloadFile(csvContent, `momentum-leaders-${selectedUniverse.toLowerCase()}-${dateStr}.csv`, 'text/csv');
   };
 
   const getTierBadge = (tier: MomentumTier) => {
@@ -259,6 +267,32 @@ export default function MomentumLeadersPage() {
             <span>{error}</span>
             <button onClick={() => fetchReport(false)} className="underline hover:text-rose-200">
               Retry
+            </button>
+          </div>
+        )}
+
+        {/* Universe Selector Tabs (Mirroring Market Breadth) */}
+        {report && (
+          <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2">
+            <button
+              onClick={() => handleUniverseChange('NSE_FNO')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                selectedUniverse === 'NSE_FNO'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800/80'
+              }`}
+            >
+              F&amp;O Universe {report.universe === 'NSE_FNO' ? `(${report.qualifiedCount})` : ''}
+            </button>
+            <button
+              onClick={() => handleUniverseChange('ALL_NSE')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+                selectedUniverse === 'ALL_NSE'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800/80'
+              }`}
+            >
+              ALL NSE (&ge; ₹10Cr) {report.universe === 'ALL_NSE' ? `(${report.qualifiedCount})` : ''}
             </button>
           </div>
         )}

@@ -46,9 +46,11 @@ export interface MomentumStock {
   tier: MomentumTier;
 }
 
+export type MomentumUniverse = 'ALL_NSE' | 'NSE_FNO';
+
 export interface MomentumLeadersReport {
   date: string;
-  universe: 'NSE_FNO';
+  universe: MomentumUniverse;
   totalScanned: number;
   qualifiedCount: number;
   countsByTier: {
@@ -81,11 +83,11 @@ export interface OhlcvCandleWithPrevClose {
   value?: number | null;
 }
 
-let cachedReport: MomentumLeadersReport | null = null;
-let lastComputedTime = 0;
-let inFlightCompute: Promise<MomentumLeadersReport> | null = null;
+const cachedReports: Partial<Record<MomentumUniverse, MomentumLeadersReport>> = {};
+const lastComputedTimes: Partial<Record<MomentumUniverse, number>> = {};
+let inFlightCompute: Promise<Record<MomentumUniverse, MomentumLeadersReport>> | null = null;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const REDIS_CACHE_KEY = 'market_tools:momentum_leaders:report';
+const REDIS_KEY_PREFIX = 'market_tools:momentum_leaders:report';
 const REDIS_TTL_SEC = 24 * 3600; // 24 hours
 
 export class MomentumLeadersService {
@@ -204,21 +206,29 @@ export class MomentumLeadersService {
   }
 
   /**
-   * Retrieves the Momentum Leaders report with Redis and in-memory caching.
+   * Return cached Momentum Leaders report for requested universe, or compute on-demand.
    */
-  static async getMomentumLeadersReport(forceRefresh = false): Promise<MomentumLeadersReport> {
+  static async getMomentumLeadersReport(
+    forceRefresh = false,
+    universe: MomentumUniverse = 'NSE_FNO'
+  ): Promise<MomentumLeadersReport> {
     const now = Date.now();
-    if (!forceRefresh && cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
-      return cachedReport;
+    const currentMemory = cachedReports[universe];
+    const currentComputedTime = lastComputedTimes[universe] || 0;
+
+    if (!forceRefresh && currentMemory && now - currentComputedTime < CACHE_TTL_MS) {
+      return currentMemory;
     }
+
+    const redisKey = `${REDIS_KEY_PREFIX}:${universe}`;
 
     if (!forceRefresh) {
       try {
-        const redisCached = await cache.get(REDIS_CACHE_KEY);
+        const redisCached = await cache.get(redisKey);
         if (redisCached) {
           const parsed = JSON.parse(redisCached) as MomentumLeadersReport;
-          cachedReport = parsed;
-          lastComputedTime = now;
+          cachedReports[universe] = parsed;
+          lastComputedTimes[universe] = now;
           return parsed;
         }
       } catch {
@@ -227,37 +237,49 @@ export class MomentumLeadersService {
     }
 
     if (inFlightCompute) {
-      return await inFlightCompute;
+      const reports = await inFlightCompute;
+      return reports[universe];
     }
 
-    inFlightCompute = MomentumLeadersService.computeMomentumLeadersReport()
-      .then(async (report) => {
-        cachedReport = report;
-        lastComputedTime = Date.now();
+    inFlightCompute = MomentumLeadersService.computeAllMomentumLeadersReports()
+      .then(async (reports) => {
+        const computedTime = Date.now();
+        cachedReports['ALL_NSE'] = reports.ALL_NSE;
+        cachedReports['NSE_FNO'] = reports.NSE_FNO;
+        lastComputedTimes['ALL_NSE'] = computedTime;
+        lastComputedTimes['NSE_FNO'] = computedTime;
+
         try {
-          await cache.set(REDIS_CACHE_KEY, JSON.stringify(report), REDIS_TTL_SEC);
+          await Promise.all([
+            cache.set(`${REDIS_KEY_PREFIX}:ALL_NSE`, JSON.stringify(reports.ALL_NSE), REDIS_TTL_SEC),
+            cache.set(`${REDIS_KEY_PREFIX}:NSE_FNO`, JSON.stringify(reports.NSE_FNO), REDIS_TTL_SEC),
+            cache.set(REDIS_KEY_PREFIX, JSON.stringify(reports.NSE_FNO), REDIS_TTL_SEC), // Legacy alias
+          ]);
         } catch {
           // Non-critical cache write error
         }
-        return report;
+        return reports;
       })
       .finally(() => {
         inFlightCompute = null;
       });
 
-    return await inFlightCompute;
+    const reports = await inFlightCompute;
+    return reports[universe];
   }
 
   /**
-   * Computes the Multi-Window Momentum Leaders across the F&O universe.
+   * Computes Multi-Window Momentum Leaders across ALL_NSE and NSE_FNO universes.
+   * Runs single DB pass against series='EQ' DailyOhlcv, applies the ₹10 Cr liquidity gate,
+   * then computes percentile ranks and composite scores independently for each universe.
    */
-  static async computeMomentumLeadersReport(): Promise<MomentumLeadersReport> {
+  static async computeAllMomentumLeadersReports(): Promise<Record<MomentumUniverse, MomentumLeadersReport>> {
     // 1. Fetch available trading dates sorted descending
     const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
       SELECT DISTINCT date FROM "DailyOhlcv" 
       WHERE series = 'EQ' 
       ORDER BY date DESC 
-      LIMIT 60
+      LIMIT 40
     `;
 
     if (dateRows.length === 0) {
@@ -265,13 +287,9 @@ export class MomentumLeadersService {
     }
 
     const latestDate = dateRows[0]!.date;
-    const oldestDate = dateRows[Math.min(dateRows.length - 1, 45)]!.date;
+    const oldestDate = dateRows[Math.min(dateRows.length - 1, 30)]!.date;
 
-    // 2. Filter F&O symbols excluding ETF/funds
-    const fnoSymbolList = Array.from(FNO_SYMBOLS).filter(sym => !isLikelyEtfOrFund(sym));
-    const totalScanned = fnoSymbolList.length;
-
-    // 3. Fetch trailing candles for F&O universe
+    // 2. Fetch trailing candles for all series='EQ' symbols
     const candleRows = await prisma.$queryRaw<
       Array<{
         symbol: string;
@@ -288,7 +306,6 @@ export class MomentumLeadersService {
       SELECT symbol, date, open, high, low, close, "prevClose", volume, value
       FROM "DailyOhlcv"
       WHERE series = 'EQ'
-        AND symbol = ANY(${fnoSymbolList}::text[])
         AND date >= ${oldestDate}
         AND date <= ${latestDate}
       ORDER BY symbol ASC, date ASC
@@ -313,28 +330,15 @@ export class MomentumLeadersService {
       });
     }
 
-    // 4. Calculate returns and VPA for each eligible stock
-    interface RawStockAnalysis {
-      symbol: string;
-      sector: string;
-      close: number;
-      prevClose: number;
-      changePct: number;
-      volume: number;
-      turnoverCr: number;
-      avgTurnoverCr20d: number;
-      rvol20d: number | null;
-      clv: number | null;
-      vpaFootprint: BreakoutVpaFootprint;
-      r1d: number;
-      r5d: number;
-      r10d: number;
-      r21d: number;
-    }
+    // 3. Count total scanned per universe
+    const allSymbols = Array.from(candleMap.keys()).filter(sym => !isLikelyEtfOrFund(sym));
+    const totalScannedAllNse = allSymbols.length;
+    const totalScannedNseFno = allSymbols.filter(sym => FNO_SYMBOLS.has(sym)).length;
 
-    const rawStocks: RawStockAnalysis[] = [];
+    // 4. Calculate returns, VPA, and apply ₹10 Cr Liquidity Base Gate across full pool
+    const fullLiquidityGatedPool: RawStockAnalysis[] = [];
 
-    for (const symbol of fnoSymbolList) {
+    for (const symbol of allSymbols) {
       const candles = candleMap.get(symbol);
       if (!candles || candles.length < 22) continue; // Must have at least 21 historical days + current day
 
@@ -359,7 +363,7 @@ export class MomentumLeadersService {
       const avgTurnoverCr20d = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
 
       // Liquidity Base Gate: Exclude stocks with 20-day average daily turnover < ₹10 Cr
-      // Eliminates structurally illiquid names from qualifying as window momentum leaders
+      // Applies identically regardless of universe tab selected
       if (avgTurnoverCr20d < MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR) {
         continue;
       }
@@ -375,7 +379,7 @@ export class MomentumLeadersService {
       const r10d = MomentumLeadersService.computeCompoundedReturn(candles, 10);
       const r21d = MomentumLeadersService.computeCompoundedReturn(candles, 21);
 
-      rawStocks.push({
+      fullLiquidityGatedPool.push({
         symbol,
         sector: getSymbolSector(symbol),
         close,
@@ -394,11 +398,53 @@ export class MomentumLeadersService {
       });
     }
 
+    // 5. Partition pools and compute ranks independently
+    const poolAllNse = fullLiquidityGatedPool;
+    const poolNseFno = fullLiquidityGatedPool.filter(s => FNO_SYMBOLS.has(s.symbol));
+
+    const reportAllNse = MomentumLeadersService.buildUniverseReport(
+      poolAllNse,
+      'ALL_NSE',
+      totalScannedAllNse,
+      latestDate
+    );
+
+    const reportNseFno = MomentumLeadersService.buildUniverseReport(
+      poolNseFno,
+      'NSE_FNO',
+      totalScannedNseFno,
+      latestDate
+    );
+
+    return {
+      ALL_NSE: reportAllNse,
+      NSE_FNO: reportNseFno,
+    };
+  }
+
+  /**
+   * Helper to compute single universe report directly (used by unit tests and scheduler).
+   */
+  static async computeMomentumLeadersReport(universe: MomentumUniverse = 'NSE_FNO'): Promise<MomentumLeadersReport> {
+    const reports = await MomentumLeadersService.computeAllMomentumLeadersReports();
+    return reports[universe];
+  }
+
+  /**
+   * Builds a MomentumLeadersReport for a specific candidate pool.
+   * Percentiles and ranks are calculated strictly within this pool's population.
+   */
+  public static buildUniverseReport(
+    rawStocks: RawStockAnalysis[],
+    universe: MomentumUniverse,
+    totalScanned: number,
+    latestDate: string
+  ): MomentumLeadersReport {
     const N = rawStocks.length;
     if (N === 0) {
       return {
         date: latestDate,
-        universe: 'NSE_FNO',
+        universe,
         totalScanned,
         qualifiedCount: 0,
         countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
@@ -416,7 +462,7 @@ export class MomentumLeadersService {
       };
     }
 
-    // 5. Compute percentile ranks per window
+    // Compute percentile ranks per window against this universe pool
     function rankWindow(extractReturn: (s: RawStockAnalysis) => number): Map<string, { rank: number; percentile: number }> {
       const sorted = [...rawStocks].sort((a, b) => extractReturn(b) - extractReturn(a));
       const map = new Map<string, { rank: number; percentile: number }>();
@@ -433,7 +479,6 @@ export class MomentumLeadersService {
     const rank10d = rankWindow(s => s.r10d);
     const rank21d = rankWindow(s => s.r21d);
 
-    // 6. Combine into final scored MomentumStock objects
     const finalStocks: MomentumStock[] = [];
     const countsByTier = { 'A+': 0, A: 0, B: 0, C: 0 };
     const countsByLeaderWindows = {
@@ -503,7 +548,7 @@ export class MomentumLeadersService {
 
     return {
       date: latestDate,
-      universe: 'NSE_FNO',
+      universe,
       totalScanned,
       qualifiedCount: finalStocks.length,
       countsByTier,
@@ -514,4 +559,22 @@ export class MomentumLeadersService {
       status: 'ready',
     };
   }
+}
+
+export interface RawStockAnalysis {
+  symbol: string;
+  sector: string;
+  close: number;
+  prevClose: number;
+  changePct: number;
+  volume: number;
+  turnoverCr: number;
+  avgTurnoverCr20d: number;
+  rvol20d: number | null;
+  clv: number | null;
+  vpaFootprint: BreakoutVpaFootprint;
+  r1d: number;
+  r5d: number;
+  r10d: number;
+  r21d: number;
 }

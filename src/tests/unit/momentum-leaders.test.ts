@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MomentumLeadersService,
   OhlcvCandleWithPrevClose,
+  RawStockAnalysis,
 } from '@/services/market-tools/momentum-leaders.service';
 import { classifyBreakoutVpa } from '@/services/vpa/vpa.math';
 
@@ -277,6 +278,84 @@ describe('MomentumLeadersService - Unit Tests', () => {
       const avgTurnover = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
       assert.ok(avgTurnover > 300, `Average turnover must be ~303 Cr, got ${avgTurnover}`);
       assert.ok(avgTurnover >= MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR, 'Must easily pass ₹10 Cr liquidity floor');
+    });
+  });
+
+  describe('Multi-Universe Computation (ALL_NSE vs NSE_FNO)', () => {
+    function createMockRawStock(symbol: string, r21d: number): RawStockAnalysis {
+      return {
+        symbol,
+        sector: 'Technology',
+        close: 100,
+        prevClose: 100,
+        changePct: 1.0,
+        volume: 500000,
+        turnoverCr: 50.0,
+        avgTurnoverCr20d: 50.0,
+        rvol20d: 1.2,
+        clv: 0.5,
+        vpaFootprint: classifyBreakoutVpa(1.2, 0.5),
+        r1d: 2.0,
+        r5d: 4.0,
+        r10d: 8.0,
+        r21d,
+      };
+    }
+
+    it('computes percentile ranks independently within each universe pool', () => {
+      // Create 5 non-F&O stocks with high 21D returns: 50%, 40%, 30%, 20%, 10%
+      const nonFnoStocks = [
+        createMockRawStock('NON_FNO_1', 50.0),
+        createMockRawStock('NON_FNO_2', 40.0),
+        createMockRawStock('NON_FNO_3', 30.0),
+        createMockRawStock('NON_FNO_4', 20.0),
+        createMockRawStock('NON_FNO_5', 10.0),
+      ];
+
+      // Create 5 F&O stocks with lower 21D returns: 9%, 8%, 7%, 6%, 5%
+      const fnoStocks = [
+        createMockRawStock('FNO_TOP', 9.0, true),
+        createMockRawStock('FNO_2', 8.0, true),
+        createMockRawStock('FNO_3', 7.0, true),
+        createMockRawStock('FNO_4', 6.0, true),
+        createMockRawStock('FNO_5', 5.0, true),
+      ];
+
+      const allNsePool = [...nonFnoStocks, ...fnoStocks]; // N = 10
+      const fnoPool = [...fnoStocks]; // N = 5
+
+      const reportAllNse = MomentumLeadersService.buildUniverseReport(allNsePool, 'ALL_NSE', 10, '2026-09-01');
+      const reportFno = MomentumLeadersService.buildUniverseReport(fnoPool, 'NSE_FNO', 5, '2026-09-01');
+
+      assert.equal(reportAllNse.universe, 'ALL_NSE');
+      assert.equal(reportAllNse.qualifiedCount, 10);
+      assert.equal(reportFno.universe, 'NSE_FNO');
+      assert.equal(reportFno.qualifiedCount, 5);
+
+      // In F&O universe: FNO_TOP has the highest return (9%) => Rank #1 out of 5 => Percentile = 100.0
+      const fnoTopInFno = reportFno.allStocks.find(s => s.symbol === 'FNO_TOP')!;
+      assert.equal(fnoTopInFno.windows.w21d.rank, 1);
+      assert.equal(fnoTopInFno.windows.w21d.percentile, 100.0);
+      assert.equal(fnoTopInFno.windows.w21d.isLeader, true);
+
+      // In ALL_NSE universe: FNO_TOP is behind all 5 non-F&O stocks (50..10%) => Rank #6 out of 10
+      // Percentile = ((10 - 6) / (10 - 1)) * 100 = (4 / 9) * 100 = 44.44%
+      const fnoTopInAllNse = reportAllNse.allStocks.find(s => s.symbol === 'FNO_TOP')!;
+      assert.equal(fnoTopInAllNse.windows.w21d.rank, 6);
+      assert.equal(fnoTopInAllNse.windows.w21d.percentile, 44.44);
+      assert.equal(fnoTopInAllNse.windows.w21d.isLeader, false);
+
+      // Confirm F&O composite score and rank are NOT identical to ALL_NSE
+      assert.notEqual(fnoTopInFno.compositeScore, fnoTopInAllNse.compositeScore);
+      assert.ok(fnoTopInFno.compositeScore > fnoTopInAllNse.compositeScore, 'FNO_TOP must have higher score in F&O view');
+    });
+
+    it('handles empty universe pool gracefully', () => {
+      const emptyReport = MomentumLeadersService.buildUniverseReport([], 'ALL_NSE', 100, '2026-09-01');
+      assert.equal(emptyReport.universe, 'ALL_NSE');
+      assert.equal(emptyReport.qualifiedCount, 0);
+      assert.equal(emptyReport.allStocks.length, 0);
+      assert.equal(emptyReport.status, 'ready');
     });
   });
 });
