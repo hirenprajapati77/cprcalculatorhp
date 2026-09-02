@@ -72,6 +72,7 @@ export async function middleware(request: NextRequest) {
       url.pathname.startsWith('/api/market-tools/breadth') ||
       url.pathname.startsWith('/api/market-tools/breakout') ||
       url.pathname.startsWith('/api/market-tools/pattern-breakout') ||
+      url.pathname.startsWith('/api/market-tools/momentum-leaders') ||
       isCronSecretExemptApiPath(url.pathname) ||
       url.pathname.startsWith('/api/broker/fyers/callback') ||
       url.pathname.startsWith('/api/share/') ||
