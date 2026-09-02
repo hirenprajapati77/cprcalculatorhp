@@ -4,6 +4,7 @@ import {
   btstRowHighlightClass,
   cprRatingLabel,
   inferScannerBadgeDirection,
+  isUnscoredSignal,
 } from '@/lib/scanner-rating';
 import { cprDirectionToOptionBias } from '@/lib/cpr-direction';
 
@@ -75,3 +76,63 @@ describe('cprDirectionToOptionBias', () => {
     assert.equal(cprDirectionToOptionBias('SHORT'), 'BEARISH');
   });
 });
+
+describe('isUnscoredSignal', () => {
+  it('identifies unvalidated/zero-weight price action signals as unscored', () => {
+    const zeroWeightSignals = [
+      'HP_REVERSAL_UP',
+      'HP_REVERSAL_DOWN',
+      'HP_DIRECT_UP',
+      'HP_DIRECT_DOWN',
+      'HP_CAM_BULL_BIAS',
+      'HP_CAM_BEAR_BIAS',
+      'HP_ASC_REVERSAL',
+      'HP_DESC_REVERSAL',
+      'HP_HP_RTP',
+      'OVERLAPPING_VALUE',
+      'OVERLAPPING_LOWER',
+      'OVERLAPPING_HIGHER',
+      'OUTSIDE_VALUE',
+    ];
+
+    for (const sig of zeroWeightSignals) {
+      assert.equal(isUnscoredSignal(sig), true, `${sig} should be identified as unscored`);
+    }
+  });
+
+  it('handles legacy KGS_ prefixes for unscored signals', () => {
+    assert.equal(isUnscoredSignal('KGS_REVERSAL_UP'), true);
+    assert.equal(isUnscoredSignal('KGS_DIRECT_DOWN'), true);
+    assert.equal(isUnscoredSignal('KGS_CAM_BULL_BIAS'), true);
+  });
+
+  it('identifies score-contributing signals as scored (false)', () => {
+    const scoredSignals = [
+      'BREAKOUT',
+      'BREAKDOWN',
+      'BULLISH',
+      'BEARISH',
+      'HIGHER_VALUE',
+      'LOWER_VALUE',
+      'INSIDE_VALUE',
+      'NARROW',
+      'WIDE',
+      'NORMAL',
+      'VIRGIN',
+      'HP_ASC_CPR',
+      'HP_DESC_CPR',
+      'HP_INSIDE_CPR',
+      'HP_RTP',
+      'VOLUME_SPIKE',
+      'HOT_ZONE',
+      'MOMENTUM',
+      'EMA_CROSS_BULL',
+      'EMA_CROSS_BEAR',
+    ];
+
+    for (const sig of scoredSignals) {
+      assert.equal(isUnscoredSignal(sig), false, `${sig} should be identified as scored`);
+    }
+  });
+});
+
