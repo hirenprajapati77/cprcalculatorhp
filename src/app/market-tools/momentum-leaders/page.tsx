@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   MomentumLeadersReport,
-  MomentumStock,
   MomentumTier,
 } from '@/services/market-tools/momentum-leaders.service';
 import { BreakoutVpaStatus } from '@/services/vpa/vpa.math';
