@@ -1,6 +1,7 @@
 import { MarketBreadthService } from './market-breadth.service';
 import { MultiYearBreakoutService } from './multi-year-breakout.service';
 import { PatternBreakoutService } from './pattern-breakout.service';
+import { MomentumLeadersService } from './momentum-leaders.service';
 
 /**
  * Background batch runner to precompute all Market Tools reports sequentially.
@@ -12,6 +13,7 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
   breadthDate?: string;
   multiYearCount?: number;
   patternCount?: number;
+  momentumCount?: number;
   elapsedMs: number;
 }> {
   const startTime = Date.now();
@@ -21,6 +23,7 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     let breadthDate: string | undefined;
     let multiYearCount: number | undefined;
     let patternCount: number | undefined;
+    let momentumCount: number | undefined;
 
     try {
       // 1. Market Breadth
@@ -49,19 +52,26 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
       console.error('[MarketToolsPrecomputeJob] Failed Pattern Breakout:', err);
     }
 
+    try {
+      // 4. Momentum Leaders
+      const momentum = await MomentumLeadersService.getMomentumLeadersReport(true);
+      console.log(`[MarketToolsPrecomputeJob] Momentum Leaders completed (${momentum.qualifiedCount} candidates)`);
+      momentumCount = momentum.qualifiedCount;
+    } catch (err) {
+      console.error('[MarketToolsPrecomputeJob] Failed Momentum Leaders:', err);
+    }
+
     const elapsedMs = Date.now() - startTime;
     console.log(`[MarketToolsPrecomputeJob] Pre-computation completed in ${elapsedMs}ms`);
 
-    // B6 fix: require ALL three sub-jobs to succeed. Previously used OR logic
-    // (anySucceeded) — if just one succeeded, the scheduler marked the day's
-    // claim complete, silently suppressing retries for the two that failed.
-    // Now: success=false if any sub-job failed, so the scheduler can retry.
-    const allSucceeded = breadthDate !== undefined && multiYearCount !== undefined && patternCount !== undefined;
+    // Require ALL sub-jobs to succeed so scheduler retries on partial failures
+    const allSucceeded = breadthDate !== undefined && multiYearCount !== undefined && patternCount !== undefined && momentumCount !== undefined;
     if (!allSucceeded) {
       const failed = [
         breadthDate === undefined && 'Breadth',
         multiYearCount === undefined && 'Multi-Year Breakout',
         patternCount === undefined && 'Pattern Breakout',
+        momentumCount === undefined && 'Momentum Leaders',
       ].filter(Boolean).join(', ');
       console.error(`[MarketToolsPrecomputeJob] Partial failure — sub-jobs failed: ${failed}. Reporting failure so the scheduler can retry.`);
     }
@@ -71,6 +81,7 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
       ...(breadthDate !== undefined && { breadthDate }),
       ...(multiYearCount !== undefined && { multiYearCount }),
       ...(patternCount !== undefined && { patternCount }),
+      ...(momentumCount !== undefined && { momentumCount }),
       elapsedMs,
     };
   } catch (err) {
