@@ -35,13 +35,13 @@ export function isUnscoredSignal(rawSig: string): boolean {
  * so UI can render "Strong" / "Opportunity" without inventing Buy/Sell.
  */
 export function inferScannerBadgeDirection(signal: {
-  entry?: number | null;
-  bc?: number | null;
-  tc?: number | null;
-  sl?: number | null;
-  target?: number | null;
-  direction?: 'LONG' | 'SHORT' | null;
-  signals?: string[] | null;
+  entry?: number | null | undefined;
+  bc?: number | null | undefined;
+  tc?: number | null | undefined;
+  sl?: number | null | undefined;
+  target?: number | null | undefined;
+  direction?: 'LONG' | 'SHORT' | null | undefined;
+  signals?: string[] | null | undefined;
 }): ScannerBadgeDirection {
   if (signal.direction === 'LONG' || signal.direction === 'SHORT') {
     return signal.direction;

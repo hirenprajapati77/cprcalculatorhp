@@ -99,12 +99,12 @@ function getISTTimeParts(date: Date): { hour: number; minute: number; totalMinut
 }
 
 function getStockDirection(stock: {
-  direction?: 'LONG' | 'SHORT';
-  target?: number | null;
-  entry?: number | null;
-  sl?: number | null;
-  signals?: string[];
-  signalSummary?: string | null;
+  direction?: 'LONG' | 'SHORT' | undefined;
+  target?: number | null | undefined;
+  entry?: number | null | undefined;
+  sl?: number | null | undefined;
+  signals?: string[] | undefined;
+  signalSummary?: string | null | undefined;
 }): 'LONG' | 'SHORT' {
   if (stock.direction) return stock.direction;
   
@@ -277,7 +277,7 @@ function alertSuppressionShortLabel(reason: string): string {
 interface ScannedStock {
   distPivot?: number;
   id: string;
-  direction?: 'LONG' | 'SHORT';
+  direction?: 'LONG' | 'SHORT' | undefined;
   symbol: string;
   date: string;
   market: 'NSE' | 'BSE';
@@ -461,38 +461,68 @@ const StockRow = React.memo(({
 
   // Flag gap/chase setups (same thresholds as breakout Telegram + CPR journal).
   // Without day high/low on the API row, entry-chase still catches GODREJCP/NATIONALUM.
-  const setupDirection = inferCprJournalDirection({
-    entry: row.entry,
-    bc: row.bc,
-    tc: row.tc,
-    sl: row.sl,
-    target: row.target,
-  });
-  const setupStale = evaluateCprSetupPriceStalenessBasic({
-    entry: row.entry,
-    ltp: row.ltp,
-    direction: setupDirection,
-    ...(((row as { previousClose?: number }).previousClose || row.price)
-      ? { previousClose: (row as { previousClose?: number }).previousClose || row.price }
-      : {}),
-  });
+  const setupDirection: 'LONG' | 'SHORT' =
+    row.direction ||
+    inferScannerBadgeDirection(row) ||
+    inferCprJournalDirection({
+      entry: row.entry,
+      bc: row.bc,
+      tc: row.tc,
+      sl: row.sl,
+      target: row.target,
+    });
+
+  // Check if target was already achieved:
+  const isTargetAchieved =
+    row.target > 0 &&
+    row.entry > 0 &&
+    ((setupDirection === 'LONG' && row.ltp >= row.target) ||
+     (setupDirection === 'SHORT' && row.ltp <= row.target));
+
+  // Only evaluate breakout extension for directional breakout/breakdown setups that haven't hit target!
+  const isBreakoutOrBreakdown =
+    (row.entry > 0 && (row.entry === row.tc || row.entry === row.bc)) ||
+    row.signals?.includes('BREAKOUT') ||
+    row.signals?.includes('BREAKDOWN') ||
+    row.signalSummary?.includes('BREAKOUT') ||
+    row.signalSummary?.includes('BREAKDOWN');
+
+  const setupStale = isBreakoutOrBreakdown && !isTargetAchieved
+    ? evaluateCprSetupPriceStalenessBasic({
+        entry: row.entry,
+        ltp: row.ltp,
+        direction: setupDirection,
+        maxExtensionPct: 2.5,
+        ...(((row as { previousClose?: number }).previousClose || row.price)
+          ? { previousClose: (row as { previousClose?: number }).previousClose || row.price }
+          : {}),
+      })
+    : { stale: false as const };
+
   const persistedSuppression = row.alertSuppressedReason
     ? {
         label: `No alert: ${alertSuppressionShortLabel(row.alertSuppressedReason)}`,
         detail: row.alertSuppressedDetail ?? row.alertSuppressedReason,
       }
     : null;
+
   const staleLabel = persistedSuppression
     ? persistedSuppression.label
-    : !setupStale.stale
-      ? null
-      : setupStale.reason === 'GAP_INVALIDATED'
-        ? 'GAP'
-        : setupStale.reason === 'AGAINST_PRIOR_CLOSE'
-          ? 'VS CLOSE'
-          : 'EXTENDED';
-  const staleDetail = persistedSuppression?.detail ?? (setupStale.stale ? setupStale.detail : undefined);
-  const staleSuffix = persistedSuppression ? '' : ' — do not chase';
+    : isTargetAchieved
+      ? 'TARGET MET'
+      : !setupStale.stale
+        ? null
+        : setupStale.reason === 'GAP_INVALIDATED'
+          ? 'GAP'
+          : setupStale.reason === 'AGAINST_PRIOR_CLOSE'
+            ? 'VS CLOSE'
+            : 'EXTENDED';
+
+  const staleVariant = isTargetAchieved ? 'green' : 'amber';
+  const staleDetail = isTargetAchieved
+    ? `LTP ₹${fmt(row.ltp)} has reached Target 1 (₹${fmt(row.target)})`
+    : (persistedSuppression?.detail ?? (setupStale.stale ? setupStale.detail : undefined));
+  const staleSuffix = (persistedSuppression || isTargetAchieved) ? '' : ' — do not chase';
 
   return (
     <tr 
@@ -612,7 +642,11 @@ const StockRow = React.memo(({
             <div className={`flex flex-col gap-1 font-mono text-[10px] leading-tight text-left ${staleLabel ? 'opacity-70' : ''}`}>
               {staleLabel && (
                 <span
-                  className="inline-flex w-fit px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide bg-accent-amber/15 text-accent-amber border border-accent-amber/40"
+                  className={`inline-flex w-fit px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide border ${
+                    staleVariant === 'green'
+                      ? 'bg-accent-green/15 text-accent-green border-accent-green/40'
+                      : 'bg-accent-amber/15 text-accent-amber border-accent-amber/40'
+                  }`}
                   title={staleDetail}
                 >
                   {staleLabel}{staleSuffix}
@@ -746,9 +780,9 @@ const StockRow = React.memo(({
 
             {visibleColumns.includes('direction') && (
         <td className={cellPadding}>
-          {row.direction ? (
-            <span className={`font-bold text-[10px] px-2 py-0.5 rounded ${row.direction === 'LONG' ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red'}`}>
-              {row.direction}
+          {setupDirection ? (
+            <span className={`font-bold text-[10px] px-2 py-0.5 rounded ${setupDirection === 'LONG' ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red'}`}>
+              {setupDirection}
             </span>
           ) : (
             <span className="text-text-tertiary">—</span>
@@ -1647,7 +1681,24 @@ export default function ScannerClient() {
             setServerHeatmap(data.insights.heatmapSectors);
           }
         }
-        let items = data.results as ScannedStock[];
+        let items = (data.results as ScannedStock[]).map((r) => {
+          const dir =
+            r.direction ||
+            inferScannerBadgeDirection(r) ||
+            (r.entry > 0
+              ? inferCprJournalDirection({
+                  entry: r.entry,
+                  bc: r.bc,
+                  tc: r.tc,
+                  sl: r.sl,
+                  target: r.target,
+                })
+              : undefined);
+          return {
+            ...r,
+            direction: dir as 'LONG' | 'SHORT' | undefined,
+          };
+        });
 
         // Client-side watchlist only filter
         if (showWatchlistOnly) {

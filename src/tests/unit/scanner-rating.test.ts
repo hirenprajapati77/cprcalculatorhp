@@ -23,10 +23,29 @@ describe('inferScannerBadgeDirection', () => {
     );
   });
 
-  it('returns null for RANGE pivot (do not invent Buy/Sell)', () => {
+  it('returns explicit direction when already set', () => {
     assert.equal(
-      inferScannerBadgeDirection({ entry: 102.5, bc: 100, tc: 105, sl: 102.5, target: 102.5 }),
-      null
+      inferScannerBadgeDirection({ direction: 'LONG' }),
+      'LONG'
+    );
+    assert.equal(
+      inferScannerBadgeDirection({ direction: 'SHORT' }),
+      'SHORT'
+    );
+  });
+
+  it('safely accepts explicit undefined properties', () => {
+    assert.equal(
+      inferScannerBadgeDirection({
+        entry: 100,
+        bc: 100,
+        tc: 105,
+        sl: 106,
+        target: 95,
+        direction: undefined,
+        signals: undefined,
+      }),
+      'SHORT'
     );
   });
 });
