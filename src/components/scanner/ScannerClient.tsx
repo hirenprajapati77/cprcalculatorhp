@@ -40,6 +40,7 @@ import {
   btstRowHighlightClass,
   cprRatingLabel,
   inferScannerBadgeDirection,
+  isUnscoredSignal,
 } from '@/lib/scanner-rating';
 import { evaluateCprSetupPriceStalenessBasic } from '@/lib/cpr-setup-staleness';
 import { inferCprJournalDirection } from '@/lib/cpr-direction';
@@ -718,17 +719,22 @@ const StockRow = React.memo(({
             {row.signals.slice(0, densityMode === 'compact' ? 2 : 5).map((rawSig) => {
               // Normalize legacy KGS_ prefix to HP_ for display
               const sig = rawSig.replace(/^KGS_/, 'HP_');
+              const unscored = isUnscoredSignal(rawSig);
 
               return (
               <span
                 key={rawSig}
-                className={`text-[8px] font-bold px-1 rounded-sm ${
-                  sig === 'BREAKOUT' ? 'bg-accent-green/15 text-accent-green' :
-                  sig === 'BULLISH' || sig === 'HIGHER_VALUE' ? 'bg-accent-blue/15 text-accent-blue' :
-                  sig === 'BEARISH' || sig === 'LOWER_VALUE' ? 'bg-accent-red/15 text-accent-red' :
-                  sig === 'NARROW' || sig === 'VIRGIN' ? 'bg-accent-amber/15 text-accent-amber' :
-                  sig === 'OUTSIDE_VALUE' || sig.startsWith('OVERLAPPING') ? 'bg-purple-500/15 text-purple-400' :
-                  'bg-bg-tertiary text-text-secondary border border-border-primary/50'
+                title={unscored ? `${sig} (Context only — unscored)` : undefined}
+                className={`text-[8px] px-1 rounded-sm ${
+                  unscored
+                    ? 'font-medium border border-dashed border-border-secondary/60 bg-bg-secondary/40 text-text-tertiary opacity-75 cursor-help'
+                    : `font-bold ${
+                        sig === 'BREAKOUT' ? 'bg-accent-green/15 text-accent-green' :
+                        sig === 'BULLISH' || sig === 'HIGHER_VALUE' ? 'bg-accent-blue/15 text-accent-blue' :
+                        sig === 'BEARISH' || sig === 'LOWER_VALUE' ? 'bg-accent-red/15 text-accent-red' :
+                        sig === 'NARROW' || sig === 'VIRGIN' ? 'bg-accent-amber/15 text-accent-amber' :
+                        'bg-bg-tertiary text-text-secondary border border-border-primary/50'
+                      }`
                 }`}
               >
                 {sig === 'VIRGIN' ? '🔥 VIRGIN' : sig}
@@ -3771,83 +3777,132 @@ export default function ScannerClient() {
                   );
                 })()}
 
-                {drawerTab === 'signals' && (
-                  <div className="space-y-3 animate-fade-in">
-                    <span className="text-[9px] text-text-tertiary uppercase tracking-wider block">Active Signal Breakdown</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(drawerStock.signals || []).map(rawSig => {
-                        const sig = rawSig.replace(/^KGS_/, 'HP_');
-                        return (
-                        <span
-                          key={rawSig}
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getRatingColorClass(
-                            sig === 'BREAKOUT' || sig === 'BULLISH' || sig === 'NARROW' ? 95 :
-                            sig === 'BEARISH' || sig === 'WIDE' ? 10 : 50
-                          )}`}
-                        >
-                          {sig}
-                        </span>
-                        );
-                      })}
-                    </div>
+                {drawerTab === 'signals' && (() => {
+                  const allSignals = (drawerStock.signals || []).map((rawSig) => ({
+                    rawSig,
+                    sig: rawSig.replace(/^KGS_/, 'HP_'),
+                    unscored: isUnscoredSignal(rawSig),
+                  }));
+                  const scoredSignals = allSignals.filter((s) => !s.unscored);
+                  const unscoredSignals = allSignals.filter((s) => s.unscored);
 
-                    <div className="border border-border-primary rounded p-3 text-[10px] space-y-2 text-text-secondary mt-2">
-                      <span className="font-bold text-text-primary block uppercase">Signal Meaning</span>
-                      <ul className="list-disc pl-4 space-y-1.5 leading-relaxed">
-                        {(drawerStock.signals || []).map(rawSig => { const sig = rawSig.replace(/^KGS_/, 'HP_');
-                          const explMap: Record<string, string> = {
-                            HIGHER_VALUE: "Today CPR is above yesterday's CPR. Bullish value migration.",
-                            INSIDE_VALUE: "Today CPR is fully inside yesterday's CPR band. Consolidation, await breakout.",
-                            LOWER_VALUE: "Today CPR below yesterday's CPR. Bearish value migration.",
-                            OVERLAPPING_VALUE: "Today and yesterday CPR bands partially overlap (neither higher, lower, nor fully inside). Mixed/transition value zone.",
-                            BREAKOUT: "Heavy volume + price above TC. Strong bullish breakout.",
-                            NARROW: "CPR width < 0.3%. High probability trending day ahead.",
-                            VIRGIN: "CPR never tested. Strong magnet zone.",
-                            HOT_ZONE: "Price within 0.5% of CPR band. High-reaction zone.",
-                            VOLUME_SPIKE: "Volume > 2x average. Institutional activity.",
-                            BULLISH: "Bias based on price vs yesterday TC/BC level.",
-                            BEARISH: "Bias based on price vs yesterday TC/BC level.",
-                            HP_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
-                            KGS_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
-                            HP_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
-                            KGS_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
-                            HP_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
-                            KGS_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
-                            HP_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
-                            KGS_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
-                            HP_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
-                            KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
-                            HP_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
-                            KGS_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
-                            HP_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
-                            KGS_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
-                            HP_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
-                            KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
-                            HP_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
-                            KGS_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
-                            HP_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
-                            KGS_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
-                            HP_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
-                            KGS_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
-                            HP_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
-                            KGS_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
-                            HP_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
-                            KGS_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
-                            HP_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance.",
-                            KGS_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance."
-                          };
-                          const expl = explMap[sig];
-                          if (!expl) return null;
-                          return (
-                            <li key={sig}>
-                              <strong>{sig}:</strong> {expl}
-                            </li>
-                          );
-                        })}
-                      </ul>
+                  const explMap: Record<string, string> = {
+                    HIGHER_VALUE: "Today CPR is above yesterday's CPR. Bullish value migration.",
+                    INSIDE_VALUE: "Today CPR is fully inside yesterday's CPR band. Consolidation, await breakout.",
+                    LOWER_VALUE: "Today CPR below yesterday's CPR. Bearish value migration.",
+                    OVERLAPPING_VALUE: "Today and yesterday CPR bands partially overlap (neither higher, lower, nor fully inside). Mixed/transition value zone.",
+                    OUTSIDE_VALUE: "Today CPR band and yesterday CPR band have no overlap. Divergent value zone.",
+                    BREAKOUT: "Heavy volume + price above TC. Strong bullish breakout.",
+                    NARROW: "CPR width < 0.3%. High probability trending day ahead.",
+                    VIRGIN: "CPR never tested. Strong magnet zone.",
+                    HOT_ZONE: "Price within 0.5% of CPR band. High-reaction zone.",
+                    VOLUME_SPIKE: "Volume > 2x average. Institutional activity.",
+                    BULLISH: "Bias based on price vs yesterday TC/BC level.",
+                    BEARISH: "Bias based on price vs yesterday TC/BC level.",
+                    HP_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
+                    KGS_ASC_CPR: "3 consecutive days of rising CPR. Bullish trend expected. Long trades favored.",
+                    HP_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
+                    KGS_DESC_CPR: "3 consecutive days of falling CPR. Bearish trend expected. Short trades favored.",
+                    HP_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
+                    KGS_INSIDE_CPR: "Today's CPR fully inside yesterday's CPR band. Trending day expected.",
+                    HP_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
+                    KGS_OUTSIDE_CPR: "Today's CPR wider than and contains yesterday's CPR. Sideways day expected — reduce conviction.",
+                    HP_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
+                    KGS_RTP: "20 & 50 SMA sloping in the same direction. Running Trend Pattern confirmed — increases trending day probability when combined with Narrow CPR.",
+                    HP_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
+                    KGS_HP_RTP: "High Probability RTP: Price crossing the 200 SMA while a Running Trend Pattern is active.",
+                    HP_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
+                    KGS_ASC_REVERSAL: "Ascending CPR invalidation via strong bearish rejection (Today Close < Yesterday Low). Expected upward trend failed.",
+                    HP_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
+                    KGS_DESC_REVERSAL: "Descending CPR invalidation via strong bullish rejection (Today Close > Yesterday High). Expected downward trend failed.",
+                    HP_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
+                    KGS_DIRECT_UP: "Daily candle closes above R1 with green body. Continuation breakout pattern.",
+                    HP_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
+                    KGS_DIRECT_DOWN: "Daily candle closes below S1 with red body. Continuation breakdown pattern.",
+                    HP_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
+                    KGS_REVERSAL_UP: "Price tags S1 and reverses to close above it with green body. Support rejection pattern.",
+                    HP_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
+                    KGS_REVERSAL_DOWN: "Price tags R1 and reverses to close below it with red body. Resistance rejection pattern.",
+                    HP_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
+                    KGS_CAM_BULL_BIAS: "Camarilla S3 support falls inside today's CPR zone. Indicates underlying bullish support.",
+                    HP_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance.",
+                    KGS_CAM_BEAR_BIAS: "Camarilla R3 resistance falls inside today's CPR zone. Indicates underlying bearish resistance.",
+                  };
+
+                  return (
+                    <div className="space-y-4 animate-fade-in">
+                      {/* 1. Scored Confluence Signals */}
+                      <div>
+                        <span className="text-[9px] text-text-tertiary uppercase tracking-wider block mb-1.5 font-bold">
+                          Scored Confluence Signals
+                        </span>
+                        {scoredSignals.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {scoredSignals.map(({ rawSig, sig }) => (
+                              <span
+                                key={rawSig}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${getRatingColorClass(
+                                  sig === 'BREAKOUT' || sig === 'BULLISH' || sig === 'NARROW' ? 95 :
+                                  sig === 'BEARISH' || sig === 'WIDE' ? 10 : 50
+                                )}`}
+                              >
+                                {sig}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-text-tertiary italic">None active</span>
+                        )}
+                      </div>
+
+                      {/* 2. Informational / Price Action Context */}
+                      {unscoredSignals.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <span className="text-[9px] text-text-tertiary uppercase tracking-wider font-bold">
+                              Informational / Price Action Context
+                            </span>
+                            <span className="text-[8px] text-text-tertiary bg-bg-secondary px-1.5 py-0.5 rounded border border-border-secondary/40 font-normal">
+                              does not affect score
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {unscoredSignals.map(({ rawSig, sig }) => (
+                              <span
+                                key={rawSig}
+                                title={`${sig} (Context only — does not affect score)`}
+                                className="text-[10px] font-medium px-2 py-0.5 rounded border border-dashed border-border-secondary/60 bg-bg-secondary/40 text-text-tertiary opacity-80 cursor-help"
+                              >
+                                {sig}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3. Signal Meaning Legend */}
+                      <div className="border border-border-primary rounded p-3 text-[10px] space-y-2 text-text-secondary mt-2">
+                        <span className="font-bold text-text-primary block uppercase">Signal Meaning</span>
+                        <ul className="list-disc pl-4 space-y-1.5 leading-relaxed">
+                          {allSignals.map(({ rawSig, sig, unscored }) => {
+                            const expl = explMap[sig];
+                            if (!expl) return null;
+                            return (
+                              <li key={rawSig}>
+                                <strong>{sig}:</strong> {expl}{' '}
+                                {unscored && (
+                                  <span className="text-[8.5px] font-semibold text-text-tertiary bg-bg-secondary/70 px-1.5 py-0.5 rounded border border-border-secondary/40 ml-1 inline-block">
+                                    Informational — does not affect score
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {drawerTab === 'tradeSetup' && (() => {
                   const direction = getStockDirection(drawerStock);

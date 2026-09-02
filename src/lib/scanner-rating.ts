@@ -3,6 +3,33 @@ import { inferCprJournalDirection } from '@/lib/cpr-direction';
 export type ScannerBadgeDirection = 'LONG' | 'SHORT' | null;
 
 /**
+ * Signals evaluated by SignalService that do not contribute to quantitative score
+ * or confidence in RankingService / ScannerService (held at 0 weight / unvalidated).
+ */
+export const UNSCORED_SIGNALS = new Set<string>([
+  'HP_REVERSAL_UP',
+  'HP_REVERSAL_DOWN',
+  'HP_DIRECT_UP',
+  'HP_DIRECT_DOWN',
+  'HP_CAM_BULL_BIAS',
+  'HP_CAM_BEAR_BIAS',
+  'HP_ASC_REVERSAL',
+  'HP_DESC_REVERSAL',
+  'HP_HP_RTP',
+  'OVERLAPPING_VALUE',
+  'OUTSIDE_VALUE',
+]);
+
+/**
+ * Checks whether a signal tag is informational-only (contributes 0 pts to quant score & confidence).
+ * Handles legacy KGS_ prefixes and dynamic OVERLAPPING prefixes.
+ */
+export function isUnscoredSignal(rawSig: string): boolean {
+  const sig = rawSig.replace(/^KGS_/, 'HP_');
+  return UNSCORED_SIGNALS.has(sig) || sig.startsWith('OVERLAPPING');
+}
+
+/**
  * Direction for CPR rating badges. Prefers explicit direction; otherwise reuses
  * inferCprJournalDirection's TC/BC entry pin. Returns null for RANGE/ambiguous
  * so UI can render "Strong" / "Opportunity" without inventing Buy/Sell.
