@@ -195,4 +195,88 @@ describe('MomentumLeadersService - Unit Tests', () => {
       assert.equal(neutral.scoreModifier, 0);
     });
   });
+
+  describe('Liquidity Base Gate (20-Day Trailing Average Turnover)', () => {
+    it('locks in MIN_LIQUIDITY_TURNOVER_CR at 10.0 (₹10 Cr)', () => {
+      assert.equal(MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR, 10.0);
+    });
+
+    it('computes accurate 20-day trailing average daily turnover in ₹ Cr', () => {
+      // 21 candles (20 prior days + 1 current day)
+      // Prior 20 days: each has volume 1,000,000 at close 100 => 10 Cr turnover/day
+      const candles: OhlcvCandleWithPrevClose[] = [];
+      for (let i = 1; i <= 21; i++) {
+        candles.push({
+          date: `2026-08-${i < 10 ? '0' + i : i}`,
+          open: 99,
+          high: 101,
+          low: 98,
+          close: 100,
+          prevClose: 100,
+          volume: 1000000, // 1M * 100 = 10 Cr
+          value: 100000000, // 10 Cr in INR
+        });
+      }
+
+      const avgTurnover = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
+      assert.equal(avgTurnover, 10.0);
+      assert.ok(avgTurnover >= MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR);
+    });
+
+    it('identifies stocks failing the ₹10 Cr liquidity floor (< 10 Cr)', () => {
+      // Illiquid stock: 20 prior days with 5.37 Cr average turnover
+      const candles: OhlcvCandleWithPrevClose[] = [];
+      for (let i = 1; i <= 21; i++) {
+        candles.push({
+          date: `2026-08-${i < 10 ? '0' + i : i}`,
+          open: 99,
+          high: 101,
+          low: 98,
+          close: 100,
+          prevClose: 100,
+          volume: 537000,
+          value: 53700000, // 5.37 Cr
+        });
+      }
+
+      const avgTurnover = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
+      assert.equal(avgTurnover, 5.37);
+      assert.ok(avgTurnover < MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR, 'Must fail liquidity floor');
+    });
+
+    it('confirms high-turnover stocks with low relative volume (NAVINFLUOR scenario) pass the liquidity floor', () => {
+      // Stock trades ₹8,600 with 74,062 shares today (₹64 Cr)
+      // Prior 20 days: avg volume 353,000 shares * ₹8,600 = ~₹305 Cr/day
+      // Today RVOL = 74,062 / 353,000 = 0.21x (Low Volume VPA badge)
+      // Absolute liquidity is massive (305 Cr avg, 64 Cr today) => passes ₹10 Cr floor
+      const candles: OhlcvCandleWithPrevClose[] = [];
+      for (let i = 1; i <= 20; i++) {
+        candles.push({
+          date: `2026-08-${i < 10 ? '0' + i : i}`,
+          open: 8500,
+          high: 8700,
+          low: 8400,
+          close: 8600,
+          prevClose: 8600,
+          volume: 353000,
+          value: 353000 * 8600, // ~303.58 Cr
+        });
+      }
+      // Current day
+      candles.push({
+        date: '2026-09-01',
+        open: 8650,
+        high: 8700,
+        low: 8550,
+        close: 8636,
+        prevClose: 8675.5,
+        volume: 74062,
+        value: 74062 * 8636, // ~63.96 Cr
+      });
+
+      const avgTurnover = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
+      assert.ok(avgTurnover > 300, `Average turnover must be ~303 Cr, got ${avgTurnover}`);
+      assert.ok(avgTurnover >= MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR, 'Must easily pass ₹10 Cr liquidity floor');
+    });
+  });
 });
