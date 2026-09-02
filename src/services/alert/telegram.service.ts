@@ -171,11 +171,11 @@ export class TelegramService {
     }
 
 
-    let text = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST | Engine: Advanced\n\n`;
+    const header = `🚨 <b>CPR PRO — BTST/STBT ALERT</b>\n📅 ${dateStr} | ⏰ ${BTST_CLOCK.discoveryStart}–${BTST_CLOCK.discoveryEnd} IST | Engine: Advanced\n\n`;
 
-    text += `🟢 <b>LONG SETUPS (${longs.length})</b>\n`;
-    if (longs.length === 0) text += `<i>None</i>\n`;
-    longs.forEach(r => {
+    const summaryFooter = `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n📊 Strong Signal: ${strongSignalCount} | Breakout: ${breakoutCount}\n`;
+
+    const formatSetup = (r: typeof longs[0]) => {
       const entry = r.entry.toFixed(2);
       const sl = r.sl.toFixed(2);
       const target = r.target.toFixed(2);
@@ -186,32 +186,57 @@ export class TelegramService {
       const optionStr = r.optionSuggestion?.formattedName
         ? `\n  🎯 Option: <b>${escapeTelegramHtml(r.optionSuggestion.formattedName)}</b>`
         : '';
-      text += `• <b>${symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${signals}${optionStr}\n\n`;
-    });
+      return `• <b>${symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${signals}${optionStr}\n\n`;
+    };
 
-    text += `🔴 <b>SHORT SETUPS (${shorts.length})</b>\n`;
-    if (shorts.length === 0) text += `<i>None</i>\n`;
-    shorts.forEach(r => {
-      const entry = r.entry.toFixed(2);
-      const sl = r.sl.toFixed(2);
-      const target = r.target.toFixed(2);
-      const rr = escapeTelegramHtml(String(r.rr));
-      const score = Math.max(r.longScore, r.shortScore);
-      const symbol = escapeTelegramHtml(r.symbol);
-      const signals = escapeTelegramHtml((r.signals || []).join(', '));
-      const optionStr = r.optionSuggestion?.formattedName
-        ? `\n  🎯 Option: <b>${escapeTelegramHtml(r.optionSuggestion.formattedName)}</b>`
-        : '';
-      text += `• <b>${symbol}</b> | Score: ${score}\n  Entry: ₹${entry} | SL: ₹${sl} | Target: ₹${target}\n  RR: ${rr} | Signals: ${signals}${optionStr}\n\n`;
-    });
+    // Telegram hard-limits messages to 4096 chars. On days with many setups,
+    // chunk into multiple messages staying safely under the 3900 character ceiling.
+    const TELEGRAM_MAX_CHARS = 3900;
+    const sections: string[] = [];
 
-    text += `⚠️ Conflicts: ${totalConflict} | Avoid: ${avoid}\n`;
-    text += `📊 Strong Signal: ${strongSignalCount} | Breakout: ${breakoutCount}\n`;
+    if (longs.length > 0) {
+      sections.push(`🟢 <b>LONG SETUPS (${longs.length})</b>\n\n`);
+      for (const r of longs) sections.push(formatSetup(r));
+    } else {
+      sections.push(`🟢 <b>LONG SETUPS (0)</b>\n<i>None</i>\n\n`);
+    }
 
-    // Single delivery to the group chat. On failure sent=false, so the claim
-    // rollback in runBtstAlertJob retries on the next 5-min bucket.
-    const result = await this.sendMessage(text, targetChatId);
-    return { sent: result.ok, ...(result.ok ? {} : (result.reason ? { reason: result.reason } : {})) };
+    if (shorts.length > 0) {
+      sections.push(`🔴 <b>SHORT SETUPS (${shorts.length})</b>\n\n`);
+      for (const r of shorts) sections.push(formatSetup(r));
+    } else {
+      sections.push(`🔴 <b>SHORT SETUPS (0)</b>\n<i>None</i>\n\n`);
+    }
+
+    sections.push(summaryFooter);
+
+    const messages: string[] = [];
+    let currentMsg = header;
+
+    for (const section of sections) {
+      if ((currentMsg + section).length > TELEGRAM_MAX_CHARS && currentMsg !== header) {
+        messages.push(currentMsg.trimEnd());
+        currentMsg = section;
+      } else {
+        currentMsg += section;
+      }
+    }
+    if (currentMsg.trim().length > 0) {
+      messages.push(currentMsg.trimEnd());
+    }
+
+    let allOk = true;
+    let lastReason: string | undefined;
+
+    for (const msg of messages) {
+      const result = await this.sendMessage(msg, targetChatId);
+      if (!result.ok) {
+        allOk = false;
+        lastReason = result.reason;
+      }
+    }
+
+    return { sent: allOk, ...(allOk ? {} : (lastReason ? { reason: lastReason } : {})) };
   }
 
   static async sendBreakoutAlert(

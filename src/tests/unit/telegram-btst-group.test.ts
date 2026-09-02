@@ -160,6 +160,35 @@ test('sendBtstAlert group-only delivery', async (t) => {
       mocks.restore();
     }
   });
+
+  await t.test('chunks large BTST payloads exceeding 3900 characters into multiple messages', async () => {
+    const mocks = withMocks({ group: 'group-chat' });
+    try {
+      // Create 35 setups — will easily exceed 3900 chars
+      const largePayload = Array.from({ length: 35 }, (_, i) => ({
+        tag: i % 2 === 0 ? 'LONG' : 'SHORT',
+        longScore: i % 2 === 0 ? 110 : 0,
+        shortScore: i % 2 === 0 ? 0 : 110,
+        symbol: `STOCK${i}`,
+        entry: 500 + i,
+        sl: 490 + i,
+        target: 520 + i,
+        rr: '1:2',
+        signals: ['BULLISH', 'VOLUME_SPIKE', 'CPR_ABOVE_TC'],
+        classification: i % 2 === 0 ? 'STRONG_BTST' : 'STRONG_STBT',
+        optionSuggestion: { formattedName: `SEP 2026 500 CE`, ltp: 15 },
+      })) as unknown as Parameters<typeof TelegramService.sendBtstAlert>[0];
+
+      const result = await TelegramService.sendBtstAlert(largePayload);
+      assert.strictEqual(result.sent, true);
+      assert.ok(mocks.sentBodies.length > 1, `Must split into multiple messages, got ${mocks.sentBodies.length}`);
+      for (const body of mocks.sentBodies) {
+        assert.ok(body.length <= 4096, `Message length ${body.length} must not exceed Telegram 4096 cap`);
+      }
+    } finally {
+      mocks.restore();
+    }
+  });
 });
 
 test('sendBreakoutAlert escapes HTML in footnote', async () => {

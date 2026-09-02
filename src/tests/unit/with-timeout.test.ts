@@ -34,3 +34,21 @@ test('withTimeout does not leave a dangling timer after resolving early', async 
   const result = await withTimeout(Promise.resolve(42), 10_000, 'irrelevant');
   assert.equal(result, 42);
 });
+
+test('withTimeout prevents unhandledRejection when underlying promise rejects after timeout', async () => {
+  let lateReject!: (err: Error) => void;
+  const slowFailingPromise = new Promise((_, reject) => {
+    lateReject = reject;
+  });
+
+  await assert.rejects(
+    () => withTimeout(slowFailingPromise, 20, 'slow-fail-job'),
+    /slow-fail-job timed out after 20ms/
+  );
+
+  // Late rejection after timeout should not trigger unhandledRejection
+  assert.doesNotThrow(() => {
+    lateReject(new Error('late failure'));
+  });
+});
+

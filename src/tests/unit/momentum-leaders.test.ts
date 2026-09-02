@@ -314,11 +314,11 @@ describe('MomentumLeadersService - Unit Tests', () => {
 
       // Create 5 F&O stocks with lower 21D returns: 9%, 8%, 7%, 6%, 5%
       const fnoStocks = [
-        createMockRawStock('FNO_TOP', 9.0, true),
-        createMockRawStock('FNO_2', 8.0, true),
-        createMockRawStock('FNO_3', 7.0, true),
-        createMockRawStock('FNO_4', 6.0, true),
-        createMockRawStock('FNO_5', 5.0, true),
+        createMockRawStock('FNO_TOP', 9.0),
+        createMockRawStock('FNO_2', 8.0),
+        createMockRawStock('FNO_3', 7.0),
+        createMockRawStock('FNO_4', 6.0),
+        createMockRawStock('FNO_5', 5.0),
       ];
 
       const allNsePool = [...nonFnoStocks, ...fnoStocks]; // N = 10
