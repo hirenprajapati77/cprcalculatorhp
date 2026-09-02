@@ -303,6 +303,24 @@ export const Navbar: React.FC = () => {
                     </div>
                   </Link>
 
+                  <Link
+                    href="/market-tools/momentum-leaders"
+                    onClick={() => setToolsOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                      pathname === '/market-tools/momentum-leaders'
+                        ? 'bg-blue-500/15 text-blue-300 font-bold'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Flame size={13} className="text-orange-400" />
+                      <span>Momentum Leaders</span>
+                    </div>
+                    <span className="px-1 py-0.2 rounded text-[8px] font-black bg-orange-500/20 text-orange-300 border border-orange-500/40">
+                      NEW
+                    </span>
+                  </Link>
+
                   <div className="h-px bg-slate-800 my-1" />
 
                   <Link
