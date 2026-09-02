@@ -153,6 +153,7 @@ export default function MomentumLeadersPage() {
       'RVOL 20D',
       'CLV',
       'Turnover (Cr)',
+      '20D Avg Turnover (Cr)',
     ];
     const rows = filteredStocks.map(s => [
       s.symbol,
@@ -174,6 +175,7 @@ export default function MomentumLeadersPage() {
       s.rvol20d !== null ? s.rvol20d.toFixed(2) + 'x' : 'N/A',
       s.clv !== null ? s.clv.toFixed(2) : 'N/A',
       s.turnoverCr.toFixed(1),
+      s.avgTurnoverCr20d !== undefined ? s.avgTurnoverCr20d.toFixed(1) : 'N/A',
     ]);
 
     const csvContent = generateCsvContent(headers, rows);

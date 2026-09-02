@@ -1,4 +1,4 @@
-﻿import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { FNO_SYMBOLS, getSymbolSector } from './market-breadth.service';
@@ -27,6 +27,7 @@ export interface MomentumStock {
   changePct: number;
   volume: number;
   turnoverCr: number;
+  avgTurnoverCr20d: number;
   rvol20d: number | null;
   clv: number | null;
   vpaFootprint: BreakoutVpaFootprint;
@@ -88,6 +89,37 @@ const REDIS_CACHE_KEY = 'market_tools:momentum_leaders:report';
 const REDIS_TTL_SEC = 24 * 3600; // 24 hours
 
 export class MomentumLeadersService {
+  /**
+   * Minimum 20-day average daily turnover required for a stock to qualify (in ₹ Cr).
+   * Stocks below this floor are excluded before percentile ranking.
+   */
+  public static readonly MIN_LIQUIDITY_TURNOVER_CR = 10.0;
+
+  /**
+   * Computes trailing average daily turnover in ₹ Cr from historical candles.
+   * Uses the prior `period` trading sessions leading up to (and excluding) the current session.
+   */
+  public static computeTrailingAvgTurnoverCr(candles: OhlcvCandleWithPrevClose[], period = 20): number {
+    if (candles.length < 2) {
+      if (candles.length === 1) {
+        const c = candles[0]!;
+        const cr = c.value !== undefined && c.value !== null
+          ? c.value / 10000000
+          : (c.volume * c.close) / 10000000;
+        return Number(cr.toFixed(2));
+      }
+      return 0;
+    }
+    const window = candles.slice(-(period + 1), -1);
+    if (window.length === 0) return 0;
+    const sum = window.reduce((acc, c) => {
+      const cr = c.value !== undefined && c.value !== null
+        ? c.value / 10000000
+        : (c.volume * c.close) / 10000000;
+      return acc + cr;
+    }, 0);
+    return Number((sum / window.length).toFixed(2));
+  }
   /**
    * Compounded return across k trading sessions using exchange-adjusted prevClose.
    * Immunizes multi-window returns against stock splits, bonuses, and capital restructuring.
@@ -290,6 +322,7 @@ export class MomentumLeadersService {
       changePct: number;
       volume: number;
       turnoverCr: number;
+      avgTurnoverCr20d: number;
       rvol20d: number | null;
       clv: number | null;
       vpaFootprint: BreakoutVpaFootprint;
@@ -322,6 +355,15 @@ export class MomentumLeadersService {
         ? prior20Candles.reduce((s, c) => s + c.volume, 0) / prior20Candles.length
         : volume;
 
+      // 20-day trailing average daily turnover (₹ Cr) for liquidity base gate
+      const avgTurnoverCr20d = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles, 20);
+
+      // Liquidity Base Gate: Exclude stocks with 20-day average daily turnover < ₹10 Cr
+      // Eliminates structurally illiquid names from qualifying as window momentum leaders
+      if (avgTurnoverCr20d < MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR) {
+        continue;
+      }
+
       const rvol20d = computeRvol(volume, avgVol20);
       const clv = computeClv(close, latestCandle.high, latestCandle.low);
       const rangePct = computeRangePct(latestCandle.high, latestCandle.low, close);
@@ -341,6 +383,7 @@ export class MomentumLeadersService {
         changePct,
         volume,
         turnoverCr,
+        avgTurnoverCr20d,
         rvol20d,
         clv,
         vpaFootprint,
@@ -423,6 +466,7 @@ export class MomentumLeadersService {
         changePct: s.changePct,
         volume: s.volume,
         turnoverCr: s.turnoverCr,
+        avgTurnoverCr20d: s.avgTurnoverCr20d,
         rvol20d: s.rvol20d,
         clv: s.clv,
         vpaFootprint: s.vpaFootprint,
