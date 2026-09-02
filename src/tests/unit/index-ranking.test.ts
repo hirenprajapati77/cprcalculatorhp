@@ -138,6 +138,14 @@ describe('IndexRankingService.calculateScoreDetails — rules', () => {
     assert.equal(weak.breakdown?.closeStrength, 0);
   });
 
+  it('Rule 6: handles zero range (high === low) without division by zero or NaN', () => {
+    const flat = IndexRankingService.calculateScoreDetails(
+      baseInputs({ close: 100, high: 100, low: 100 })
+    );
+    assert.equal(flat.breakdown?.closeStrength, 0);
+    assert.ok(!Number.isNaN(flat.score), 'Score must not be NaN');
+  });
+
   it('sums all six rules to a max score of 130', () => {
     const result = IndexRankingService.calculateScoreDetails(allRulesInputs());
     assert.equal(result.score, 130);

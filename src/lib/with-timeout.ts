@@ -24,6 +24,10 @@ export async function withTimeout<T>(
   timeoutMs: number,
   label: string
 ): Promise<T> {
+  // Attach silent catch to prevent unhandledRejection if the underlying promise
+  // rejects after timeout has already triggered.
+  promise.catch(() => {});
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

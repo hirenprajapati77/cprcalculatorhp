@@ -40,6 +40,29 @@ if (env.REDIS_URL) {
 // In-memory cache fallback implementation
 const memoryCache = new Map<string, { value: string; expiry: number }>();
 
+/**
+ * Actively sweeps expired entries from the in-memory cache to prevent unbounded growth.
+ * Returns the count of purged keys.
+ */
+export function sweepExpiredMemoryCache(now: number = Date.now()): number {
+  let purged = 0;
+  for (const [key, cached] of memoryCache.entries()) {
+    if (now > cached.expiry) {
+      memoryCache.delete(key);
+      purged++;
+    }
+  }
+  return purged;
+}
+
+// Background sweep timer runs every 60s. .unref() ensures it does not block process exit.
+const sweepTimer = setInterval(() => {
+  sweepExpiredMemoryCache();
+}, 60_000);
+if (sweepTimer.unref) {
+  sweepTimer.unref();
+}
+
 export const cache = {
   async get(key: string): Promise<string | null> {
     if (redis && redis.status === 'ready') {
@@ -124,7 +147,7 @@ export const cache = {
       }
     }
     const regex = new RegExp(
-      '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'
+      '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$'
     );
 
     for (const key of Array.from(memoryCache.keys())) {

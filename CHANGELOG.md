@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 02 Sep: Multi-Window Momentum Leaders Scanner with Universe Toggle (`ALL_NSE` vs `NSE_FNO`)
+
+Shipped new institutional scanner **Multi-Window Momentum Leaders** (`/market-tools/momentum-leaders`) in PRs #152 & #153:
+
+- **Multi-Frame Momentum Engine** (`src/services/market-tools/momentum-leaders.service.ts`):
+  - Surfaces stocks that demonstrate persistent momentum leadership across multiple concurrent time horizons: 1-Day, 5-Day (~1W), 10-Day (~2W), and 21-Day (~1M) trading sessions.
+  - **Corporate-Action-Safe Return Compounding:** Compounds daily `(close - prevClose) / prevClose` returns across all $k$ trading sessions, immunizing returns from split or bonus distortions.
+  - **₹10 Cr Trailing Average Daily Turnover Liquidity Floor:** Baseline filter (`MIN_LIQUIDITY_TURNOVER_CR = 10.0`) requires 20-day average turnover $\ge ₹10\text{ Cr}$, cleanly filtering illiquid equities while retaining liquid institutions.
+  - **Bounded Additive Composite Scoring ($S \in [0, 100]$):**
+    $$S = \text{clamp}_{[0, 100]}\Big(\text{Base Score} + \text{Consistency Bonus} - \text{Dispersion Penalty} + \text{VPA Modifier}\Big)$$
+    Weighted base percentiles ($0.15 \times p_{1d} + 0.25 \times p_{5d} + 0.30 \times p_{10d} + 0.30 \times p_{21d}$) rewarded with up to +15 pts for multi-window leadership ($p \ge 85$) and penalized by up to 15 pts for single-day spike dispersion ($p_{max} - p_{min} > 30$).
+  - **Dual Universe Scoping & Independent Percentiles:** Single-pass database loader computes candidates and ranks percentiles ($p = \frac{N - rank}{N - 1} \times 100$) independently within each universe pool size ($N_{all} = 995$ vs $N_{fno} = 165$).
+- **API & Background Precomputation** (`src/app/api/market-tools/momentum-leaders/route.ts`):
+  - Dual Redis caching keys: `market_tools:momentum_leaders:report:ALL_NSE` and `market_tools:momentum_leaders:report:NSE_FNO`.
+  - Integrated into daily 19:15 IST background precompute cron (`src/services/market-tools/market-tools-precompute.job.ts`).
+  - Auth-gated heavy recalculation via `isAuthorizedForRefresh()`.
+- **Interactive UI Dashboard & Badging** (`src/app/market-tools/momentum-leaders/page.tsx`):
+  - Universe selector tabs mirroring Market Breadth (`F&O Universe` vs `ALL NSE`).
+  - Tier A+ / A / B / C badges, 4-window flame badges, expandable drawer analytics, and RFC 4180 CSV export with UTF-8 BOM.
+
+### Fixed — 02 Sep: 10-Day Deep Code Review Stability & Resilience Fixes
+
+Addressed high-priority findings from the 10-day comprehensive code review across Core Services, Alerts, Caching, and Test Suite:
+
+- **🔴 [CRITICAL] Prevent Unhandled Promise Rejection on Late Timeout** (`src/lib/with-timeout.ts`): Attached a silent no-op catch (`promise.catch(() => {})`) to underlying promises inside `withTimeout`. When a timeout triggers first, any subsequent rejection from the abandoned promise is safely swallowed rather than escalating to a fatal `unhandledRejection` Node.js process crash.
+- **🟠 [HIGH] Telegram Alert Message Chunking for BTST/STBT** (`src/services/alert/telegram.service.ts`): Implemented safe message pagination (3,900 char ceiling) in `sendBtstAlert`, preventing message drops on high-volume days when combined LONG and SHORT setups exceed Telegram's strict 4,096-character limit.
+- **🟠 [HIGH] In-Memory Cache Active Sweeper & Glob Fix** (`src/lib/redis.ts`): Added a periodic 60-second active cleanup sweep (`sweepExpiredMemoryCache`, unreferenced) to purge expired keys when Redis is disconnected, preventing unbounded memory buildup. Fixed regex conversion in `delPattern` to properly support glob `?` single-character wildcards.
+- **🟠 [HIGH] Division-by-Zero Safety Coverage in CLV Calculations** (`src/tests/unit/index-ranking.test.ts`): Added unit test coverage verifying that zero range (`high === low`) safely produces 0 closeStrength without division by zero or `NaN`.
+- **Unit Test Suite:** Expanded test suite with `redis-memory-cache.test.ts`, with-timeout late rejection tests, and BTST message chunking tests (**754 total tests: 753 passed, 1 skipped, 0 failed**).
+
 ### Added — 01 Sep: Bull Flag & Pole (High Tight Flag) Pattern Detection in Market Tools
 
 Added institutional **Bull Flag & Pole** (High Tight Flag) chart pattern detection to the **52W High Pattern Breakout Scanner** (`/market-tools/pattern-breakout`):
