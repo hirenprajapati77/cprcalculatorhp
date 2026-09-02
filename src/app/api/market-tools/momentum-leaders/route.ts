@@ -1,5 +1,5 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
-import { MomentumLeadersService, MomentumTier } from '@/services/market-tools/momentum-leaders.service';
+import { NextRequest, NextResponse } from 'next/server';
+import { MomentumLeadersService, MomentumTier, MomentumUniverse } from '@/services/market-tools/momentum-leaders.service';
 import { isAuthorizedForRefresh } from '@/lib/market-tools-refresh-auth';
 
 export const dynamic = 'force-dynamic';
@@ -14,11 +14,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const universeParam = searchParams.get('universe');
+    const universe: MomentumUniverse = universeParam === 'ALL_NSE' ? 'ALL_NSE' : 'NSE_FNO';
     const tierFilter = searchParams.get('tier') as MomentumTier | 'ALL' | null;
     const windowLeaderFilter = searchParams.get('windows') as '4' | '3' | '2' | '1' | 'ALL' | null;
     const sectorFilter = searchParams.get('sector');
 
-    const report = await MomentumLeadersService.getMomentumLeadersReport(forceRefresh);
+    const report = await MomentumLeadersService.getMomentumLeadersReport(forceRefresh, universe);
 
     let filteredStocks = report.allStocks;
 
