@@ -255,7 +255,21 @@ describe('PatternBreakoutService - Pattern Detection & Scoring Unit Tests', () =
       ];
 
       const primary = PatternBreakoutService.selectPrimaryPattern(detected);
-      assert.equal(primary, 'FLAG_POLE', 'FLAG_POLE must take top priority in deterministic tiebreak');
+      assert.equal(primary, 'VCP', 'VCP takes top priority over other patterns');
+
+      const cupVsFlag = [
+        { type: 'FLAG_POLE' as const, label: 'Bull Flag & Pole', baseDepthPct: 5, baseDays: 20, confidence: 92, description: '' },
+        { type: 'CUP_AND_HANDLE' as const, label: 'Cup & Handle', baseDepthPct: 20, baseDays: 60, confidence: 85, description: '' },
+        { type: 'DOUBLE_BOTTOM' as const, label: 'Double Bottom', baseDepthPct: 15, baseDays: 45, confidence: 80, description: '' },
+      ];
+      assert.equal(PatternBreakoutService.selectPrimaryPattern(cupVsFlag), 'CUP_AND_HANDLE', 'CUP_AND_HANDLE takes priority over FLAG_POLE');
+
+      const flagVsDouble = [
+        { type: 'DOUBLE_BOTTOM' as const, label: 'Double Bottom', baseDepthPct: 15, baseDays: 45, confidence: 80, description: '' },
+        { type: 'FLAG_POLE' as const, label: 'Bull Flag & Pole', baseDepthPct: 5, baseDays: 20, confidence: 92, description: '' },
+        { type: 'FLAT_BASE' as const, label: 'Flat Base', baseDepthPct: 8, baseDays: 30, confidence: 85, description: '' },
+      ];
+      assert.equal(PatternBreakoutService.selectPrimaryPattern(flagVsDouble), 'FLAG_POLE', 'FLAG_POLE takes priority over DOUBLE_BOTTOM and FLAT_BASE');
     });
   });
 
@@ -320,6 +334,74 @@ describe('PatternBreakoutService - Pattern Detection & Scoring Unit Tests', () =
 
       const pattern = PatternBreakoutService.detectFlagAndPole(candles, 125.5);
       assert.equal(pattern, null, 'Deep pullback should not qualify as a bull flag');
+    });
+
+    it('locks in minPoleGain = 15.0%: detects 16% pole gain and rejects 12% pole gain', () => {
+      function makeCandles(targetPeak: number, flagDays: number) {
+        const c: OhlcvCandle[] = [];
+        const poleLen = 11;
+        const total = 15 + poleLen + flagDays;
+        for (let i = 0; i < total; i++) {
+          const dateStr = `2026-02-${String(i + 1).padStart(2, '0')}`;
+          if (i < 15) {
+            c.push({ date: dateStr, open: 100, high: 101, low: 100, close: 100.5, volume: 80000 });
+          } else if (i <= 14 + poleLen) {
+            const prog = (i - 15) / (poleLen - 1);
+            const price = 100 + prog * (targetPeak - 100);
+            c.push({ date: dateStr, open: price - 0.5, high: price + 0.5, low: price - 0.5, close: price, volume: 200000 });
+          } else {
+            const price = targetPeak - 1.0;
+            c.push({ date: dateStr, open: price, high: price + 0.2, low: price - 0.2, close: price, volume: 50000 });
+          }
+        }
+        return c;
+      }
+
+      // 16% pole (+17% high-to-low) with 3-day flag consolidation MUST pass under 15.0% threshold
+      const candles16 = makeCandles(116.0, 3);
+      const res16 = PatternBreakoutService.detectFlagAndPole(candles16, 116.5);
+      assert.ok(res16 !== null, '16.0% pole advance must be detected under 15.0% threshold (locks in minPoleGain = 15.0%)');
+      assert.equal(res16.type, 'FLAG_POLE');
+
+      // 12% pole MUST be rejected (< 15.0% minPoleGain)
+      const candles12 = makeCandles(112.0, 3);
+      const res12 = PatternBreakoutService.detectFlagAndPole(candles12, 112.5);
+      assert.equal(res12, null, '12.0% pole advance must be rejected (< 15.0% minPoleGain)');
+    });
+
+    it('locks in minFlagLen = 4 (3 consolidation days): detects 3-day flag and rejects 2-day flag', () => {
+      // high52w = 125.0. 90% threshold is 112.5. Only the peak candle exceeds 112.5.
+      function makeFlagCandles(consolidationDays: number) {
+        const c: OhlcvCandle[] = [];
+        // 15 base candles at 100
+        for (let i = 0; i < 15; i++) {
+          c.push({ date: `2026-01-${String(i + 1).padStart(2, '0')}`, open: 100, high: 101, low: 100, close: 100, volume: 50000 });
+        }
+        // 5 surge candles staying <= 110
+        for (let i = 1; i <= 5; i++) {
+          const p = 100 + (i / 5) * 10;
+          c.push({ date: `2026-02-${String(i).padStart(2, '0')}`, open: p - 0.5, high: p, low: p - 0.5, close: p, volume: 150000 });
+        }
+        // 1 single explosive peak candle to 125
+        c.push({ date: '2026-02-06', open: 110, high: 125, low: 110, close: 125, volume: 300000 });
+
+        // consolidationDays: tight drift at 123-124
+        for (let i = 1; i <= consolidationDays; i++) {
+          c.push({ date: `2026-02-${String(6 + i).padStart(2, '0')}`, open: 123.5, high: 124, low: 123, close: 123.5, volume: 30000 });
+        }
+        return c;
+      }
+
+      // 3 consolidation days (flagLen = 4) MUST pass
+      const candles3d = makeFlagCandles(3);
+      const res3d = PatternBreakoutService.detectFlagAndPole(candles3d, 125.0);
+      assert.ok(res3d !== null, '3-day flag consolidation (flagLen=4) must be detected (locks in minFlagLen = 4)');
+      assert.equal(res3d.type, 'FLAG_POLE');
+
+      // 2 consolidation days (flagLen = 3) MUST be rejected (< minFlagLen 4)
+      const candles2d = makeFlagCandles(2);
+      const res2d = PatternBreakoutService.detectFlagAndPole(candles2d, 125.0);
+      assert.equal(res2d, null, '2-day flag consolidation must be rejected (< minFlagLen 4)');
     });
   });
 

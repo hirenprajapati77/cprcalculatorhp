@@ -437,7 +437,7 @@ export class PatternBreakoutService {
    */
   static selectPrimaryPattern(detected: PatternDetails[]): PatternType {
     if (detected.length === 0) return 'NONE';
-    const hierarchy: PatternType[] = ['FLAG_POLE', 'VCP', 'CUP_AND_HANDLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
+    const hierarchy: PatternType[] = ['VCP', 'CUP_AND_HANDLE', 'FLAG_POLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
     for (const type of hierarchy) {
       if (detected.some(d => d.type === type)) {
         return type;
