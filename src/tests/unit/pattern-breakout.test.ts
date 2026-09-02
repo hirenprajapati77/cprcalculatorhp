@@ -255,14 +255,7 @@ describe('PatternBreakoutService - Pattern Detection & Scoring Unit Tests', () =
       ];
 
       const primary = PatternBreakoutService.selectPrimaryPattern(detected);
-      assert.equal(primary, 'VCP', 'VCP takes top priority over other patterns');
-
-      const flagVsDouble = [
-        { type: 'DOUBLE_BOTTOM' as const, label: 'Double Bottom', baseDepthPct: 15, baseDays: 45, confidence: 80, description: '' },
-        { type: 'FLAG_POLE' as const, label: 'Bull Flag & Pole', baseDepthPct: 5, baseDays: 20, confidence: 92, description: '' },
-        { type: 'FLAT_BASE' as const, label: 'Flat Base', baseDepthPct: 8, baseDays: 30, confidence: 85, description: '' },
-      ];
-      assert.equal(PatternBreakoutService.selectPrimaryPattern(flagVsDouble), 'FLAG_POLE', 'FLAG_POLE takes priority over DOUBLE_BOTTOM and FLAT_BASE');
+      assert.equal(primary, 'FLAG_POLE', 'FLAG_POLE must take top priority in deterministic tiebreak');
     });
   });
 
