@@ -437,7 +437,7 @@ export class PatternBreakoutService {
    */
   static selectPrimaryPattern(detected: PatternDetails[]): PatternType {
     if (detected.length === 0) return 'NONE';
-    const hierarchy: PatternType[] = ['FLAG_POLE', 'VCP', 'CUP_AND_HANDLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
+    const hierarchy: PatternType[] = ['VCP', 'CUP_AND_HANDLE', 'FLAG_POLE', 'DOUBLE_BOTTOM', 'FLAT_BASE'];
     for (const type of hierarchy) {
       if (detected.some(d => d.type === type)) {
         return type;
@@ -461,7 +461,7 @@ export class PatternBreakoutService {
    * Bull Flag & Pole (High Tight Flag) Detection Algorithm
    *
    * 1. Pole (Momentum Surge):
-   *    - Sharp advance >= 15.0% over compact 8-25 candles
+   *    - Sharp advance >= 18.0% over compact 8-25 candles
    *    - Pole base low -> pole peak high
    * 2. Flag (Consolidation Channel):
    *    - Tight pullback <= 12.0% from pole peak (duration 4-18 candles)
@@ -478,7 +478,7 @@ export class PatternBreakoutService {
     // Flag duration: trailing 4 to 18 candles
     let bestPattern: PatternDetails | null = null;
 
-    for (let flagLen = 4; flagLen <= Math.min(18, n - 8); flagLen++) {
+    for (let flagLen = 5; flagLen <= Math.min(18, n - 8); flagLen++) {
       const polePeakIdx = n - flagLen;
       const polePeakCandle = window[polePeakIdx];
       const polePeakVal = polePeakCandle.high;
@@ -502,7 +502,7 @@ export class PatternBreakoutService {
 
       // Pole height percentage
       const poleGainPct = ((polePeakVal - poleBaseVal) / poleBaseVal) * 100;
-      if (poleGainPct < 15.0) continue; // Must be a powerful momentum surge
+      if (poleGainPct < 18.0) continue; // Must be a powerful momentum surge
 
       // Flag consolidation: candles from polePeakIdx + 1 to n - 1
       let flagLowVal = Infinity;
@@ -517,7 +517,7 @@ export class PatternBreakoutService {
         flagVolCount++;
       }
 
-      if (flagVolCount < 3) continue;
+      if (flagVolCount < 4) continue;
 
       // Flag pullback depth from pole peak
       const flagDepthPct = ((polePeakVal - flagLowVal) / polePeakVal) * 100;
