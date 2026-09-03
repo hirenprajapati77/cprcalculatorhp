@@ -573,6 +573,15 @@ export class OvernightService {
             continue;
           }
 
+          // Fail-closed when market regime is unreliable (Nifty data unavailable/corrupt).
+          // Mirrors btst-alert.job.ts (L271-273) and cpr-journal.job.ts (L36-39).
+          if (regime.reliable === false) {
+            console.warn(
+              `[OvernightScan] Suppressing ${fullStock.symbol} ${finalDir}: market regime is UNRELIABLE (Nifty feed unavailable).`
+            );
+            continue;
+          }
+
           // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
           if (finalDir === 'SHORT' && regime.trend === 'BULL') {
             continue;

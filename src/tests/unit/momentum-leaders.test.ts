@@ -523,5 +523,16 @@ describe('MomentumLeadersService - Unit Tests', () => {
       assert.equal(normalStock.isCircuitLocked, false);
       assert.equal(normalStock.circuitLimitPct, null);
     });
+
+    it('orders tied stocks deterministically by symbol when compositeScore and 21D return are identical', () => {
+      // Create stocks with identical returns in reverse alphabetical order: ZED, MID, ALPHA
+      const stockZ = createMockRawStock('ZED', 20.0);
+      const stockM = createMockRawStock('MID', 20.0);
+      const stockA = createMockRawStock('ALPHA', 20.0);
+
+      const report = MomentumLeadersService.buildUniverseReport([stockZ, stockM, stockA], 'ALL_NSE', 3, '2026-09-01');
+      const symbols = report.allStocks.map(s => s.symbol);
+      assert.deepEqual(symbols, ['ALPHA', 'MID', 'ZED'], 'Tied stocks must sort deterministically by symbol');
+    });
   });
 });

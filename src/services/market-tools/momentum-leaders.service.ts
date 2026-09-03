@@ -521,12 +521,26 @@ export class MomentumLeadersService {
 
     // Compute percentile ranks per window against this universe pool
     function rankWindow(extractReturn: (s: RawStockAnalysis) => number): Map<string, { rank: number; percentile: number }> {
-      const sorted = [...rawStocks].sort((a, b) => extractReturn(b) - extractReturn(a));
+      const sorted = [...rawStocks].sort(
+        (a, b) => extractReturn(b) - extractReturn(a) || a.symbol.localeCompare(b.symbol)
+      );
       const map = new Map<string, { rank: number; percentile: number }>();
+      let prevReturn: number | null = null;
+      let prevRank = 1;
+      let prevPercentile = 100;
+
       sorted.forEach((item, idx) => {
-        const rank = idx + 1;
-        const percentile = Number((N > 1 ? ((N - rank) / (N - 1)) * 100 : 100).toFixed(2));
-        map.set(item.symbol, { rank, percentile });
+        const currentReturn = extractReturn(item);
+        if (prevReturn !== null && currentReturn === prevReturn) {
+          map.set(item.symbol, { rank: prevRank, percentile: prevPercentile });
+        } else {
+          const rank = idx + 1;
+          const percentile = Number((N > 1 ? ((N - rank) / (N - 1)) * 100 : 100).toFixed(2));
+          prevReturn = currentReturn;
+          prevRank = rank;
+          prevPercentile = percentile;
+          map.set(item.symbol, { rank, percentile });
+        }
       });
       return map;
     }
@@ -599,8 +613,13 @@ export class MomentumLeadersService {
       else countsByLeaderWindows['0_windows']++;
     }
 
-    // Sort descending by compositeScore, then by w21d returnPct
-    finalStocks.sort((a, b) => b.compositeScore - a.compositeScore || b.windows.w21d.returnPct - a.windows.w21d.returnPct);
+    // Sort descending by compositeScore, then by w21d returnPct, with deterministic symbol tie-breaker
+    finalStocks.sort(
+      (a, b) =>
+        b.compositeScore - a.compositeScore ||
+        b.windows.w21d.returnPct - a.windows.w21d.returnPct ||
+        a.symbol.localeCompare(b.symbol)
+    );
 
     // Top leaders: Tier A+ and A stocks (or top 35)
     const topLeaders = finalStocks.filter(s => s.compositeScore >= 80).slice(0, 35);

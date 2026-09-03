@@ -121,6 +121,7 @@ export class MarketBreadthService {
     }
 
     const latestDate = dateRows[0]!.date;
+    const oldestDate = dateRows[dateRows.length - 1]!.date;
     const tradingDaysAvailable = dateRows.length;
 
     // 2. Fetch today's records with historical MA calculations
@@ -157,7 +158,7 @@ export class MarketBreadthService {
           MIN(low) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND CURRENT ROW) as low52w,
           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
         FROM "DailyOhlcv"
-        WHERE series = 'EQ'
+        WHERE series = 'EQ' AND date >= ${oldestDate}
       )
       SELECT 
         symbol,
