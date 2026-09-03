@@ -194,11 +194,26 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         ...(atrPct != null ? { atrPct } : {}),
         symbol: signal.symbol,
       });
+
+      // At EOD (15:20 IST), a winning setup that achieved its target has naturally moved
+      // > 1.5% from entry. Accept winning setups that met target despite real-time chase extension.
+      const isTargetAchieved =
+        signal.target > 0 &&
+        signal.entry > 0 &&
+        ((tag === 'LONG' && liveLtp >= signal.target) ||
+         (tag === 'SHORT' && liveLtp <= signal.target));
+
       if (staleness.stale) {
-        console.warn(
-          `[CPRJournal] ${signal.symbol} skipped (${staleness.reason}): ${staleness.detail}`
-        );
-        return { tag: `${signal.symbol}:${staleness.reason}`, didLog: false };
+        if (staleness.reason === 'EXTENDED' && isTargetAchieved) {
+          console.log(
+            `[CPRJournal] ${signal.symbol} target achieved (LTP ${liveLtp} vs Target ${signal.target}) — accepting winning trade despite extension.`
+          );
+        } else {
+          console.warn(
+            `[CPRJournal] ${signal.symbol} skipped (${staleness.reason}): ${staleness.detail}`
+          );
+          return { tag: `${signal.symbol}:${staleness.reason}`, didLog: false };
+        }
       }
 
       const fallbackOptionType = isBearish ? 'PE' : 'CE';

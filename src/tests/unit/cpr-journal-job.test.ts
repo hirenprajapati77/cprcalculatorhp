@@ -637,3 +637,52 @@ test('CPR_JOURNAL_MAX_SIGNALS env schema rejects unsafe values', () => {
     assert.strictEqual(defaulted.data.CPR_JOURNAL_MAX_SIGNALS, 5, 'default cap is 5');
   }
 });
+
+test('CPR Journal EOD Target Achieved handling', async (t) => {
+  const choppyRegime: MarketRegime = { trend: 'CHOPPY', volatility: 'LOW', score: 50, reliable: true };
+
+  await t.test('logs winning LONG trade that reached target even when LTP is extended > 1.5% from entry', async () => {
+    // entry 100, target 103, ltp 104 (4% above entry => normally EXTENDED if > 1.5%)
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'WINNER_LONG', ltp: 104, entry: 100, target: 103, sl: 98, tc: 100, bc: 98, signalSummary: 'BULLISH,BREAKOUT,ABOVE_TC' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['WINNER_LONG'], 'Winning trade that met target must be logged');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('logs winning SHORT trade that reached target even when LTP is extended > 1.5% below entry', async () => {
+    // entry 100, target 96, ltp 95 (5% below entry => normally EXTENDED if > 1.5%)
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'WINNER_SHORT', ltp: 95, entry: 100, target: 96, sl: 102, tc: 102, bc: 100, signalSummary: 'BEARISH,BREAKDOWN,BELOW_BC' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['WINNER_SHORT'], 'Winning trade that met target must be logged');
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('skips extended trade when target has NOT been achieved', async () => {
+    // entry 100, target 108, ltp 103 (3% above entry, but target 108 not reached)
+    const mocks = mockJobDeps(
+      [makeSignal({ symbol: 'EXTENDED_FAIL', ltp: 103, entry: 100, target: 108, sl: 98, tc: 100, bc: 98, signalSummary: 'BULLISH,BREAKOUT,ABOVE_TC' })],
+      {},
+      choppyRegime
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.ok(result.skipped.some((s) => s.includes('EXTENDED')), 'Unreached target trade must be skipped as EXTENDED');
+    } finally {
+      mocks.restore();
+    }
+  });
+});
