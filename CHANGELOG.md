@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 03 Sep: Core Quality, Momentum Leaders Hardening & Safety Controls (PRs #155, #156, #158, #159)
+
+- **Circuit Lock Detection & Limit-Up/Down Badging (PR #156)** (`src/services/market-tools/momentum-leaders.service.ts`, `src/app/market-tools/momentum-leaders/page.tsx`):
+  - **Algorithmic Detection:** Implemented `detectCircuitLock(changePct, tolerance = 0.20)` to approximate standard NSE circuit filter limits (5%, 10%, 20%) within a $\pm 0.20\%$ boundary, catching locked names like TBZ (+19.99%) or DYCL (+19.95%).
+  - **UI & Export Telemetry:** Added high-contrast orange `🔒 Limit Up` / `🔒 Limit Down` badges in table rows, detailed circuit audit notes in the expanded analytics drawer, and dedicated `Circuit Lock` column in RFC 4180 CSV exports.
+  - **Unit Tests:** Added unit tests locking in circuit tolerance boundaries and negative lower-circuit limit checks.
+
+- **PrevClose Validation & Whole-Stock Corruption Immunity (PR #158)** (`src/services/market-tools/momentum-leaders.service.ts`):
+  - **Mathematical Validation:** Added `isValidPrevClose(val)` validator and updated `computeCompoundedReturn` to return `null` if any candle in the requested window has an invalid (`<= 0`, `null`, `undefined`, `NaN`) `prevClose` or non-positive `close`, eliminating the silent omission of corrupted intermediate days.
+  - **Single-Sourced Candidate Exclusion:** Evaluates all four windows (`r1d`, `r5d`, `r10d`, `r21d`) in `computeAllMomentumLeadersReports` and excludes any stock with a `null` window from ranking with a logged ops warning, ensuring percentile rankings are calculated exclusively on complete, clean data.
+  - **Empirical Live Database Verification:** Queried 77,551 production candles across 2,725 symbols on production server: confirmed 0 corrupted rows, verifying that the fix provides complete mathematical protection with zero current-day leaderboard shrinkage.
+
+- **Deterministic Competition Ranking & Tie-Breakers (PR #159)** (`src/services/market-tools/momentum-leaders.service.ts`):
+  - **Standard Competition Ranking:** Stocks sharing identical percentage returns now receive identical rank and percentile within `rankWindow`.
+  - **Deterministic Secondary Sort:** Added `|| a.symbol.localeCompare(b.symbol)` to both `rankWindow` and `finalStocks.sort`, eliminating non-deterministic display order across cache refreshes.
+
+- **Market Breadth CTE Historical Window Scoping (PR #159)** (`src/services/market-tools/market-breadth.service.ts`):
+  - Added lower date boundary `AND date >= ${oldestDate}` to the `RankedHistory` CTE, pruning scans beyond the 250-trading-day window as `DailyOhlcv` grows over time.
+
+- **Overnight Fail-Closed Regime Reliability Gate (PR #159)** (`src/services/overnight/overnight.service.ts`):
+  - Added fail-closed check (`if (regime.reliable === false) continue;`) to suppress overnight signal generation when Nifty feed data is unavailable, aligning with `btst-alert.job.ts` and `cpr-journal.job.ts`.
+
+- **Realtime Scanner Direction & Extension Refinement (PR #155)** (`src/services/scanner.service.ts`, `src/components/scanner/ScannerClient.tsx`):
+  - Attached inferred setup direction (`LONG` / `SHORT`) to `/api/scanner` payloads.
+  - Rendered `LONG` / `SHORT` setup badges and `TARGET MET` badge when price reaches Target 1.
+  - Restricted price extension evaluation to active breakout setups with a 2.5% threshold.
+
+- **Unit Test Suite:** Expanded test suite with regime fail-closed tests, prevClose corruption tests, circuit lock tests, and tie-breaking tests (**769 total tests: 768 passed, 1 skipped, 0 failed**).
+
 ### Added — 02 Sep: Multi-Window Momentum Leaders Scanner with Universe Toggle (`ALL_NSE` vs `NSE_FNO`)
 
 Shipped new institutional scanner **Multi-Window Momentum Leaders** (`/market-tools/momentum-leaders`) in PRs #152 & #153:
