@@ -68,7 +68,7 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-09-01', open: 505, high: 520, low: 495, close: 510, prevClose: 500, volume: 200000 },
       ];
       const r2 = MomentumLeadersService.computeCompoundedReturn(candles, 2);
-      assert.ok(r2 > 4.0 && r2 < 4.2, `Split-adjusted return must be ~+4.08%, received ${r2}%`);
+      assert.ok(r2 !== null && r2 > 4.0 && r2 < 4.2, `Split-adjusted return must be ~+4.08%, received ${r2}%`);
     });
 
     it('returns 0 when candles length is less than requested window k', () => {
@@ -77,6 +77,81 @@ describe('MomentumLeadersService - Unit Tests', () => {
       ];
       const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5);
       assert.equal(r5, 0);
+    });
+
+    it('returns null when any candle in the window has zero prevClose', () => {
+      const candles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-08-28', open: 100, high: 105, low: 95, close: 105, prevClose: 100, volume: 1000 },
+        { date: '2026-08-29', open: 105, high: 110, low: 100, close: 110, prevClose: 0, volume: 1000 },
+        { date: '2026-09-01', open: 110, high: 115, low: 105, close: 115, prevClose: 110, volume: 1000 },
+      ];
+      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3);
+      assert.strictEqual(result, null, 'Window containing zero prevClose must return null');
+    });
+
+    it('returns null when any candle in the window has negative prevClose', () => {
+      const candles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-08-28', open: 100, high: 105, low: 95, close: 105, prevClose: 100, volume: 1000 },
+        { date: '2026-08-29', open: 105, high: 110, low: 100, close: 110, prevClose: -50, volume: 1000 },
+        { date: '2026-09-01', open: 110, high: 115, low: 105, close: 115, prevClose: 110, volume: 1000 },
+      ];
+      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3);
+      assert.strictEqual(result, null, 'Window containing negative prevClose must return null');
+    });
+
+    it('returns null when any candle in the window has NaN or missing prevClose', () => {
+      const nanCandles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-09-01', open: 100, high: 105, low: 95, close: 105, prevClose: NaN, volume: 1000 },
+      ];
+      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(nanCandles, 1), null);
+
+      const undefinedCandles = [
+        { date: '2026-09-01', open: 100, high: 105, low: 95, close: 105, volume: 1000 } as unknown as OhlcvCandleWithPrevClose,
+      ];
+      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(undefinedCandles, 1), null);
+    });
+
+    it('validates prevClose accurately with isValidPrevClose', () => {
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(100), true);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(0.01), true);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(0), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(-5), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(NaN), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(Infinity), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(null), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose(undefined), false);
+      assert.strictEqual(MomentumLeadersService.isValidPrevClose('100'), false);
+    });
+
+    it('whole-stock exclusion: detects corruption across 1D/5D/10D/21D windows when candles contain invalid prevClose', () => {
+      // 22 candles where Day 15 has prevClose = 0
+      const candles: OhlcvCandleWithPrevClose[] = [];
+      for (let i = 1; i <= 22; i++) {
+        candles.push({
+          date: `2026-08-${i.toString().padStart(2, '0')}`,
+          open: 100 + i,
+          high: 105 + i,
+          low: 95 + i,
+          close: 102 + i,
+          prevClose: i === 15 ? 0 : 100 + i,
+          volume: 10000,
+        });
+      }
+
+      const r1 = MomentumLeadersService.computeCompoundedReturn(candles, 1);
+      const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5);
+      const r10 = MomentumLeadersService.computeCompoundedReturn(candles, 10);
+      const r21 = MomentumLeadersService.computeCompoundedReturn(candles, 21);
+
+      // Day 15 is within the 10D and 21D windows (since 22 - 15 = 7th candle from end)
+      assert.notEqual(r1, null);
+      assert.notEqual(r5, null);
+      assert.strictEqual(r10, null, '10D window containing invalid prevClose on Day 15 must be null');
+      assert.strictEqual(r21, null, '21D window containing invalid prevClose on Day 15 must be null');
+
+      // Candidate filter condition: any null window causes exclusion
+      const isExcluded = r1 === null || r5 === null || r10 === null || r21 === null;
+      assert.strictEqual(isExcluded, true, 'Stock must be flagged for exclusion when any return window is null');
     });
   });
 

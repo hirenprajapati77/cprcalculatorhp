@@ -158,19 +158,28 @@ export class MomentumLeadersService {
     return Number((sum / window.length).toFixed(2));
   }
   /**
+   * Validates whether a previous close price is a finite, positive number.
+   */
+  public static isValidPrevClose(val: unknown): val is number {
+    return typeof val === 'number' && Number.isFinite(val) && val > 0;
+  }
+
+  /**
    * Compounded return across k trading sessions using exchange-adjusted prevClose.
    * Immunizes multi-window returns against stock splits, bonuses, and capital restructuring.
+   * Returns null if any candle in the requested window has an invalid, missing, zero, or negative prevClose.
    */
-  static computeCompoundedReturn(candles: OhlcvCandleWithPrevClose[], k: number): number {
+  static computeCompoundedReturn(candles: OhlcvCandleWithPrevClose[], k: number): number | null {
     if (candles.length < k || k <= 0) return 0;
     const window = candles.slice(-k);
     let compoundRatio = 1.0;
 
     for (const c of window) {
-      if (c.prevClose > 0) {
-        const dailyReturn = (c.close - c.prevClose) / c.prevClose;
-        compoundRatio *= (1.0 + dailyReturn);
+      if (!MomentumLeadersService.isValidPrevClose(c.prevClose) || !Number.isFinite(c.close) || c.close <= 0) {
+        return null;
       }
+      const dailyReturn = (c.close - c.prevClose) / c.prevClose;
+      compoundRatio *= (1.0 + dailyReturn);
     }
 
     return Number(((compoundRatio - 1.0) * 100).toFixed(2));
@@ -413,6 +422,15 @@ export class MomentumLeadersService {
       const r5d = MomentumLeadersService.computeCompoundedReturn(candles, 5);
       const r10d = MomentumLeadersService.computeCompoundedReturn(candles, 10);
       const r21d = MomentumLeadersService.computeCompoundedReturn(candles, 21);
+
+      // Whole-stock exclusion: if any window contains invalid prevClose data,
+      // exclude the stock from ranking rather than computing partial or corrupted returns.
+      if (r1d === null || r5d === null || r10d === null || r21d === null) {
+        console.warn(
+          `[MomentumLeaders] Excluding ${symbol} from ranking due to invalid prevClose in historical candles (r1d=${r1d}, r5d=${r5d}, r10d=${r10d}, r21d=${r21d})`
+        );
+        continue;
+      }
 
       const circuitInfo = MomentumLeadersService.detectCircuitLock(changePct);
 
