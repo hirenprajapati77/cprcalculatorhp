@@ -21,6 +21,7 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Lock,
 } from 'lucide-react';
 
 export default function MomentumLeadersPage() {
@@ -146,6 +147,7 @@ export default function MomentumLeadersPage() {
       'Sector',
       'LTP',
       '1D Change %',
+      'Circuit Lock',
       'Composite Score',
       'Tier',
       'Leader Windows',
@@ -168,6 +170,7 @@ export default function MomentumLeadersPage() {
       s.sector,
       s.close.toFixed(2),
       s.changePct.toFixed(2) + '%',
+      s.isCircuitLocked ? `${s.changePct >= 0 ? 'Limit Up' : 'Limit Down'} (${s.circuitLimitPct}%)` : 'No',
       s.compositeScore,
       s.tier,
       `${s.leaderWindowCount}/4`,
@@ -536,8 +539,19 @@ export default function MomentumLeadersPage() {
                                 #{idx + 1}
                               </span>
                               <div>
-                                <div className="font-bold tracking-tight text-white hover:text-orange-400 transition">
-                                  {stock.symbol}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold tracking-tight text-white hover:text-orange-400 transition">
+                                    {stock.symbol}
+                                  </span>
+                                  {stock.isCircuitLocked && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                      title={`Stock 1D return (${stock.changePct >= 0 ? '+' : ''}${stock.changePct.toFixed(2)}%) is within ±0.20% of the ${stock.circuitLimitPct}% circuit limit. Likely circuit-locked (untradeable at market).`}
+                                    >
+                                      <Lock size={10} className="text-amber-400 flex-shrink-0" />
+                                      {stock.changePct >= 0 ? 'Limit Up' : 'Limit Down'} ({stock.circuitLimitPct}%)
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-[10px] text-slate-400">{stock.sector}</div>
                               </div>
@@ -695,6 +709,15 @@ export default function MomentumLeadersPage() {
                                   <Info size={14} />
                                   <span>Momentum Score Audit for {stock.symbol}</span>
                                 </div>
+
+                                {stock.isCircuitLocked && (
+                                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-[11px] text-amber-300 flex items-center gap-2.5">
+                                    <Lock size={15} className="text-amber-400 flex-shrink-0" />
+                                    <span>
+                                      <strong>Circuit Lock Warning:</strong> 1D return of {stock.changePct >= 0 ? '+' : ''}{stock.changePct.toFixed(2)}% is within &plusmn;0.20% of the {stock.circuitLimitPct}% price band. In cash equities, circuit-locked stocks typically cannot be entered or exited at market prices due to lack of sellers/buyers.
+                                    </span>
+                                  </div>
+                                )}
 
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950 p-3.5 rounded-lg border border-slate-800">
                                   <div>

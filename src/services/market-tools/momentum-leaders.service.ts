@@ -44,6 +44,8 @@ export interface MomentumStock {
   vpaModifier: number;
   compositeScore: number; // 0 to 100
   tier: MomentumTier;
+  isCircuitLocked: boolean;
+  circuitLimitPct: number | null;
 }
 
 export type MomentumUniverse = 'ALL_NSE' | 'NSE_FNO';
@@ -96,6 +98,39 @@ export class MomentumLeadersService {
    * Stocks below this floor are excluded before percentile ranking.
    */
   public static readonly MIN_LIQUIDITY_TURNOVER_CR = 10.0;
+
+  /** Standard NSE circuit filter thresholds (in %). */
+  public static readonly CIRCUIT_THRESHOLDS = [5.0, 10.0, 20.0];
+
+  /** Tolerance for circuit lock approximation (in %). E.g., +19.99% is within 0.20% of 20.0%. */
+  public static readonly CIRCUIT_TOLERANCE_PCT = 0.20;
+
+  /**
+   * Detects if a stock's 1D return lands within tolerance of a standard NSE circuit band (5%, 10%, 20%).
+   * Flagging circuit-locked stocks alerts traders to potential illiquidity or limit-up/limit-down traps.
+   */
+  public static detectCircuitLock(
+    changePct: number,
+    tolerance = MomentumLeadersService.CIRCUIT_TOLERANCE_PCT
+  ): {
+    isCircuitLocked: boolean;
+    circuitLimitPct: number | null;
+  } {
+    const absChange = Math.abs(changePct);
+    for (const threshold of MomentumLeadersService.CIRCUIT_THRESHOLDS) {
+      const diff = Math.abs(absChange - threshold);
+      if (diff <= tolerance + 1e-6) {
+        return {
+          isCircuitLocked: true,
+          circuitLimitPct: threshold,
+        };
+      }
+    }
+    return {
+      isCircuitLocked: false,
+      circuitLimitPct: null,
+    };
+  }
 
   /**
    * Computes trailing average daily turnover in ₹ Cr from historical candles.
@@ -379,6 +414,8 @@ export class MomentumLeadersService {
       const r10d = MomentumLeadersService.computeCompoundedReturn(candles, 10);
       const r21d = MomentumLeadersService.computeCompoundedReturn(candles, 21);
 
+      const circuitInfo = MomentumLeadersService.detectCircuitLock(changePct);
+
       fullLiquidityGatedPool.push({
         symbol,
         sector: getSymbolSector(symbol),
@@ -395,6 +432,8 @@ export class MomentumLeadersService {
         r5d,
         r10d,
         r21d,
+        isCircuitLocked: circuitInfo.isCircuitLocked,
+        circuitLimitPct: circuitInfo.circuitLimitPct,
       });
     }
 
@@ -528,6 +567,8 @@ export class MomentumLeadersService {
         vpaModifier: scoreResult.vpaModifier,
         compositeScore: scoreResult.compositeScore,
         tier: scoreResult.tier,
+        isCircuitLocked: s.isCircuitLocked ?? false,
+        circuitLimitPct: s.circuitLimitPct ?? null,
       };
 
       finalStocks.push(stock);
@@ -577,4 +618,6 @@ export interface RawStockAnalysis {
   r5d: number;
   r10d: number;
   r21d: number;
+  isCircuitLocked: boolean;
+  circuitLimitPct: number | null;
 }

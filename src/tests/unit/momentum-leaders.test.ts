@@ -8,6 +8,29 @@ import {
 import { classifyBreakoutVpa } from '@/services/vpa/vpa.math';
 
 describe('MomentumLeadersService - Unit Tests', () => {
+  function createMockRawStock(symbol: string, r21d: number, changePct = 1.0): RawStockAnalysis {
+    const circuitInfo = MomentumLeadersService.detectCircuitLock(changePct);
+    return {
+      symbol,
+      sector: 'Technology',
+      close: 100,
+      prevClose: 100,
+      changePct,
+      volume: 500000,
+      turnoverCr: 50.0,
+      avgTurnoverCr20d: 50.0,
+      rvol20d: 1.2,
+      clv: 0.5,
+      vpaFootprint: classifyBreakoutVpa(1.2, 0.5),
+      r1d: 2.0,
+      r5d: 4.0,
+      r10d: 8.0,
+      r21d,
+      isCircuitLocked: circuitInfo.isCircuitLocked,
+      circuitLimitPct: circuitInfo.circuitLimitPct,
+    };
+  }
+
   describe('Compounded Daily Return Calculation', () => {
     it('computes accurate 1-day return using close and prevClose', () => {
       const candles: OhlcvCandleWithPrevClose[] = [
@@ -282,26 +305,6 @@ describe('MomentumLeadersService - Unit Tests', () => {
   });
 
   describe('Multi-Universe Computation (ALL_NSE vs NSE_FNO)', () => {
-    function createMockRawStock(symbol: string, r21d: number): RawStockAnalysis {
-      return {
-        symbol,
-        sector: 'Technology',
-        close: 100,
-        prevClose: 100,
-        changePct: 1.0,
-        volume: 500000,
-        turnoverCr: 50.0,
-        avgTurnoverCr20d: 50.0,
-        rvol20d: 1.2,
-        clv: 0.5,
-        vpaFootprint: classifyBreakoutVpa(1.2, 0.5),
-        r1d: 2.0,
-        r5d: 4.0,
-        r10d: 8.0,
-        r21d,
-      };
-    }
-
     it('computes percentile ranks independently within each universe pool', () => {
       // Create 5 non-F&O stocks with high 21D returns: 50%, 40%, 30%, 20%, 10%
       const nonFnoStocks = [
@@ -356,6 +359,94 @@ describe('MomentumLeadersService - Unit Tests', () => {
       assert.equal(emptyReport.qualifiedCount, 0);
       assert.equal(emptyReport.allStocks.length, 0);
       assert.equal(emptyReport.status, 'ready');
+    });
+  });
+
+  describe('Circuit Lock Detection (detectCircuitLock)', () => {
+    it('detects 20% upper circuit lock for TBZ (+19.99%), DYCL (+19.95%), and GHCLTEXTIL (+19.89%)', () => {
+      const tbz = MomentumLeadersService.detectCircuitLock(19.99);
+      assert.equal(tbz.isCircuitLocked, true);
+      assert.equal(tbz.circuitLimitPct, 20.0);
+
+      const dycl = MomentumLeadersService.detectCircuitLock(19.95);
+      assert.equal(dycl.isCircuitLocked, true);
+      assert.equal(dycl.circuitLimitPct, 20.0);
+
+      const ghcl = MomentumLeadersService.detectCircuitLock(19.89);
+      assert.equal(ghcl.isCircuitLocked, true);
+      assert.equal(ghcl.circuitLimitPct, 20.0);
+
+      const exact20 = MomentumLeadersService.detectCircuitLock(20.00);
+      assert.equal(exact20.isCircuitLocked, true);
+      assert.equal(exact20.circuitLimitPct, 20.0);
+    });
+
+    it('detects 10% and 5% circuit locks accurately', () => {
+      const lock10 = MomentumLeadersService.detectCircuitLock(9.98);
+      assert.equal(lock10.isCircuitLocked, true);
+      assert.equal(lock10.circuitLimitPct, 10.0);
+
+      const lock5 = MomentumLeadersService.detectCircuitLock(4.99);
+      assert.equal(lock5.isCircuitLocked, true);
+      assert.equal(lock5.circuitLimitPct, 5.0);
+    });
+
+    it('detects lower circuit limits on large negative 1D drops', () => {
+      const lower20 = MomentumLeadersService.detectCircuitLock(-19.95);
+      assert.equal(lower20.isCircuitLocked, true);
+      assert.equal(lower20.circuitLimitPct, 20.0);
+
+      const lower10 = MomentumLeadersService.detectCircuitLock(-10.00);
+      assert.equal(lower10.isCircuitLocked, true);
+      assert.equal(lower10.circuitLimitPct, 10.0);
+
+      const lower5 = MomentumLeadersService.detectCircuitLock(-4.95);
+      assert.equal(lower5.isCircuitLocked, true);
+      assert.equal(lower5.circuitLimitPct, 5.0);
+    });
+
+    it('does not flag normal liquid non-circuit returns', () => {
+      const normalReturns = [0.0, 1.5, 3.2, 7.5, 12.0, 14.8, 16.5, 23.0, -2.5, -8.0, -14.0];
+      for (const ret of normalReturns) {
+        const res = MomentumLeadersService.detectCircuitLock(ret);
+        assert.equal(res.isCircuitLocked, false, `Return ${ret}% should NOT be flagged as circuit lock`);
+        assert.equal(res.circuitLimitPct, null);
+      }
+    });
+
+    it('strictly enforces the ±0.20% tolerance boundary around 20%, 10%, 5%', () => {
+      // 20% boundary [19.80, 20.20]
+      assert.equal(MomentumLeadersService.detectCircuitLock(19.80).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(20.20).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(19.79).isCircuitLocked, false);
+      assert.equal(MomentumLeadersService.detectCircuitLock(20.21).isCircuitLocked, false);
+
+      // 10% boundary [9.80, 10.20]
+      assert.equal(MomentumLeadersService.detectCircuitLock(9.80).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(10.20).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(9.79).isCircuitLocked, false);
+      assert.equal(MomentumLeadersService.detectCircuitLock(10.21).isCircuitLocked, false);
+
+      // 5% boundary [4.80, 5.20]
+      assert.equal(MomentumLeadersService.detectCircuitLock(4.80).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(5.20).isCircuitLocked, true);
+      assert.equal(MomentumLeadersService.detectCircuitLock(4.79).isCircuitLocked, false);
+      assert.equal(MomentumLeadersService.detectCircuitLock(5.21).isCircuitLocked, false);
+    });
+
+    it('attaches isCircuitLocked and circuitLimitPct to MomentumStock in buildUniverseReport', () => {
+      const rawLocked = createMockRawStock('LOCKED_STOCK', 30.0, 19.95);
+      const rawNormal = createMockRawStock('NORMAL_STOCK', 30.0, 3.50);
+
+      const report = MomentumLeadersService.buildUniverseReport([rawLocked, rawNormal], 'ALL_NSE', 2, '2026-09-01');
+      const lockedStock = report.allStocks.find(s => s.symbol === 'LOCKED_STOCK')!;
+      const normalStock = report.allStocks.find(s => s.symbol === 'NORMAL_STOCK')!;
+
+      assert.equal(lockedStock.isCircuitLocked, true);
+      assert.equal(lockedStock.circuitLimitPct, 20.0);
+
+      assert.equal(normalStock.isCircuitLocked, false);
+      assert.equal(normalStock.circuitLimitPct, null);
     });
   });
 });
