@@ -133,7 +133,7 @@ function useBtstState(mode: ScannerMode = 'BTST') {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    const timer = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -974,17 +974,17 @@ StockRow.displayName = 'StockRow';
 
 /** Isolated countdown tick — keeps the 1s interval out of the God parent so StockRow memo stays intact. */
 function AutoRefreshCountdownLabel({
-  resetSeconds,
   refreshInterval,
+  lastRefreshedAt,
 }: {
-  resetSeconds: number;
   refreshInterval: string;
+  lastRefreshedAt?: number;
 }) {
-  const [seconds, setSeconds] = useState(resetSeconds);
+  const [seconds, setSeconds] = useState(() => refreshIntervalSeconds(refreshInterval));
 
   useEffect(() => {
-    setSeconds(resetSeconds);
-  }, [resetSeconds]);
+    setSeconds(refreshIntervalSeconds(refreshInterval));
+  }, [refreshInterval, lastRefreshedAt]);
 
   useEffect(() => {
     if (refreshInterval === 'Off') return;
@@ -992,7 +992,7 @@ function AutoRefreshCountdownLabel({
       setSeconds((c) => (c > 0 ? c - 1 : c));
     }, 1000);
     return () => clearInterval(tick);
-  }, [refreshInterval]);
+  }, [refreshInterval, lastRefreshedAt]);
 
   if (refreshInterval === 'Off') return <>Off</>;
   const m = Math.floor(seconds / 60);
@@ -1127,7 +1127,7 @@ export default function ScannerClient() {
   const activeRequestRef = useRef<number>(0);
   // Auto Refresh Logic is moved down
 
-  const [countdown, setCountdown] = useState<number>(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number>(() => Date.now());
 
   // KPI Bar Stats
   const [latency, setLatency] = useState<number>(0);
@@ -1823,7 +1823,7 @@ export default function ScannerClient() {
         setLatency(Date.now() - startFetchTime);
         showToast('Index scan complete.', 'success');
         if (refreshInterval !== 'Off') {
-          setCountdown(refreshIntervalSeconds(refreshInterval));
+          setLastRefreshedAt(Date.now());
         }
         return;
       }
@@ -1833,7 +1833,7 @@ export default function ScannerClient() {
         setLatency(Date.now() - startFetchTime);
         showToast('BTST/STBT discovery scan complete.', 'success');
         if (refreshInterval !== 'Off') {
-          setCountdown(refreshIntervalSeconds(refreshInterval));
+          setLastRefreshedAt(Date.now());
         }
         return;
       }
@@ -1852,7 +1852,7 @@ export default function ScannerClient() {
         fetchTopOpportunities();
         fetchHistoryRuns();
         if (refreshInterval !== 'Off') {
-          setCountdown(refreshIntervalSeconds(refreshInterval));
+          setLastRefreshedAt(Date.now());
         }
         return;
       }
@@ -1868,7 +1868,7 @@ export default function ScannerClient() {
         
         // Reset countdown clock
         if (refreshInterval !== 'Off') {
-          setCountdown(refreshIntervalSeconds(refreshInterval));
+          setLastRefreshedAt(Date.now());
         }
       }
     } catch {
@@ -1895,23 +1895,21 @@ export default function ScannerClient() {
   useEffect(() => {
     if (refreshInterval === 'Off') {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-      setCountdown(0);
       return;
     }
     const ms = REFRESH_INTERVAL_MS[refreshInterval] ?? REFRESH_INTERVAL_MS['15m'];
-    setCountdown(ms / 1000);
 
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
 
     // Re-read frozen/live DB results immediately when the timer is armed —
     // does not trigger a market-wide rescan or Telegram.
     void refreshActiveData(true).then(() => {
-      setCountdown(ms / 1000);
+      setLastRefreshedAt(Date.now());
     });
 
     autoRefreshRef.current = setInterval(() => {
       void refreshActiveData(true);
-      setCountdown(ms / 1000);
+      setLastRefreshedAt(Date.now());
     }, ms);
 
     return () => {
@@ -2599,8 +2597,8 @@ export default function ScannerClient() {
                   </span>
                   <span className="font-bold text-text-primary">
                     <AutoRefreshCountdownLabel
-                      resetSeconds={countdown}
                       refreshInterval={refreshInterval}
+                      lastRefreshedAt={lastRefreshedAt}
                     />
                   </span>
                 </div>

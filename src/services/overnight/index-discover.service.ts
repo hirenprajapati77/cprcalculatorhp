@@ -803,17 +803,11 @@ export class IndexDiscoverService {
   static async discoverIntraday(dateOverride?: Date): Promise<IndexSignalResult[]> {
     const currentTime = dateOverride || new Date();
     const dateStr = getISTDateString(currentTime);
-    const timeStr = currentTime.toLocaleTimeString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-
-    const { isTradingDay } = getISTTime(currentTime);
-    if (!isTradingDay) {
+    const istTime = getISTTime(currentTime);
+    if (!istTime.isTradingDay) {
       return [];
     }
+    const timeStr = `${String(istTime.hour).padStart(2, '0')}:${String(istTime.minute).padStart(2, '0')}`;
 
     const results: IndexSignalResult[] = [];
     const vixState = await this.getIndiaVixState(currentTime);

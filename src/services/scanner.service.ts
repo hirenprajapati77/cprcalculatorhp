@@ -52,6 +52,9 @@ export interface ScannerSignalResult extends MarketStockData {
 }
 
 
+/** Maximum allowable stop-loss risk as a percentage of entry (guards against flash wicks). */
+const MAX_SL_PCT = 0.03;
+
 export class ScannerService {
   /**
    * Evaluates all CPR levels, price-action signals, entry targets, and SL parameters.
@@ -221,9 +224,11 @@ export class ScannerService {
       // LONG SETUP: pullback/hold entry at today's TC
       entry = cprToday.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
+      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
       const dayLowSL = stock.low;
       const minSL = entry * 0.995;
-      sl = Math.min(dayLowSL, minSL);
+      const maxDistanceSL = entry * (1 - MAX_SL_PCT);
+      sl = Math.max(Math.min(dayLowSL, minSL), maxDistanceSL);
       const risk = entry - sl;
  
       if (risk > 0) {
@@ -252,9 +257,11 @@ export class ScannerService {
       // SHORT SETUP: bounce/hold entry at today's BC
       entry = cprToday.bc;
       // SL = day high OR minimum 0.5% above entry (whichever is higher)
+      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
       const dayHighSL = stock.high;
       const maxSL = entry * 1.005;
-      sl = Math.max(dayHighSL, maxSL);
+      const maxDistanceSL = entry * (1 + MAX_SL_PCT);
+      sl = Math.min(Math.max(dayHighSL, maxSL), maxDistanceSL);
       const risk = sl - entry;
  
       if (risk > 0) {
