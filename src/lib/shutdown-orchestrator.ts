@@ -106,10 +106,6 @@ export async function executeShutdown(options?: {
       }
     }, timeoutMs);
 
-    if (timer.unref) {
-      timer.unref();
-    }
-
     state.activeExecutionPromise = (async () => {
       try {
         for (const phase of SHUTDOWN_PHASES) {
