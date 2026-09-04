@@ -1,4 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 (process.env as any).NODE_ENV = 'test';
 import test from 'node:test';
 import assert from 'node:assert';

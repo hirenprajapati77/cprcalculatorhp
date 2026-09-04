@@ -2,8 +2,6 @@ import { VPA_CLIMAX, VPA_COMPONENT_FLAGS } from '@/config/vpa.config';
 import {
   computeRvol,
   computeWickRatios,
-  isBearishCandle,
-  isBullishCandle,
 } from './vpa.math';
 import type { VpaDirection, VpaMarketInputs } from './vpa.types';
 

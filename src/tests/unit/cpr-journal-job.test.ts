@@ -194,7 +194,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       assert.ok(targetCall);
       assert.strictEqual(targetCall.direction, 'SHORT');
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const logCall = mocks.logCalls.find((c: any) => c.symbol === 'BEARTRIG') as any;
       assert.ok(logCall);
       assert.strictEqual(logCall.optionType, 'PE');
@@ -233,7 +233,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
       assert.deepStrictEqual(result.logged, ['RANGESHORT']);
       const call = mocks.suggestArgs.find((c) => c.symbol === 'RANGESHORT');
       assert.strictEqual(call?.direction, 'SHORT');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const logCall = mocks.logCalls.find((c: any) => c.symbol === 'RANGESHORT') as any;
       assert.strictEqual(logCall.optionType, 'PE');
     } finally {
@@ -249,7 +249,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['NOCHAIN']);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const logCall = mocks.logCalls[0] as any;
       assert.strictEqual(logCall.optionContract, 'UNDERLYING CE');
       assert.strictEqual(logCall.optionStrike, 0);
@@ -269,7 +269,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     try {
       const result = await runCprJournalJob();
       assert.deepStrictEqual(result.logged, ['NOCHAINBEAR']);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const logCall = mocks.logCalls[0] as any;
       assert.strictEqual(logCall.optionContract, 'UNDERLYING PE');
       assert.strictEqual(logCall.optionType, 'PE');
@@ -390,7 +390,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     ]);
 
     const originalLog = TradeJournalService.logSignal;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     TradeJournalService.logSignal = (async (params: any) => {
       if (params.symbol === 'ERRORSYMBOL') throw new Error('Uncaught exception in parallel block');
       return originalLog(params);

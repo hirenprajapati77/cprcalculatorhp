@@ -30,7 +30,6 @@ export default function MultiYearBreakoutPage() {
       isMounted.current = false;
       controller.abort();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchBreakouts(forceRefresh = false, signal?: AbortSignal) {
