@@ -118,10 +118,13 @@ describe('shutdown-orchestrator', () => {
 
   it('enforces deadline when a hook hangs and fails fast with error', async () => {
     let reachedAfterHanging = false;
+    let resolveHanging: (() => void) | null = null;
 
     registerShutdownHook('close_queues', 'hanging-hook', async () => {
-      // Intentionally never resolves
-      await new Promise(() => {});
+      // Simulates a hung hook until explicitly settled during test cleanup
+      await new Promise<void>((res) => {
+        resolveHanging = res;
+      });
     });
 
     registerShutdownHook('release_locks', 'never-reached', async () => {
@@ -134,6 +137,10 @@ describe('shutdown-orchestrator', () => {
       await executeShutdown({ timeoutMs: 200, exitOnComplete: false });
     } catch (err) {
       rejectedError = err as Error;
+    } finally {
+      if (resolveHanging) {
+        (resolveHanging as () => void)();
+      }
     }
     const elapsed = Date.now() - startTime;
 
