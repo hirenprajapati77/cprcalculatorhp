@@ -210,6 +210,23 @@ describe('VpaConfirmationService.analyze', () => {
     assert.ok(result.breakdown.buyingClimax < 0);
   });
 
+  it('detects buying climax on red shooting star (open > close) at resistance', () => {
+    const result = VpaConfirmationService.analyze({
+      direction: 'LONG',
+      open: 106,
+      high: 112,
+      low: 99,
+      close: 105,
+      volume: 300_000,
+      avgVolume: 100_000,
+      todayBc: 98,
+      todayTc: 105,
+    });
+    assert.ok(result.flags.includes('VPA_BUYING_CLIMAX'));
+    assert.equal(result.rejectRecommended, true);
+    assert.ok(result.breakdown.buyingClimax < 0);
+  });
+
   it('detects absorption (high volume, tiny range)', () => {
     const result = VpaConfirmationService.analyze({
       direction: 'LONG',

@@ -136,10 +136,12 @@ export class MultiYearBreakoutService {
     }
 
     const latestDate = dateRows[0]!.date;
+    const oldestDate = dateRows[dateRows.length - 1]!.date;
     const tradingDaysAvailable = dateRows.length;
 
     // 2. Fetch today's records with trailing max high calculations for 1Y/2Y/3Y/5Y/10Y/ATH
     // Note: Excludes current day using ROWS BETWEEN N PRECEDING AND 1 PRECEDING to prevent self-comparison
+    // H-06 fix: bound CTE with date >= oldestDate to prevent full-table scan across unbounded historical dates
     const rawStocks = await prisma.$queryRaw<
       Array<{
         symbol: string;
@@ -180,7 +182,7 @@ export class MultiYearBreakoutService {
           MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as "highATH",
           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
         FROM "DailyOhlcv"
-        WHERE series = 'EQ'
+        WHERE series = 'EQ' AND date >= ${oldestDate}
       )
       SELECT 
         symbol,
@@ -380,8 +382,10 @@ export class MultiYearBreakoutService {
         breakoutGainPct = gainATHPct;
       }
 
-      // If stock has ATH breakout alongside a multi-year breakout, upgrade label to ATH if history is full
-      if (breakoutATH && strongestBreakout !== null) {
+      // H-07 fix: If stock has ATH breakout alongside a multi-year breakout,
+      // upgrade label to ATH only if history covers full available history and at least 2Y (500 days),
+      // preventing recent IPOs with limited data from falsely overriding established 1Y/2Y breakouts.
+      if (breakoutATH && historyDays >= tradingDaysAvailable && historyDays >= WINDOW_SPECS['2Y']) {
         strongestBreakout = 'ATH';
         breakoutPrice = highATH;
         breakoutGainPct = gainATHPct;

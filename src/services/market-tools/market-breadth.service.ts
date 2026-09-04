@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
+import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { NSE_SECTOR_MAP } from './nse-sector-map';
 
 export interface SectorBreadth {
@@ -194,20 +195,23 @@ export class MarketBreadthService {
       low52w: s.low52w !== null ? Number(s.low52w) : null,
     }));
 
+    // H-08 fix: Exclude ETFs, mutual funds, and debt/liquid schemes so breadth reflects real operating companies
+    const operatingStockStats = stockStats.filter((s) => !isLikelyEtfOrFund(s.symbol));
+
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
-    const allNse = computeUniverseBreadth('ALL_NSE', stockStats);
+    const allNse = computeUniverseBreadth('ALL_NSE', operatingStockStats);
 
     // Mock/Filter Nifty 50 and FNO symbol subsets if present
-    const nifty50Stats = stockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
+    const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
     const nifty50 = computeUniverseBreadth(
       'NIFTY_50',
-      nifty50Stats.length > 0 ? nifty50Stats : stockStats.slice(0, 50)
+      nifty50Stats.length > 0 ? nifty50Stats : operatingStockStats.slice(0, 50)
     );
 
-    const fnoStats = stockStats.filter((s) => FNO_SYMBOLS.has(s.symbol));
+    const fnoStats = operatingStockStats.filter((s) => FNO_SYMBOLS.has(s.symbol));
     const nseFno = computeUniverseBreadth(
       'NSE_FNO',
-      fnoStats.length > 0 ? fnoStats : stockStats.slice(0, 180)
+      fnoStats.length > 0 ? fnoStats : operatingStockStats.slice(0, 180)
     );
 
     // 4. Compute Sector Rankings — once per universe, so switching universe
@@ -216,9 +220,9 @@ export class MarketBreadthService {
     // all three tabs (verified live: totals summed to the ALL_NSE count of
     // 2632 even while the Nifty 50 / F&O tabs were selected).
     const sectors = {
-      allNse: computeSectorBreadth(stockStats),
-      nifty50: computeSectorBreadth(nifty50Stats.length > 0 ? nifty50Stats : stockStats.slice(0, 50)),
-      nseFno: computeSectorBreadth(fnoStats.length > 0 ? fnoStats : stockStats.slice(0, 180)),
+      allNse: computeSectorBreadth(operatingStockStats),
+      nifty50: computeSectorBreadth(nifty50Stats.length > 0 ? nifty50Stats : operatingStockStats.slice(0, 50)),
+      nseFno: computeSectorBreadth(fnoStats.length > 0 ? fnoStats : operatingStockStats.slice(0, 180)),
     };
 
     // 5. Compute Overall Signed Signal-Agreement Score & Regime (matching reference tool -10 to +10 scale)

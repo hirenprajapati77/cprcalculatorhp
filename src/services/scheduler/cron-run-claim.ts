@@ -33,17 +33,46 @@ const memoryRunning = new Set<string>();
 const memoryClaimed = new Map<string, number>(); // key → expiresAt (ms)
 /** Active running lock keys tracked for process exit cleanup */
 const activeRunningLocks = new Set<string>();
+/** Owner token per claimed key to prevent deleting locks acquired by others */
+const activeLockTokens = new Map<string, string>();
+
+const RELEASE_LOCK_LUA = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end
+`;
+
+// H-16 fix: sweep expired entries from memoryClaimed to prevent date-stamped keys leaking heap
+function evictExpiredMemoryClaims(): void {
+  const now = Date.now();
+  for (const [k, expiresAt] of memoryClaimed.entries()) {
+    if (now >= expiresAt) {
+      memoryClaimed.delete(k);
+    }
+  }
+}
 
 async function cleanupLocksOnProcessExit(): Promise<void> {
   if (activeRunningLocks.size === 0) return;
-  const keys = Array.from(activeRunningLocks);
+  const entries = Array.from(activeRunningLocks).map((k) => ({
+    key: k,
+    token: activeLockTokens.get(k),
+  }));
   activeRunningLocks.clear();
+  activeLockTokens.clear();
   try {
     const redis = getRedis();
     if (redis && CacheService.isRedisConnected) {
-      const redisKeys = keys.map((k) => `cron_lock:${k}`);
-      await redis.del(...redisKeys);
-      console.log(`[CronClaim] Released ${keys.length} orphaned cron lock(s) on process exit.`);
+      for (const { key, token } of entries) {
+        if (token) {
+          await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
+        } else {
+          await redis.del(`cron_lock:${key}`);
+        }
+      }
+      console.log(`[CronClaim] Released ${entries.length} orphaned cron lock(s) on process exit.`);
     }
   } catch (err) {
     console.warn('[CronClaim] Failed to release cron locks on exit:', err);
@@ -66,7 +95,7 @@ if (typeof process !== 'undefined') {
 }
 
 function memoryTryClaim(key: string): boolean {
-  // M-5 fix: evict expired entries before checking.
+  evictExpiredMemoryClaims();
   const claimedUntil = memoryClaimed.get(key);
   if (claimedUntil !== undefined) {
     if (Date.now() < claimedUntil) return false; // still within TTL
@@ -92,15 +121,18 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
         const done = await redis.get(`cron_done:${key}`);
         if (done) return false;
 
+        // H-15 fix: store unique owner token instead of static '1'
+        const token = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
         const result = await redis.set(
           `cron_lock:${key}`,
-          '1',
+          token,
           'EX',
           LOCK_TTL_SECONDS,
           'NX'
         );
         if (result === 'OK') {
           activeRunningLocks.add(key);
+          activeLockTokens.set(key, token);
           return true;
         }
         return false;
@@ -115,7 +147,10 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
 export async function completeCronRun(key: string, retainClaim = true): Promise<void> {
   memoryRunning.delete(key);
   activeRunningLocks.delete(key);
-  // M-5 fix: store expiry timestamp so the memory fallback matches the Redis 24h TTL.
+  const token = activeLockTokens.get(key);
+  activeLockTokens.delete(key);
+
+  evictExpiredMemoryClaims();
   if (retainClaim) memoryClaimed.set(key, Date.now() + DONE_TTL_SECONDS * 1000);
 
   if (!CacheService.isRedisConnected) return;
@@ -128,8 +163,12 @@ export async function completeCronRun(key: string, retainClaim = true): Promise<
       // Persist completion across workers for the rest of the trading day.
       await redis.set(`cron_done:${key}`, '1', 'EX', DONE_TTL_SECONDS);
     }
-    // Drop the short running lock either way.
-    await redis.del(`cron_lock:${key}`);
+    // H-15 fix: drop lock using owner token check so we never delete a lock acquired by another run
+    if (token) {
+      await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
+    } else {
+      await redis.del(`cron_lock:${key}`);
+    }
   } catch {
     // non-fatal — lock expires on its own
   }
@@ -138,10 +177,19 @@ export async function completeCronRun(key: string, retainClaim = true): Promise<
 export async function releaseCronRun(key: string): Promise<void> {
   memoryRunning.delete(key);
   activeRunningLocks.delete(key);
+  const token = activeLockTokens.get(key);
+  activeLockTokens.delete(key);
+
   if (CacheService.isRedisConnected) {
     try {
       const redis = getRedis();
-      if (redis) await redis.del(`cron_lock:${key}`);
+      if (redis) {
+        if (token) {
+          await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
+        } else {
+          await redis.del(`cron_lock:${key}`);
+        }
+      }
     } catch {
       // non-fatal
     }
@@ -153,4 +201,5 @@ export function resetCronRunClaims(): void {
   memoryClaimed.clear();
   memoryRunning.clear();
   activeRunningLocks.clear();
+  activeLockTokens.clear();
 }

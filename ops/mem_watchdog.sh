@@ -168,8 +168,15 @@ if is_nse_cash_session; then IN_SESSION=1; fi
 
 if [ "$MEM_USED" -gt 85 ]; then
   if [ "$IN_SESSION" -eq 1 ]; then
-    echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session: PM2 restart WITHOUT Redis flush" >> "$LOG"
-    restart_pm2_fresh >> "$LOG" 2>&1
+    # H-17 fix: during active market session, only restart PM2 if Node itself is bloated (PM2_MEM > 420MB),
+    # preventing disruption when high system memory is merely due to Linux OS page cache / buffers.
+    if [ "$PM2_MEM" -gt 420 ]; then
+      echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session & high Node RSS: PM2 restart WITHOUT Redis flush" >> "$LOG"
+      restart_pm2_fresh >> "$LOG" 2>&1
+    else
+      echo "$TIMESTAMP [INFO] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session: RAM elevated but Node healthy; dropping page cache instead of restarting" >> "$LOG"
+      sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    fi
   else
     echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — pruning Redis cache + fresh PM2 restart" >> "$LOG"
     prune_redis_cache_preserving_protected_keys >> "$LOG" 2>&1

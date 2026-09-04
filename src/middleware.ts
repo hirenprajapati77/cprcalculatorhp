@@ -85,7 +85,7 @@ export async function middleware(request: NextRequest) {
     // APP_ACCESS_TOKEN: required in production (env.ts also fail-fasts at import).
     // Reject unauthenticated API calls over plain HTTP when a token is configured;
     // in production, missing token is treated as unauthorized (defense in depth).
-    if (env.NODE_ENV === 'production' && !expectedToken) {
+    if (env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test' && !expectedToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     if (expectedToken) {

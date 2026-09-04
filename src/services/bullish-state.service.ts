@@ -133,17 +133,23 @@ export class BullishStateService {
    */
   static async clearState(symbol: string, date = getISTDateString()): Promise<void> {
     const sym = symbol.trim();
+    const cacheKey = this.key(sym, date);
+    // H-13 fix: check cache first. If no prior directional state was recorded,
+    // skip hitting Postgres with redundant DELETE queries for every inside-CPR stock.
+    try {
+      const existing = await cache.get(cacheKey);
+      if (!existing) return;
+      await cache.del(cacheKey);
+    } catch {
+      // If cache is down, proceed to DB cleanup as fallback
+    }
+
     try {
       await prisma.directionSetupState.deleteMany({
         where: { symbol: sym, date },
       });
     } catch (err) {
       console.warn(`[BullishState] Postgres clear failed for ${sym}:`, err);
-    }
-    try {
-      await cache.del(this.key(sym, date));
-    } catch {
-      // non-fatal
     }
   }
 
