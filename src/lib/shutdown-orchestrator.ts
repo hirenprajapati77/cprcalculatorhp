@@ -34,6 +34,7 @@ interface OrchestratorState {
   shutdownPromise: Promise<void> | null;
   hooks: Map<string, ShutdownHook>;
   isSignalHandlerAttached: boolean;
+  activeExecutionPromise: Promise<void> | null;
 }
 
 const state: OrchestratorState = {
@@ -41,6 +42,7 @@ const state: OrchestratorState = {
   shutdownPromise: null,
   hooks: new Map(),
   isSignalHandlerAttached: false,
+  activeExecutionPromise: null,
 };
 
 let activeSigtermListener: (() => void) | null = null;
@@ -104,11 +106,7 @@ export async function executeShutdown(options?: {
       }
     }, timeoutMs);
 
-    if (timer.unref) {
-      timer.unref();
-    }
-
-    (async () => {
+    state.activeExecutionPromise = (async () => {
       try {
         for (const phase of SHUTDOWN_PHASES) {
           if (completed) break;
@@ -232,9 +230,25 @@ export function initShutdownOrchestrator(): void {
 registerDefaultSystemHooks();
 
 /**
+ * Test helper: returns the currently executing background phase promise (if any).
+ */
+export function getActiveExecutionPromise(): Promise<void> | null {
+  return state.activeExecutionPromise;
+}
+
+/**
  * Test helper: completely resets orchestrator state, attached listeners, and global flags.
  */
-export function resetShutdownOrchestratorForTesting(): void {
+export async function resetShutdownOrchestratorForTesting(): Promise<void> {
+  if (state.activeExecutionPromise) {
+    try {
+      await state.activeExecutionPromise;
+    } catch {
+      // ignore
+    }
+    state.activeExecutionPromise = null;
+  }
+
   state.isShuttingDown = false;
   state.shutdownPromise = null;
   state.hooks.clear();
