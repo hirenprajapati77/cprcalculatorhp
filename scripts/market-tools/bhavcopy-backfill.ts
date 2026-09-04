@@ -19,11 +19,26 @@ export interface BackfillSummary {
     peakRssMb: number;
     durationMs: number;
     status: 'INGESTED' | 'SKIPPED_EXISTS' | 'HOLIDAY_404' | 'FAILED';
-    reason?: string;
+    reason?: string | undefined;
   }>;
   totalWallClockMs: number;
   avgDurationPerDateMs: number;
   extrapolated250DaysMinutes: number;
+}
+
+export const DEFAULT_BACKFILL_MIN_ROWS = 1800;
+
+/**
+ * Resolves the minimum row threshold for determining if a trading session's DailyOhlcv
+ * records are already fully ingested.
+ *
+ * Typical NSE daily EQ-series volume ranges from ~2,050 to 2,150 active symbols.
+ * A default of 1800 ensures that interrupted/partial runs (~1,100 rows) are not mistakenly
+ * skipped on retry, while allowing BACKFILL_MIN_ROWS to override for known shortened sessions
+ * (e.g. 1-hour Diwali Muhurat trading).
+ */
+export function resolveBackfillMinRows(): number {
+  return Number(process.env.BACKFILL_MIN_ROWS) || DEFAULT_BACKFILL_MIN_ROWS;
 }
 
 export async function runBhavcopyBackfill(
@@ -75,7 +90,7 @@ export async function runBhavcopyBackfill(
       existingCount = 0;
     }
 
-    const minRows = Number(process.env.BACKFILL_MIN_ROWS) || 1000;
+    const minRows = resolveBackfillMinRows();
     if (existingCount >= minRows) {
       console.log(`[BhavcopyBackfill] Skipping ${dateStr} (Already ingested: ${existingCount} rows, threshold: ${minRows})`);
       stats.push({
@@ -174,8 +189,11 @@ function generateDateRange(startStr: string, endStr: string): string[] {
   return dates;
 }
 
-// ── CLI Execution ─────────────────────────────────────────────────────────
-if (process.argv[1] && process.argv[1].includes('bhavcopy-backfill')) {
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith('bhavcopy-backfill.ts') || process.argv[1].endsWith('bhavcopy-backfill.js')) &&
+  !process.argv[1].includes('.test.')
+) {
   const startDate = process.argv[2] || '2026-08-07';
   const endDate = process.argv[3] || '2026-08-21';
 

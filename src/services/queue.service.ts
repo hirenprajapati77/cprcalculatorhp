@@ -1,6 +1,7 @@
 import redis from '@/lib/redis';
 import { env } from '@/config/env';
 import { Queue, QueueOptions } from 'bullmq';
+import { registerShutdownHook } from '@/lib/shutdown-orchestrator';
 
 
 function parseRedisConnection() {
@@ -67,14 +68,7 @@ class QueueServiceImpl {
   }
 
   private setupGracefulShutdown() {
-    const globalWithShutdown = globalThis as unknown as { __queueServiceShutdownRegistered?: boolean };
-    if (globalWithShutdown.__queueServiceShutdownRegistered) return;
-    globalWithShutdown.__queueServiceShutdownRegistered = true;
-
-    let isShuttingDown = false;
-    const shutdown = async () => {
-      if (isShuttingDown) return;
-      isShuttingDown = true;
+    registerShutdownHook('close_queues', 'bullmq-queues', async () => {
       console.log('Closing BullMQ connections...');
       try {
         await Promise.all([
@@ -85,12 +79,8 @@ class QueueServiceImpl {
         console.log('BullMQ connections closed successfully.');
       } catch (e) {
         console.error('Error closing BullMQ connections', e);
-      } finally {
-        process.exit(0);
       }
-    };
-    process.once('SIGTERM', shutdown);
-    process.once('SIGINT', shutdown);
+    });
   }
 
   get isEnabled() {
