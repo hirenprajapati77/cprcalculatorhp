@@ -6,13 +6,14 @@ import {
   isShuttingDown,
   initShutdownOrchestrator,
   resetShutdownOrchestratorForTesting,
+  getActiveExecutionPromise,
   registerDefaultSystemHooks,
   SHUTDOWN_PHASES,
 } from '../../lib/shutdown-orchestrator';
 
 describe('shutdown-orchestrator', () => {
-  beforeEach(() => {
-    resetShutdownOrchestratorForTesting();
+  beforeEach(async () => {
+    await resetShutdownOrchestratorForTesting();
   });
 
   it('defines the four canonical shutdown phases in order', () => {
@@ -141,6 +142,10 @@ describe('shutdown-orchestrator', () => {
       if (resolveHanging) {
         (resolveHanging as () => void)();
       }
+      const activePromise = getActiveExecutionPromise();
+      if (activePromise) {
+        await activePromise.catch(() => {});
+      }
     }
     const elapsed = Date.now() - startTime;
 
@@ -151,7 +156,7 @@ describe('shutdown-orchestrator', () => {
     assert.equal(reachedAfterHanging, false);
   });
 
-  it('cleanly resets test state and removes process signal listeners', () => {
+  it('cleanly resets test state and removes process signal listeners', async () => {
     initShutdownOrchestrator();
     assert.equal(
       (globalThis as unknown as { __shutdownOrchestratorRegistered?: boolean })
@@ -159,7 +164,7 @@ describe('shutdown-orchestrator', () => {
       true
     );
 
-    resetShutdownOrchestratorForTesting();
+    await resetShutdownOrchestratorForTesting();
     assert.equal(
       (globalThis as unknown as { __shutdownOrchestratorRegistered?: boolean })
         .__shutdownOrchestratorRegistered,
