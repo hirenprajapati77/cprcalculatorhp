@@ -1763,7 +1763,7 @@ export default function ScannerClient() {
         setIsLoading(false);
       }
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, debouncedSearchQuery, showToast, scannerMode]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, debouncedSearchQuery, showToast, scannerMode, watchlist]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {

@@ -153,7 +153,7 @@ test('TradeJournalService Phase 3', async (t) => {
   await t.test('previousTradingDayMidnightIST resolves Monday to prior Friday', async () => {
     // 2026-07-13 is a Monday
     const monday = new Date(Date.UTC(2026, 6, 13, 6, 0, 0)); // 11:30 AM IST
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const result = (TradeJournalService as any).previousTradingDayMidnightIST(monday) as Date;
     
     // Should resolve to 2026-07-10 (Friday) midnight IST, which is 2026-07-09 18:30:00 UTC

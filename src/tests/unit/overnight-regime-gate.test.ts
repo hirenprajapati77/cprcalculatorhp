@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { OvernightService, MockOvernightStock } from '../../services/overnight/overnight.service';
 import { RegimeService, MarketRegime } from '../../services/overnight/regime.service';
-import { prisma } from '../../lib/db';
 
 function createMockStock(targetDateStr = '2026-09-02'): MockOvernightStock {
   const history = [];

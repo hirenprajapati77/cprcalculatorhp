@@ -10,7 +10,7 @@ const mockRawUniverse = [
   { symbol: 'HDFCBANK    ', name: 'HDFC Bank', sector: 'Finance', marketCap: 100, isNifty50: true, isNifty200: true, isFnO: true },
   { symbol: 'RELIANCE    ', name: 'Reliance Industries', sector: 'Energy', marketCap: 200, isNifty50: true, isNifty200: true, isFnO: true },
   { symbol: 'NONFNO      ', name: 'Not FNO', sector: 'IT', marketCap: 50, isNifty50: false, isNifty200: false, isFnO: false }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
 ] as any[];
 
 function setupMocks(csvContent?: string, fetchOk = true, fetchStatus = 200) {
@@ -19,7 +19,7 @@ function setupMocks(csvContent?: string, fetchOk = true, fetchStatus = 200) {
     ok: fetchOk,
     status: fetchStatus,
     text: async () => csvContent || ''
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
   }) as any;
 }
 

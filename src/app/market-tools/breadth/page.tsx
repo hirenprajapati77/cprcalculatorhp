@@ -24,7 +24,6 @@ export default function MarketBreadthPage() {
       isMounted.current = false;
       controller.abort();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchBreadth(forceRefresh = false, signal?: AbortSignal) {
