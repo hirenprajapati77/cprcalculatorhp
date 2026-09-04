@@ -178,7 +178,13 @@ export function startMarketCronScheduler(): void {
         // Double-send is prevented by BtstAlertState DB unique constraint inside
         // runBtstAlertJob itself (returns sent:false, reason:'already sent today').
         const btstBucket = Math.floor(istTime.totalMinutes / 5);
-        await runClaimedJob(`btst-alert:${dateKey}:${btstBucket}`, runBtstAlertJob, 'btst-alert');
+        await runClaimedJob(
+          `btst-alert:${dateKey}:${btstBucket}`,
+          runBtstAlertJob,
+          'btst-alert',
+          true,
+          180_000
+        );
       }
 
       // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
@@ -190,7 +196,24 @@ export function startMarketCronScheduler(): void {
       // btst-journal is tied to overnight/derivatives workflow and should track
       // profile BTST journal windows (including CAS extension profile clocks).
       if (isBtstJournalWindowOpen()) {
-        await runClaimedJob(`btst-journal:${dateKey}`, runBtstJournalJob, 'btst-journal');
+        await runClaimedJob(
+          `btst-journal:${dateKey}`,
+          runBtstJournalJob,
+          'btst-journal',
+          true,
+          180_000
+        );
+      }
+
+      // 09:16 AM IST — gap-failure exit alert for previous-session overnight signals.
+      // Must execute BEFORE morning journal-snapshot so adverse gaps are closed immediately
+      // and not overwritten by subsequent regular snapshots.
+      if (istTime.hour === 9 && istTime.minute >= 16 && istTime.minute <= 20) {
+        await runClaimedJob(
+          `gap-failure-exit:${dateKey}`,
+          () => checkGapFailureExits(),
+          'gap-failure-exit'
+        );
       }
 
       const snapshotSlot = resolveJournalSnapshotSlot();
@@ -207,18 +230,6 @@ export function startMarketCronScheduler(): void {
           `earnings-populate:${dateKey}`,
           () => EarningsPopulatorService.populate(),
           'earnings-populate'
-        );
-      }
-
-      // 09:16 AM IST — gap-failure exit alert for previous-session overnight signals.
-      // Runs once per day immediately after market open. Checks if any TRADEABLE/WATCHLIST
-      // overnight signals from the prior session have gapped > 1% against their trade
-      // direction, and sends a Telegram ⚠️ GAP_FAILURE_EXIT alert if so.
-      if (istTime.hour === 9 && istTime.minute >= 16 && istTime.minute <= 20) {
-        await runClaimedJob(
-          `gap-failure-exit:${dateKey}`,
-          () => checkGapFailureExits(),
-          'gap-failure-exit'
         );
       }
 

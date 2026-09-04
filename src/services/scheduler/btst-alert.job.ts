@@ -2,6 +2,7 @@ import { Prisma, type OvernightSignal } from '@prisma/client';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
+import { computeOptionPnl } from '@/lib/pnl';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { MarketService } from '@/services/market.service';
@@ -627,24 +628,48 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
         const [y, m, d] = yesterday.split('-').map(Number);
         const journalTradeDate = new Date(Date.UTC(y, m - 1, d, 0, -330, 0, 0));
 
-        await prisma.tradeJournal.updateMany({
+        const journalEntries = await prisma.tradeJournal.findMany({
           where: {
             symbol: sig.symbol,
             tradeDate: journalTradeDate,
             signalType: sig.direction === 'SHORT' ? 'STBT' : 'BTST',
-            cmp916: null,
-          },
-          data: {
-            cmp916: ltp,
-            exitCmp: ltp,
-            pnlPct: parseFloat(
-              sig.direction === 'SHORT'
-                ? (((entry - ltp) / entry) * 100).toFixed(2)
-                : gapPct.toFixed(2)
-            ),
-            executionOutcome: 'GAP_FAILURE',
+            exitCmp: null,
           },
         });
+
+        for (const journalEntry of journalEntries) {
+          let exitPrice = ltp;
+          if (!TradeJournalService.isUnderlyingJournalLeg(journalEntry.optionContract) && journalEntry.optionStrike && journalEntry.optionType) {
+            try {
+              const optCmp = await TradeJournalService.fetchOptionCmp(
+                journalEntry.symbol,
+                journalEntry.optionStrike,
+                journalEntry.optionType as 'CE' | 'PE',
+                journalEntry.id,
+                journalEntry.optionExpiry ?? undefined
+              );
+              if (optCmp !== null && optCmp > 0) {
+                exitPrice = optCmp;
+              }
+            } catch (optErr) {
+              console.warn(`[GapFailureExit] Option CMP fetch failed for ${journalEntry.symbol}, using entryCmp or ltp:`, optErr);
+            }
+          }
+
+          const { pnl, pnlPct: calcPnlPct } = computeOptionPnl(journalEntry.entryCmp, exitPrice);
+
+          await prisma.tradeJournal.update({
+            where: { id: journalEntry.id },
+            data: {
+              cmp916: journalEntry.cmp916 ?? exitPrice,
+              exitCmp: exitPrice,
+              exitTime: new Date(),
+              pnl,
+              pnlPct: calcPnlPct,
+              executionOutcome: 'GAP_FAILURE',
+            },
+          });
+        }
       } catch (journalErr) {
         console.warn(`[GapFailureExit] Journal update failed for ${sig.symbol}:`, journalErr);
       }

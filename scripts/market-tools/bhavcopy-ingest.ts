@@ -89,6 +89,7 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
 
     const BATCH_SIZE = 250;
     const batchMap = new Map<string, Record<string, unknown>>();
+    const seenEqSymbols = new Set<string>();
 
     await prisma.$transaction(async (tx) => {
       for (let i = 1; i < lines.length; i++) {
@@ -131,9 +132,20 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
         const trades = parsedTrades !== null && !isNaN(parsedTrades) ? parsedTrades : null;
         const isin = getCol(cols, colIndex.ISIN) || null;
 
-        if (!symbol || close <= 0 || [open, high, low, close].some(isNaN)) {
+        if (!symbol || close <= 0 || prevClose <= 0 || [open, high, low, close, prevClose].some(isNaN)) {
           rowsSkipped++;
           continue;
+        }
+
+        // If an EQ series record for this symbol was already processed today,
+        // ignore any subsequent non-EQ (BE/SM) rows in later chunks.
+        if (series !== 'EQ' && seenEqSymbols.has(symbol)) {
+          rowsSkipped++;
+          continue;
+        }
+
+        if (series === 'EQ') {
+          seenEqSymbols.add(symbol);
         }
 
         rowsProcessed++;
@@ -266,16 +278,16 @@ async function upsertBatch(
       (id, symbol, date, open, high, low, close, "prevClose", volume, value, trades, series, isin, "createdAt")
     VALUES ${Prisma.join(rows)}
     ON CONFLICT (symbol, date) DO UPDATE SET
-      open        = EXCLUDED.open,
-      high        = EXCLUDED.high,
-      low         = EXCLUDED.low,
-      close       = EXCLUDED.close,
-      "prevClose" = EXCLUDED."prevClose",
-      volume      = EXCLUDED.volume,
-      value       = EXCLUDED.value,
-      trades      = EXCLUDED.trades,
-      series      = EXCLUDED.series,
-      isin        = EXCLUDED.isin
+      open        = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".open ELSE EXCLUDED.open END,
+      high        = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".high ELSE EXCLUDED.high END,
+      low         = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".low ELSE EXCLUDED.low END,
+      close       = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".close ELSE EXCLUDED.close END,
+      "prevClose" = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv"."prevClose" ELSE EXCLUDED."prevClose" END,
+      volume      = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".volume ELSE EXCLUDED.volume END,
+      value       = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".value ELSE EXCLUDED.value END,
+      trades      = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".trades ELSE EXCLUDED.trades END,
+      series      = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".series ELSE EXCLUDED.series END,
+      isin        = CASE WHEN "DailyOhlcv".series = 'EQ' AND EXCLUDED.series != 'EQ' THEN "DailyOhlcv".isin ELSE EXCLUDED.isin END
   `;
 }
 

@@ -425,13 +425,21 @@ export class OvernightService {
         const isLastToday = lastCandle.date === dateStr;
         const { isTradingDay } = getISTTime(currentTime);
 
-        // Trading day without today's daily bar: do not synthesize todayCandle from
-        // prior-session H/L + LTP (false tomorrow CPR width / Narrow +30).
+        const hasValidSessionOhlc =
+          fullStock.ltp > 0 &&
+          fullStock.high > 0 &&
+          fullStock.low > 0 &&
+          fullStock.high >= fullStock.low;
+
+        // Trading day without today's daily bar: verify valid live session OHLC exists.
+        // If live session OHLC is missing, skip to avoid generating false signals.
         if (!isLastToday && isTradingDay) {
-          console.warn(
-            `[OvernightScan] ${fullStock.symbol} skipped: Today's daily candle unavailable.`
-          );
-          continue;
+          if (!hasValidSessionOhlc) {
+            console.warn(
+              `[OvernightScan] ${fullStock.symbol} skipped: Today's daily candle and session OHLC unavailable.`
+            );
+            continue;
+          }
         }
 
         const isTodayCandleFinal = dateOverride 
@@ -439,8 +447,6 @@ export class OvernightService {
           : (isLastToday && isTodayCandleClosed());
 
         // Ensure we have distinct candles for both today's candle and yesterday's (prior day) candle.
-        // When history already contains today's (possibly in-progress) bar, yesterday must be
-        // history[n-2] — never the same candle as today — regardless of whether today is final.
         if (isLastToday && history.length < 2) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} for today-appended database state (requires at least 2 distinct daily candles).`);
           continue;
@@ -453,19 +459,18 @@ export class OvernightService {
 
         const todayCandle = isLastToday
           ? (isTodayCandleFinal ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
-          : lastCandle;
+          : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
 
-        // M-3 fix: replace silent fallback (yesterdayCandle = lastCandle when only 1 bar)
-        // with an explicit skip. The fallback caused todayCpr === yesterdayCpr silently,
-        // making the Higher Value rule always false and producing misleading BTST signals.
-        // Note: the history.length >= 2 invariant is also checked above at line 438,
-        // but only when isLastToday is true. This guard covers the non-today case.
-        if (history.length < 2) {
-          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: only 1 bar in history, cannot derive yesterdayCandle.`);
+        // When today's bar is in history, yesterday is history[n-2].
+        // When today's bar is NOT in history (Fyers live feed), yesterday is history[n-1].
+        const yesterdayCandle = isLastToday
+          ? history[history.length - 2]
+          : history[history.length - 1];
+
+        if (!yesterdayCandle) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} skipped: cannot derive yesterdayCandle.`);
           continue;
         }
-
-        const yesterdayCandle = history[history.length - 2];
 
 
         // Same completed-history ATR input as signal.service / Simple BtstService

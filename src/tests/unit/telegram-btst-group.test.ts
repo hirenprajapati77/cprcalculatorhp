@@ -277,3 +277,35 @@ test('sendBreakoutAlert uses dynamic CPR classification and conditionally includ
     env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
   }
 });
+
+test('sendBreakoutAlert returns ok: false when Telegram API returns failure (CRITICAL-06)', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalGroupChatId = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'unit-test-token';
+  env.TELEGRAM_GROUP_CHAT_ID = 'group-chat';
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  // Simulate Telegram failure
+  global.fetch = (async () => ({
+    ok: false,
+    text: async () => 'Bad Request: chat not found',
+    json: async () => ({ ok: false, description: 'Bad Request: chat not found' }),
+  })) as unknown as typeof global.fetch;
+
+  try {
+    const stock = {
+      ltp: 100, entry: 101, sl: 99, target: 103, rr: '1:1.5', score: 80, sector: 'IT', alertKind: 'BREAKOUT' as const, symbol: 'TEST_FAIL', classification: 'NORMAL', signals: ['BREAKOUT'],
+    };
+
+    const res = await TelegramService.sendBreakoutAlert([stock]);
+    assert.strictEqual(res.ok, false, 'sendBreakoutAlert must return ok: false when telegram fails');
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
+  }
+});
