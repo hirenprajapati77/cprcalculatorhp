@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db';
 import { MarketService } from '@/services/market.service';
-import { TelegramService } from '@/services/alert/telegram.service';
+import { TelegramService, escapeTelegramHtml } from '@/services/alert/telegram.service';
 import { getISTDateString } from '@/lib/market-hours';
 import YahooFinance from 'yahoo-finance2';
 
@@ -213,8 +213,13 @@ export class EarningsPopulatorService {
     const success = errors.length === 0;
 
     if (!success && !dryRun) {
-      // Use <b> for HTML formatting in Telegram messages
-      const alertMsg = `🚨 <b>Earnings Populator Failure Alert</b> 🚨\nNSE Count: ${nseCount}\nErrors:\n${errors.join('\n')}`;
+      // M-08 fix: Escape HTML entities and truncate error preview to prevent Telegram 400 Bad Request
+      const escapedErrors = errors
+        .slice(0, 10)
+        .map((e) => escapeTelegramHtml(String(e)))
+        .join('\n')
+        .slice(0, 1500);
+      const alertMsg = `🚨 <b>Earnings Populator Failure Alert</b> 🚨\nNSE Count: ${nseCount}\nErrors:\n${escapedErrors}`;
       try {
         await TelegramService.sendMessage(alertMsg);
       } catch (tgErr) {

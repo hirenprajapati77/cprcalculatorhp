@@ -26,4 +26,10 @@ test('getSymbolSector - sector classification and false-positive prevention', as
     assert.strictEqual(getSymbolSector('MAXESTATES'), 'REALTY');
     assert.strictEqual(getSymbolSector('IDEA'), 'TELECOMMUNICATION');
   });
+
+  await t.test('correctly classifies hyphenated symbols like BAJAJ-AUTO and series suffixes', () => {
+    assert.strictEqual(getSymbolSector('BAJAJ-AUTO'), 'AUTO');
+    assert.strictEqual(getSymbolSector('BAJAJ-AUTO-EQ'), 'AUTO');
+    assert.strictEqual(getSymbolSector('TATASTEEL-EQ'), 'METALS');
+  });
 });

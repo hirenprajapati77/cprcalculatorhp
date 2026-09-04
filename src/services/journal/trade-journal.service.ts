@@ -442,8 +442,10 @@ export class TradeJournalService {
       }),
       prisma.tradeJournal.count({ where }),
       // Summary stats computed over all matching entries (slim payload to prevent OOM)
+      // M-13 fix: add take: 2000 safety bound to prevent full-table heap exhaustion on large journals
       prisma.tradeJournal.findMany({
         where,
+        take: 2000,
         select: { signalType: true, pnl: true, pnlPct: true },
       }) as unknown as Promise<TradeJournal[]>,
     ]);
@@ -581,9 +583,10 @@ export class TradeJournalService {
         trade.cmp916 ?? trade.cmp930 ?? trade.cmp945 ?? trade.exitCmp;
       // Fix 4: Removed `trade.signalType !== 'CPR'` exclusion — CPR trades can also suffer
       // overnight gap failures (e.g. FORTIS Aug 2026: gapped +0.78% against PE, -32% loss).
-      // The exclusion caused CPR gap losses to be misclassified as EXECUTION_SLIPPAGE
-      // instead of GAP_FAILURE, masking a systematic market risk in analytics.
-      if (gapRef != null && trade.entryCmp) {
+      // M-01 fix: An adverse opening gap that recovered into profit should not be classified
+      // as a trade GAP_FAILURE (the trade finished as a WINNER with pnlPct >= 0).
+      // Only losing trades (pnlPct < 0) that suffered an adverse opening gap should be labeled GAP_FAILURE.
+      if (pnlPct < 0 && gapRef != null && trade.entryCmp) {
         const gapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
         // Severe adverse gap blow-through in options is usually -15% or worse overnight
         if (gapPct < -15) {

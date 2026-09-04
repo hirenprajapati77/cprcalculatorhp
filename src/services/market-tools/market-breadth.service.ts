@@ -74,11 +74,9 @@ export class MarketBreadthService {
    */
   static async getMarketBreadth(forceRefresh = false): Promise<MarketBreadthReport> {
     const now = Date.now();
-    if (!forceRefresh && cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
-      return cachedReport;
-    }
 
     if (!forceRefresh) {
+      // M-06 fix: query Redis first so web workers pick up reports precomputed by background jobs
       try {
         const redisCached = await cache.get('market_breadth:report');
         if (redisCached) {
@@ -408,6 +406,7 @@ export function computeSectorBreadth(
   const sectorMap = new Map<string, { total: number; adv: number; dec: number; sumChange: number }>();
 
   for (const s of stats) {
+    if (!Number.isFinite(s.changePct)) continue;
     const sector = getSymbolSector(s.symbol);
     if (!sectorMap.has(sector)) {
       sectorMap.set(sector, { total: 0, adv: 0, dec: 0, sumChange: 0 });
@@ -479,16 +478,22 @@ const INFRA_SYMBOLS = new Set([
 ]);
 
 export function getSymbolSector(symbol: string): string {
-  const base = symbol.split('-')[0]!;
-  if (NSE_SECTOR_MAP[base]) return NSE_SECTOR_MAP[base];
-  if (BANKING_SYMBOLS.has(base)) return 'BANKING';
-  if (IT_SYMBOLS.has(base)) return 'IT';
-  if (AUTO_SYMBOLS.has(base)) return 'AUTO';
-  if (PHARMA_SYMBOLS.has(base)) return 'PHARMA';
-  if (METALS_SYMBOLS.has(base)) return 'METALS';
-  if (ENERGY_SYMBOLS.has(base)) return 'ENERGY';
-  if (REALTY_SYMBOLS.has(base)) return 'REALTY';
-  if (INFRA_SYMBOLS.has(base)) return 'INFRA';
+  // M-04 fix: check exact symbol first (e.g. BAJAJ-AUTO) before stripping series suffixes
+  if (NSE_SECTOR_MAP[symbol]) return NSE_SECTOR_MAP[symbol];
+  if (BANKING_SYMBOLS.has(symbol)) return 'BANKING';
+  if (IT_SYMBOLS.has(symbol)) return 'IT';
+  if (AUTO_SYMBOLS.has(symbol)) return 'AUTO';
+  if (PHARMA_SYMBOLS.has(symbol)) return 'PHARMA';
+  if (METALS_SYMBOLS.has(symbol)) return 'METALS';
+  if (ENERGY_SYMBOLS.has(symbol)) return 'ENERGY';
+  if (REALTY_SYMBOLS.has(symbol)) return 'REALTY';
+  if (INFRA_SYMBOLS.has(symbol)) return 'INFRA';
+
+  // Strip known series suffix (-EQ, -BE, -BZ, -SM, -ST) if present
+  const stripped = symbol.replace(/-(?:EQ|BE|BZ|SM|ST)$/i, '');
+  if (stripped !== symbol) {
+    return getSymbolSector(stripped);
+  }
   return 'OTHERS';
 }
 

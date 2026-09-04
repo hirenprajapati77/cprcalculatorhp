@@ -388,6 +388,8 @@ model TradeJournal {
   @@unique([symbol, tradeDate, signalType])
   @@index([tradeDate])
   @@index([signalType])
+  // M-12 fix: composite index for journal date-range and signal-type queries
+  @@index([tradeDate, signalType])
 }
 
 // Singleton settings row — always upserted with id = "global"
@@ -439,7 +441,7 @@ model DailyOhlcv {
   createdAt    DateTime @default(now())
 
   @@unique([symbol, date])
-  @@index([date])
+  // M-11 fix: single-column [date] index removed; leading column in [date, series] and [date, symbol] covers all date-only lookups
   // H-01: [date, series] covers WHERE series = 'EQ' ORDER BY date DESC LIMIT N.
   @@index([date, series])
   // B19 fix: cross-sectional queries (Market Breadth, Breakout scans) filter by date
