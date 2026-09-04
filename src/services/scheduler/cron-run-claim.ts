@@ -1,5 +1,5 @@
 import { CacheService } from '@/services/cache.service';
-import { registerShutdownHook } from '@/lib/shutdown-orchestrator';
+import { registerShutdownHook, isShuttingDown } from '@/lib/shutdown-orchestrator';
 
 /**
  * Distributed cron-run claim guard using Redis SET NX.
@@ -103,6 +103,10 @@ function getRedis(): import('ioredis').Redis | null {
 }
 
 export async function tryClaimCronRun(key: string): Promise<boolean> {
+  if (isShuttingDown()) {
+    console.warn(`[CronClaim] Rejecting claim '${key}' — process shutdown in progress.`);
+    return false;
+  }
   if (CacheService.isRedisConnected) {
     try {
       const redis = getRedis();

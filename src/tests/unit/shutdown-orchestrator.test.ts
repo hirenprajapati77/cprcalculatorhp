@@ -4,7 +4,9 @@ import {
   registerShutdownHook,
   executeShutdown,
   isShuttingDown,
+  initShutdownOrchestrator,
   resetShutdownOrchestratorForTesting,
+  registerDefaultSystemHooks,
   SHUTDOWN_PHASES,
 } from '../../lib/shutdown-orchestrator';
 
@@ -20,6 +22,12 @@ describe('shutdown-orchestrator', () => {
       'release_locks',
       'close_connections',
     ]);
+  });
+
+  it('registers default system hooks covering phase 1 and phase 4', () => {
+    registerDefaultSystemHooks();
+    // Default hooks should exist and execute without error
+    assert.equal(isShuttingDown(), false);
   });
 
   it('executes registered hooks in strict phase order', async () => {
@@ -108,7 +116,7 @@ describe('shutdown-orchestrator', () => {
     assert.equal(callCount, 1);
   });
 
-  it('enforces deadline when a hook hangs', async () => {
+  it('enforces deadline when a hook hangs and fails fast with error', async () => {
     let reachedAfterHanging = false;
 
     registerShutdownHook('close_queues', 'hanging-hook', async () => {
@@ -121,12 +129,35 @@ describe('shutdown-orchestrator', () => {
     });
 
     const startTime = Date.now();
-    // Use a short 200ms timeout for test speed
-    await executeShutdown({ timeoutMs: 200, exitOnComplete: false });
+    let rejectedError: Error | null = null;
+    try {
+      await executeShutdown({ timeoutMs: 200, exitOnComplete: false });
+    } catch (err) {
+      rejectedError = err as Error;
+    }
     const elapsed = Date.now() - startTime;
 
+    assert.ok(rejectedError !== null, 'Expected shutdown to reject on deadline exceed');
+    assert.match(rejectedError!.message, /deadline.*exceeded/i);
     assert.ok(elapsed >= 180, `Expected elapsed >= 180ms, got ${elapsed}ms`);
     assert.ok(elapsed < 1000, `Expected elapsed < 1000ms, got ${elapsed}ms`);
     assert.equal(reachedAfterHanging, false);
+  });
+
+  it('cleanly resets test state and removes process signal listeners', () => {
+    initShutdownOrchestrator();
+    assert.equal(
+      (globalThis as unknown as { __shutdownOrchestratorRegistered?: boolean })
+        .__shutdownOrchestratorRegistered,
+      true
+    );
+
+    resetShutdownOrchestratorForTesting();
+    assert.equal(
+      (globalThis as unknown as { __shutdownOrchestratorRegistered?: boolean })
+        .__shutdownOrchestratorRegistered,
+      undefined
+    );
+    assert.equal(isShuttingDown(), false);
   });
 });

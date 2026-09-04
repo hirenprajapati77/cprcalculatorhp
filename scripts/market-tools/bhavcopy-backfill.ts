@@ -36,9 +36,24 @@ export const DEFAULT_BACKFILL_MIN_ROWS = 1800;
  * A default of 1800 ensures that interrupted/partial runs (~1,100 rows) are not mistakenly
  * skipped on retry, while allowing BACKFILL_MIN_ROWS to override for known shortened sessions
  * (e.g. 1-hour Diwali Muhurat trading).
+ *
+ * Hardened validation: accepts only strictly positive integers (>= 1).
+ * Any non-numeric, zero, negative, decimal, or invalid strings fall back to DEFAULT_BACKFILL_MIN_ROWS.
  */
 export function resolveBackfillMinRows(): number {
-  return Number(process.env.BACKFILL_MIN_ROWS) || DEFAULT_BACKFILL_MIN_ROWS;
+  const raw = process.env.BACKFILL_MIN_ROWS;
+  if (!raw || typeof raw !== 'string') {
+    return DEFAULT_BACKFILL_MIN_ROWS;
+  }
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return DEFAULT_BACKFILL_MIN_ROWS;
+  }
+  const parsed = parseInt(trimmed, 10);
+  if (parsed <= 0) {
+    return DEFAULT_BACKFILL_MIN_ROWS;
+  }
+  return parsed;
 }
 
 export async function runBhavcopyBackfill(
