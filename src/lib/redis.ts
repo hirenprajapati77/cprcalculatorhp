@@ -9,6 +9,14 @@ if (env.REDIS_URL) {
       maxRetriesPerRequest: 1,
       lazyConnect: true, // Do not block application startup
       connectTimeout: 2000, // Fast timeout
+      retryStrategy: (times) => {
+        // M-15 fix: drop reconnect attempts in test environments and after 3 failures
+        // to avoid infinite retry loops pinning the event loop.
+        if (env.NODE_ENV === 'test' || times > 3) {
+          return null;
+        }
+        return Math.min(times * 1000, 10000);
+      },
     });
     
     let lastErrorLogTime = 0;

@@ -228,11 +228,12 @@ export class ScannerService {
  
       if (risk > 0) {
         // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
+        // M-10 fix: Target must be ahead of both entry AND current LTP (t > entry && t > ltp)
         const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
-        let chosenTarget = entry + risk * 1.5; // fallback
+        let chosenTarget = Math.max(entry + risk * 1.5, ltp * 1.005); // fallback
         for (let i = 0; i < targets.length; i++) {
           const t = targets[i];
-          if (t > entry && (t - entry) / risk >= 1.5) {
+          if (t > entry && t > ltp && (t - entry) / risk >= 1.5) {
             chosenTarget = t;
             if (i + 1 < targets.length) {
               target2 = targets[i + 1];
@@ -244,7 +245,7 @@ export class ScannerService {
         target = chosenTarget;
         rr = `1:${((target - entry) / risk).toFixed(1)}`;
       } else {
-        target = entry * 1.01;
+        target = Math.max(entry * 1.01, ltp * 1.005);
         rr = '1:2.0';
       }
     } else if (bias === 'BEARISH') {
@@ -258,11 +259,12 @@ export class ScannerService {
  
       if (risk > 0) {
         // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
+        // M-10 fix: Target must be below both entry AND current LTP (t < entry && t < ltp)
         const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
-        let chosenTarget = entry - risk * 1.5; // fallback
+        let chosenTarget = Math.min(entry - risk * 1.5, ltp * 0.995); // fallback
         for (let i = 0; i < targets.length; i++) {
           const t = targets[i];
-          if (t < entry && (entry - t) / risk >= 1.5) {
+          if (t < entry && t < ltp && (entry - t) / risk >= 1.5) {
             chosenTarget = t;
             if (i + 1 < targets.length) {
               target2 = targets[i + 1];
@@ -274,7 +276,7 @@ export class ScannerService {
         target = chosenTarget;
         rr = `1:${((entry - target) / risk).toFixed(1)}`;
       } else {
-        target = entry * 0.99;
+        target = Math.min(entry * 0.99, ltp * 0.995);
         rr = '1:2.0';
       }
     } else {

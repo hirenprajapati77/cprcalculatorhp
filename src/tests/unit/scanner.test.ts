@@ -1092,7 +1092,7 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
       volume: 100000,
       avgVolume: 100000,
       marketCap: 120000,
-      ltp: 102.5, // BULLISH bias
+      ltp: 100.5, // BULLISH bias (above TC 100, below R1 101)
       history: [
         { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
         { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
@@ -1134,6 +1134,29 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
     assert.strictEqual(res.rr, '1:1.6'); // (104.0 - 100) / 2.5 = 1.6
     assert.strictEqual(res.target2, null); // Last level R4 reached
     assert.strictEqual(res.rr2, null);
+  });
+
+  await t.test('ScannerService selects target ahead of current LTP when stock runs past R1 (M-10)', async () => {
+    const mockStock = {
+      symbol: 'RUNNER',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100,
+      high: 105,
+      low: 97.5,
+      close: 104.5,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 104.5, // Price has already crossed R1, R2, R3, R4 (104.0)
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
+      ],
+    };
+
+    const res = await ScannerService.scanStock(mockStock, '2026-08-11');
+    assert.ok(res.target > mockStock.ltp, `Target (${res.target}) must be strictly ahead of current LTP (${mockStock.ltp})`);
   });
 });
 

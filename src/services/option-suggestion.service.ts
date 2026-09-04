@@ -192,8 +192,12 @@ export class OptionSuggestionService {
           const yy = parseInt(monthlyMatch[1], 10) + 2000;
           const mo = monthMap[monthlyMatch[2]];
           if (mo !== undefined) {
-            // Use last day of month as an approximation for monthly expiry
-            expiryDate = new Date(Date.UTC(yy, mo + 1, 0));
+            // M-07 fix: Compute the true last Thursday of the month in UTC
+            const lastDay = new Date(Date.UTC(yy, mo + 1, 0));
+            const dayOfWeek = lastDay.getUTCDay(); // 0 = Sun, 4 = Thu
+            const diffToThu = (dayOfWeek - 4 + 7) % 7;
+            lastDay.setUTCDate(lastDay.getUTCDate() - diffToThu);
+            expiryDate = lastDay;
           }
         }
 

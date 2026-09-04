@@ -88,11 +88,9 @@ export class MultiYearBreakoutService {
    */
   static async getBreakoutReport(forceRefresh = false): Promise<MultiYearBreakoutReport> {
     const now = Date.now();
-    if (!forceRefresh && cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
-      return cachedReport;
-    }
 
     if (!forceRefresh) {
+      // M-06 fix: query Redis first so web workers pick up reports precomputed by background jobs
       try {
         const redisCached = await cache.get('market_tools:breakout:report');
         if (redisCached) {

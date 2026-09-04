@@ -10,6 +10,7 @@ export interface IndexBtstCompareRow {
     id: string;
     score: number;
     classification: string | null;
+    direction: string | null;
     optionContract: string;
     entryCmp: number;
     exitCmp: number | null;
@@ -21,6 +22,7 @@ export interface IndexBtstCompareRow {
     id: string;
     score: number;
     classification: string | null;
+    direction: string | null;
     spotPnlPct: number | null;
     status: string;
     exitReason: string | null;
@@ -154,6 +156,7 @@ export async function getIndexBtstCompare(
             id: live.id,
             score: live.score,
             classification: parseClassification(live.signalSummary),
+            direction: live.signalType === 'STBT' ? 'SHORT' : 'LONG',
             optionContract: live.optionContract,
             entryCmp: live.entryCmp,
             exitCmp: live.exitCmp,
@@ -169,6 +172,7 @@ export async function getIndexBtstCompare(
             id: bt.id,
             score: bt.score ?? 0,
             classification: ctx.classification ?? null,
+            direction: bt.type === 'SHORT' ? 'SHORT' : 'LONG',
             spotPnlPct: bt.pnlPercent,
             status: bt.status,
             exitReason: bt.exitReason,

@@ -970,6 +970,23 @@ export class IndexDiscoverService {
         const sl = direction === 'LONG' ? realCpr.bc : realCpr.tc;
         const target = direction === 'LONG' ? realCpr.r1 : realCpr.s1;
 
+        // M-03 fix: Validate risk > 0. Inverted or zero-spread CPR bands (entry <= sl for LONG,
+        // or entry >= sl for SHORT) yield invalid risk-reward setups that must be ignored.
+        const risk = direction === 'LONG' ? entry - sl : sl - entry;
+        if (risk <= 0) {
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              direction,
+              [`Invalid intra risk: ${risk.toFixed(2)} <= 0 (entry=${entry.toFixed(2)}, sl=${sl.toFixed(2)})`],
+              regimeCtx
+            )
+          );
+          continue;
+        }
+
         results.push(
           this.buildSignalResult({
             symbol: instrument.symbol,

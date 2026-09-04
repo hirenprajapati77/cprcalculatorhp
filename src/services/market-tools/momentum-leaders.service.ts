@@ -257,16 +257,10 @@ export class MomentumLeadersService {
     universe: MomentumUniverse = 'NSE_FNO'
   ): Promise<MomentumLeadersReport> {
     const now = Date.now();
-    const currentMemory = cachedReports[universe];
-    const currentComputedTime = lastComputedTimes[universe] || 0;
-
-    if (!forceRefresh && currentMemory && now - currentComputedTime < CACHE_TTL_MS) {
-      return currentMemory;
-    }
-
     const redisKey = `${REDIS_KEY_PREFIX}:${universe}`;
 
     if (!forceRefresh) {
+      // M-06 fix: query Redis first so web workers pick up reports precomputed by background jobs
       try {
         const redisCached = await cache.get(redisKey);
         if (redisCached) {
@@ -277,6 +271,13 @@ export class MomentumLeadersService {
         }
       } catch {
         // Fall back to compute on cache miss/error
+      }
+
+      // Memory fallback if Redis is temporarily unreachable
+      const currentMemory = cachedReports[universe];
+      const currentComputedTime = lastComputedTimes[universe] || 0;
+      if (currentMemory && now - currentComputedTime < CACHE_TTL_MS) {
+        return currentMemory;
       }
     }
 

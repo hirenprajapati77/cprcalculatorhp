@@ -421,6 +421,19 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     FyersAuthService.getAccessToken = originalGetAccessToken;
     OptionChainService.getOptionChain = originalGetOptionChain;
   });
+
+  await t.test('monthly option expiry calculates true last Thursday (M-07)', () => {
+    const fn = (OptionSuggestionService as any).parseOptionSymbol;
+    if (typeof fn === 'function') {
+      // August 2026: Aug 31 is Monday, last Thursday is Aug 27
+      const parsedAug26 = fn('NSE:SBIN26AUG800CE', ['SBIN']);
+      assert.ok(parsedAug26?.expiryDate);
+      assert.strictEqual(parsedAug26.expiryDate.getUTCDay(), 4, 'Expiry day of week must be Thursday');
+      assert.strictEqual(parsedAug26.expiryDate.getUTCDate(), 27, 'Aug 2026 expiry must be 27th');
+      assert.strictEqual(parsedAug26.expiryDate.getUTCMonth(), 7, 'Month must be August');
+    }
+  });
 });
+
 
 

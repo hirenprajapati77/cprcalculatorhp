@@ -5,6 +5,7 @@ import { prisma } from '../../lib/db';
 import { MarketService } from '../../services/market.service';
 import { TelegramService } from '../../services/alert/telegram.service';
 import { checkGapFailureExits } from '../../services/scheduler/btst-alert.job';
+import { TradeJournalService } from '../../services/journal/trade-journal.service';
 
 function makeSignal(overrides: Partial<OvernightSignal>): OvernightSignal {
   return {
@@ -167,6 +168,33 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
 
   // B20 fix: AbortController cleanup — confirm all stubs are cleaned up in finally
   // (regression guard: if finally blocks are removed, future tests will bleed state)
+  await t.test('classifyExecutionOutcome marks winning trade as MODEL_VALID even with adverse opening gap (M-01)', async () => {
+    const origFindUnique = prisma.tradeJournal.findUnique;
+    const origUpdate = prisma.tradeJournal.update;
+
+    let updatedOutcome = '';
+    (prisma.tradeJournal.findUnique as any) = async () => ({
+      id: 'trade-win-1',
+      entryCmp: 100,
+      exitCmp: 130,
+      cmp916: 80, // gapped -20%
+      pnlPct: 30, // but finished as a winner!
+      qualityBucketAtSignal: 'TRADEABLE',
+    });
+    (prisma.tradeJournal.update as any) = async (args: any) => {
+      updatedOutcome = args.data.executionOutcome;
+      return {};
+    };
+
+    try {
+      await TradeJournalService.classifyExecutionOutcome('trade-win-1');
+      assert.strictEqual(updatedOutcome, 'MODEL_VALID');
+    } finally {
+      prisma.tradeJournal.findUnique = origFindUnique;
+      prisma.tradeJournal.update = origUpdate;
+    }
+  });
+
   await t.test('all prisma/service stubs are restored after the test runs', async () => {
     const originalFindMany = prisma.overnightSignal.findMany;
 

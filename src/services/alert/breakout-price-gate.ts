@@ -86,6 +86,23 @@ export function evaluateCprSetupPriceStaleness(args: {
   }
 
   if (todayHigh > 0 && todayLow > 0 && (previousClose ?? 0) > 0) {
+    // M-09 fix: If atrPct is available, synthesize a historical candle reflecting the stock's
+    // true ATR% so EntryManagerService.evaluateExtension evaluates true ATR multiples instead
+    // of defaulting to a 1-day range from todayHigh - todayLow.
+    const history =
+      atrPct && atrPct > 0
+        ? [
+            {
+              date: 'historical_atr',
+              open: ltp,
+              high: ltp * (1 + (atrPct / 100) / 2),
+              low: ltp * (1 - (atrPct / 100) / 2),
+              close: ltp,
+              volume: 100000,
+            },
+          ]
+        : [];
+
     const stock: MarketStockData = {
       symbol,
       market: 'NSE',
@@ -98,7 +115,7 @@ export function evaluateCprSetupPriceStaleness(args: {
       volume: 0,
       avgVolume: 0,
       marketCap: 0,
-      history: [],
+      history,
       ...(previousClose != null ? { previousClose } : {}),
     };
     const ext = EntryManagerService.evaluateExtension(stock, direction, undefined, {
