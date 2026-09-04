@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 04 Sep: 2-Month Deep Code Review — 52 Defects Resolved across Tiers 1–4 (PRs #161, #162, #163, #164)
+
+Exhaustive 60-day architectural and quantitative code review covering 822 commits and 596 unique files (July 4 – September 4, 2026). All 52 confirmed defects resolved across all 4 operational domains in strict priority order (**CRITICAL > HIGH > MEDIUM > LOW**):
+
+- **Tier 1: 11 CRITICAL Production Defects (PR #161 / `commit 8c0baf77`)**:
+  - **Option Trade Journal Pricing (`btst-alert.job.ts`)**: Fixed spot stock price leaking into option trade records during gap failure exits; now resolves real option CMP via `fetchOptionCmp` and populates `pnl` and `pnlPct` (CRITICAL-01).
+  - **Morning Execution Inversion (`market-cron.scheduler.ts`)**: Reordered morning execution at 09:16 IST so `gap-failure-exit` runs before `journal-snapshot:916`, preventing premature closure misses (CRITICAL-02).
+  - **Live Fyers Candle Synthesis (`overnight.service.ts`, `market.service.ts`)**: Synthesized live session candle from `MarketStockData` OHLC when Fyers primary history omits the uncompleted daily bar, restoring live BTST discovery (CRITICAL-03).
+  - **Market Breadth 52W Window Slicing (`market-breadth.service.ts`)**: Shifted window frame from `CURRENT ROW` to `1 PRECEDING`, eliminating false zero 52W high breakouts across the market (CRITICAL-04).
+  - **Bhavcopy Ingestion Deduplication (`bhavcopy-ingest.ts`)**: Protected `EQ` series rows from being overwritten by later `BE`/`SM` batches in PostgreSQL `ON CONFLICT` (CRITICAL-05).
+  - **Telegram Alert Delivery Guard (`telegram.service.ts`)**: Fixed truthy object check in `sendBreakoutAlert` (`!result.ok`), ensuring claims roll back and retry on delivery failures (CRITICAL-06).
+  - **Option Target & SL Reference Frame (`option-suggestion.service.ts`)**: Aligned option target/SL distance calculations to current spot LTP rather than morning stock entry (CRITICAL-07).
+  - **Missing Option Chain Route Handler (`src/app/api/options/chain/route.ts`)**: Implemented missing endpoint exposing `OptionChainService.getOptionChain` (CRITICAL-08).
+  - **Cron Distributed Lock Gaps (`src/app/api/cron/*`)**: Enforced `tryClaimCronRun` in all HTTP cron routes, eliminating concurrent execution and heap exhaustion (CRITICAL-09).
+  - **Shutdown Process Exit (`queue.service.ts`, `cron-run-claim.ts`)**: Added explicit `process.exit(0)` to `SIGINT`/`SIGTERM` handlers to eliminate PM2 reload hangs and hard SIGKILLs (CRITICAL-10).
+  - **Crash Loop Resilience (`server-starter.js`, `ecosystem.config.js`)**: Replaced lethal process exits on `unhandledRejection` with structured trace logging, and added exponential backoff restart delay to PM2 (CRITICAL-11).
+
+- **Tier 2: 19 HIGH Priority Defects (PR #162 / `commit 1962d168`)**:
+  - **Rule 5 Strict Inequality (`btst-ranking.service.ts`, `stbt-ranking.service.ts`)**: Relaxed `>` to `>=` for BTST (`close >= last15mHigh`) and `<=` for STBT (`close <= last15mLow`), restoring up to 20 points across valid setups (H-01).
+  - **Cron Execution Timeout (`market-cron.scheduler.ts`)**: Increased batch `discover()` timeout from 60s to 180s to prevent premature aborts on heavy scan intervals (H-02).
+  - **Exchange Suffix Sanitization (`cpr-journal.job.ts`)**: Stripped `:NSE` suffix before option chain strike lookups in morning journal snapshots (H-03).
+  - **Intraday Index Score Scale (`index-intra-ranking.service.ts`)**: Corrected Category B max score cap to 25 pts, allowing intraday index score to reach full 100 scale (H-04).
+  - **Unmapped Sector TypeError (`overnight-risk.service.ts`)**: Added null-safe fallback for `stock.sector` on unmapped tickers (H-05).
+  - **Unbounded CTE Scans (`multi-year-breakout.service.ts`)**: Added lower date boundary `AND date >= ${oldestDate}` to CTE queries to avoid scanning all historical rows (H-06).
+  - **IPO ATH Designation (`multi-year-breakout.service.ts`)**: Guarded ATH label against recent IPO listings lacking multi-year depth (H-07).
+  - **ETF Exclusion Filter (`market-breadth.service.ts`)**: Filtered out ETF and mutual fund symbols from advance/decline and moving average calculations (H-08).
+  - **Scanner Extension UI Sync (`ScannerClient.tsx`)**: Aligned client-side extension gate to 2.5% threshold matching server-side rules (H-09).
+  - **Option Symbol Regex (`option-chain.service.ts`)**: Expanded regex parser to support weekly index options and BSE Sensex contracts (H-10).
+  - **VPA Climax Detection (`climax.service.ts`)**: Corrected body color inversion for red shooting-star distribution traps (H-11).
+  - **Cloudflare Proxy Fallback Timeout (`option-chain.service.ts`)**: Added 5s timeout and `AbortSignal` to Cloudflare proxy requests (H-12).
+  - **Redundant Database Writes (`bullish-state.service.ts`)**: Eliminated redundant empty `DELETE` queries on inside-CPR stocks (H-13).
+  - **Watchlist Triple-Fetch (`ScannerClient.tsx`)**: Stabilized watchlist state updates to prevent duplicate fetches (H-14).
+  - **Redis Lock Release Race Condition (`cron-run-claim.ts`)**: Replaced static `'1'` lock value with unique UUID instance tokens (H-15).
+  - **Fallback Claim Cache Memory Leak (`cron-run-claim.ts`)**: Bounded in-memory fallback cache with automated TTL eviction (H-16).
+  - **Watchdog Aggressive Restarts (`ops/mem_watchdog.sh`)**: Suppressed PM2 restarts during active trading hours (`IN_SESSION=1`) (H-17).
+  - **Heap vs RSS Allocation (`ecosystem.config.js`)**: Tuned Node.js heap limit (`--max-old-space-size=400`) and PM2 restart threshold (450M) for 1GB VM capacity (H-18).
+  - **Middleware Public Fall-Through (`src/middleware.ts`)**: Sealed non-production environment fall-through edge cases (H-19).
+
+- **Tier 3: 15 MEDIUM Priority Defects (PR #163 / `commit 7de7eb0b`)**:
+  - **Winning Trade Gap Outcome (`trade-journal.service.ts`)**: Classified winning trades opening weak as `MODEL_VALID` instead of `GAP_FAILURE` when `pnlPct >= 0` (M-01).
+  - **Index BTST Compare Direction (`index-btst-compare.service.ts`)**: Added `direction: string | null` to `IndexBtstCompareRow` objects for parity with stock rows (M-02).
+  - **Intraday Index Risk Validation (`index-discover.service.ts`)**: Guarded intraday index scanner against inverted or zero-spread CPR bands (`risk <= 0`) (M-03).
+  - **Sector Lookup Hyphen Handling (`market-breadth.service.ts`)**: Fixed hyphenated ticker mapping for stocks like `BAJAJ-AUTO` and sanitized `NaN` change percentages (M-04).
+  - **Bhavcopy Numeric Sanitization (`bhavcopy-ingest.ts`)**: Verified strict `prevClose` and `close` numeric validation (M-05).
+  - **Cache Hierarchy Resolution (Market Tools Services)**: Re-ordered cache resolution to query Redis *before* local in-memory cache, ensuring web workers serve freshly computed background reports (M-06).
+  - **Monthly Option Expiry Date (`option-suggestion.service.ts`)**: Updated monthly option expiry math to target the true last Thursday of the month in UTC (M-07).
+  - **Telegram Error Formatting (`earnings-populator.service.ts`)**: Escaped error messages with `escapeTelegramHtml()` and capped at 1500 chars to avoid Telegram API 400 Bad Request errors (M-08).
+  - **Extension Gate ATR Calibration (`breakout-price-gate.ts`)**: Synthesized true `atrPct` in synthetic stock candle so extension checks evaluate actual ATR multiples (M-09).
+  - **Forward Target Selection (`scanner.service.ts`)**: Enforced forward target selection strictly ahead of current LTP (`t > entry && t > ltp` for LONG, `t < entry && t < ltp` for SHORT) (M-10).
+  - **Redundant Schema Index (`prisma/schema.prisma`)**: Removed redundant single-column index on `DailyOhlcv.date` (M-11).
+  - **Composite Journal Index (`prisma/schema.prisma`)**: Added composite index `@@index([tradeDate, signalType])` on `TradeJournal` (M-12).
+  - **Journal Query Memory Limit (`trade-journal.service.ts`)**: Added `take: 2000` safety limit on journal summary queries to prevent full-table heap exhaustion (M-13).
+  - **Constant-Time Token Comparison (`auth-token.ts`)**: Implemented constant-time SHA-256 comparison in `timingSafeEqual` via `crypto.timingSafeEqual` (M-14).
+  - **Redis Reconnect Throttling (`redis.ts`)**: Added bounded retry strategy to secondary Redis client in test/build environments (M-15).
+
+- **Tier 4: 7 LOW Priority Defects (PR #164 / `commit f453389a`)**:
+  - **Deterministic Time Formatting (`index-discover.service.ts`)**: Replaced locale-dependent `toLocaleTimeString('en-IN')` with deterministic zero-padded IST time string (L-01).
+  - **CSV Formula Injection Defense (`export-utils.ts`)**: Neutralized CSV formula injection (CWE-1236) by prepending `'` to cells starting with `=`, `+`, `-`, `@`, `\t`, or `\r` (L-02).
+  - **Shared Prisma Singleton & Resumability (`bhavcopy-backfill.ts`)**: Replaced standalone `new PrismaClient()` with singleton `prisma` from `@/lib/db`; made resumability threshold configurable via `BACKFILL_MIN_ROWS` (L-03).
+  - **Flash Wick Stop-Loss Capping (`scanner.service.ts`)**: Capped stop-loss risk to max 3.0% of entry on opening flash wicks (L-04).
+  - **Countdown Timer Optimization (`ScannerClient.tsx`)**: Removed redundant `countdown` state and throttled `useBtstState` timer from 1s to 30s to eliminate up to 59 unnecessary re-renders per minute (L-05).
+  - **Deploy Script Hardening (`deploy.ps1`)**: Made deployment credentials configurable via environment variables and replaced `StrictHostKeyChecking=no` with `accept-new` (L-06).
+  - **Deploy Script Typecheck Verification (`deploy.ps1`)**: Added `npm run typecheck` (`tsc --noEmit`) step prior to building (L-07).
+
+- **Unit Test Suite**: Expanded test suite to **798 total tests (797 passed, 0 failed, 1 skipped)**.
+
 ### Added & Fixed — 03 Sep: Core Quality, Momentum Leaders Hardening & Safety Controls (PRs #155, #156, #158, #159)
 
 - **Circuit Lock Detection & Limit-Up/Down Badging (PR #156)** (`src/services/market-tools/momentum-leaders.service.ts`, `src/app/market-tools/momentum-leaders/page.tsx`):
