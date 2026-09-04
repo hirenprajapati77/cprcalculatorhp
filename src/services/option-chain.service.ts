@@ -189,12 +189,14 @@ export class OptionChainService {
       }
       console.log(`[OptionChain] Attempting proxy fetch for ${cleanSym} via ${proxyUrl}...`);
       const proxySymbol = encodeURIComponent(`${exchange}:${fyersSym}-${suffix}`);
+      // H-12 fix: add 6000ms AbortSignal timeout to proxy fetch to prevent indefinite hangs
       const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`, {
         headers: {
           'Authorization': `${appId}:${token}`,
           'X-Fyers-AppId': appId,
           'x-target-host': 'api-t1.fyers.in'
-        }
+        },
+        signal: AbortSignal.timeout(6000),
       });
 
       if (res.status === 401) {
@@ -255,7 +257,8 @@ export class OptionChainService {
   }
 
   public static async fetchOptionQuote(optionSymbol: string): Promise<number> {
-    const match = optionSymbol.match(/NSE:([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
+    // H-10 fix: support both NSE and BSE exchanges and weekly index option formats
+    const match = optionSymbol.match(/(?:NSE|BSE):([A-Za-z0-9_\-&]+?)(?=\d{2}[A-Z0-9])/i);
     if (!match) {
       throw new Error(`Invalid option symbol format: ${optionSymbol}`);
     }

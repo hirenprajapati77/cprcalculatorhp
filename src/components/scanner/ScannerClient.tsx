@@ -42,7 +42,10 @@ import {
   inferScannerBadgeDirection,
   isUnscoredSignal,
 } from '@/lib/scanner-rating';
-import { evaluateCprSetupPriceStalenessBasic } from '@/lib/cpr-setup-staleness';
+import {
+  evaluateCprSetupPriceStalenessBasic,
+  CPR_ENTRY_EXTENSION_PCT,
+} from '@/lib/cpr-setup-staleness';
 import { inferCprJournalDirection } from '@/lib/cpr-direction';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
@@ -492,7 +495,7 @@ const StockRow = React.memo(({
         entry: row.entry,
         ltp: row.ltp,
         direction: setupDirection,
-        maxExtensionPct: 2.5,
+        maxExtensionPct: CPR_ENTRY_EXTENSION_PCT,
         ...(((row as { previousClose?: number }).previousClose || row.price)
           ? { previousClose: (row as { previousClose?: number }).previousClose || row.price }
           : {}),
@@ -1701,14 +1704,16 @@ export default function ScannerClient() {
         });
 
         // Client-side watchlist only filter
+        // H-14 fix: use watchlistRef.current so toggling stars/pins does not trigger duplicate network fetches
+        const currentWatchlist = watchlistRef.current;
         if (showWatchlistOnly) {
-          items = items.filter(r => watchlist[r.symbol]?.starred);
+          items = items.filter(r => currentWatchlist[r.symbol]?.starred);
         }
 
         // Apply watchlist Pinned priority layout logic & dynamic column sorting
         items.sort((a, b) => {
-          const pinA = watchlist[a.symbol]?.pinned ? 1 : 0;
-          const pinB = watchlist[b.symbol]?.pinned ? 1 : 0;
+          const pinA = currentWatchlist[a.symbol]?.pinned ? 1 : 0;
+          const pinB = currentWatchlist[b.symbol]?.pinned ? 1 : 0;
           if (pinA !== pinB) return pinB - pinA; // pinned first
           
           let comparison = 0;
@@ -1758,7 +1763,7 @@ export default function ScannerClient() {
         setIsLoading(false);
       }
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, watchlist, debouncedSearchQuery, showToast, scannerMode]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, debouncedSearchQuery, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {

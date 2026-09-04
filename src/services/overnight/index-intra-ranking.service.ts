@@ -14,7 +14,8 @@ export const INDEX_INTRA_SCORE = {
   WATCH: SIMPLE_SCORE.WATCH,
 } as const;
 
-/** Session move thresholds for Category B (aligned with direction). */
+/** Session move thresholds for Category B (aligned with direction, max 25). */
+const SESSION_MOVE_VERY_STRONG = 0.015; // 1.5%
 const SESSION_MOVE_STRONG = 0.01; // 1.0%
 const SESSION_MOVE_MODERATE = 0.005; // 0.5%
 
@@ -60,14 +61,16 @@ export class IndexIntraRankingService {
     const catA = Math.min(45, catASum);
 
     // Category B: Session move aligned with direction (max 25)
+    // H-04 fix: allow strong moves to achieve up to 25 points so total index score can reach 100
     let catBSum = 0;
     const alignedMove =
       (direction === 'LONG' && sessionMovePct > 0) ||
       (direction === 'SHORT' && sessionMovePct < 0);
     if (alignedMove) {
       const absMove = Math.abs(sessionMovePct);
-      if (absMove >= SESSION_MOVE_STRONG) catBSum += 15;
-      else if (absMove >= SESSION_MOVE_MODERATE) catBSum += 10;
+      if (absMove >= SESSION_MOVE_VERY_STRONG) catBSum += 25;
+      else if (absMove >= SESSION_MOVE_STRONG) catBSum += 20;
+      else if (absMove >= SESSION_MOVE_MODERATE) catBSum += 15;
     }
     const catB = Math.min(25, catBSum);
 

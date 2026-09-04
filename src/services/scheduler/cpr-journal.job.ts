@@ -265,9 +265,11 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         entryCmp = liveLtp;
       }
 
+      // H-03 fix: pass cleanSym (stripped of :NSE suffix) so TradeJournal stores clean ticker
+      // and morning snapshots can fetch option quotes without malformed Fyers symbols.
       const didLog = await TradeJournalService.logSignal({
         signalType: 'CPR',
-        symbol: signal.symbol,
+        symbol: cleanSym,
         optionContract: optionName,
         optionStrike,
         optionType,

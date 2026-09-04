@@ -15,9 +15,11 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
-        NODE_OPTIONS: '--max-old-space-size=512',
+        NODE_OPTIONS: '--max-old-space-size=384',
       },
-      max_memory_restart: '650M',
+      // H-18 fix: keep Node heap (384M) and RSS (480M) bounded so total system memory
+      // stays comfortably under 1GB VM limits alongside PostgreSQL (~180M) and Redis (~60M)
+      max_memory_restart: '480M',
       autorestart: true,
       min_uptime: '10s',
       max_restarts: 10,

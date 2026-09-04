@@ -166,7 +166,8 @@ export function startMarketCronScheduler(): void {
         const intervalMinutes = Math.max(1, env.CPR_SCAN_INTERVAL_MINUTES || 5);
         const timeBucket = Math.floor(istTime.totalMinutes / intervalMinutes);
         const cprScanKey = `cpr-scan:NIFTY_FNO:${dateKey}:${timeBucket}`;
-        await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true);
+        // H-02 fix: 120s timeout for full F&O universe scan on 1GB box
+        await runClaimedJob(cprScanKey, () => runCprScanJob('NIFTY_FNO', 'NSE'), 'cpr-scan', true, 120_000);
       }
 
       // btst-alert selects overnight/index tradable picks (F&O-only legs for stock
@@ -190,7 +191,8 @@ export function startMarketCronScheduler(): void {
       // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
       // separate from the scanner route's mixed-universe live recompute behavior.
       if (isCprJournalWindowOpen()) {
-        await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal');
+        // H-02 fix: 120s timeout for CPR journal generation with option chain lookups
+        await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal', true, 120_000);
       }
 
       // btst-journal is tied to overnight/derivatives workflow and should track

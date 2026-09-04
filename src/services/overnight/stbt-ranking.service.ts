@@ -82,11 +82,10 @@ export class StbtRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Weakness — close < lowest price in 15:15–15:30 IST window.
-    // H-1 fix: last15mLow is null before 15:15 IST; skip rule rather than evaluate
-    // close < null (which JS coerces to close < 0, always false for positive prices
-    // — but makes the condition semantically wrong and fragile for any future change).
-    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close < inputs.last15mLow) {
+    // Rule 5: EOD Weakness — close <= lowest price in 15:15–15:30 IST window.
+    // H-01 fix: close cannot strictly undercut the low of the window containing it;
+    // use <= so closing at or near the 15:15–15:30 trough correctly qualifies for weakness points.
+    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close <= inputs.last15mLow) {
       breakdown.liquidity = 20;
     }
 

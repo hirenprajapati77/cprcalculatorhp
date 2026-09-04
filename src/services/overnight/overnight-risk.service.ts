@@ -87,7 +87,8 @@ export class OvernightRiskService {
     }
 
     // 3. Sector Risk Factor (deterministic based on sector name)
-    const sector = stock.sector.trim().toLowerCase();
+    // H-05 fix: guard against undefined/null stock.sector on unmapped tickers
+    const sector = (stock.sector || '').trim().toLowerCase();
     let sectorRisk = 1.0;
     const HIGH_RISK_SECTORS = new Set(['it', 'technology', 'energy', 'metals', 'metal']);
     const RATE_SENSITIVE_SECTORS = new Set(['financial services', 'finance', 'banking', 'bank']);

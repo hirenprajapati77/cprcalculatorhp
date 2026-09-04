@@ -35,9 +35,12 @@ export function scoreVpaClimax(inputs: VpaMarketInputs): {
   const nearResistance = close >= resistance * 0.995;
   const nearSupport = close <= support * 1.005;
 
+  // H-11 fix: in VPA, buying climax (shooting star / upthrust) and selling climax
+  // (hammer / stopping volume) are defined by extreme volume, wick rejection, and
+  // support/resistance proximity. A red shooting star at resistance is the classic
+  // distribution climax, so requiring isBullishCandle falsely missed it.
   if (
     rvol >= VPA_CLIMAX.EXTREME_RVOL &&
-    isBullishCandle(open, close) &&
     wicks.upper !== null &&
     wicks.upper >= VPA_CLIMAX.WICK_RATIO &&
     nearResistance
@@ -54,7 +57,6 @@ export function scoreVpaClimax(inputs: VpaMarketInputs): {
 
   if (
     rvol >= VPA_CLIMAX.EXTREME_RVOL &&
-    isBearishCandle(open, close) &&
     wicks.lower !== null &&
     wicks.lower >= VPA_CLIMAX.WICK_RATIO &&
     nearSupport

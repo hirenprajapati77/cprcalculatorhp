@@ -95,10 +95,10 @@ export class BtstRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window.
-    // H-1 fix: last15mHigh is null before 15:15 IST; skip rule rather than evaluate
-    // close > null (which JS coerces to close > 0, awarding 20 pts to every stock).
-    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close > inputs.last15mHigh) {
+    // Rule 5: EOD Liquidity — close >= highest price in 15:15–15:30 IST window.
+    // H-01 fix: close cannot strictly exceed the high of the window containing it;
+    // use >= so closing at or near the 15:15–15:30 peak correctly qualifies for liquidity points.
+    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close >= inputs.last15mHigh) {
       breakdown.liquidity = 20;
     }
 

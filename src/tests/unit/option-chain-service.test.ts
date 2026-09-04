@@ -32,6 +32,30 @@ test('OptionChainService fetchOptionQuote regex supports &', async (_t) => {
   }
 });
 
+test('OptionChainService fetchOptionQuote regex supports BSE and weekly index options', async (_t) => {
+  let fetchedSymbol = '';
+  
+  const originalGetOptionChain = OptionChainService.getOptionChain;
+  OptionChainService.getOptionChain = async (symbol: string) => {
+    fetchedSymbol = symbol;
+    return {
+      expiryData: [],
+      optionsChain: [
+        { symbol: `BSE:${symbol}2690480000CE`, strikePrice: 80000, optionType: 'CE', ltp: 245.0 }
+      ],
+      method: 'direct'
+    };
+  };
+
+  try {
+    const ltp = await OptionChainService.fetchOptionQuote('BSE:SENSEX2690480000CE');
+    assert.strictEqual(ltp, 245.0, 'Should correctly extract LTP from BSE symbol');
+    assert.strictEqual(fetchedSymbol, 'SENSEX', 'Should correctly parse SENSEX from BSE quote');
+  } finally {
+    OptionChainService.getOptionChain = originalGetOptionChain;
+  }
+});
+
 test('OptionChainService rollover logic and cache partitioning', async () => {
   const originalGetAccessToken = FyersAuthService.getAccessToken;
   const originalGetCredentials = FyersAuthService.getCredentials;

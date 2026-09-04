@@ -114,3 +114,52 @@ describe('VDU Option B — score at SPIKE_RATIO (2.0×), gate remains 1.5×', ()
     assert.equal(atSpike.breakdown?.vdu, 25);
   });
 });
+
+describe('Rule 5 — close at or above last15mHigh (BTST) / at or below last15mLow (STBT)', () => {
+  it('awards 20 points for BTST when close equals last15mHigh', () => {
+    const inputs = {
+      tomorrowCprNarrow: false,
+      tomorrowBc: 100,
+      tomorrowTc: 101,
+      todayBc: 99,
+      todayTc: 100,
+      close: 102.5,
+      high: 103,
+      low: 98,
+      vwap: 100,
+      volume: 1_600_000,
+      avgVolume: 800_000,
+      intradayVolume: 50000,
+      last15mHigh: 102.5,
+      hasConfirmationCandles: true,
+      rsi14: 60,
+      emaCross: { cross: 'BULLISH' as const, isBullishAlignment: true },
+    };
+    const details = BtstRankingService.calculateScoreDetails(inputs);
+    assert.equal(details.breakdown?.liquidity, 20);
+  });
+
+  it('awards 20 points for STBT when close equals last15mLow', () => {
+    const inputs = {
+      tomorrowCprNarrow: false,
+      tomorrowTc: 99,
+      tomorrowBc: 98,
+      todayBc: 100,
+      todayTc: 101,
+      close: 98.5,
+      high: 102,
+      low: 97,
+      vwap: 100,
+      volume: 1_600_000,
+      avgVolume: 800_000,
+      intradayVolume: 50000,
+      last15mLow: 98.5,
+      hasConfirmationCandles: true,
+      rsi14: 40,
+      emaCross: { cross: 'BEARISH' as const, isBullishAlignment: false },
+    };
+    const details = StbtRankingService.calculateScoreDetails(inputs);
+    assert.equal(details.breakdown?.liquidity, 20);
+  });
+});
+
