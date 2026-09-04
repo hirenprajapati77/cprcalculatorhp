@@ -2,11 +2,17 @@ import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getISTTime,
+  getISTDateString,
   isBtstJournalWindowOpen,
   BTST_CLOCK,
 } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import { runBtstJournalJob } from '@/services/scheduler/btst-journal.job';
+import {
+  tryClaimCronRun,
+  completeCronRun,
+  releaseCronRun,
+} from '@/services/scheduler/cron-run-claim';
 
 /**
  * Premium / tradable BTST–STBT Trade Journal cron.
@@ -35,10 +41,23 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const dateKey = getISTDateString();
+  const claimKey = `btst-journal:${dateKey}`;
+
+  if (!(await tryClaimCronRun(claimKey))) {
+    return NextResponse.json({
+      skipped: true,
+      reason: 'already run or in progress',
+      claimKey,
+    });
+  }
+
   try {
     const result = await runBtstJournalJob();
+    await completeCronRun(claimKey, true);
     return NextResponse.json(result);
   } catch (err) {
+    await releaseCronRun(claimKey);
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

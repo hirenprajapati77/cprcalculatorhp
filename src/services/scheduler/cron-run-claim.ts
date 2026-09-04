@@ -51,8 +51,15 @@ async function cleanupLocksOnProcessExit(): Promise<void> {
 }
 
 if (typeof process !== 'undefined') {
+  let isCleaningUp = false;
   const handleExitSignal = async () => {
-    await cleanupLocksOnProcessExit();
+    if (isCleaningUp) return;
+    isCleaningUp = true;
+    try {
+      await cleanupLocksOnProcessExit();
+    } finally {
+      setTimeout(() => process.exit(0), 200);
+    }
   };
   process.once('SIGINT', handleExitSignal);
   process.once('SIGTERM', handleExitSignal);

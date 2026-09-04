@@ -389,5 +389,38 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     FyersAuthService.getAccessToken = originalGetAccessToken;
     OptionChainService.getOptionChain = originalGetOptionChain;
   });
+
+  await t.test('Target and SL are calculated relative to current spot LTP, not stockEntry', async () => {
+    FyersAuthService.getAccessToken = async () => 'mock_token';
+    OptionChainService.getOptionChain = async () => ({
+      optionsChain: [
+        { symbol: 'NSE:SBIN26JUL790CE', strikePrice: 790, optionType: 'CE' as const, ltp: 20, open_interest: 50000, volume: 5000, bid: 19.8, ask: 20.2 },
+      ],
+      expiryData: [],
+      method: 'direct' as const,
+    });
+    const originalLoadLotSizes = (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes;
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
+
+    // stockEntry = 790, but spot LTP has already run to 800. stockTarget = 810, stockSl = 790.
+    // Underlying distance to target from LTP (800) is 10 points (not 20 points from stockEntry).
+    // Underlying distance to SL from LTP (800) is 10 points (not 0 points from stockEntry).
+    const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 790, 790, 810);
+    assert.ok(!res.error);
+    assert.strictEqual(res.strike, 790);
+    assert.strictEqual(res.ltp, 20);
+
+    // Delta for ITM-1 CE at depth 1 is ~0.52
+    // Move from current spot LTP (800) to target (810) is 10 pts → 10 * 0.52 = 5.2 pts gain → target = 25.2
+    // Move from current spot LTP (800) to SL (790) is 10 pts → 10 * 0.52 * 0.9 (theta) = 4.68 pts loss → SL = 15.32
+    // (Under old code, stockEntry 790 was used: target would be 30.4 and SL distance would be 0 → SL=20)
+    assert.strictEqual(res.target, 25.2);
+    assert.strictEqual(res.sl, 15.32);
+
+    (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = originalLoadLotSizes;
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    OptionChainService.getOptionChain = originalGetOptionChain;
+  });
 });
+
 

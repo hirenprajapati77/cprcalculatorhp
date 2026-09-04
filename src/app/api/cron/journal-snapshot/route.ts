@@ -1,12 +1,17 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
-import { getISTTime } from '@/lib/market-hours';
+import { getISTTime, getISTDateString } from '@/lib/market-hours';
 import { isValidCronSecret } from '@/lib/crypto';
 import {
   resolveJournalSnapshotSlot,
   runJournalSnapshotJob,
   type JournalSnapshotSlot,
 } from '@/services/scheduler/journal-snapshot.job';
+import {
+  tryClaimCronRun,
+  completeCronRun,
+  releaseCronRun,
+} from '@/services/scheduler/cron-run-claim';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('x-cron-secret');
@@ -38,13 +43,26 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const dateKey = getISTDateString();
+  const claimKey = `journal-snapshot:${slot}:${dateKey}`;
+
+  if (!(await tryClaimCronRun(claimKey))) {
+    return NextResponse.json({
+      skipped: true,
+      reason: 'already run or in progress for this slot',
+      claimKey,
+    });
+  }
+
   try {
     const result = await runJournalSnapshotJob(slot);
+    await completeCronRun(claimKey, true);
     return NextResponse.json({
       ...result,
       istTime: `${hour}:${String(minute).padStart(2, '0')}`,
     });
   } catch (error: unknown) {
+    await releaseCronRun(claimKey);
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('[JournalSnapshot] cron failed:', error);
     return NextResponse.json({ error: message }, { status: 500 });

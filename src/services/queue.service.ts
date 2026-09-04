@@ -71,7 +71,10 @@ class QueueServiceImpl {
     if (globalWithShutdown.__queueServiceShutdownRegistered) return;
     globalWithShutdown.__queueServiceShutdownRegistered = true;
 
+    let isShuttingDown = false;
     const shutdown = async () => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
       console.log('Closing BullMQ connections...');
       try {
         await Promise.all([
@@ -82,10 +85,12 @@ class QueueServiceImpl {
         console.log('BullMQ connections closed successfully.');
       } catch (e) {
         console.error('Error closing BullMQ connections', e);
+      } finally {
+        process.exit(0);
       }
     };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+    process.once('SIGINT', shutdown);
   }
 
   get isEnabled() {

@@ -378,7 +378,7 @@ export class TelegramService {
       const prefix = firstMessage ? header : `⚡ <b>${headline} (cont.)</b>\n\n`;
       const suffix = isLast ? `\n\n${footnote}` : '';
       const result = await this.sendMessage(prefix + text + suffix, chatId, overrideToken);
-      if (!result) allOk = false;
+      if (!result || !result.ok) allOk = false;
       firstMessage = false;
     };
 
@@ -404,7 +404,8 @@ export class TelegramService {
     // but just in case the list is empty after mapping)
     if (stockLines.length === 0) {
       const message = `${header}${footnote}`;
-      await this.sendMessage(message, chatId, overrideToken);
+      const emptyRes = await this.sendMessage(message, chatId, overrideToken);
+      if (!emptyRes || !emptyRes.ok) allOk = false;
     }
 
     return { ok: allOk };

@@ -629,8 +629,11 @@ export class OptionSuggestionService {
     const dte = OptionSuggestionService.computeDTE(selected.option.symbol, cleanSym, today);
     const thetaBuffer = dte !== null && dte <= 4 ? 0.10 : 0;
 
-    const stockMoveTarget = Math.max(0, type === 'CE' ? stockTarget - stockEntry : stockEntry - stockTarget);
-    const stockMoveSl = Math.max(0, type === 'CE' ? stockEntry - stockSl : stockSl - stockEntry);
+    // Measure expected underlying move from current spot LTP rather than morning stockEntry.
+    // The option's current LTP already reflects the stock's move up to this point.
+    const refSpot = ltp > 0 ? ltp : stockEntry;
+    const stockMoveTarget = Math.max(0, type === 'CE' ? stockTarget - refSpot : refSpot - stockTarget);
+    const stockMoveSl = Math.max(0, type === 'CE' ? refSpot - stockSl : stockSl - refSpot);
 
     const optionTarget = parseFloat((selected.option.ltp + stockMoveTarget * delta).toFixed(2));
     // thetaBuffer shrinks the distance between ltp and SL so we exit earlier in expiry week.

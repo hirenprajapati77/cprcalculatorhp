@@ -4,9 +4,8 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason) => {
-  console.error('[server-starter] Unhandled promise rejection:', reason);
-  process.exit(1);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[server-starter] Unhandled promise rejection at:', promise, 'reason:', reason);
 });
 
 const { createServer } = require('http');
