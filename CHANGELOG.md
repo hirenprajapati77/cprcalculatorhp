@@ -42,7 +42,7 @@ Exhaustive 60-day architectural and quantitative code review covering 822 commit
   - **Redis Lock Release Race Condition (`cron-run-claim.ts`)**: Replaced static `'1'` lock value with unique UUID instance tokens (H-15).
   - **Fallback Claim Cache Memory Leak (`cron-run-claim.ts`)**: Bounded in-memory fallback cache with automated TTL eviction (H-16).
   - **Watchdog Aggressive Restarts (`ops/mem_watchdog.sh`)**: Suppressed PM2 restarts during active trading hours (`IN_SESSION=1`) (H-17).
-  - **Heap vs RSS Allocation (`ecosystem.config.js`)**: Tuned Node.js heap limit (`--max-old-space-size=400`) and PM2 restart threshold (450M) for 1GB VM capacity (H-18).
+  - **Heap vs RSS Allocation (`ecosystem.config.js`, `ops/ecosystem.config.cjs`)**: Tuned Node.js heap cap (`--max-old-space-size=384`) and PM2 restart threshold (`480M` in `ecosystem.config.js` / `650M` in production `ops/ecosystem.config.cjs` and `ops/deploy.ps1`) for 1GB VM capacity (H-18).
   - **Middleware Public Fall-Through (`src/middleware.ts`)**: Sealed non-production environment fall-through edge cases (H-19).
 
 - **Tier 3: 15 MEDIUM Priority Defects (PR #163 / `commit 7de7eb0b`)**:

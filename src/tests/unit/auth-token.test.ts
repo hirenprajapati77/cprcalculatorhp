@@ -22,6 +22,14 @@ describe('auth-token timingSafeEqual and hashToken', () => {
   it('returns false when inputs are not strings', () => {
     assert.equal(timingSafeEqual(null as any, 'secret'), false);
     assert.equal(timingSafeEqual('secret', undefined as any), false);
+    assert.equal(timingSafeEqual(123 as any, 123 as any), false);
+  });
+
+  it('correctly compares strings with special characters and unicode', () => {
+    assert.equal(timingSafeEqual('token!@#$%^&*()_+', 'token!@#$%^&*()_+'), true);
+    assert.equal(timingSafeEqual('token!@#$%^&*()_+', 'token!@#$%^&*()_-'), false);
+    assert.equal(timingSafeEqual('🚀-trading-token', '🚀-trading-token'), true);
+    assert.equal(timingSafeEqual('🚀-trading-token', '💰-trading-token'), false);
   });
 
   it('hashes tokens deterministically with SHA-256 hex output', async () => {

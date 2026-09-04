@@ -1,4 +1,5 @@
 import { CacheService } from '@/services/cache.service';
+import { registerShutdownHook, isShuttingDown } from '@/lib/shutdown-orchestrator';
 
 /**
  * Distributed cron-run claim guard using Redis SET NX.
@@ -54,7 +55,7 @@ function evictExpiredMemoryClaims(): void {
   }
 }
 
-async function cleanupLocksOnProcessExit(): Promise<void> {
+export async function cleanupLocksOnProcessExit(): Promise<void> {
   if (activeRunningLocks.size === 0) return;
   const entries = Array.from(activeRunningLocks).map((k) => ({
     key: k,
@@ -79,20 +80,9 @@ async function cleanupLocksOnProcessExit(): Promise<void> {
   }
 }
 
-if (typeof process !== 'undefined') {
-  let isCleaningUp = false;
-  const handleExitSignal = async () => {
-    if (isCleaningUp) return;
-    isCleaningUp = true;
-    try {
-      await cleanupLocksOnProcessExit();
-    } finally {
-      setTimeout(() => process.exit(0), 200);
-    }
-  };
-  process.once('SIGINT', handleExitSignal);
-  process.once('SIGTERM', handleExitSignal);
-}
+registerShutdownHook('release_locks', 'cron-distributed-locks', async () => {
+  await cleanupLocksOnProcessExit();
+});
 
 function memoryTryClaim(key: string): boolean {
   evictExpiredMemoryClaims();
@@ -113,6 +103,10 @@ function getRedis(): import('ioredis').Redis | null {
 }
 
 export async function tryClaimCronRun(key: string): Promise<boolean> {
+  if (isShuttingDown()) {
+    console.warn(`[CronClaim] Rejecting claim '${key}' — process shutdown in progress.`);
+    return false;
+  }
   if (CacheService.isRedisConnected) {
     try {
       const redis = getRedis();
