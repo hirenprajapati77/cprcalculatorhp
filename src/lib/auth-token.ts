@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import crypto from 'crypto';
 
 /** Process-lifetime memo — APP_ACCESS_TOKEN is fixed for the worker, so rehashing on every middleware hit is pure waste. */
 const hashCache = new Map<string, string>();
