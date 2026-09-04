@@ -202,8 +202,8 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
     // Entry = today's TC (approx 100.67)
     assert.ok(Math.abs(result.entry - 100.67) < 0.05, 'entry should be today TC');
 
-    // SL = min(dayLow=95, entry×0.995≈100.17) → dayLow=95 wins
-    assert.strictEqual(result.sl, 95);
+    // SL = min(dayLow=95, entry×0.995≈100.17) → capped at max 3.0% risk (100.67 * 0.97 = 97.65)
+    assert.strictEqual(result.sl, 97.65);
 
     assert.ok(result.target > result.entry, 'target should be above entry for BULLISH');
     assert.ok(result.sl < result.entry, 'sl should be below entry for BULLISH');
@@ -232,8 +232,8 @@ test('Scanner Service V2 Entry, Target, Stop Loss, and Risk-Reward (RR)', async 
     // Entry = today's BC (approx 100)
     assert.ok(Math.abs(result.entry - 100) < 0.05, 'entry should be today BC');
 
-    // SL = max(dayHigh=105, entry×1.005=100.5) → dayHigh=105 wins
-    assert.strictEqual(result.sl, 105);
+    // SL = max(dayHigh=105, entry×1.005=100.5) → capped at max 3.0% risk (100 * 1.03 = 103)
+    assert.strictEqual(result.sl, 103);
 
     assert.ok(result.target < result.entry, 'target should be below entry for BEARISH');
     assert.ok(result.sl > result.entry, 'sl should be above entry for BEARISH');
@@ -1157,6 +1157,58 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
 
     const res = await ScannerService.scanStock(mockStock, '2026-08-11');
     assert.ok(res.target > mockStock.ltp, `Target (${res.target}) must be strictly ahead of current LTP (${mockStock.ltp})`);
+  });
+
+  await t.test('ScannerService caps stop loss to max 3.0% of entry on opening flash wicks (L-04)', async () => {
+    // BULLISH setup: entry = TC (100). Low is 90 (10% drop on flash wick).
+    // SL must be capped at 97 (3.0% risk) instead of 90.
+    const mockLongStock = {
+      symbol: 'FLASHWICK_LONG',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100,
+      high: 105,
+      low: 90, // Flash wick 10% below entry
+      close: 102,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 102,
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
+      ],
+    };
+
+    const longRes = await ScannerService.scanStock(mockLongStock, '2026-08-11');
+    assert.strictEqual(longRes.entry, 100);
+    // Capped at 100 * (1 - 0.03) = 97
+    assert.strictEqual(longRes.sl, 97);
+
+    // BEARISH setup: entry = BC (100). High is 110 (10% spike on flash wick).
+    // SL must be capped at 103 (3.0% risk) instead of 110.
+    const mockShortStock = {
+      symbol: 'FLASHWICK_SHORT',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 100,
+      high: 110, // Flash wick 10% above entry
+      low: 95,
+      close: 98,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 98, // ltp < BC (100) => BEARISH
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 }
+      ],
+    };
+
+    const shortRes = await ScannerService.scanStock(mockShortStock, '2026-08-11');
+    assert.strictEqual(shortRes.entry, 100);
+    // Capped at 100 * (1 + 0.03) = 103
+    assert.strictEqual(shortRes.sl, 103);
   });
 });
 

@@ -11,7 +11,14 @@ export function escapeCsvCell(value: CsvCellValue): string {
   if (value === null || value === undefined) {
     return '';
   }
-  const str = String(value);
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  let str = String(value);
+  // Neutralize CSV formula injection (CWE-1236): prepend single-quote if string starts with =, +, -, @, \t, or \r
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   // If the cell contains quotes, commas, or newlines, wrap in quotes and escape internal quotes
   if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;

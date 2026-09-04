@@ -1,40 +1,59 @@
-﻿import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import {
-  escapeCsvCell,
-  generateCsvContent,
-} from '@/lib/export-utils';
+﻿import test from 'node:test';
+import assert from 'node:assert';
+import { escapeCsvCell, generateCsvContent } from '../../lib/export-utils';
 
-describe('Export Utilities (CSV & Excel formatting)', () => {
-  it('escapes standard numbers and strings without quotes when no special chars exist', () => {
-    assert.equal(escapeCsvCell('RELIANCE'), 'RELIANCE');
-    assert.equal(escapeCsvCell(2945.5), '2945.5');
-    assert.equal(escapeCsvCell(true), 'true');
-    assert.equal(escapeCsvCell(null), '');
-    assert.equal(escapeCsvCell(undefined), '');
+test('export-utils: escapeCsvCell and generateCsvContent', async (t) => {
+  await t.test('handles standard types correctly', () => {
+    assert.strictEqual(escapeCsvCell(null), '');
+    assert.strictEqual(escapeCsvCell(undefined), '');
+    assert.strictEqual(escapeCsvCell(123), '123');
+    assert.strictEqual(escapeCsvCell(true), 'true');
+    assert.strictEqual(escapeCsvCell(false), 'false');
+    assert.strictEqual(escapeCsvCell('RELIANCE'), 'RELIANCE');
   });
 
-  it('escapes commas, quotes, and newlines properly according to RFC 4180', () => {
-    assert.equal(escapeCsvCell('Cup, and Handle'), '"Cup, and Handle"');
-    assert.equal(escapeCsvCell('52W "Pivot" Breakout'), '"52W ""Pivot"" Breakout"');
-    assert.equal(escapeCsvCell('Line 1\nLine 2'), '"Line 1\nLine 2"');
+  await t.test('preserves legitimate numeric values without single-quote prefix', () => {
+    assert.strictEqual(escapeCsvCell(-15.5), '-15.5');
+    assert.strictEqual(escapeCsvCell(0), '0');
+    assert.strictEqual(escapeCsvCell(100.25), '100.25');
   });
 
-  it('generates compliant CSV with UTF-8 Byte Order Mark (BOM) for Excel', () => {
-    const headers = ['Symbol', 'Price', 'Pattern'];
+  await t.test('neutralizes CSV formula injection (CWE-1236) on dangerous prefix characters', () => {
+    // Starts with = (formula execution)
+    assert.strictEqual(escapeCsvCell('=1+1'), "'=1+1");
+    assert.strictEqual(escapeCsvCell("=cmd|' /C calc'!A0"), "'=cmd|' /C calc'!A0");
+
+    // Starts with + or -
+    assert.strictEqual(escapeCsvCell('+5.2%'), "'+5.2%");
+    assert.strictEqual(escapeCsvCell('-12.4%'), "'-12.4%");
+
+    // Starts with @ (e.g. @SUM)
+    assert.strictEqual(escapeCsvCell('@SUM(A1:A10)'), "'@SUM(A1:A10)");
+
+    // Starts with tab or carriage return
+    assert.strictEqual(escapeCsvCell('\tmalicious'), "'\tmalicious");
+    assert.strictEqual(escapeCsvCell('\rmalicious'), "\"'\rmalicious\"");
+  });
+
+  await t.test('properly escapes quotes, commas, and newlines per RFC 4180', () => {
+    assert.strictEqual(escapeCsvCell('Hello, World'), '"Hello, World"');
+    assert.strictEqual(escapeCsvCell('He said "Hello"'), '"He said ""Hello"""');
+    assert.strictEqual(escapeCsvCell('Line1\nLine2'), '"Line1\nLine2"');
+  });
+
+  await t.test('generates valid UTF-8 BOM CSV with generateCsvContent', () => {
+    const headers = ['Symbol', 'Formula', 'Change', 'LTP'];
     const rows = [
-      ['TATAMOTORS', 980.5, 'Cup & Handle'],
-      ['INFY, TECH', 1850, '52W "ATH" Breakout'],
+      ['RELIANCE', '=SUM(1,2)', '+2.5%', 2950.5],
+      ['TCS', 'Normal text', -1.2, 4100],
     ];
 
     const csv = generateCsvContent(headers, rows);
+    // Starts with UTF-8 BOM
+    assert.ok(csv.startsWith('\uFEFF'));
 
-    // Verify UTF-8 BOM
-    assert.ok(csv.startsWith('\uFEFF'), 'CSV must start with UTF-8 BOM (\\uFEFF)');
-
-    // Verify row structure
-    assert.ok(csv.includes('Symbol,Price,Pattern'));
-    assert.ok(csv.includes('TATAMOTORS,980.5,Cup & Handle'));
-    assert.ok(csv.includes('"INFY, TECH",1850,"52W ""ATH"" Breakout"'));
+    // Verify row contents: =SUM(1,2) has comma, so it is quoted per RFC 4180
+    assert.ok(csv.includes('RELIANCE,"\'=SUM(1,2)",\'+2.5%,2950.5'));
+    assert.ok(csv.includes('TCS,Normal text,-1.2,4100'));
   });
 });

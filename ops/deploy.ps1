@@ -7,11 +7,12 @@
 
 $ErrorActionPreference = "Stop"
 
-$SSH_KEY   = "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key"
-$SERVER    = "ubuntu@129.159.230.41"
-$PROD_URL  = "https://129-159-230-41.nip.io"
-$LOCAL_URL = "http://localhost:3000"
-$ENV_FILE  = ".env"
+$SSH_KEY          = if ($env:DEPLOY_SSH_KEY) { $env:DEPLOY_SSH_KEY } else { "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" }
+$SERVER           = if ($env:DEPLOY_SERVER) { $env:DEPLOY_SERVER } else { "ubuntu@129.159.230.41" }
+$PROD_URL         = if ($env:DEPLOY_PROD_URL) { $env:DEPLOY_PROD_URL } else { "https://129-159-230-41.nip.io" }
+$STRICT_HOST_KEY  = if ($env:DEPLOY_STRICT_HOST_KEY) { $env:DEPLOY_STRICT_HOST_KEY } else { "accept-new" }
+$LOCAL_URL        = "http://localhost:3000"
+$ENV_FILE         = ".env"
 
 function Log($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Cyan }
 function Ok($msg)  { Write-Host "[OK] $msg" -ForegroundColor Green }
@@ -78,6 +79,11 @@ if ($exitCode -eq 0) {
     $exitCode = $LASTEXITCODE
 }
 if ($exitCode -eq 0) {
+    Log "Verifying TypeScript types (npm run typecheck)..."
+    $build = & npm run typecheck 2>&1
+    $exitCode = $LASTEXITCODE
+}
+if ($exitCode -eq 0) {
     Log "Building Next.js (this takes ~1-2 min)..."
     $build = & npm run build 2>&1
     $exitCode = $LASTEXITCODE
@@ -109,25 +115,25 @@ Ok "NEXT_PUBLIC_BASE_URL restored to $LOCAL_URL"
 
 # ── 6. UPLOAD ────────────────────────────────────────────────
 Log "Uploading to server (~15-20s)..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh ops/merge_env.sh ops/ecosystem.config.cjs ops/mem_watchdog.sh "${SERVER}:/home/ubuntu/"
+scp -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY deploy_standalone.tar.gz deploy_static.tar.gz deploy_public.tar.gz deploy_prisma.tar.gz ops/deploy_extract.sh ops/merge_env.sh ops/ecosystem.config.cjs ops/mem_watchdog.sh "${SERVER}:/home/ubuntu/"
 if ($LASTEXITCODE -ne 0) { Err "SCP upload failed" }
 
 Log "Merging .env.server into production .env (keeps server-only keys)..."
-scp -i $SSH_KEY -o StrictHostKeyChecking=no .env.server "${SERVER}:/home/ubuntu/cpr.env.server"
+scp -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY .env.server "${SERVER}:/home/ubuntu/cpr.env.server"
 if ($LASTEXITCODE -ne 0) { Err "SCP env upload failed" }
 
-ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/merge_env.sh && bash /home/ubuntu/merge_env.sh"
+ssh -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY $SERVER "sed -i 's/\r$//' /home/ubuntu/merge_env.sh && bash /home/ubuntu/merge_env.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server .env merge failed" }
 
 Ok "Upload complete"
 
 # ── 7. EXTRACT + RESTART ON SERVER ───────────────────────────
 Log "Extracting and restarting PM2 on server..."
-ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh /home/ubuntu/mem_watchdog.sh && chmod +x /home/ubuntu/mem_watchdog.sh && bash /home/ubuntu/deploy_extract.sh"
+ssh -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY $SERVER "sed -i 's/\r$//' /home/ubuntu/deploy_extract.sh /home/ubuntu/mem_watchdog.sh && chmod +x /home/ubuntu/mem_watchdog.sh && bash /home/ubuntu/deploy_extract.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server deploy script failed" }
 
 Log "Verifying PM2 memory limit on server..."
-$pm2Max = (ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SERVER 'pm2 show cpr-platform 2>/dev/null | grep -E "max.*memory.*restart" | sed -E "s/[^0-9]//g"').Trim()
+$pm2Max = (ssh -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY $SERVER 'pm2 show cpr-platform 2>/dev/null | grep -E "max.*memory.*restart" | sed -E "s/[^0-9]//g"').Trim()
 if ($pm2Max -ne "681574400") {
     Err "PM2 max_memory_restart is '$pm2Max' (expected 681574400 / 650M). Check /home/ubuntu/ecosystem.config.cjs"
 }

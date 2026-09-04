@@ -1,7 +1,5 @@
 import { runBhavcopyIngest } from './bhavcopy-ingest';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/db';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,8 +75,9 @@ export async function runBhavcopyBackfill(
       existingCount = 0;
     }
 
-    if (existingCount > 2000) {
-      console.log(`[BhavcopyBackfill] Skipping ${dateStr} (Already ingested: ${existingCount} rows)`);
+    const minRows = Number(process.env.BACKFILL_MIN_ROWS) || 1000;
+    if (existingCount >= minRows) {
+      console.log(`[BhavcopyBackfill] Skipping ${dateStr} (Already ingested: ${existingCount} rows, threshold: ${minRows})`);
       stats.push({
         date: dateStr,
         rowsInserted: existingCount,
