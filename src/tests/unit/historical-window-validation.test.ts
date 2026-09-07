@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  hasConsecutiveTradingSessions,
-  isValidHistoricalOhlcvCandle,
+  matchesExpectedTradingSessions,
+  isValidHistoricalReturnCandle,
   isValidHistoricalWindow,
 } from '@/services/market-tools/historical-window-validation';
 
@@ -21,7 +21,7 @@ const sessions = [
 
 test('accepts a window whose dates match canonical trading sessions', () => {
   assert.equal(
-    hasConsecutiveTradingSessions(
+    matchesExpectedTradingSessions(
       sessions.map((date) => candle(date)),
       sessions,
       5,
@@ -39,7 +39,7 @@ test('rejects a symbol with a missing historical trading session', () => {
   ];
 
   assert.equal(
-    hasConsecutiveTradingSessions(candles, sessions, 5),
+    matchesExpectedTradingSessions(candles, sessions, 5),
     false,
   );
 });
@@ -55,14 +55,14 @@ test('rejects a window with count matching windowSize but an internal date misal
   ];
 
   assert.equal(
-    hasConsecutiveTradingSessions(candles, sessions, 5),
+    matchesExpectedTradingSessions(candles, sessions, 5),
     false,
   );
 });
 
 test('rejects insufficient history instead of treating it as a valid zero return window', () => {
   assert.equal(
-    hasConsecutiveTradingSessions(
+    matchesExpectedTradingSessions(
       [candle('2026-09-02'), candle('2026-09-03')],
       sessions,
       5,
@@ -72,9 +72,9 @@ test('rejects insufficient history instead of treating it as a valid zero return
 });
 
 test('rejects invalid OHLCV values', () => {
-  assert.equal(isValidHistoricalOhlcvCandle(candle('2026-09-03', 0, 99)), false);
-  assert.equal(isValidHistoricalOhlcvCandle(candle('2026-09-03', 100, 0)), false);
-  assert.equal(isValidHistoricalOhlcvCandle(candle('2026-09-03', Number.NaN, 99)), false);
+  assert.equal(isValidHistoricalReturnCandle(candle('2026-09-03', 0, 99)), false);
+  assert.equal(isValidHistoricalReturnCandle(candle('2026-09-03', 100, 0)), false);
+  assert.equal(isValidHistoricalReturnCandle(candle('2026-09-03', Number.NaN, 99)), false);
 });
 
 test('validates both session continuity and candle values', () => {

@@ -173,10 +173,10 @@ export class MomentumLeadersService {
   static computeCompoundedReturn(
     candles: OhlcvCandleWithPrevClose[],
     k: number,
-    expectedTradingDates: readonly string[] = [],
+    expectedTradingDates: readonly string[],
   ): number | null {
     if (k <= 0 || candles.length < k) return null;
-    if (expectedTradingDates.length > 0 && !isValidHistoricalWindow(candles, expectedTradingDates, k)) return null;
+    if (!isValidHistoricalWindow(candles, expectedTradingDates, k)) return null;
     const window = candles.slice(-k);
     let compoundRatio = 1.0;
 

@@ -4,7 +4,7 @@ export interface HistoricalCandleLike {
   prevClose: number;
 }
 
-export function hasConsecutiveTradingSessions(
+export function matchesExpectedTradingSessions(
   candles: HistoricalCandleLike[],
   expectedTradingDates: readonly string[],
   windowSize: number,
@@ -18,7 +18,7 @@ export function hasConsecutiveTradingSessions(
   return window.every((candle, index) => candle.date === expected[index]);
 }
 
-export function isValidHistoricalOhlcvCandle(
+export function isValidHistoricalReturnCandle(
   candle: HistoricalCandleLike,
 ): boolean {
   return (
@@ -36,11 +36,11 @@ export function isValidHistoricalWindow(
   expectedTradingDates: readonly string[],
   windowSize: number,
 ): boolean {
-  if (!hasConsecutiveTradingSessions(candles, expectedTradingDates, windowSize)) {
+  if (!matchesExpectedTradingSessions(candles, expectedTradingDates, windowSize)) {
     return false;
   }
 
   return candles
     .slice(-windowSize)
-    .every(isValidHistoricalOhlcvCandle);
+    .every(isValidHistoricalReturnCandle);
 }
