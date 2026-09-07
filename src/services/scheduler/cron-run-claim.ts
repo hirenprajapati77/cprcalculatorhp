@@ -1,3 +1,4 @@
+import { env } from '@/config/env';
 import { CacheService } from '@/services/cache.service';
 import { registerShutdownHook, isShuttingDown } from '@/lib/shutdown-orchestrator';
 
@@ -107,6 +108,9 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
     console.warn(`[CronClaim] Rejecting claim '${key}' — process shutdown in progress.`);
     return false;
   }
+
+  const isProduction = process.env.NODE_ENV === 'production' || env.NODE_ENV === 'production';
+
   if (CacheService.isRedisConnected) {
     try {
       const redis = getRedis();
@@ -132,9 +136,19 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
         return false;
       }
     } catch (err) {
-      console.warn('[CronClaim] Redis lock attempt failed, falling back to memory:', err);
+      console.warn('[CronClaim] Redis lock attempt failed:', err);
+      if (isProduction) {
+        console.warn(`[CronClaim] Redis is unavailable in production. Rejecting claim '${key}' to prevent duplicate executions across workers.`);
+        return false;
+      }
     }
   }
+
+  if (isProduction) {
+    console.warn(`[CronClaim] Redis is unavailable in production. Rejecting claim '${key}' to prevent duplicate executions across workers.`);
+    return false;
+  }
+
   return memoryTryClaim(key);
 }
 

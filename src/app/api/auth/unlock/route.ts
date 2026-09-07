@@ -1,10 +1,18 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
-import { cache } from '@/lib/redis';
+import { cache, isRedisAvailable } from '@/lib/redis';
 import { hashToken, timingSafeEqual } from '@/lib/auth-token';
 import { cookieSecureFromRequest } from '@/lib/auth-cookie';
 
-async function checkUnlockRateLimit(request: NextRequest): Promise<boolean> {
+async function checkUnlockRateLimit(request: NextRequest): Promise<{ allowed: boolean; unavailable?: boolean }> {
+  const isProduction = process.env.NODE_ENV === 'production' || env.NODE_ENV === 'production';
+  const redisConfigured = Boolean(env.REDIS_URL || process.env.REDIS_URL);
+  const failClosed = isProduction && redisConfigured;
+
+  if (failClosed && !isRedisAvailable()) {
+    return { allowed: false, unavailable: true };
+  }
+
   // Prefer nginx's X-Real-IP (always the direct peer). Only when TRUST_PROXY is
   // set do we consult X-Forwarded-For — and we take the *last* hop, which
   // nginx's $proxy_add_x_forwarded_for appends as the real client. Taking the
@@ -25,14 +33,35 @@ async function checkUnlockRateLimit(request: NextRequest): Promise<boolean> {
   const ttlSeconds = Math.ceil(windowMs / 1000);
   const cacheKey = `rate_limit:unlock:${ip}`;
 
-  const count = await cache.incr(cacheKey, ttlSeconds);
-  return count <= limit;
+  try {
+    const count = await cache.incr(cacheKey, ttlSeconds, failClosed);
+    return { allowed: count <= limit };
+  } catch (err) {
+    if (failClosed) {
+      console.error('[AuthUnlock] Redis rate limiter failed in production:', err);
+      return { allowed: false, unavailable: true };
+    }
+    return { allowed: true };
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const allowed = await checkUnlockRateLimit(req);
-    if (!allowed) {
+    const rateLimit = await checkUnlockRateLimit(req);
+    if (rateLimit.unavailable) {
+      console.error('[AuthUnlock] Redis rate limiter unavailable in production. Rejecting unlock request.');
+      return NextResponse.json(
+        { error: 'Authentication service temporarily unavailable. Please try again later.' },
+        {
+          status: 503,
+          headers: {
+            'Retry-After': '60',
+          },
+        }
+      );
+    }
+
+    if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.' },
         {

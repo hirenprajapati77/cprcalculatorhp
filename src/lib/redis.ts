@@ -45,6 +45,15 @@ if (env.REDIS_URL) {
   }
 }
 
+export function isRedisAvailable(): boolean {
+  return Boolean(redis && redis.status === 'ready');
+}
+
+/** For unit tests to simulate Redis connection state */
+export function _setRedisForTesting(client: Redis | null): void {
+  redis = client;
+}
+
 // In-memory cache fallback implementation
 const memoryCache = new Map<string, { value: string; expiry: number }>();
 
@@ -175,7 +184,7 @@ export const cache = {
     }
     memoryCache.clear();
   },
-  async incr(key: string, ttlSeconds: number): Promise<number> {
+  async incr(key: string, ttlSeconds: number, failClosed: boolean = false): Promise<number> {
     if (redis && redis.status === 'ready') {
       try {
         const pipeline = redis.multi();
@@ -185,8 +194,13 @@ export const cache = {
         const count = results?.[0]?.[1] as number ?? 1;
         return count;
       } catch (err) {
+        if (failClosed) {
+          throw err;
+        }
         console.warn('Redis INCR failed, falling back to memory cache:', err);
       }
+    } else if (failClosed) {
+      throw new Error('Redis is unavailable');
     }
 
     // Memory fallback logic
