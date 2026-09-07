@@ -37,7 +37,8 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-08-28', open: 100, high: 102, low: 99, close: 100, prevClose: 98, volume: 100000 },
         { date: '2026-09-01', open: 101, high: 106, low: 100, close: 105, prevClose: 100, volume: 150000 },
       ];
-      const r1 = MomentumLeadersService.computeCompoundedReturn(candles, 1);
+      const canonicalTradingDates = ['2026-08-28', '2026-09-01'];
+      const r1 = MomentumLeadersService.computeCompoundedReturn(candles, 1, canonicalTradingDates);
       // (105 - 100) / 100 = +5.0%
       assert.equal(r1, 5.0);
     });
@@ -53,7 +54,8 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-08-29', open: 102, high: 105, low: 101, close: 104.04, prevClose: 102, volume: 100000 },
         { date: '2026-09-01', open: 104, high: 108, low: 103, close: 107.1612, prevClose: 104.04, volume: 100000 },
       ];
-      const r3 = MomentumLeadersService.computeCompoundedReturn(candles, 3);
+      const canonicalTradingDates = ['2026-08-27', '2026-08-28', '2026-08-29', '2026-09-01'];
+      const r3 = MomentumLeadersService.computeCompoundedReturn(candles, 3, canonicalTradingDates);
       assert.equal(r3, 7.16);
     });
 
@@ -67,16 +69,73 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-08-28', open: 980, high: 1010, low: 975, close: 1000, prevClose: 980, volume: 100000 },
         { date: '2026-09-01', open: 505, high: 520, low: 495, close: 510, prevClose: 500, volume: 200000 },
       ];
-      const r2 = MomentumLeadersService.computeCompoundedReturn(candles, 2);
+      const canonicalTradingDates = ['2026-08-28', '2026-09-01'];
+      const r2 = MomentumLeadersService.computeCompoundedReturn(candles, 2, canonicalTradingDates);
       assert.ok(r2 !== null && r2 > 4.0 && r2 < 4.2, `Split-adjusted return must be ~+4.08%, received ${r2}%`);
     });
 
-    it('returns 0 when candles length is less than requested window k', () => {
+    it('returns null when candles length is less than requested window k', () => {
       const candles: OhlcvCandleWithPrevClose[] = [
         { date: '2026-09-01', open: 100, high: 105, low: 99, close: 102, prevClose: 100, volume: 50000 },
       ];
-      const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5);
-      assert.equal(r5, 0);
+      const canonicalTradingDates = ['2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-09-01'];
+      const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5, canonicalTradingDates);
+      assert.equal(r5, null);
+    });
+
+    it('returns null for gapped trading sessions when canonicalTradingDates has a missing session', () => {
+      // Canonical trading sessions: 5 consecutive days
+      const canonicalTradingDates = [
+        '2026-08-28',
+        '2026-08-31',
+        '2026-09-01',
+        '2026-09-02',
+        '2026-09-03',
+      ];
+
+      // Candles array with a genuine date gap: 2026-09-01 is missing (skipped trading day)
+      // All prices and prevClose are valid and positive numbers (no value corruption)
+      const gappedCandles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-08-27', open: 98, high: 102, low: 98, close: 100, prevClose: 99, volume: 100000 },
+        { date: '2026-08-28', open: 100, high: 103, low: 100, close: 102, prevClose: 100, volume: 100000 },
+        { date: '2026-08-31', open: 102, high: 105, low: 101, close: 104, prevClose: 102, volume: 100000 },
+        // 2026-09-01 is missing from candles
+        { date: '2026-09-02', open: 104, high: 107, low: 103, close: 106, prevClose: 104, volume: 100000 },
+        { date: '2026-09-03', open: 106, high: 109, low: 105, close: 108, prevClose: 106, volume: 100000 },
+      ];
+
+      // Case 1: Real canonicalTradingDates supplied -> detects missing session and returns null
+      const resultWithDates = MomentumLeadersService.computeCompoundedReturn(
+        gappedCandles,
+        5,
+        canonicalTradingDates,
+      );
+      assert.strictEqual(
+        resultWithDates,
+        null,
+        'Expected computeCompoundedReturn to return null when historical window has a date gap relative to canonical dates',
+      );
+
+      // Case 2: Complete non-gapped candles -> computes return accurately
+      const completeCandles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-08-28', open: 100, high: 103, low: 100, close: 102, prevClose: 100, volume: 100000 },
+        { date: '2026-08-31', open: 102, high: 105, low: 101, close: 104, prevClose: 102, volume: 100000 },
+        { date: '2026-09-01', open: 103, high: 106, low: 102, close: 105, prevClose: 104, volume: 100000 },
+        { date: '2026-09-02', open: 104, high: 107, low: 103, close: 106, prevClose: 105, volume: 100000 },
+        { date: '2026-09-03', open: 106, high: 109, low: 105, close: 108, prevClose: 106, volume: 100000 },
+      ];
+      const validResult = MomentumLeadersService.computeCompoundedReturn(
+        completeCandles,
+        5,
+        canonicalTradingDates,
+      );
+      assert.notStrictEqual(
+        validResult,
+        null,
+        'Expected computeCompoundedReturn to compute return when trading dates match canonical sequence',
+      );
+      assert.strictEqual(typeof validResult, 'number');
+      assert.ok(validResult! > 0);
     });
 
     it('returns null when any candle in the window has zero prevClose', () => {
@@ -85,7 +144,8 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-08-29', open: 105, high: 110, low: 100, close: 110, prevClose: 0, volume: 1000 },
         { date: '2026-09-01', open: 110, high: 115, low: 105, close: 115, prevClose: 110, volume: 1000 },
       ];
-      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3);
+      const canonicalTradingDates = candles.map(c => c.date);
+      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3, canonicalTradingDates);
       assert.strictEqual(result, null, 'Window containing zero prevClose must return null');
     });
 
@@ -95,7 +155,8 @@ describe('MomentumLeadersService - Unit Tests', () => {
         { date: '2026-08-29', open: 105, high: 110, low: 100, close: 110, prevClose: -50, volume: 1000 },
         { date: '2026-09-01', open: 110, high: 115, low: 105, close: 115, prevClose: 110, volume: 1000 },
       ];
-      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3);
+      const canonicalTradingDates = candles.map(c => c.date);
+      const result = MomentumLeadersService.computeCompoundedReturn(candles, 3, canonicalTradingDates);
       assert.strictEqual(result, null, 'Window containing negative prevClose must return null');
     });
 
@@ -103,12 +164,12 @@ describe('MomentumLeadersService - Unit Tests', () => {
       const nanCandles: OhlcvCandleWithPrevClose[] = [
         { date: '2026-09-01', open: 100, high: 105, low: 95, close: 105, prevClose: NaN, volume: 1000 },
       ];
-      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(nanCandles, 1), null);
+      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(nanCandles, 1, ['2026-09-01']), null);
 
       const undefinedCandles = [
         { date: '2026-09-01', open: 100, high: 105, low: 95, close: 105, volume: 1000 } as unknown as OhlcvCandleWithPrevClose,
       ];
-      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(undefinedCandles, 1), null);
+      assert.strictEqual(MomentumLeadersService.computeCompoundedReturn(undefinedCandles, 1, ['2026-09-01']), null);
     });
 
     it('validates prevClose accurately with isValidPrevClose', () => {
@@ -138,10 +199,11 @@ describe('MomentumLeadersService - Unit Tests', () => {
         });
       }
 
-      const r1 = MomentumLeadersService.computeCompoundedReturn(candles, 1);
-      const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5);
-      const r10 = MomentumLeadersService.computeCompoundedReturn(candles, 10);
-      const r21 = MomentumLeadersService.computeCompoundedReturn(candles, 21);
+      const canonicalTradingDates = candles.map(c => c.date);
+      const r1 = MomentumLeadersService.computeCompoundedReturn(candles, 1, canonicalTradingDates);
+      const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5, canonicalTradingDates);
+      const r10 = MomentumLeadersService.computeCompoundedReturn(candles, 10, canonicalTradingDates);
+      const r21 = MomentumLeadersService.computeCompoundedReturn(candles, 21, canonicalTradingDates);
 
       // Day 15 is within the 10D and 21D windows (since 22 - 15 = 7th candle from end)
       assert.notEqual(r1, null);
