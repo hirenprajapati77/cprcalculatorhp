@@ -27,6 +27,7 @@ export interface ShutdownHook {
   id: string;
   phase: ShutdownPhase;
   fn: () => Promise<void> | void;
+  critical: boolean;
 }
 
 interface OrchestratorState {
@@ -55,10 +56,12 @@ let activeSigintListener: (() => void) | null = null;
 export function registerShutdownHook(
   phase: ShutdownPhase,
   id: string,
-  fn: () => Promise<void> | void
+  fn: () => Promise<void> | void,
+  options?: { critical?: boolean } | boolean
 ): () => void {
   initShutdownOrchestrator();
-  state.hooks.set(id, { id, phase, fn });
+  const critical = typeof options === 'boolean' ? options : (options?.critical ?? false);
+  state.hooks.set(id, { id, phase, fn, critical });
   return () => {
     state.hooks.delete(id);
   };
@@ -107,6 +110,9 @@ export async function executeShutdown(options?: {
     }, timeoutMs);
 
     state.activeExecutionPromise = (async () => {
+      const criticalFailures: { hookId: string; phase: ShutdownPhase; error: unknown }[] = [];
+      let nonCriticalFailureCount = 0;
+
       try {
         for (const phase of SHUTDOWN_PHASES) {
           if (completed) break;
@@ -120,11 +126,29 @@ export async function executeShutdown(options?: {
               try {
                 await hook.fn();
               } catch (err) {
-                console.error(`[ShutdownOrchestrator] Error in hook '${hook.id}' during phase '${phase}':`, err);
-                throw err;
+                console.error(
+                  `[ShutdownOrchestrator] Error in hook '${hook.id}' (${hook.critical ? 'critical' : 'best-effort'}) during phase '${phase}':`,
+                  err
+                );
+                throw { hook, err };
               }
             })
           );
+
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              const reason = result.reason as { hook: ShutdownHook; err: unknown };
+              if (reason?.hook?.critical) {
+                criticalFailures.push({
+                  hookId: reason.hook.id,
+                  phase,
+                  error: reason.err,
+                });
+              } else {
+                nonCriticalFailureCount++;
+              }
+            }
+          }
 
           const failed = results.filter((r) => r.status === 'rejected');
           if (failed.length > 0) {
@@ -132,16 +156,33 @@ export async function executeShutdown(options?: {
           }
         }
 
-        console.log('[ShutdownOrchestrator] All shutdown phases completed successfully.');
+        if (criticalFailures.length > 0) {
+          console.error(
+            `[ShutdownOrchestrator] Graceful shutdown finished with ${criticalFailures.length} critical failure(s): [${criticalFailures.map((f) => f.hookId).join(', ')}]. Non-zero exit required.`
+          );
+        } else if (nonCriticalFailureCount > 0) {
+          console.warn(
+            `[ShutdownOrchestrator] All shutdown phases finished (with ${nonCriticalFailureCount} non-critical warning(s)).`
+          );
+        } else {
+          console.log('[ShutdownOrchestrator] All shutdown phases completed successfully.');
+        }
       } catch (err) {
-        console.error('[ShutdownOrchestrator] Error during shutdown phases:', err);
+        console.error('[ShutdownOrchestrator] Unexpected error during shutdown phases:', err);
       } finally {
         if (!completed) {
           completed = true;
           clearTimeout(timer);
-          if (exitOnComplete) {
-            process.exit(0);
+          if (criticalFailures.length > 0) {
+            if (exitOnComplete) {
+              process.exit(1);
+            }
+            const failedIds = criticalFailures.map((f) => f.hookId).join(', ');
+            reject(new Error(`Graceful shutdown failed due to critical hook failure(s): ${failedIds}`));
           } else {
+            if (exitOnComplete) {
+              process.exit(0);
+            }
             resolve();
           }
         }
@@ -156,44 +197,68 @@ export async function executeShutdown(options?: {
  * Register default system hooks for phase 1 (stop accepting work) and phase 4 (close connections).
  */
 export function registerDefaultSystemHooks(): void {
-  // Phase 1: stop accepting work — halt in-process market cron scheduler
-  registerShutdownHook('stop_accepting_work', 'system-market-cron-scheduler', async () => {
-    try {
-      const { stopMarketCronScheduler } = await import('@/services/scheduler/market-cron.scheduler');
-      stopMarketCronScheduler();
-      console.log('[ShutdownOrchestrator] In-process market cron scheduler halted.');
-    } catch {
-      // Scheduler might not be loaded in all environments (e.g. scripts/tests)
-    }
-  });
+  // Phase 1: stop accepting work — halt in-process market cron scheduler (best-effort)
+  registerShutdownHook(
+    'stop_accepting_work',
+    'system-market-cron-scheduler',
+    async () => {
+      try {
+        const { stopMarketCronScheduler } = await import('@/services/scheduler/market-cron.scheduler');
+        stopMarketCronScheduler();
+        console.log('[ShutdownOrchestrator] In-process market cron scheduler halted.');
+      } catch {
+        // Scheduler might not be loaded in all environments (e.g. scripts/tests)
+      }
+    },
+    { critical: false }
+  );
 
-  // Phase 4: close connections — Prisma DB pool
-  registerShutdownHook('close_connections', 'system-prisma-db', async () => {
-    try {
+  // Phase 4: close connections — Prisma DB pool (critical)
+  registerShutdownHook(
+    'close_connections',
+    'system-prisma-db',
+    async () => {
       const globalWithPrisma = globalThis as unknown as {
         prisma?: { $disconnect: () => Promise<void> };
       };
       if (globalWithPrisma.prisma && typeof globalWithPrisma.prisma.$disconnect === 'function') {
-        await globalWithPrisma.prisma.$disconnect();
-        console.log('[ShutdownOrchestrator] Prisma database pool disconnected.');
+        try {
+          await globalWithPrisma.prisma.$disconnect();
+          console.log('[ShutdownOrchestrator] Prisma database pool disconnected.');
+        } catch (err) {
+          console.error('[ShutdownOrchestrator] Failed to disconnect Prisma database pool:', err);
+          throw err;
+        }
       }
-    } catch (err) {
-      console.warn('[ShutdownOrchestrator] Failed to disconnect Prisma:', err);
-    }
-  });
+    },
+    { critical: true }
+  );
 
-  // Phase 4: close connections — Redis client
-  registerShutdownHook('close_connections', 'system-redis-client', async () => {
-    try {
-      const { default: redis } = await import('@/lib/redis');
-      if (redis && redis.status === 'ready') {
-        await redis.quit().catch(() => redis.disconnect());
-        console.log('[ShutdownOrchestrator] Redis connection closed.');
+  // Phase 4: close connections — Redis client (critical)
+  registerShutdownHook(
+    'close_connections',
+    'system-redis-client',
+    async () => {
+      let redisModule: typeof import('@/lib/redis') | null = null;
+      try {
+        redisModule = await import('@/lib/redis');
+      } catch {
+        // Redis module might not be initialized in all environments (e.g. edge / unit tests)
+        return;
       }
-    } catch {
-      // Redis might not be initialized
-    }
-  });
+      const redis = redisModule?.default;
+      if (redis && (redis.status === 'ready' || redis.status === 'connecting')) {
+        try {
+          await redis.quit().catch(() => redis.disconnect());
+          console.log('[ShutdownOrchestrator] Redis connection closed.');
+        } catch (err) {
+          console.error('[ShutdownOrchestrator] Failed to close Redis connection (both quit and disconnect failed):', err);
+          throw err;
+        }
+      }
+    },
+    { critical: true }
+  );
 }
 
 /**

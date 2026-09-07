@@ -82,7 +82,7 @@ export async function cleanupLocksOnProcessExit(): Promise<void> {
 
 registerShutdownHook('release_locks', 'cron-distributed-locks', async () => {
   await cleanupLocksOnProcessExit();
-});
+}, { critical: false });
 
 function memoryTryClaim(key: string): boolean {
   evictExpiredMemoryClaims();
