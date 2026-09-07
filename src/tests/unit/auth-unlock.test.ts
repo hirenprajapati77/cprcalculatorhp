@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { POST as unlock } from '../../app/api/auth/unlock/route';
 import { POST as logout } from '../../app/api/auth/logout/route';
-import { cache } from '../../lib/redis';
+import { cache, _setRedisForTesting } from '../../lib/redis';
 
 function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock') {
   return new NextRequest(url, {
@@ -66,6 +66,97 @@ describe('POST /api/auth/unlock', () => {
     assert.strictEqual(res.headers.get('retry-after'), '900');
     const data = await res.json();
     assert.strictEqual(data.error, 'Too many requests. Please try again later.');
+  });
+
+  it('returns 503 in production when Redis is configured but unavailable', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origRedisUrl = process.env.REDIS_URL;
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      process.env.REDIS_URL = 'redis://localhost:6379';
+      _setRedisForTesting(null);
+
+      const res = await unlock(unlockReq({ token: 'test-token-123' }));
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(res.headers.get('retry-after'), '60');
+      const data = await res.json();
+      assert.strictEqual(
+        data.error,
+        'Authentication service temporarily unavailable. Please try again later.'
+      );
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origRedisUrl === undefined) {
+        delete process.env.REDIS_URL;
+      } else {
+        process.env.REDIS_URL = origRedisUrl;
+      }
+      _setRedisForTesting(null);
+    }
+  });
+
+  it('returns 503 in production when Redis throws an unexpected error during incr', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origRedisUrl = process.env.REDIS_URL;
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      process.env.REDIS_URL = 'redis://localhost:6379';
+
+      const mockRedis = {
+        status: 'ready',
+        multi: () => {
+          throw new Error('Connection lost to Redis cluster');
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const res = await unlock(unlockReq({ token: 'test-token-123' }));
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(res.headers.get('retry-after'), '60');
+      const data = await res.json();
+      assert.strictEqual(
+        data.error,
+        'Authentication service temporarily unavailable. Please try again later.'
+      );
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origRedisUrl === undefined) {
+        delete process.env.REDIS_URL;
+      } else {
+        process.env.REDIS_URL = origRedisUrl;
+      }
+      _setRedisForTesting(null);
+    }
+  });
+
+  it('succeeds in production when Redis is available and working', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origRedisUrl = process.env.REDIS_URL;
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      process.env.REDIS_URL = 'redis://localhost:6379';
+
+      const mockRedis = {
+        status: 'ready',
+        multi: () => ({
+          incr: () => {},
+          expire: () => {},
+          exec: async () => [[null, 1]],
+        }),
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const res = await unlock(unlockReq({ token: 'test-token-123' }));
+      assert.strictEqual(res.status, 200);
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origRedisUrl === undefined) {
+        delete process.env.REDIS_URL;
+      } else {
+        process.env.REDIS_URL = origRedisUrl;
+      }
+      _setRedisForTesting(null);
+    }
   });
 });
 

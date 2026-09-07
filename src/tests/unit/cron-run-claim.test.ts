@@ -94,4 +94,51 @@ describe('cron-run-claim service', () => {
       (CacheService as any).redisClient = originalRedisClient;
     }
   });
+
+  it('fails closed and returns false in production when Redis is disconnected', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origDesc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(CacheService), 'isRedisConnected');
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      Object.defineProperty(CacheService, 'isRedisConnected', { value: false, configurable: true });
+
+      const claimed = await tryClaimCronRun('prod-no-redis-job');
+      assert.equal(claimed, false, 'Must reject claim in production when Redis is down');
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origDesc) {
+        Object.defineProperty(Object.getPrototypeOf(CacheService), 'isRedisConnected', origDesc);
+      }
+      delete (CacheService as any).isRedisConnected;
+    }
+  });
+
+  it('fails closed and returns false in production when Redis throws an error', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origDesc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(CacheService), 'isRedisConnected');
+    const originalRedisClient = (CacheService as any).redisClient;
+
+    const mockRedis = {
+      status: 'ready',
+      get: async () => {
+        throw new Error('Redis connection timed out');
+      },
+    };
+
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      Object.defineProperty(CacheService, 'isRedisConnected', { value: true, configurable: true });
+      (CacheService as any).redisClient = mockRedis;
+
+      const claimed = await tryClaimCronRun('prod-redis-error-job');
+      assert.equal(claimed, false, 'Must reject claim in production when Redis throws an error');
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origDesc) {
+        Object.defineProperty(Object.getPrototypeOf(CacheService), 'isRedisConnected', origDesc);
+      }
+      delete (CacheService as any).isRedisConnected;
+      (CacheService as any).redisClient = originalRedisClient;
+    }
+  });
 });
