@@ -10,6 +10,7 @@ import {
 } from '@/services/vpa/vpa.math';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
+import { isValidOhlcvGeometry } from './historical-window-validation';
 
 export interface OhlcvCandle {
   date: string;
@@ -305,9 +306,19 @@ export class PatternBreakoutService {
       ORDER BY symbol ASC, date ASC
     `;
 
-    // Group candles by symbol
+    // Group candles by symbol, filtering out geometrically malformed candles
     const candleMap = new Map<string, OhlcvCandle[]>();
     for (const r of candleRows) {
+      const open = Number(r.open);
+      const high = Number(r.high);
+      const low = Number(r.low);
+      const close = Number(r.close);
+      const volume = Number(r.volume);
+
+      if (!isValidOhlcvGeometry({ open, high, low, close, volume })) {
+        continue;
+      }
+
       let list = candleMap.get(r.symbol);
       if (!list) {
         list = [];
@@ -315,11 +326,11 @@ export class PatternBreakoutService {
       }
       list.push({
         date: r.date,
-        open: Number(r.open),
-        high: Number(r.high),
-        low: Number(r.low),
-        close: Number(r.close),
-        volume: Number(r.volume),
+        open,
+        high,
+        low,
+        close,
+        volume,
       });
     }
 

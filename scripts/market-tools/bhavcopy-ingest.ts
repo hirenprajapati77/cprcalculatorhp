@@ -1,5 +1,6 @@
 import AdmZip from 'adm-zip';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { isValidOhlcvGeometry } from '../../src/services/market-tools/historical-window-validation';
 
 const prisma = new PrismaClient();
 
@@ -132,7 +133,10 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
         const trades = parsedTrades !== null && !isNaN(parsedTrades) ? parsedTrades : null;
         const isin = getCol(cols, colIndex.ISIN) || null;
 
-        if (!symbol || close <= 0 || prevClose <= 0 || [open, high, low, close, prevClose].some(isNaN)) {
+        if (
+          !symbol ||
+          !isValidOhlcvGeometry({ open, high, low, close, volume, prevClose })
+        ) {
           rowsSkipped++;
           continue;
         }
