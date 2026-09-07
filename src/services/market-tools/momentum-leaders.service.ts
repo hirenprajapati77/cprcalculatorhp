@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { FNO_SYMBOLS, getSymbolSector } from './market-breadth.service';
+import { isValidHistoricalWindow } from './historical-window-validation';
 import {
   computeClv,
   computeRvol,
@@ -165,12 +166,17 @@ export class MomentumLeadersService {
   }
 
   /**
-   * Compounded return across k trading sessions using exchange-adjusted prevClose.
+   * Compounded return across k consecutive canonical trading sessions using exchange-adjusted prevClose.
    * Immunizes multi-window returns against stock splits, bonuses, and capital restructuring.
    * Returns null if any candle in the requested window has an invalid, missing, zero, or negative prevClose.
    */
-  static computeCompoundedReturn(candles: OhlcvCandleWithPrevClose[], k: number): number | null {
-    if (candles.length < k || k <= 0) return 0;
+  static computeCompoundedReturn(
+    candles: OhlcvCandleWithPrevClose[],
+    k: number,
+    expectedTradingDates: readonly string[] = [],
+  ): number | null {
+    if (k <= 0 || candles.length < k) return null;
+    if (expectedTradingDates.length > 0 && !isValidHistoricalWindow(candles, expectedTradingDates, k)) return null;
     const window = candles.slice(-k);
     let compoundRatio = 1.0;
 
@@ -332,6 +338,10 @@ export class MomentumLeadersService {
     }
 
     const latestDate = dateRows[0]!.date;
+    const canonicalTradingDates = dateRows
+      .map(row => row.date)
+      .slice(0, 21)
+      .reverse();
     const oldestDate = dateRows[Math.min(dateRows.length - 1, 30)]!.date;
 
     // 2. Fetch trailing candles for all series='EQ' symbols
@@ -419,10 +429,10 @@ export class MomentumLeadersService {
       const vpaFootprint = classifyBreakoutVpa(rvol20d, clv, rangePct);
 
       // Compounded returns
-      const r1d = MomentumLeadersService.computeCompoundedReturn(candles, 1);
-      const r5d = MomentumLeadersService.computeCompoundedReturn(candles, 5);
-      const r10d = MomentumLeadersService.computeCompoundedReturn(candles, 10);
-      const r21d = MomentumLeadersService.computeCompoundedReturn(candles, 21);
+      const r1d = MomentumLeadersService.computeCompoundedReturn(candles, 1, canonicalTradingDates);
+      const r5d = MomentumLeadersService.computeCompoundedReturn(candles, 5, canonicalTradingDates);
+      const r10d = MomentumLeadersService.computeCompoundedReturn(candles, 10, canonicalTradingDates);
+      const r21d = MomentumLeadersService.computeCompoundedReturn(candles, 21, canonicalTradingDates);
 
       // Whole-stock exclusion: if any window contains invalid prevClose data,
       // exclude the stock from ranking rather than computing partial or corrupted returns.

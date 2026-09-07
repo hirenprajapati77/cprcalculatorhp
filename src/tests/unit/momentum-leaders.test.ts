@@ -71,12 +71,59 @@ describe('MomentumLeadersService - Unit Tests', () => {
       assert.ok(r2 !== null && r2 > 4.0 && r2 < 4.2, `Split-adjusted return must be ~+4.08%, received ${r2}%`);
     });
 
-    it('returns 0 when candles length is less than requested window k', () => {
+    it('returns null when candles length is less than requested window k', () => {
       const candles: OhlcvCandleWithPrevClose[] = [
         { date: '2026-09-01', open: 100, high: 105, low: 99, close: 102, prevClose: 100, volume: 50000 },
       ];
       const r5 = MomentumLeadersService.computeCompoundedReturn(candles, 5);
-      assert.equal(r5, 0);
+      assert.equal(r5, null);
+    });
+
+    it('returns null for gapped trading sessions when canonicalTradingDates is supplied, but computes return when omitted', () => {
+      // Canonical trading sessions: 5 consecutive days
+      const canonicalTradingDates = [
+        '2026-08-28',
+        '2026-08-31',
+        '2026-09-01',
+        '2026-09-02',
+        '2026-09-03',
+      ];
+
+      // Candles array with a genuine date gap: 2026-09-01 is missing (skipped trading day)
+      // All prices and prevClose are valid and positive numbers (no value corruption)
+      const gappedCandles: OhlcvCandleWithPrevClose[] = [
+        { date: '2026-08-27', open: 98, high: 102, low: 98, close: 100, prevClose: 99, volume: 100000 },
+        { date: '2026-08-28', open: 100, high: 103, low: 100, close: 102, prevClose: 100, volume: 100000 },
+        { date: '2026-08-31', open: 102, high: 105, low: 101, close: 104, prevClose: 102, volume: 100000 },
+        // 2026-09-01 is missing from candles
+        { date: '2026-09-02', open: 104, high: 107, low: 103, close: 106, prevClose: 104, volume: 100000 },
+        { date: '2026-09-03', open: 106, high: 109, low: 105, close: 108, prevClose: 106, volume: 100000 },
+      ];
+
+      // Case 1: Real canonicalTradingDates supplied -> detects missing session and returns null
+      const resultWithDates = MomentumLeadersService.computeCompoundedReturn(
+        gappedCandles,
+        5,
+        canonicalTradingDates,
+      );
+      assert.strictEqual(
+        resultWithDates,
+        null,
+        'Expected computeCompoundedReturn to return null when historical window has a date gap relative to canonical dates',
+      );
+
+      // Case 2: expectedTradingDates is omitted (default []) -> skips session continuity check, does not return null
+      const resultWithoutDates = MomentumLeadersService.computeCompoundedReturn(
+        gappedCandles,
+        5,
+      );
+      assert.notStrictEqual(
+        resultWithoutDates,
+        null,
+        'Expected computeCompoundedReturn to compute return and NOT return null when expectedTradingDates is omitted',
+      );
+      assert.strictEqual(typeof resultWithoutDates, 'number');
+      assert.ok(resultWithoutDates! > 0);
     });
 
     it('returns null when any candle in the window has zero prevClose', () => {
