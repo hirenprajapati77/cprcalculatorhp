@@ -68,19 +68,24 @@ class QueueServiceImpl {
   }
 
   private setupGracefulShutdown() {
-    registerShutdownHook('close_queues', 'bullmq-queues', async () => {
-      console.log('Closing BullMQ connections...');
-      try {
-        await Promise.all([
-          this.scannerQueue?.close(),
-          this.marketQueue?.close(),
-          this.historyQueue?.close(),
-        ]);
-        console.log('BullMQ connections closed successfully.');
-      } catch (e) {
-        console.error('Error closing BullMQ connections', e);
-      }
-    });
+    registerShutdownHook(
+      'close_queues',
+      'bullmq-queues',
+      async () => {
+        console.log('Closing BullMQ connections...');
+        try {
+          await Promise.all([
+            this.scannerQueue?.close(),
+            this.marketQueue?.close(),
+            this.historyQueue?.close(),
+          ]);
+          console.log('BullMQ connections closed successfully.');
+        } catch (e) {
+          console.error('Error closing BullMQ connections', e);
+        }
+      },
+      { critical: false }
+    );
   }
 
   get isEnabled() {
