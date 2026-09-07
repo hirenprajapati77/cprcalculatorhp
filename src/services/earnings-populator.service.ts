@@ -3,6 +3,7 @@ import { MarketService } from '@/services/market.service';
 import { TelegramService, escapeTelegramHtml } from '@/services/alert/telegram.service';
 import { getISTDateString } from '@/lib/market-hours';
 import YahooFinance from 'yahoo-finance2';
+import { withTimeout } from '@/lib/with-timeout';
 
 const MONTH_MAP: Record<string, string> = {
   Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
@@ -44,7 +45,7 @@ function extractCookieHeader(headers: Headers): string {
 }
 
 export class EarningsPopulatorService {
-  static async populate(dryRun = false): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[] }> {
+  static async populate(dryRun = false, yahooTimeoutMs = 10_000): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[] }> {
     const errors: string[] = [];
     let nseCount = 0;
     let yahooCount = 0;
@@ -156,7 +157,11 @@ export class EarningsPopulatorService {
       await Promise.all(chunk.map(async (symbol) => {
         try {
           const yfSymbol = `${symbol}.NS`;
-          const quote = await yahoo.quoteSummary(yfSymbol, { modules: ['calendarEvents'] });
+          const quote = await withTimeout(
+            yahoo.quoteSummary(yfSymbol, { modules: ['calendarEvents'] }),
+            yahooTimeoutMs,
+            `Yahoo Finance quoteSummary for ${yfSymbol}`
+          );
 
           const earnings = quote.calendarEvents?.earnings;
           const earningsDates = earnings?.earningsDate;
