@@ -439,6 +439,53 @@ describe('MomentumLeadersService - Unit Tests', () => {
       assert.ok(avgTurnover > 300, `Average turnover must be ~303 Cr, got ${avgTurnover}`);
       assert.ok(avgTurnover >= MomentumLeadersService.MIN_LIQUIDITY_TURNOVER_CR, 'Must easily pass ₹10 Cr liquidity floor');
     });
+
+    it('returns 0 trailing turnover for empty candle array', () => {
+      const avg = MomentumLeadersService.computeTrailingAvgTurnoverCr([], 20);
+      assert.equal(avg, 0);
+    });
+
+    it('returns 0 trailing turnover for single candle (no prior sessions leading up to current)', () => {
+      const singleCandle: OhlcvCandleWithPrevClose = {
+        date: '2026-09-01',
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 100,
+        prevClose: 100,
+        volume: 1000000,
+        value: 100000000, // 10 Cr
+      };
+      const avg = MomentumLeadersService.computeTrailingAvgTurnoverCr([singleCandle], 20);
+      assert.equal(avg, 0);
+    });
+
+    it('correctly uses only the 1 prior session when exactly 2 candles are provided', () => {
+      // Prior session: 15 Cr turnover
+      const priorCandle: OhlcvCandleWithPrevClose = {
+        date: '2026-08-31',
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 100,
+        prevClose: 100,
+        volume: 1500000,
+        value: 150000000, // 15 Cr
+      };
+      // Current session: 50 Cr turnover (must be excluded from trailing calculation)
+      const currentCandle: OhlcvCandleWithPrevClose = {
+        date: '2026-09-01',
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 100,
+        prevClose: 100,
+        volume: 5000000,
+        value: 500000000, // 50 Cr
+      };
+      const avg = MomentumLeadersService.computeTrailingAvgTurnoverCr([priorCandle, currentCandle], 20);
+      assert.equal(avg, 15.0);
+    });
   });
 
   describe('Multi-Universe Computation (ALL_NSE vs NSE_FNO)', () => {

@@ -139,13 +139,6 @@ export class MomentumLeadersService {
    */
   public static computeTrailingAvgTurnoverCr(candles: OhlcvCandleWithPrevClose[], period = 20): number {
     if (candles.length < 2) {
-      if (candles.length === 1) {
-        const c = candles[0]!;
-        const cr = c.value !== undefined && c.value !== null
-          ? c.value / 10000000
-          : (c.volume * c.close) / 10000000;
-        return Number(cr.toFixed(2));
-      }
       return 0;
     }
     const window = candles.slice(-(period + 1), -1);
