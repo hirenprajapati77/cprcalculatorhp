@@ -1,34 +1,79 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PatternBreakoutService, PatternType, BreakoutStatus } from '@/services/market-tools/pattern-breakout.service';
+import { z } from 'zod';
+import { PatternBreakoutService } from '@/services/market-tools/pattern-breakout.service';
 import { isAuthorizedForRefresh } from '@/lib/market-tools-refresh-auth';
 
 export const dynamic = 'force-dynamic';
 
+const patternBreakoutQuerySchema = z.object({
+  refresh: z
+    .enum(['true', 'false'])
+    .optional()
+    .default('false')
+    .transform((val) => val === 'true'),
+  pattern: z
+    .enum(['ALL', 'FLAG_POLE', 'VCP', 'CUP_AND_HANDLE', 'DOUBLE_BOTTOM', 'FLAT_BASE', 'NONE'])
+    .optional()
+    .default('ALL'),
+  status: z
+    .enum(['ALL', 'BREAKOUT', 'NEAR_HIGH'])
+    .optional()
+    .default('ALL'),
+  tier: z
+    .preprocess(
+      (val) => (typeof val === 'string' && val.trim() === 'A ' ? 'A+' : val),
+      z.enum(['ALL', 'A+', 'A', 'B', 'C'])
+    )
+    .optional()
+    .default('ALL'),
+});
+
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const forceRefresh = searchParams.get('refresh') === 'true';
+    const getParam = (key: string) => {
+      const v = request.nextUrl.searchParams.get(key);
+      return v === null || v.trim() === '' ? undefined : v.trim();
+    };
+
+    const parsed = patternBreakoutQuerySchema.safeParse({
+      refresh: getParam('refresh'),
+      pattern: getParam('pattern'),
+      status: getParam('status'),
+      tier: getParam('tier'),
+    });
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid query parameters',
+          details: parsed.error.issues.map((issue) => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+          })),
+        },
+        { status: 400 }
+      );
+    }
+
+    const { refresh: forceRefresh, pattern: patternFilter, status: statusFilter, tier: tierFilter } = parsed.data;
 
     // Gate heavy refresh behind auth — prevents unauthenticated DDoS of the DB scan
     if (forceRefresh && !(await isAuthorizedForRefresh(request))) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const patternFilter = searchParams.get('pattern') as PatternType | 'ALL' | null;
-    const statusFilter = searchParams.get('status') as BreakoutStatus | 'ALL' | null;
-    const tierFilter = searchParams.get('tier') as 'A+' | 'A' | 'B' | 'C' | 'ALL' | null;
-
     const report = await PatternBreakoutService.getPatternBreakoutReport(forceRefresh);
 
     let filteredStocks = report.stocks;
-    if (patternFilter && patternFilter !== 'ALL') {
-      filteredStocks = filteredStocks.filter(s => s.primaryPattern === patternFilter);
+    if (patternFilter !== 'ALL') {
+      filteredStocks = filteredStocks.filter((s) => s.primaryPattern === patternFilter);
     }
-    if (statusFilter && statusFilter !== 'ALL') {
-      filteredStocks = filteredStocks.filter(s => s.status === statusFilter);
+    if (statusFilter !== 'ALL') {
+      filteredStocks = filteredStocks.filter((s) => s.status === statusFilter);
     }
-    if (tierFilter && tierFilter !== 'ALL') {
-      filteredStocks = filteredStocks.filter(s => s.scoreBreakdown.qualityTier === tierFilter);
+    if (tierFilter !== 'ALL') {
+      filteredStocks = filteredStocks.filter((s) => s.scoreBreakdown.qualityTier === tierFilter);
     }
 
     return NextResponse.json({
