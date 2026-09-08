@@ -278,6 +278,15 @@ export class MomentumLeadersService {
       if (currentMemory && now - currentComputedTime < CACHE_TTL_MS) {
         return currentMemory;
       }
+
+      // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
+      if (inFlightCompute) {
+        const reports = await inFlightCompute;
+        return reports[universe];
+      }
+
+      // Cold cache protection: do NOT trigger expensive DB queries for unauthenticated / normal page requests.
+      return MomentumLeadersService.getPendingMomentumLeadersReport(universe);
     }
 
     if (inFlightCompute) {
@@ -310,6 +319,48 @@ export class MomentumLeadersService {
 
     const reports = await inFlightCompute;
     return reports[universe];
+  }
+
+  /**
+   * Pending report returned when cache is cold before background precompute runs.
+   */
+  static getPendingMomentumLeadersReport(universe: MomentumUniverse = 'NSE_FNO'): MomentumLeadersReport {
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      universe,
+      totalScanned: 0,
+      qualifiedCount: 0,
+      countsByTier: {
+        'A+': 0,
+        A: 0,
+        B: 0,
+        C: 0,
+      },
+      countsByLeaderWindows: {
+        '4_windows': 0,
+        '3_windows': 0,
+        '2_windows': 0,
+        '1_window': 0,
+        '0_windows': 0,
+      },
+      topLeaders: [],
+      allStocks: [],
+      computedAt: new Date().toISOString(),
+      status: 'pending',
+    };
+  }
+
+  /**
+   * Reset in-memory cache and in-flight promise for test isolation.
+   */
+  static _resetCacheForTesting(): void {
+    for (const key of Object.keys(cachedReports) as MomentumUniverse[]) {
+      delete cachedReports[key];
+    }
+    for (const key of Object.keys(lastComputedTimes) as MomentumUniverse[]) {
+      delete lastComputedTimes[key];
+    }
+    inFlightCompute = null;
   }
 
   /**

@@ -107,9 +107,17 @@ export class MultiYearBreakoutService {
       if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
+
+      // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
+      if (inFlightCompute) {
+        return await inFlightCompute;
+      }
+
+      // Cold cache protection: do NOT trigger expensive DB queries for unauthenticated / normal page requests.
+      return MultiYearBreakoutService.getPendingBreakoutReport();
     }
 
-    // If forceRefresh=true or cache is missing, compute with single-flight deduplication
+    // If forceRefresh=true, compute with single-flight deduplication
     if (inFlightCompute) {
       return await inFlightCompute;
     }
@@ -120,6 +128,45 @@ export class MultiYearBreakoutService {
       });
 
     return await inFlightCompute;
+  }
+
+  /**
+   * Pending report returned when cache is cold before background precompute runs.
+   */
+  static getPendingBreakoutReport(): MultiYearBreakoutReport {
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      tradingDaysAvailable: 0,
+      totalScanned: 0,
+      breakoutCounts: {
+        '1Y': 0,
+        '2Y': 0,
+        '3Y': 0,
+        '5Y': 0,
+        '10Y': 0,
+        'ATH': 0,
+      },
+      windowAvailability: {
+        '1Y': { available: false, requiredDays: 250, availableDays: 0, label: 'Pending precompute' },
+        '2Y': { available: false, requiredDays: 500, availableDays: 0, label: 'Pending precompute' },
+        '3Y': { available: false, requiredDays: 750, availableDays: 0, label: 'Pending precompute' },
+        '5Y': { available: false, requiredDays: 1250, availableDays: 0, label: 'Pending precompute' },
+        '10Y': { available: false, requiredDays: 2500, availableDays: 0, label: 'Pending precompute' },
+        'ATH': { available: false, requiredDays: 20, availableDays: 0, label: 'Pending precompute' },
+      },
+      stocks: [],
+      computedAt: new Date().toISOString(),
+      status: 'pending',
+    };
+  }
+
+  /**
+   * Reset in-memory cache and in-flight promise for test isolation.
+   */
+  static _resetCacheForTesting(): void {
+    cachedReport = null;
+    lastComputedTime = 0;
+    inFlightCompute = null;
   }
 
   private static async computeBreakoutReport(now: number): Promise<MultiYearBreakoutReport> {
