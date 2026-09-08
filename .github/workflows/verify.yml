@@ -60,6 +60,17 @@ jobs:
           TELEGRAM_CHAT_ID: "0"
           NODE_ENV: "test"
 
+      - name: E2E critical flows
+        timeout-minutes: 5
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+          APP_ACCESS_TOKEN: "test-token-123"
+          REDIS_URL: "redis://localhost:6379"
+          TELEGRAM_BOT_TOKEN: "dummy"
+          TELEGRAM_CHAT_ID: "0"
+          NODE_ENV: "test"
+
       - name: Production build
         run: npm run build:clean
         env:
