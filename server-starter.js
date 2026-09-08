@@ -18,6 +18,7 @@ if (!fs.existsSync(buildIdPath)) {
   console.error('FATAL: .next/BUILD_ID missing. Run `next build` before starting the server.');
   process.exit(1);
 }
+const buildId = fs.readFileSync(buildIdPath, 'utf8').trim();
 
 const port = parseInt(process.env.PORT || '3000', 10);
 // B11 fix: hostname passed to next() controls canonical URL generation (used by
@@ -45,7 +46,7 @@ app.prepare().then(() => {
   // M-02: listen() callback does not receive an error argument in Node.js 14+;
   // errors are emitted on the 'error' event above — removed dead `if (err) throw err`.
   server.listen(port, bindHost, () => {
-    console.log(`> CPR PRO Platform ready on http://${bindHost}:${port}`);
+    console.log(`> CPR PRO Platform ready on http://${bindHost}:${port} [Build: ${buildId}]`);
   });
 }).catch((err) => {
   console.error('Failed to start Next.js custom server:', err);
