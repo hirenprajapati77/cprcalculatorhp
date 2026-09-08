@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
+import { executeGuardedQuery } from '@/lib/db-query-guard';
+import { MARKET_TOOLS_QUERY_TIMEOUTS } from '@/config/trading-constants';
 import {
   tryAcquireDistributedLock,
   releaseDistributedLock,
@@ -209,9 +211,13 @@ export class MarketBreadthService {
   private static async computeMarketBreadth(now: number): Promise<MarketBreadthReport> {
 
     // 1. Fetch available trading dates sorted descending
-    const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
-      SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 250
-    `;
+    const dateRows = await withTimeout(
+      prisma.$queryRaw<Array<{ date: string }>>`
+        SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 250
+      `,
+      MARKET_TOOLS_QUERY_TIMEOUTS.DATE_DISCOVERY_MS,
+      'MarketBreadth.dateDiscovery'
+    );
 
     if (dateRows.length === 0) {
       throw new Error('No data available in DailyOhlcv table');
@@ -223,68 +229,76 @@ export class MarketBreadthService {
 
     // 2. Fetch today's records with historical MA calculations
     // SQL query computes 10, 20, 50, 200 SMA and 52W High/Low per symbol
-    const rawStockStats = await prisma.$queryRaw<
-      Array<{
-        symbol: string;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        prevClose: number;
-        volume: bigint | number;
-        changePct: number;
-        historyDays: bigint | number;
-        ma10: number | null;
-        ma20: number | null;
-        ma50: number | null;
-        ma200: number | null;
-        high52w: number | null;
-        low52w: number | null;
-      }>
-    >`
-      WITH RankedHistory AS (
-        SELECT 
-          symbol,
-          series,
-          date,
-          open,
-          high,
-          low,
-          close,
-          "prevClose",
-          volume,
-          ((close - "prevClose") / NULLIF("prevClose", 0)) * 100 as "changePct",
-          COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
-          AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) as ma10,
-          AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) as ma20,
-          AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) as ma50,
-          AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 199 PRECEDING AND CURRENT ROW) as ma200,
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as high52w,
-          MIN(low) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as low52w,
-          ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
-        FROM "DailyOhlcv"
-        WHERE series = 'EQ' AND date >= ${oldestDate}
-      )
-      SELECT 
-        symbol,
-        series,
-        open,
-        high,
-        low,
-        close,
-        "prevClose",
-        volume,
-        "changePct",
-        "historyDays",
-        ma10,
-        ma20,
-        ma50,
-        ma200,
-        high52w,
-        low52w
-      FROM RankedHistory
-      WHERE date = ${latestDate} AND rn = 1
-    `;
+    // Protected database-side via SET LOCAL statement_timeout (ISSUE-007)
+    const rawStockStats = await executeGuardedQuery(
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            symbol: string;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            prevClose: number;
+            volume: bigint | number;
+            changePct: number;
+            historyDays: bigint | number;
+            ma10: number | null;
+            ma20: number | null;
+            ma50: number | null;
+            ma200: number | null;
+            high52w: number | null;
+            low52w: number | null;
+          }>
+        >`
+          WITH RankedHistory AS (
+            SELECT 
+              symbol,
+              series,
+              date,
+              open,
+              high,
+              low,
+              close,
+              "prevClose",
+              volume,
+              ((close - "prevClose") / NULLIF("prevClose", 0)) * 100 as "changePct",
+              COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
+              AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) as ma10,
+              AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) as ma20,
+              AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) as ma50,
+              AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 199 PRECEDING AND CURRENT ROW) as ma200,
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as high52w,
+              MIN(low) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as low52w,
+              ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
+            FROM "DailyOhlcv"
+            WHERE series = 'EQ' AND date >= ${oldestDate}
+          )
+          SELECT 
+            symbol,
+            series,
+            open,
+            high,
+            low,
+            close,
+            "prevClose",
+            volume,
+            "changePct",
+            "historyDays",
+            ma10,
+            ma20,
+            ma50,
+            ma200,
+            high52w,
+            low52w
+          FROM RankedHistory
+          WHERE date = ${latestDate} AND rn = 1
+        `,
+      {
+        statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.MARKET_BREADTH_MS,
+        label: 'MarketBreadth.rawStockStats',
+      }
+    );
 
     // B1 fix: Prisma $queryRaw returns Postgres NUMERIC columns as Prisma.Decimal
     // objects, not primitive JS numbers. Coerce every numeric field immediately

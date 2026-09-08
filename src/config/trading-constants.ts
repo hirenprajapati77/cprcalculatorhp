@@ -142,3 +142,16 @@ export const ATR = {
   BUILD_MULTIPLIER: 0.75,
   UNWIND_MULTIPLIER: 0.25,
 };
+
+/**
+ * Query statement and execution timeouts for heavy Market Tools queries (ISSUE-007).
+ * Bounded database-side via SET LOCAL statement_timeout and application-side via withTimeout.
+ */
+export const MARKET_TOOLS_QUERY_TIMEOUTS = {
+  DATE_DISCOVERY_MS: 10_000,
+  MARKET_BREADTH_MS: 30_000,
+  PATTERN_BREAKOUT_MS: 30_000,
+  MOMENTUM_LEADERS_MS: 30_000,
+  MULTI_YEAR_BREAKOUT_MS: 45_000,
+} as const;
+

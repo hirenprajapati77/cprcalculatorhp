@@ -15,12 +15,10 @@ async function runRegressionLock() {
   // 1. CONSTANTS LOCK
   const constantsString = JSON.stringify(Constants);
   const constantsHash = crypto.createHash('sha256').update(constantsString).digest('hex');
-  // Baseline updated in ISSUE-004 (PR #184):
+  // Baseline updated in ISSUE-007 (PR #186):
   // Incorporates intentional trading constant additions:
-  // - BREAKOUT_VIX: VIX regime pause (25) & chase tighten (18) thresholds (commit 7dae2b6d)
-  // - CPR_THRESHOLDS.HOT_ZONE_ATR_MULTIPLIER: 0.10 ATR scaling (commit 949a97ba)
-  // - OPTION_PCR: Bullish (1.2) & Bearish (0.8) options sentiment bands (commit a29be473)
-  const EXPECTED_HASH = 'da428e5b665ea39ed32a1dcb412d5ad590ae200b218ea406c69bbbccb2dd36dc'; 
+  // - MARKET_TOOLS_QUERY_TIMEOUTS: Database statement & query execution budgets for market tools (ISSUE-007)
+  const EXPECTED_HASH = '2ef002db620a9545a601fb2fb23c92e1a6219ae5012ba4bc977e686e9a2072f5'; 
   
   if (constantsHash !== EXPECTED_HASH) {
      console.error(`❌ Constants Regression! Trading constants have mutated.\nExpected: ${EXPECTED_HASH}\nGot: ${constantsHash}`);

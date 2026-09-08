@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
+import { executeGuardedQuery } from '@/lib/db-query-guard';
+import { MARKET_TOOLS_QUERY_TIMEOUTS } from '@/config/trading-constants';
 import {
   tryAcquireDistributedLock,
   releaseDistributedLock,
@@ -214,9 +216,13 @@ export class PatternBreakoutService {
    */
   static async computePatternBreakoutReport(): Promise<PatternBreakoutReport> {
     // 1. Fetch available trading dates sorted descending
-    const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
-      SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 300
-    `;
+    const dateRows = await withTimeout(
+      prisma.$queryRaw<Array<{ date: string }>>`
+        SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 300
+      `,
+      MARKET_TOOLS_QUERY_TIMEOUTS.DATE_DISCOVERY_MS,
+      'PatternBreakout.dateDiscovery'
+    );
 
     if (dateRows.length === 0) {
       throw new Error('No data available in DailyOhlcv table');
@@ -227,43 +233,51 @@ export class PatternBreakoutService {
     const tradingDaysAvailable = dateRows.length;
 
     // 2. Fetch candidates with 52W High using exact prior 250-day window (excluding current day)
-    const rawCandidates = await prisma.$queryRaw<
-      Array<{
-        symbol: string;
-        close: number;
-        prevClose: number;
-        volume: bigint | number;
-        historyDays: bigint | number;
-        high52w: number | null;
-        avgVol20: number | null;
-      }>
-    >`
-      WITH RankedHistory AS (
-        SELECT 
-          symbol,
-          series,
-          date,
-          close,
-          "prevClose",
-          volume,
-          COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as "high52w",
-          AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
-          ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
-        FROM "DailyOhlcv"
-        WHERE series = 'EQ' AND date >= ${oldestDate}
-      )
-      SELECT 
-        symbol,
-        close,
-        "prevClose",
-        volume,
-        "historyDays",
-        "high52w",
-        "avgVol20"
-      FROM RankedHistory
-      WHERE date = ${latestDate} AND rn = 1
-    `;
+    // Protected database-side via SET LOCAL statement_timeout (ISSUE-007)
+    const rawCandidates = await executeGuardedQuery(
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            symbol: string;
+            close: number;
+            prevClose: number;
+            volume: bigint | number;
+            historyDays: bigint | number;
+            high52w: number | null;
+            avgVol20: number | null;
+          }>
+        >`
+          WITH RankedHistory AS (
+            SELECT 
+              symbol,
+              series,
+              date,
+              close,
+              "prevClose",
+              volume,
+              COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as "high52w",
+              AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
+              ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
+            FROM "DailyOhlcv"
+            WHERE series = 'EQ' AND date >= ${oldestDate}
+          )
+          SELECT 
+            symbol,
+            close,
+            "prevClose",
+            volume,
+            "historyDays",
+            "high52w",
+            "avgVol20"
+          FROM RankedHistory
+          WHERE date = ${latestDate} AND rn = 1
+        `,
+      {
+        statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.PATTERN_BREAKOUT_MS,
+        label: 'PatternBreakout.rawCandidates',
+      }
+    );
 
     // Filter to stocks meeting history depth guard (>= 250 days) and within 5% of 52W high or breaking out
     const qualifyingList: Array<{
@@ -341,23 +355,31 @@ export class PatternBreakoutService {
     // Bounded by date, NOT full history — full-history fetch here previously
     // grew unbounded as DailyOhlcv accumulated more trading days over time.
     const qualifyingSymbols = qualifyingList.map(s => s.symbol);
-    const candleRows = await prisma.$queryRaw<
-      Array<{
-        symbol: string;
-        date: string;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        volume: bigint | number;
-      }>
-    >`
-      SELECT symbol, date, open, high, low, close, volume
-      FROM "DailyOhlcv"
-      WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
-        AND date >= (${latestDate}::date - INTERVAL '150 days')::date::text
-      ORDER BY symbol ASC, date ASC
-    `;
+    // Protected database-side via SET LOCAL statement_timeout (ISSUE-007)
+    const candleRows = await executeGuardedQuery(
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            symbol: string;
+            date: string;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            volume: bigint | number;
+          }>
+        >`
+          SELECT symbol, date, open, high, low, close, volume
+          FROM "DailyOhlcv"
+          WHERE series = 'EQ' AND symbol IN (${Prisma.join(qualifyingSymbols)})
+            AND date >= (${latestDate}::date - INTERVAL '150 days')::date::text
+          ORDER BY symbol ASC, date ASC
+        `,
+      {
+        statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.PATTERN_BREAKOUT_MS,
+        label: 'PatternBreakout.candleRows',
+      }
+    );
 
     // Group candles by symbol, filtering out geometrically malformed candles
     const candleMap = new Map<string, OhlcvCandle[]>();
