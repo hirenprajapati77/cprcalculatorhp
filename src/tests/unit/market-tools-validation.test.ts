@@ -139,19 +139,19 @@ describe('Market-Tools API Query Parameter Validation', () => {
       assert.ok(json.details.some((d: any) => d.field === 'tier'));
     });
 
-    it('accepts valid pattern, status, tier (including A+ and A%2B)', async () => {
+    it('accepts valid pattern, status, tier (including unencoded A+ and encoded A%2B)', async () => {
       const orig = PatternBreakoutService.getPatternBreakoutReport;
       (PatternBreakoutService as any).getPatternBreakoutReport = async () => ({
         date: '2026-09-07',
         tradingDaysAvailable: 250,
-        totalScanned: 1,
-        qualifiedCount: 1,
-        countsByStatus: { BREAKOUT: 1, NEAR_HIGH: 0 },
-        countsByPattern: { FLAG_POLE: 0, VCP: 1, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
-        countsByTier: { 'A+': 1, A: 0, B: 0, C: 0 },
+        totalScanned: 2,
+        qualifiedCount: 2,
+        countsByStatus: { BREAKOUT: 2, NEAR_HIGH: 0 },
+        countsByPattern: { FLAG_POLE: 0, VCP: 2, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
+        countsByTier: { 'A+': 1, A: 1, B: 0, C: 0 },
         stocks: [
           {
-            symbol: 'TEST',
+            symbol: 'STOCK_APLUS',
             sector: 'IT',
             close: 100,
             prevClose: 99,
@@ -178,21 +178,68 @@ describe('Market-Tools API Query Parameter Validation', () => {
             patternDetails: null,
             vpaFootprint: 'NEUTRAL' as any,
           },
+          {
+            symbol: 'STOCK_A',
+            sector: 'AUTO',
+            close: 200,
+            prevClose: 198,
+            changePct: 1,
+            volume: 1000,
+            rvol20d: null,
+            clv: null,
+            historyDays: 250,
+            high52w: 210,
+            distanceToHighPct: 5,
+            status: 'BREAKOUT',
+            primaryPattern: 'VCP',
+            primaryPatternLabel: 'Volatility Contraction',
+            detectedPatterns: [],
+            scoreBreakdown: {
+              proximityScore: 20,
+              volumeScore: 18,
+              patternScore: 18,
+              momentumScore: 14,
+              vpaModifier: 0,
+              totalScore: 70,
+              qualityTier: 'A',
+            },
+            patternDetails: null,
+            vpaFootprint: 'NEUTRAL' as any,
+          },
         ],
         computedAt: new Date().toISOString(),
       });
 
       try {
-        const reqValid = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?pattern=VCP&status=BREAKOUT&tier=A%2B');
-        const resValid = await patternBreakoutGet(reqValid);
-        assert.strictEqual(resValid.status, 200);
-        const jsonValid = await resValid.json();
-        assert.strictEqual(jsonValid.success, true);
-        assert.strictEqual(jsonValid.data.stocks.length, 1);
+        // Test encoded A%2B
+        const reqEncoded = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?pattern=VCP&status=BREAKOUT&tier=A%2B');
+        const resEncoded = await patternBreakoutGet(reqEncoded);
+        assert.strictEqual(resEncoded.status, 200);
+        const jsonEncoded = await resEncoded.json();
+        assert.strictEqual(jsonEncoded.success, true);
+        assert.strictEqual(jsonEncoded.data.stocks.length, 1);
+        assert.strictEqual(jsonEncoded.data.stocks[0].symbol, 'STOCK_APLUS');
+        assert.strictEqual(jsonEncoded.data.stocks[0].scoreBreakdown.qualityTier, 'A+');
 
-        const reqPlus = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?tier=A+');
-        const resPlus = await patternBreakoutGet(reqPlus);
-        assert.strictEqual(resPlus.status, 200);
+        // Test unencoded A+ (which URL decodes as 'A ')
+        const reqUnencoded = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?tier=A+');
+        const resUnencoded = await patternBreakoutGet(reqUnencoded);
+        assert.strictEqual(resUnencoded.status, 200);
+        const jsonUnencoded = await resUnencoded.json();
+        assert.strictEqual(jsonUnencoded.success, true);
+        assert.strictEqual(jsonUnencoded.data.stocks.length, 1);
+        assert.strictEqual(jsonUnencoded.data.stocks[0].symbol, 'STOCK_APLUS');
+        assert.strictEqual(jsonUnencoded.data.stocks[0].scoreBreakdown.qualityTier, 'A+');
+
+        // Test explicit tier A
+        const reqA = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?tier=A');
+        const resA = await patternBreakoutGet(reqA);
+        assert.strictEqual(resA.status, 200);
+        const jsonA = await resA.json();
+        assert.strictEqual(jsonA.success, true);
+        assert.strictEqual(jsonA.data.stocks.length, 1);
+        assert.strictEqual(jsonA.data.stocks[0].symbol, 'STOCK_A');
+        assert.strictEqual(jsonA.data.stocks[0].scoreBreakdown.qualityTier, 'A');
       } finally {
         PatternBreakoutService.getPatternBreakoutReport = orig;
       }
@@ -227,21 +274,21 @@ describe('Market-Tools API Query Parameter Validation', () => {
       assert.ok(json.details.some((d: any) => d.field === 'tier'));
     });
 
-    it('accepts valid query parameters and filters correctly', async () => {
+    it('accepts valid query parameters and filters correctly (including unencoded A+ and encoded A%2B)', async () => {
       const orig = MomentumLeadersService.getMomentumLeadersReport;
       (MomentumLeadersService as any).getMomentumLeadersReport = async () => ({
         date: '2026-09-07',
         universe: 'NSE_FNO',
-        totalScanned: 1,
-        qualifiedCount: 1,
-        countsByTier: { 'A+': 1, A: 0, B: 0, C: 0 },
-        countsByWindows: { '4': 1, '3': 0, '2': 0, '1': 0 },
-        countsByLeaderWindows: { '4': 1, '3': 0, '2': 0, '1': 0 },
+        totalScanned: 2,
+        qualifiedCount: 2,
+        countsByTier: { 'A+': 1, A: 1, B: 0, C: 0 },
+        countsByWindows: { '4': 2, '3': 0, '2': 0, '1': 0 },
+        countsByLeaderWindows: { '4': 2, '3': 0, '2': 0, '1': 0 },
         leaders4of4: [],
         topLeaders: [],
         allStocks: [
           {
-            symbol: 'TEST',
+            symbol: 'LEADER_APLUS',
             sector: 'IT',
             close: 100,
             prevClose: 99,
@@ -268,18 +315,69 @@ describe('Market-Tools API Query Parameter Validation', () => {
             isCircuitLocked: false,
             circuitLimitPct: null,
           },
+          {
+            symbol: 'LEADER_A',
+            sector: 'IT',
+            close: 200,
+            prevClose: 198,
+            changePct: 1,
+            volume: 1000,
+            turnoverCr: 50,
+            avgTurnoverCr20d: 45,
+            rvol20d: null,
+            clv: null,
+            vpaFootprint: 'NEUTRAL' as any,
+            windows: {
+              w1d: { returnPct: 1, rank: 1, percentile: 80, isLeader: true },
+              w5d: { returnPct: 2, rank: 1, percentile: 80, isLeader: true },
+              w10d: { returnPct: 3, rank: 1, percentile: 80, isLeader: true },
+              w21d: { returnPct: 4, rank: 1, percentile: 80, isLeader: true },
+            },
+            leaderWindowCount: 4,
+            baseScore: 40,
+            consistencyBonus: 15,
+            dispersionPenalty: 0,
+            vpaModifier: 0,
+            compositeScore: 55,
+            tier: 'A',
+            isCircuitLocked: false,
+            circuitLimitPct: null,
+          },
         ],
         computedAt: new Date().toISOString(),
         status: 'ready',
       });
 
       try {
-        const reqValid = createRequest('http://localhost:3000/api/market-tools/momentum-leaders?universe=NSE_FNO&tier=A%2B&windows=4&sector=IT');
-        const resValid = await momentumLeadersGet(reqValid);
-        assert.strictEqual(resValid.status, 200);
-        const jsonValid = await resValid.json();
-        assert.strictEqual(jsonValid.success, true);
-        assert.strictEqual(jsonValid.data.allStocks.length, 1);
+        // Test unencoded A+ (which URL decodes as 'A ')
+        const reqUnencoded = createRequest('http://localhost:3000/api/market-tools/momentum-leaders?universe=NSE_FNO&tier=A+&windows=4&sector=IT');
+        const resUnencoded = await momentumLeadersGet(reqUnencoded);
+        assert.strictEqual(resUnencoded.status, 200);
+        const jsonUnencoded = await resUnencoded.json();
+        assert.strictEqual(jsonUnencoded.success, true);
+        assert.strictEqual(jsonUnencoded.data.allStocks.length, 1);
+        assert.strictEqual(jsonUnencoded.data.allStocks[0].symbol, 'LEADER_APLUS');
+        assert.strictEqual(jsonUnencoded.data.allStocks[0].tier, 'A+');
+
+        // Test encoded A%2B
+        const reqEncoded = createRequest('http://localhost:3000/api/market-tools/momentum-leaders?universe=NSE_FNO&tier=A%2B&windows=4&sector=IT');
+        const resEncoded = await momentumLeadersGet(reqEncoded);
+        assert.strictEqual(resEncoded.status, 200);
+        const jsonEncoded = await resEncoded.json();
+        assert.strictEqual(jsonEncoded.success, true);
+        assert.strictEqual(jsonEncoded.data.allStocks.length, 1);
+        assert.strictEqual(jsonEncoded.data.allStocks[0].symbol, 'LEADER_APLUS');
+        assert.strictEqual(jsonEncoded.data.allStocks[0].tier, 'A+');
+
+        // Test explicit A tier
+        const reqA = createRequest('http://localhost:3000/api/market-tools/momentum-leaders?universe=NSE_FNO&tier=A');
+        const resA = await momentumLeadersGet(reqA);
+        assert.strictEqual(resA.status, 200);
+        const jsonA = await resA.json();
+        assert.strictEqual(jsonA.success, true);
+        assert.strictEqual(jsonA.data.allStocks.length, 1);
+        assert.strictEqual(jsonA.data.allStocks[0].symbol, 'LEADER_A');
+        assert.strictEqual(jsonA.data.allStocks[0].tier, 'A');
       } finally {
         MomentumLeadersService.getMomentumLeadersReport = orig;
       }

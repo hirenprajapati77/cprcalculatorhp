@@ -21,7 +21,14 @@ const patternBreakoutQuerySchema = z.object({
     .default('ALL'),
   tier: z
     .preprocess(
-      (val) => (typeof val === 'string' && val.trim() === 'A ' ? 'A+' : val),
+      (val) => {
+        if (typeof val === 'string') {
+          const upper = val.toUpperCase();
+          if (upper === 'A ' || upper === 'A+') return 'A+';
+          return upper.trim();
+        }
+        return val;
+      },
       z.enum(['ALL', 'A+', 'A', 'B', 'C'])
     )
     .optional()
@@ -32,7 +39,13 @@ export async function GET(request: NextRequest) {
   try {
     const getParam = (key: string) => {
       const v = request.nextUrl.searchParams.get(key);
-      return v === null || v.trim() === '' ? undefined : v.trim();
+      if (v === null) return undefined;
+      // In URL query strings, unencoded '+' decodes to a space ('A+' -> 'A ').
+      // Preserve trailing space for tier so the Zod preprocessor can identify 'A+'.
+      if (key === 'tier') {
+        return v.trim() === '' ? undefined : v;
+      }
+      return v.trim() === '' ? undefined : v.trim();
     };
 
     const parsed = patternBreakoutQuerySchema.safeParse({
