@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 
 export const TEST_ACCESS_TOKEN = 'test-token-123';
+export const TEST_CRON_SECRET = 'test-cron-secret-123';
 
 export async function getTestTokenHash(): Promise<string> {
   return crypto.createHash('sha256').update(TEST_ACCESS_TOKEN).digest('hex');
@@ -63,8 +64,9 @@ export async function startE2EServer(): Promise<E2ETestServer> {
         ...process.env,
         NODE_ENV: 'test',
         APP_ACCESS_TOKEN: TEST_ACCESS_TOKEN,
+        CRON_SECRET: TEST_CRON_SECRET,
         DATABASE_URL: process.env.DATABASE_URL || 'postgresql://dummy:dummy@localhost:5432/dummy',
-        REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
+        REDIS_URL: process.env.REDIS_URL || '',
         PORT: '0',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
