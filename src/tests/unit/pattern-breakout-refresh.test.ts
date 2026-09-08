@@ -15,16 +15,18 @@ PatternBreakoutService.computePatternBreakoutReport = async () => {
     countsByTier: { 'A+': 4, A: 6, B: 5, C: 0 },
     stocks: [],
     computedAt: new Date().toISOString(),
+    status: 'ready',
   };
 };
 
 test('PatternBreakoutService - Pre-computed Redis Cache Read Path', async (t) => {
-  await t.test('computes report on cold cache and returns valid data without pending state', async () => {
+  await t.test('returns pending report on cold cache and does NOT compute live report', async () => {
     await cache.clear();
 
     const report = await PatternBreakoutService.getPatternBreakoutReport(false);
-    assert.strictEqual(report.totalScanned, 2636);
-    assert.strictEqual(report.qualifiedCount, 15);
+    assert.strictEqual(report.status, 'pending');
+    assert.strictEqual(report.totalScanned, 0);
+    assert.strictEqual(report.qualifiedCount, 0);
   });
 
   await t.test('computes and caches report when forceRefresh is true', async () => {
@@ -33,6 +35,7 @@ test('PatternBreakoutService - Pre-computed Redis Cache Read Path', async (t) =>
     const report = await PatternBreakoutService.getPatternBreakoutReport(true);
     assert.strictEqual(report.totalScanned, 2636);
     assert.strictEqual(report.qualifiedCount, 15);
+    assert.strictEqual(report.status, 'ready');
 
     // Subsequent read without forceRefresh uses cached output
     const cachedReport = await PatternBreakoutService.getPatternBreakoutReport(false);

@@ -129,18 +129,13 @@ export class PatternBreakoutService {
         return cachedReport;
       }
 
-      // If cache is cold, compute live on-the-fly via deduplicated in-flight promise
-      if (!inFlightCompute) {
-        inFlightCompute = PatternBreakoutService.computePatternBreakoutReport()
-          .then(async (report) => {
-            await PatternBreakoutService.saveCache(report);
-            return report;
-          })
-          .finally(() => {
-            inFlightCompute = null;
-          });
+      // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
+      if (inFlightCompute) {
+        return await inFlightCompute;
       }
-      return inFlightCompute;
+
+      // Cold cache protection: do NOT trigger expensive DB queries for unauthenticated / normal page requests.
+      return PatternBreakoutService.getPendingPatternBreakoutReport();
     }
 
     if (!inFlightCompute) {
@@ -154,6 +149,40 @@ export class PatternBreakoutService {
         });
     }
     return inFlightCompute;
+  }
+
+  /**
+   * Pending report returned when cache is cold before background precompute runs.
+   */
+  static getPendingPatternBreakoutReport(): PatternBreakoutReport {
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      tradingDaysAvailable: 0,
+      totalScanned: 0,
+      qualifiedCount: 0,
+      countsByStatus: { BREAKOUT: 0, NEAR_HIGH: 0 },
+      countsByPattern: {
+        FLAG_POLE: 0,
+        VCP: 0,
+        CUP_AND_HANDLE: 0,
+        DOUBLE_BOTTOM: 0,
+        FLAT_BASE: 0,
+        NONE: 0,
+      },
+      countsByTier: { 'A+': 0, A: 0, B: 0, C: 0 },
+      stocks: [],
+      computedAt: new Date().toISOString(),
+      status: 'pending',
+    };
+  }
+
+  /**
+   * Reset in-memory cache and in-flight promise for test isolation.
+   */
+  static _resetCacheForTesting(): void {
+    cachedReport = null;
+    lastComputedTime = 0;
+    inFlightCompute = null;
   }
 
   /**

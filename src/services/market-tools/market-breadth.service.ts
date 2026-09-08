@@ -93,9 +93,17 @@ export class MarketBreadthService {
       if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
         return cachedReport;
       }
+
+      // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
+      if (inFlightCompute) {
+        return await inFlightCompute;
+      }
+
+      // Cold cache protection: do NOT trigger expensive DB queries for unauthenticated / normal page requests.
+      return MarketBreadthService.getPendingMarketBreadthReport();
     }
 
-    // If forceRefresh=true or cache is missing, compute with single-flight deduplication
+    // If forceRefresh=true, compute with single-flight deduplication
     if (inFlightCompute) {
       return await inFlightCompute;
     }
@@ -106,6 +114,64 @@ export class MarketBreadthService {
       });
 
     return await inFlightCompute;
+  }
+
+  /**
+   * Pending report returned when cache is cold before background precompute runs.
+   */
+  static getPendingMarketBreadthReport(): MarketBreadthReport {
+    const emptyUniverse: UniverseBreadth = {
+      universe: 'ALL_NSE',
+      totalCount: 0,
+      advances: 0,
+      declines: 0,
+      unchanged: 0,
+      adRatio: 0,
+      aboveMa10Count: 0,
+      ma10EligibleCount: 0,
+      aboveMa10Pct: 0,
+      aboveMa20Count: 0,
+      ma20EligibleCount: 0,
+      aboveMa20Pct: 0,
+      aboveMa50Count: 0,
+      ma50EligibleCount: 0,
+      aboveMa50Pct: 0,
+      aboveMa200Count: 0,
+      ma200EligibleCount: 0,
+      aboveMa200Pct: 0,
+      up4PctCount: 0,
+      down4PctCount: 0,
+      new52wHighCount: 0,
+      new52wLowCount: 0,
+      netNewHighs: 0,
+      status52w: 'NEUTRAL',
+    };
+
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      tradingDaysAvailable: 0,
+      overallScore: 0,
+      marketRegime: 'NEUTRAL',
+      allNse: { ...emptyUniverse, universe: 'ALL_NSE' },
+      nifty50: { ...emptyUniverse, universe: 'NIFTY_50' },
+      nseFno: { ...emptyUniverse, universe: 'NSE_FNO' },
+      sectors: {
+        allNse: [],
+        nifty50: [],
+        nseFno: [],
+      },
+      computedAt: new Date().toISOString(),
+      status: 'pending',
+    };
+  }
+
+  /**
+   * Reset in-memory cache and in-flight promise for test isolation.
+   */
+  static _resetCacheForTesting(): void {
+    cachedReport = null;
+    lastComputedTime = 0;
+    inFlightCompute = null;
   }
 
   private static async computeMarketBreadth(now: number): Promise<MarketBreadthReport> {

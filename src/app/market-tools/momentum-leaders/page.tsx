@@ -264,6 +264,14 @@ export default function MomentumLeadersPage() {
           </div>
         </div>
 
+        {/* Pending Precompute Banner */}
+        {!isRefreshing && report?.status === 'pending' && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
+            <span>⏳</span>
+            Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. Click Recalculate to scan now.
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center justify-between">
