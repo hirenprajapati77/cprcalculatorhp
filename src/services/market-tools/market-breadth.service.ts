@@ -1,5 +1,11 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
+import { withTimeout } from '@/lib/with-timeout';
+import {
+  tryAcquireDistributedLock,
+  releaseDistributedLock,
+  handleLockContentionWithStaleFallback,
+} from '@/lib/distributed-lock';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { NSE_SECTOR_MAP } from './nse-sector-map';
 
@@ -103,15 +109,40 @@ export class MarketBreadthService {
       return MarketBreadthService.getPendingMarketBreadthReport();
     }
 
-    // If forceRefresh=true, compute with single-flight deduplication
+    // If forceRefresh=true, compute with single-flight and distributed lock deduplication
     if (inFlightCompute) {
       return await inFlightCompute;
     }
 
-    inFlightCompute = MarketBreadthService.computeMarketBreadth(now)
-      .finally(() => {
-        inFlightCompute = null;
+    const { acquired, token } = await tryAcquireDistributedLock('lock:market_tools:breadth', 180);
+    if (!acquired) {
+      return await handleLockContentionWithStaleFallback<MarketBreadthReport>({
+        cacheKey: 'market_breadth:report',
+        getCachedMemory: () => cachedReport,
+        getPendingReport: MarketBreadthService.getPendingMarketBreadthReport,
       });
+    }
+
+    inFlightCompute = (async () => {
+      try {
+        const report = await withTimeout(
+          MarketBreadthService.computeMarketBreadth(now),
+          120_000,
+          'MarketBreadthService.computeMarketBreadth'
+        );
+        cachedReport = report;
+        lastComputedTime = Date.now();
+        try {
+          await cache.set('market_breadth:report', JSON.stringify(report), REDIS_TTL_SEC);
+        } catch {
+          // Non-critical cache write error
+        }
+        return report;
+      } finally {
+        inFlightCompute = null;
+        await releaseDistributedLock('lock:market_tools:breadth', token);
+      }
+    })();
 
     return await inFlightCompute;
   }
