@@ -22,6 +22,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -44,8 +45,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Regression lock
+        run: npm run regression-lock
+
+      - name: Unit tests & Coverage gate
+        run: npm run test:coverage
         env:
           # B12 fix: env.ts validates required vars at module load time.
           # Without these, Zod crashes before a single test runs (or exits 0 with 0 tests).

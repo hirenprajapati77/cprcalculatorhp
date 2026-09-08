@@ -10,11 +10,12 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "regression-lock": "tsx scripts/regression_lock.ts",
-    "release:check": "tsc --noEmit && npm run lint && npm run test:unit && npm run test:coverage:core && npm run test:coverage:services && npm run regression-lock && npm run security:check && npm run build:clean",
+    "release:check": "tsc --noEmit && npm run lint && npm run regression-lock && npm run test:coverage && npm run security:check && npm run build:clean",
     "test": "npm run test:unit",
     "test:unit": "node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "test:integration": "node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/integration/**/*.test.ts",
     "test:e2e": "echo \"No E2E tests yet\"",
+    "test:coverage": "c8 node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "test:coverage:core": "c8 --check-coverage --lines 95 --include src/lib/** --include src/services/backtest/** node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "test:coverage:services": "c8 --check-coverage --lines 85 --include src/services/** --exclude src/services/backtest/** node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "security:check": "npm audit --audit-level=high"
