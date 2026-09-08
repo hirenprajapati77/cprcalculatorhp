@@ -76,3 +76,29 @@ export async function markMarketToolsCacheStale(newTradingDate: string): Promise
     console.warn('[CacheFreshness] Failed to record latest ingested date in Redis:', err);
   }
 }
+
+/**
+ * Resolves the logical freshness of a cached market-tools report against Redis state.
+ * Reads LATEST_INGESTED_DATE_KEY from Redis and evaluates using evaluateReportFreshness().
+ * Fails gracefully to time-based freshness evaluation if Redis is unreachable.
+ */
+export async function checkCachedReportFreshness(
+  reportDate?: string | null | undefined,
+  reportComputedTime?: number | undefined
+): Promise<CacheFreshnessStatus> {
+  try {
+    const latestTradingDate = await cache.get(LATEST_INGESTED_DATE_KEY);
+    return evaluateReportFreshness({
+      reportDate,
+      latestTradingDate,
+      reportComputedTime,
+    });
+  } catch (err) {
+    console.warn('[CacheFreshness] Error checking latest ingested date from Redis:', err);
+    return evaluateReportFreshness({
+      reportDate,
+      reportComputedTime,
+    });
+  }
+}
+

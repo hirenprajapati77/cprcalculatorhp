@@ -22,6 +22,7 @@ import { isValidOhlcvGeometry } from './historical-window-validation';
 import {
   MARKET_TOOLS_CACHE_TTL_MS,
   MARKET_TOOLS_CACHE_TTL_SEC,
+  checkCachedReportFreshness,
 } from '@/lib/cache-freshness';
 
 export interface OhlcvCandle {
@@ -144,6 +145,13 @@ export class PatternBreakoutService {
           const parsed = JSON.parse(redisCached) as PatternBreakoutReport;
           cachedReport = parsed;
           lastComputedTime = now;
+
+          const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTime);
+          if (freshness === 'STALE') {
+            console.log(
+              `[PatternBreakoutService] Serving STALE cached report (date: ${parsed.date}) while background precompute refreshes`
+            );
+          }
           return parsed;
         }
       } catch {
@@ -152,6 +160,12 @@ export class PatternBreakoutService {
 
       // Memory fallback if Redis is temporarily unreachable
       if (cachedReport && now - lastComputedTime < CACHE_TTL_MS) {
+        const freshness = await checkCachedReportFreshness(cachedReport.date, lastComputedTime);
+        if (freshness === 'STALE') {
+          console.log(
+            `[PatternBreakoutService] Serving STALE in-memory report (date: ${cachedReport.date}) while background precompute refreshes`
+          );
+        }
         return cachedReport;
       }
 
