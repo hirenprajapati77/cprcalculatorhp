@@ -19,6 +19,10 @@ import {
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { isValidOhlcvGeometry } from './historical-window-validation';
+import {
+  MARKET_TOOLS_CACHE_TTL_MS,
+  MARKET_TOOLS_CACHE_TTL_SEC,
+} from '@/lib/cache-freshness';
 
 export interface OhlcvCandle {
   date: string;
@@ -95,20 +99,34 @@ export interface PatternBreakoutReport {
 
 let cachedReport: PatternBreakoutReport | null = null;
 let lastComputedTime = 0;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL_MS = MARKET_TOOLS_CACHE_TTL_MS; // 7-day safety window (ISSUE-008)
+const REDIS_TTL_SEC = MARKET_TOOLS_CACHE_TTL_SEC; // 7 days (prevents weekend cold cache)
 let inFlightCompute: Promise<PatternBreakoutReport> | null = null;
 
 export class PatternBreakoutService {
   /**
-   * Save computed report to Redis cache (24h TTL) and in-memory cache.
+   * Save computed report to Redis cache (7-day safety TTL) and in-memory cache.
    */
   static async saveCache(report: PatternBreakoutReport): Promise<void> {
     cachedReport = report;
     lastComputedTime = Date.now();
     try {
-      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), 86400);
+      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(report), REDIS_TTL_SEC);
     } catch {
       // Ignore cache write errors
+    }
+  }
+
+  /**
+   * Invalidate cached pattern breakout report in Redis and process memory.
+   */
+  static async invalidateCache(): Promise<void> {
+    cachedReport = null;
+    lastComputedTime = 0;
+    try {
+      await cache.del('market_tools:pattern_breakout:report');
+    } catch {
+      // Non-critical eviction error
     }
   }
 

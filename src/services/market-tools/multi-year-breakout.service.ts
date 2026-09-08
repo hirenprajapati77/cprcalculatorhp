@@ -12,6 +12,10 @@ import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { isValidOhlcvGeometry } from './historical-window-validation';
 import {
+  MARKET_TOOLS_CACHE_TTL_MS,
+  MARKET_TOOLS_CACHE_TTL_SEC,
+} from '@/lib/cache-freshness';
+import {
   computeRvol,
   computeClv,
   computeRangePct,
@@ -88,8 +92,8 @@ export interface MultiYearBreakoutReport {
 let cachedReport: MultiYearBreakoutReport | null = null;
 let lastComputedTime = 0;
 let inFlightCompute: Promise<MultiYearBreakoutReport> | null = null;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours (Bhavcopy updates once daily)
-const REDIS_TTL_SEC = 24 * 3600; // 24 hours
+const CACHE_TTL_MS = MARKET_TOOLS_CACHE_TTL_MS; // 7-day safety window (ISSUE-008)
+const REDIS_TTL_SEC = MARKET_TOOLS_CACHE_TTL_SEC; // 7 days (prevents weekend cold cache)
 
 export class MultiYearBreakoutService {
   /**
@@ -188,6 +192,19 @@ export class MultiYearBreakoutService {
       computedAt: new Date().toISOString(),
       status: 'pending',
     };
+  }
+
+  /**
+   * Invalidate cached breakout report in Redis and process memory.
+   */
+  static async invalidateCache(): Promise<void> {
+    cachedReport = null;
+    lastComputedTime = 0;
+    try {
+      await cache.del('market_tools:breakout:report');
+    } catch {
+      // Non-critical eviction error
+    }
   }
 
   /**

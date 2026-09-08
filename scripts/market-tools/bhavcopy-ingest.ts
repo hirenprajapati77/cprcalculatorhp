@@ -1,6 +1,7 @@
 import AdmZip from 'adm-zip';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { isValidOhlcvGeometry } from '../../src/services/market-tools/historical-window-validation';
+import { markMarketToolsCacheStale } from '../../src/lib/cache-freshness';
 
 const prisma = new PrismaClient();
 
@@ -192,6 +193,12 @@ export async function runBhavcopyIngest(targetDateStr?: string): Promise<IngestR
       `[BhavcopyIngest] SUCCESS: date=${dateStr}, rowsProcessed=${rowsProcessed}, ` +
       `rowsInserted=${rowsInserted}, rowsSkipped=${rowsSkipped}, peakRssMb=${peakRssMb}MB, durationMs=${durationMs}ms`
     );
+
+    if (rowsInserted > 0) {
+      // Mark market tools caches logically STALE relative to this new date (ISSUE-008)
+      // Does NOT trigger expensive synchronous precompute directly from ingest script.
+      await markMarketToolsCacheStale(dateStr);
+    }
 
     return {
       date: dateStr,

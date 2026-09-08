@@ -12,6 +12,10 @@ import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { FNO_SYMBOLS, getSymbolSector } from './market-breadth.service';
 import { isValidHistoricalWindow, isValidOhlcvGeometry } from './historical-window-validation';
 import {
+  MARKET_TOOLS_CACHE_TTL_MS,
+  MARKET_TOOLS_CACHE_TTL_SEC,
+} from '@/lib/cache-freshness';
+import {
   computeClv,
   computeRvol,
   computeRangePct,
@@ -97,9 +101,9 @@ export interface OhlcvCandleWithPrevClose {
 const cachedReports: Partial<Record<MomentumUniverse, MomentumLeadersReport>> = {};
 const lastComputedTimes: Partial<Record<MomentumUniverse, number>> = {};
 let inFlightCompute: Promise<Record<MomentumUniverse, MomentumLeadersReport>> | null = null;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL_MS = MARKET_TOOLS_CACHE_TTL_MS; // 7-day safety window (ISSUE-008)
 const REDIS_KEY_PREFIX = 'market_tools:momentum_leaders:report';
-const REDIS_TTL_SEC = 24 * 3600; // 24 hours
+const REDIS_TTL_SEC = MARKET_TOOLS_CACHE_TTL_SEC; // 7 days (prevents weekend cold cache)
 
 export class MomentumLeadersService {
   /**
@@ -371,6 +375,27 @@ export class MomentumLeadersService {
       computedAt: new Date().toISOString(),
       status: 'pending',
     };
+  }
+
+  /**
+   * Invalidate cached momentum leaders reports in Redis and process memory.
+   */
+  static async invalidateCache(): Promise<void> {
+    for (const key of Object.keys(cachedReports) as MomentumUniverse[]) {
+      delete cachedReports[key];
+    }
+    for (const key of Object.keys(lastComputedTimes) as MomentumUniverse[]) {
+      delete lastComputedTimes[key];
+    }
+    try {
+      await Promise.all([
+        cache.del(`${REDIS_KEY_PREFIX}:ALL_NSE`),
+        cache.del(`${REDIS_KEY_PREFIX}:NSE_FNO`),
+        cache.del(REDIS_KEY_PREFIX),
+      ]);
+    } catch {
+      // Non-critical eviction error
+    }
   }
 
   /**
