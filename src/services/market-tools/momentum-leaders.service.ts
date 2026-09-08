@@ -14,6 +14,7 @@ import { isValidHistoricalWindow, isValidOhlcvGeometry } from './historical-wind
 import {
   MARKET_TOOLS_CACHE_TTL_MS,
   MARKET_TOOLS_CACHE_TTL_SEC,
+  checkCachedReportFreshness,
 } from '@/lib/cache-freshness';
 import {
   computeClv,
@@ -278,6 +279,13 @@ export class MomentumLeadersService {
           const parsed = JSON.parse(redisCached) as MomentumLeadersReport;
           cachedReports[universe] = parsed;
           lastComputedTimes[universe] = now;
+
+          const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTimes[universe]);
+          if (freshness === 'STALE') {
+            console.log(
+              `[MomentumLeadersService] Serving STALE cached report (${universe}, date: ${parsed.date}) while background precompute refreshes`
+            );
+          }
           return parsed;
         }
       } catch {
@@ -288,6 +296,12 @@ export class MomentumLeadersService {
       const currentMemory = cachedReports[universe];
       const currentComputedTime = lastComputedTimes[universe] || 0;
       if (currentMemory && now - currentComputedTime < CACHE_TTL_MS) {
+        const freshness = await checkCachedReportFreshness(currentMemory.date, currentComputedTime);
+        if (freshness === 'STALE') {
+          console.log(
+            `[MomentumLeadersService] Serving STALE in-memory report (${universe}, date: ${currentMemory.date}) while background precompute refreshes`
+          );
+        }
         return currentMemory;
       }
 

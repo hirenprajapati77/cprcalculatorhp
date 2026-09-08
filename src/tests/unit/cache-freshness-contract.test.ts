@@ -2,6 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   evaluateReportFreshness,
+  checkCachedReportFreshness,
   markMarketToolsCacheStale,
   LATEST_INGESTED_DATE_KEY,
   MARKET_TOOLS_CACHE_TTL_SEC,
@@ -142,6 +143,110 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
     it('MARKET_TOOLS_CACHE_TTL_MS is strictly 7 days in milliseconds', () => {
       assert.strictEqual(MARKET_TOOLS_CACHE_TTL_MS, 7 * 24 * 3600 * 1000);
+    });
+  });
+
+  describe('Read-Path evaluateReportFreshness Integration (ISSUE C)', () => {
+    it('checkCachedReportFreshness returns FRESH when report date matches latest date in Redis', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-08', 3600);
+      const status = await checkCachedReportFreshness('2026-09-08', Date.now());
+      assert.strictEqual(status, 'FRESH');
+    });
+
+    it('checkCachedReportFreshness returns STALE when Redis latest date is newer than report date', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-09', 3600);
+      const status = await checkCachedReportFreshness('2026-09-08', Date.now());
+      assert.strictEqual(status, 'STALE');
+    });
+
+    it('checkCachedReportFreshness returns PENDING when report date is missing', async () => {
+      const status = await checkCachedReportFreshness(null, Date.now());
+      assert.strictEqual(status, 'PENDING');
+    });
+
+    it('MarketBreadthService.getMarketBreadth serves STALE report safely without blocking', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-09', 3600);
+      const fakeReport = {
+        date: '2026-09-08',
+        tradingDaysAvailable: 250,
+        overallScore: 72,
+        marketRegime: 'BULLISH' as const,
+        allNse: {} as any,
+        nifty50: {} as any,
+        nseFno: {} as any,
+        sectors: { allNse: [], nifty50: [], nseFno: [] },
+        computedAt: new Date().toISOString(),
+        status: 'ready' as const,
+      };
+      await cache.set('market_breadth:report', JSON.stringify(fakeReport), 3600);
+
+      const res = await MarketBreadthService.getMarketBreadth(false);
+      assert.strictEqual(res.date, '2026-09-08');
+      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.overallScore, 72);
+    });
+
+    it('MultiYearBreakoutService.getBreakoutReport serves STALE report safely without blocking', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-09', 3600);
+      const fakeReport = {
+        date: '2026-09-08',
+        stocks: [],
+        totalScanned: 50,
+        counts: { total1Y: 0, total2Y: 0, total3Y: 0, total5Y: 0, total10Y: 0, totalAth: 0 },
+        status: 'ready' as const,
+      };
+      await cache.set('market_tools:breakout:report', JSON.stringify(fakeReport), 3600);
+
+      const res = await MultiYearBreakoutService.getBreakoutReport(false);
+      assert.strictEqual(res.date, '2026-09-08');
+      assert.strictEqual(res.status, 'ready');
+    });
+
+    it('PatternBreakoutService.getPatternBreakoutReport serves STALE report safely without blocking', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-09', 3600);
+      const fakeReport = {
+        date: '2026-09-08',
+        qualifiedCount: 0,
+        allCandidates: [],
+        status: 'ready' as const,
+      };
+      await cache.set('market_tools:pattern_breakout:report', JSON.stringify(fakeReport), 3600);
+
+      const res = await PatternBreakoutService.getPatternBreakoutReport(false);
+      assert.strictEqual(res.date, '2026-09-08');
+      assert.strictEqual(res.status, 'ready');
+    });
+
+    it('MomentumLeadersService.getMomentumLeadersReport serves STALE report safely without blocking', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-09', 3600);
+      const fakeReport = {
+        date: '2026-09-08',
+        universe: 'NSE_FNO' as const,
+        totalScanned: 200,
+        qualifiedCount: 15,
+        allStocks: [],
+        status: 'ready' as const,
+      };
+      await cache.set('market_tools:momentum_leaders:report:NSE_FNO', JSON.stringify(fakeReport), 3600);
+
+      const res = await MomentumLeadersService.getMomentumLeadersReport(false, 'NSE_FNO');
+      assert.strictEqual(res.date, '2026-09-08');
+      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.qualifiedCount, 15);
+    });
+
+    it('cold cache returns deterministic pending stubs across all 4 services', async () => {
+      const breadth = await MarketBreadthService.getMarketBreadth(false);
+      assert.strictEqual(breadth.status, 'pending');
+
+      const breakout = await MultiYearBreakoutService.getBreakoutReport(false);
+      assert.strictEqual(breakout.status, 'pending');
+
+      const pattern = await PatternBreakoutService.getPatternBreakoutReport(false);
+      assert.strictEqual(pattern.status, 'pending');
+
+      const momentum = await MomentumLeadersService.getMomentumLeadersReport(false, 'NSE_FNO');
+      assert.strictEqual(momentum.status, 'pending');
     });
   });
 });
