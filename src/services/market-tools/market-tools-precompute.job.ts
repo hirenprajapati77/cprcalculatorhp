@@ -28,8 +28,10 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     try {
       // 1. Market Breadth
       const breadth = await MarketBreadthService.getMarketBreadth(true);
-      console.log(`[MarketToolsPrecomputeJob] Breadth completed for date ${breadth.date} (Overall Score: ${breadth.overallScore})`);
-      breadthDate = breadth.date;
+      console.log(`[MarketToolsPrecomputeJob] Breadth completed for date ${breadth.date} (Overall Score: ${breadth.overallScore}, Status: ${breadth.status || 'ready'})`);
+      if (breadth.status !== 'pending') {
+        breadthDate = breadth.date;
+      }
     } catch (err) {
       console.error('[MarketToolsPrecomputeJob] Failed Market Breadth:', err);
     }
@@ -37,8 +39,10 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     try {
       // 2. Multi-Year Breakout
       const multiYear = await MultiYearBreakoutService.getBreakoutReport(true);
-      console.log(`[MarketToolsPrecomputeJob] Multi-Year Breakout completed (${multiYear.stocks.length} candidates)`);
-      multiYearCount = multiYear.stocks.length;
+      console.log(`[MarketToolsPrecomputeJob] Multi-Year Breakout completed (${multiYear.stocks.length} candidates, Status: ${multiYear.status || 'ready'})`);
+      if (multiYear.status !== 'pending') {
+        multiYearCount = multiYear.stocks.length;
+      }
     } catch (err) {
       console.error('[MarketToolsPrecomputeJob] Failed Multi-Year Breakout:', err);
     }
@@ -46,8 +50,10 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     try {
       // 3. 52W Pattern Breakout
       const pattern = await PatternBreakoutService.getPatternBreakoutReport(true);
-      console.log(`[MarketToolsPrecomputeJob] Pattern Breakout completed (${pattern.qualifiedCount} candidates)`);
-      patternCount = pattern.qualifiedCount;
+      console.log(`[MarketToolsPrecomputeJob] Pattern Breakout completed (${pattern.qualifiedCount} candidates, Status: ${pattern.status || 'ready'})`);
+      if (pattern.status !== 'pending') {
+        patternCount = pattern.qualifiedCount;
+      }
     } catch (err) {
       console.error('[MarketToolsPrecomputeJob] Failed Pattern Breakout:', err);
     }
@@ -55,8 +61,10 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
     try {
       // 4. Momentum Leaders
       const momentum = await MomentumLeadersService.getMomentumLeadersReport(true);
-      console.log(`[MarketToolsPrecomputeJob] Momentum Leaders completed (${momentum.qualifiedCount} candidates)`);
-      momentumCount = momentum.qualifiedCount;
+      console.log(`[MarketToolsPrecomputeJob] Momentum Leaders completed (${momentum.qualifiedCount} candidates, Status: ${momentum.status || 'ready'})`);
+      if (momentum.status !== 'pending') {
+        momentumCount = momentum.qualifiedCount;
+      }
     } catch (err) {
       console.error('[MarketToolsPrecomputeJob] Failed Momentum Leaders:', err);
     }

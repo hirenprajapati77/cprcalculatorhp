@@ -1,5 +1,11 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
+import { withTimeout } from '@/lib/with-timeout';
+import {
+  tryAcquireDistributedLock,
+  releaseDistributedLock,
+  handleLockContentionWithStaleFallback,
+} from '@/lib/distributed-lock';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import {
@@ -117,15 +123,36 @@ export class MultiYearBreakoutService {
       return MultiYearBreakoutService.getPendingBreakoutReport();
     }
 
-    // If forceRefresh=true, compute with single-flight deduplication
+    // If forceRefresh=true, compute with single-flight and distributed lock deduplication
     if (inFlightCompute) {
       return await inFlightCompute;
     }
 
-    inFlightCompute = MultiYearBreakoutService.computeBreakoutReport(now)
-      .finally(() => {
-        inFlightCompute = null;
+    // Acquire distributed lock for multi-worker concurrency protection
+    const { acquired, token } = await tryAcquireDistributedLock('lock:market_tools:breakout', 180);
+    if (!acquired) {
+      return await handleLockContentionWithStaleFallback<MultiYearBreakoutReport>({
+        cacheKey: 'market_tools:breakout:report',
+        getCachedMemory: () => cachedReport,
+        getPendingReport: MultiYearBreakoutService.getPendingBreakoutReport,
       });
+    }
+
+    inFlightCompute = (async () => {
+      try {
+        const report = await withTimeout(
+          MultiYearBreakoutService.computeBreakoutReport(now),
+          120_000,
+          'MultiYearBreakoutService.computeBreakoutReport'
+        );
+        cachedReport = report;
+        lastComputedTime = Date.now();
+        return report;
+      } finally {
+        inFlightCompute = null;
+        await releaseDistributedLock('lock:market_tools:breakout', token);
+      }
+    })();
 
     return await inFlightCompute;
   }

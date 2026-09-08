@@ -1,5 +1,11 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
+import { withTimeout } from '@/lib/with-timeout';
+import {
+  tryAcquireDistributedLock,
+  releaseDistributedLock,
+  handleLockContentionWithStaleFallback,
+} from '@/lib/distributed-lock';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { FNO_SYMBOLS, getSymbolSector } from './market-breadth.service';
 import { isValidHistoricalWindow } from './historical-window-validation';
@@ -294,8 +300,22 @@ export class MomentumLeadersService {
       return reports[universe];
     }
 
-    inFlightCompute = MomentumLeadersService.computeAllMomentumLeadersReports()
-      .then(async (reports) => {
+    const { acquired, token } = await tryAcquireDistributedLock('lock:market_tools:momentum_leaders', 180);
+    if (!acquired) {
+      return await handleLockContentionWithStaleFallback<MomentumLeadersReport>({
+        cacheKey: redisKey,
+        getCachedMemory: () => cachedReports[universe] || null,
+        getPendingReport: () => MomentumLeadersService.getPendingMomentumLeadersReport(universe),
+      });
+    }
+
+    inFlightCompute = (async () => {
+      try {
+        const reports = await withTimeout(
+          MomentumLeadersService.computeAllMomentumLeadersReports(),
+          120_000,
+          'MomentumLeadersService.computeAllMomentumLeadersReports'
+        );
         const computedTime = Date.now();
         cachedReports['ALL_NSE'] = reports.ALL_NSE;
         cachedReports['NSE_FNO'] = reports.NSE_FNO;
@@ -312,10 +332,11 @@ export class MomentumLeadersService {
           // Non-critical cache write error
         }
         return reports;
-      })
-      .finally(() => {
+      } finally {
         inFlightCompute = null;
-      });
+        await releaseDistributedLock('lock:market_tools:momentum_leaders', token);
+      }
+    })();
 
     const reports = await inFlightCompute;
     return reports[universe];

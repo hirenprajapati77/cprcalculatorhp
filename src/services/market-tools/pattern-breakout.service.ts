@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
+import { withTimeout } from '@/lib/with-timeout';
+import {
+  tryAcquireDistributedLock,
+  releaseDistributedLock,
+  handleLockContentionWithStaleFallback,
+} from '@/lib/distributed-lock';
 import {
   computeRvol,
   computeClv,
@@ -138,17 +144,35 @@ export class PatternBreakoutService {
       return PatternBreakoutService.getPendingPatternBreakoutReport();
     }
 
-    if (!inFlightCompute) {
-      inFlightCompute = PatternBreakoutService.computePatternBreakoutReport()
-        .then(async (report) => {
-          await PatternBreakoutService.saveCache(report);
-          return report;
-        })
-        .finally(() => {
-          inFlightCompute = null;
-        });
+    if (inFlightCompute) {
+      return await inFlightCompute;
     }
-    return inFlightCompute;
+
+    const { acquired, token } = await tryAcquireDistributedLock('lock:market_tools:pattern_breakout', 180);
+    if (!acquired) {
+      return await handleLockContentionWithStaleFallback<PatternBreakoutReport>({
+        cacheKey: 'market_tools:pattern_breakout:report',
+        getCachedMemory: () => cachedReport,
+        getPendingReport: PatternBreakoutService.getPendingPatternBreakoutReport,
+      });
+    }
+
+    inFlightCompute = (async () => {
+      try {
+        const report = await withTimeout(
+          PatternBreakoutService.computePatternBreakoutReport(),
+          120_000,
+          'PatternBreakoutService.computePatternBreakoutReport'
+        );
+        await PatternBreakoutService.saveCache(report);
+        return report;
+      } finally {
+        inFlightCompute = null;
+        await releaseDistributedLock('lock:market_tools:pattern_breakout', token);
+      }
+    })();
+
+    return await inFlightCompute;
   }
 
   /**
