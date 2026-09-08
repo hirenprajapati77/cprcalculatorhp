@@ -189,15 +189,15 @@ describe('ISSUE-010: Additional E2E Security Scenarios & Boundary Hardening', ()
 
   // Scenario 15: Cron Secret Route Boundaries
   describe('Scenario 15: Cron secret protected route boundaries', () => {
-    it('rejects /api/cron/earnings-populate without x-cron-secret header with 401', async () => {
-      const res = await fetch(`${server.baseUrl}/api/cron/earnings-populate`);
+    it('rejects /api/cron/reset-breakout-state without x-cron-secret header with 401', async () => {
+      const res = await fetch(`${server.baseUrl}/api/cron/reset-breakout-state`);
       assert.strictEqual(res.status, 401);
       const body = await res.json() as Record<string, unknown>;
       assert.strictEqual(body.error, 'Unauthorized');
     });
 
-    it('rejects /api/cron/earnings-populate with invalid x-cron-secret header with 401', async () => {
-      const res = await fetch(`${server.baseUrl}/api/cron/earnings-populate`, {
+    it('rejects /api/cron/reset-breakout-state with invalid x-cron-secret header with 401', async () => {
+      const res = await fetch(`${server.baseUrl}/api/cron/reset-breakout-state`, {
         headers: { 'x-cron-secret': 'invalid-bogus-secret-123' },
       });
       assert.strictEqual(res.status, 401);
@@ -206,7 +206,7 @@ describe('ISSUE-010: Additional E2E Security Scenarios & Boundary Hardening', ()
     });
 
     it('passes authentication boundary with valid x-cron-secret header (not 401/403)', async () => {
-      const res = await fetch(`${server.baseUrl}/api/cron/earnings-populate`, {
+      const res = await fetch(`${server.baseUrl}/api/cron/reset-breakout-state`, {
         headers: { 'x-cron-secret': TEST_CRON_SECRET },
       });
       // Boundary-only assertion: authentication must succeed; status must NOT be 401 or 403

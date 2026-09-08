@@ -43,9 +43,13 @@ export async function startE2EServer(): Promise<E2ETestServer> {
       });
 
       const shutdown = () => {
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
         server.close(() => {
           app.close().then(() => process.exit(0)).catch(() => process.exit(0));
         });
+        setTimeout(() => process.exit(0), 1000).unref();
       };
       process.on('SIGTERM', shutdown);
       process.on('SIGINT', shutdown);
