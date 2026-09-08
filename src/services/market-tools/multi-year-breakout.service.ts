@@ -8,6 +8,7 @@ import {
 } from '@/lib/distributed-lock';
 import { getSymbolSector } from './market-breadth.service';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
+import { isValidOhlcvGeometry } from './historical-window-validation';
 import {
   computeRvol,
   computeClv,
@@ -344,9 +345,22 @@ export class MultiYearBreakoutService {
       const _open = Number(raw.open || 0);
       const high = Number(raw.high || 0);
       const low = Number(raw.low || 0);
-      const prevClose = Number(raw.prevClose || 0);
-      const changePct = prevClose > 0 ? Math.round(((close - prevClose) / prevClose) * 10000) / 100 : 0;
+      const prevCloseRaw = raw.prevClose != null ? Number(raw.prevClose) : null;
       const volume = Number(raw.volume || 0);
+
+      if (!isValidOhlcvGeometry({
+        open: _open,
+        high,
+        low,
+        close,
+        volume,
+        prevClose: prevCloseRaw,
+      })) {
+        continue;
+      }
+
+      const prevClose = prevCloseRaw ?? 0;
+      const changePct = prevClose > 0 ? Math.round(((close - prevClose) / prevClose) * 10000) / 100 : 0;
       const avgVol20 = Number(raw.avgVol20 || 0);
       const sector = getSymbolSector(raw.symbol);
 

@@ -1,4 +1,5 @@
 import { env } from '@/config/env';
+import { isValidOhlcvGeometry } from '../market-tools/historical-window-validation';
 import { CacheService } from '../cache.service';
 import { getISTTime } from '../../lib/market-hours';
 import { alignedYahooSeriesLength } from '../../lib/yahoo-quote';
@@ -40,16 +41,12 @@ export class HistoricalProvider {
       }
 
       const validData = data.filter((candle, idx) => {
-        if (!candle.date || candle.open === null || candle.high === null || candle.low === null || candle.close === null || candle.volume === null) {
-          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at index ${idx}: Missing date or OHLC values. Skipping candle.`);
+        if (!candle || typeof candle.date !== 'string' || !candle.date) {
+          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at index ${idx}: Missing date. Skipping candle.`);
           return false;
         }
-        if (candle.open < 0 || candle.high < 0 || candle.low < 0 || candle.close < 0 || candle.volume < 0) {
-          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at ${candle.date}: Negative price or volume. Skipping candle.`);
-          return false;
-        }
-        if (candle.high < candle.low || candle.close > candle.high || candle.close < candle.low) {
-          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at ${candle.date}: Invalid OHLC structure (High < Low, or Close outside High/Low). Skipping candle.`);
+        if (!isValidOhlcvGeometry(candle)) {
+          console.warn(`[HistoricalProvider] Validation failed for ${symbol} at ${candle.date}: Invalid OHLCV geometry. Skipping candle.`);
           return false;
         }
         return true;
@@ -142,12 +139,9 @@ export class HistoricalProvider {
   private static validateOHLC(data: OHLC[]) {
     for (let i = 0; i < data.length; i++) {
       const candle = data[i];
-      if (!candle.date) throw new Error('Validation failed: Missing date');
-      if (candle.open < 0 || candle.high < 0 || candle.low < 0 || candle.close < 0) {
-        throw new Error(`Validation failed: Negative prices at ${candle.date}`);
-      }
-      if (candle.high < candle.low || candle.high < Math.max(candle.open, candle.close) || candle.low > Math.min(candle.open, candle.close)) {
-         throw new Error(`Validation failed: Invalid OHLC structure at ${candle.date}`);
+      if (!candle || !candle.date) throw new Error('Validation failed: Missing date');
+      if (!isValidOhlcvGeometry(candle)) {
+        throw new Error(`Validation failed: Invalid OHLC structure at ${candle.date}`);
       }
       // Check gaps
       if (i > 0) {

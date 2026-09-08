@@ -8,7 +8,7 @@ import {
 } from '@/lib/distributed-lock';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { FNO_SYMBOLS, getSymbolSector } from './market-breadth.service';
-import { isValidHistoricalWindow } from './historical-window-validation';
+import { isValidHistoricalWindow, isValidOhlcvGeometry } from './historical-window-validation';
 import {
   computeClv,
   computeRvol,
@@ -433,6 +433,24 @@ export class MomentumLeadersService {
 
     const candleMap = new Map<string, OhlcvCandleWithPrevClose[]>();
     for (const r of candleRows) {
+      const open = Number(r.open);
+      const high = Number(r.high);
+      const low = Number(r.low);
+      const close = Number(r.close);
+      const prevCloseRaw = r.prevClose != null ? Number(r.prevClose) : null;
+      const volume = Number(r.volume);
+
+      if (!isValidOhlcvGeometry({
+        open,
+        high,
+        low,
+        close,
+        volume,
+        prevClose: prevCloseRaw,
+      })) {
+        continue;
+      }
+
       let list = candleMap.get(r.symbol);
       if (!list) {
         list = [];
@@ -440,12 +458,12 @@ export class MomentumLeadersService {
       }
       list.push({
         date: r.date,
-        open: Number(r.open),
-        high: Number(r.high),
-        low: Number(r.low),
-        close: Number(r.close),
-        prevClose: Number(r.prevClose),
-        volume: Number(r.volume),
+        open,
+        high,
+        low,
+        close,
+        prevClose: prevCloseRaw ?? 0,
+        volume,
         value: r.value !== null ? Number(r.value) : null,
       });
     }
