@@ -143,10 +143,27 @@ Ok "PM2 max_memory_restart = 650M (681574400)"
 Remove-Item -Force deploy_standalone.tar.gz, deploy_static.tar.gz, deploy_public.tar.gz, deploy_prisma.tar.gz -ErrorAction SilentlyContinue
 Ok "Local tarballs cleaned up"
 
-# ── 9. DONE ──────────────────────────────────────────────────
+# ── 9. POST-DEPLOY PRODUCTION SMOKE VERIFICATION ─────────────
+Log "Running post-deploy production smoke verification against $PROD_URL..."
+$smokeToken = if ($env:APP_ACCESS_TOKEN) { $env:APP_ACCESS_TOKEN } else { "" }
+$smokeArgs = @("scripts/smoke-verify.ts", "--url", $PROD_URL, "--total-timeout", "35000", "--timeout", "6000")
+if ($smokeToken) {
+    $smokeArgs += @("--token", $smokeToken)
+}
+
+$smokeRun = & npx tsx @smokeArgs 2>&1
+$smokeExit = $LASTEXITCODE
+if ($smokeExit -ne 0) {
+    Write-Host $smokeRun
+    Err "Post-deployment smoke verification failed on $PROD_URL (exit code $smokeExit)!"
+}
+Ok "Post-deploy production smoke verification passed all probes"
+
+# ── 10. DONE ─────────────────────────────────────────────────
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green
 Write-Host "  DEPLOY COMPLETE" -ForegroundColor Green
 Write-Host "  $PROD_URL" -ForegroundColor Green
 Write-Host "  (use HTTPS nip.io — not bare http://IP — for Secure cookies)" -ForegroundColor Green
 Write-Host "================================================" -ForegroundColor Green
+
