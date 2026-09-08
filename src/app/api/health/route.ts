@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { getISTDateString } from '@/lib/market-hours';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { hashToken, timingSafeEqual } from '@/lib/auth-token';
+import { getRuntimeBuildId } from '@/lib/build-id';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
       console.error('[Health Check Error] Database is unreachable:', err);
     }
     return NextResponse.json(
-      { status: dbOk ? 'healthy' : 'degraded' },
+      { status: dbOk ? 'healthy' : 'degraded', build: getRuntimeBuildId() },
       { status: dbOk ? 200 : 503 }
     );
   }
@@ -119,7 +120,7 @@ export async function GET(req: NextRequest) {
         ? { warning: `CRITICAL: Running in production but HISTORICAL_MODE is '${historicalMode}' instead of 'live'!` }
         : {}),
       version: appVersion,
-      build: env.BUILD_TIMESTAMP || new Date().toISOString(),
+      build: getRuntimeBuildId(),
       environment: env.NODE_ENV || 'development',
       executionMode,
       checks: {

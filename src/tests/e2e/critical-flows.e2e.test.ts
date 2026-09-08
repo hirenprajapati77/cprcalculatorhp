@@ -1,5 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { startE2EServer, E2ETestServer, TEST_ACCESS_TOKEN, getTestTokenHash } from './harness';
 
 describe('ISSUE-005: E2E Critical Flows & HTTP Boundary Verification', () => {
@@ -27,9 +29,16 @@ describe('ISSUE-005: E2E Critical Flows & HTTP Boundary Verification', () => {
     );
     const body = await res.json() as Record<string, unknown>;
     assert.ok(
-      body.status === 'ok' || body.status === 'degraded',
-      `Expected health status 'ok' or 'degraded', got: ${JSON.stringify(body)}`
+      body.status === 'ok' || body.status === 'degraded' || body.status === 'healthy',
+      `Expected health status 'ok', 'degraded', or 'healthy', got: ${JSON.stringify(body)}`
     );
+    // Deployment boundary verification (ISSUE-011): /api/health reports active build ID
+    assert.ok(typeof body.build === 'string' && body.build.length > 0, 'Expected build field in /api/health');
+    const buildIdPath = path.join(process.cwd(), '.next', 'BUILD_ID');
+    if (fs.existsSync(buildIdPath)) {
+      const expectedId = fs.readFileSync(buildIdPath, 'utf8').trim().slice(0, 12);
+      assert.strictEqual(body.build, expectedId, 'Expected /api/health build field to match .next/BUILD_ID');
+    }
   });
 
   // Scenario 2: Authentication Boundary on Protected API Routes
