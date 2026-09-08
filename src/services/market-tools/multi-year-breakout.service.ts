@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
+import { executeGuardedQuery } from '@/lib/db-query-guard';
+import { MARKET_TOOLS_QUERY_TIMEOUTS } from '@/config/trading-constants';
 import {
   tryAcquireDistributedLock,
   releaseDistributedLock,
@@ -200,9 +202,13 @@ export class MultiYearBreakoutService {
   private static async computeBreakoutReport(now: number): Promise<MultiYearBreakoutReport> {
 
     // 1. Fetch available trading dates sorted descending
-    const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
-      SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 2500
-    `;
+    const dateRows = await withTimeout(
+      prisma.$queryRaw<Array<{ date: string }>>`
+        SELECT DISTINCT date FROM "DailyOhlcv" WHERE series = 'EQ' ORDER BY date DESC LIMIT 2500
+      `,
+      MARKET_TOOLS_QUERY_TIMEOUTS.DATE_DISCOVERY_MS,
+      'MultiYearBreakout.dateDiscovery'
+    );
 
     if (dateRows.length === 0) {
       throw new Error('No data available in DailyOhlcv table');
@@ -215,67 +221,75 @@ export class MultiYearBreakoutService {
     // 2. Fetch today's records with trailing max high calculations for 1Y/2Y/3Y/5Y/10Y/ATH
     // Note: Excludes current day using ROWS BETWEEN N PRECEDING AND 1 PRECEDING to prevent self-comparison
     // H-06 fix: bound CTE with date >= oldestDate to prevent full-table scan across unbounded historical dates
-    const rawStocks = await prisma.$queryRaw<
-      Array<{
-        symbol: string;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        prevClose: number;
-        volume: bigint | number;
-        avgVol20: number | null;
-        historyDays: bigint | number;
-        high1Y: number | null;
-        high2Y: number | null;
-        high3Y: number | null;
-        high5Y: number | null;
-        high10Y: number | null;
-        highATH: number | null;
-      }>
-    >`
-      WITH RankedHistory AS (
-        SELECT 
-          symbol,
-          series,
-          date,
-          open,
-          high,
-          low,
-          close,
-          "prevClose",
-          volume,
-          COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
-          AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as "high1Y",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 499 PRECEDING AND 1 PRECEDING) as "high2Y",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 749 PRECEDING AND 1 PRECEDING) as "high3Y",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 1249 PRECEDING AND 1 PRECEDING) as "high5Y",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 2499 PRECEDING AND 1 PRECEDING) as "high10Y",
-          MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as "highATH",
-          ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
-        FROM "DailyOhlcv"
-        WHERE series = 'EQ' AND date >= ${oldestDate}
-      )
-      SELECT 
-        symbol,
-        open,
-        high,
-        low,
-        close,
-        "prevClose",
-        volume,
-        "avgVol20",
-        "historyDays",
-        "high1Y",
-        "high2Y",
-        "high3Y",
-        "high5Y",
-        "high10Y",
-        "highATH"
-      FROM RankedHistory
-      WHERE date = ${latestDate} AND rn = 1
-    `;
+    // Protected database-side via SET LOCAL statement_timeout (ISSUE-007)
+    const rawStocks = await executeGuardedQuery(
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            symbol: string;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            prevClose: number;
+            volume: bigint | number;
+            avgVol20: number | null;
+            historyDays: bigint | number;
+            high1Y: number | null;
+            high2Y: number | null;
+            high3Y: number | null;
+            high5Y: number | null;
+            high10Y: number | null;
+            highATH: number | null;
+          }>
+        >`
+          WITH RankedHistory AS (
+            SELECT 
+              symbol,
+              series,
+              date,
+              open,
+              high,
+              low,
+              close,
+              "prevClose",
+              volume,
+              COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
+              AVG(volume) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING) as "avgVol20",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 249 PRECEDING AND 1 PRECEDING) as "high1Y",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 499 PRECEDING AND 1 PRECEDING) as "high2Y",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 749 PRECEDING AND 1 PRECEDING) as "high3Y",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 1249 PRECEDING AND 1 PRECEDING) as "high5Y",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 2499 PRECEDING AND 1 PRECEDING) as "high10Y",
+              MAX(high) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as "highATH",
+              ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
+            FROM "DailyOhlcv"
+            WHERE series = 'EQ' AND date >= ${oldestDate}
+          )
+          SELECT 
+            symbol,
+            open,
+            high,
+            low,
+            close,
+            "prevClose",
+            volume,
+            "avgVol20",
+            "historyDays",
+            "high1Y",
+            "high2Y",
+            "high3Y",
+            "high5Y",
+            "high10Y",
+            "highATH"
+          FROM RankedHistory
+          WHERE date = ${latestDate} AND rn = 1
+        `,
+      {
+        statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.MULTI_YEAR_BREAKOUT_MS,
+        label: 'MultiYearBreakout.rawStocks',
+      }
+    );
 
     // Exclude ETFs/liquid/debt funds -- see nse-fund-exclusion.ts for rationale.
     // Filtering rawStocks directly (rather than inside the loop below) keeps

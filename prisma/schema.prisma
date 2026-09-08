@@ -442,8 +442,8 @@ model DailyOhlcv {
 
   @@unique([symbol, date])
   // M-11 fix: single-column [date] index removed; leading column in [date, series] and [date, symbol] covers all date-only lookups
-  // H-01: [date, series] covers WHERE series = 'EQ' ORDER BY date DESC LIMIT N.
-  @@index([date, series])
+  // ISSUE-007: [series, date] optimizes equality-first B-Tree lookup for WHERE series = 'EQ' AND date >= X
+  @@index([series, date])
   // B19 fix: cross-sectional queries (Market Breadth, Breakout scans) filter by date
   // across all ~2,636 symbols. The @@unique([symbol, date]) index is symbol-first
   // so it can't efficiently serve WHERE date = X across all symbols — it requires

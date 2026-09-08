@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
+import { executeGuardedQuery } from '@/lib/db-query-guard';
+import { MARKET_TOOLS_QUERY_TIMEOUTS } from '@/config/trading-constants';
 import {
   tryAcquireDistributedLock,
   releaseDistributedLock,
@@ -391,12 +393,16 @@ export class MomentumLeadersService {
    */
   static async computeAllMomentumLeadersReports(): Promise<Record<MomentumUniverse, MomentumLeadersReport>> {
     // 1. Fetch available trading dates sorted descending
-    const dateRows = await prisma.$queryRaw<Array<{ date: string }>>`
-      SELECT DISTINCT date FROM "DailyOhlcv" 
-      WHERE series = 'EQ' 
-      ORDER BY date DESC 
-      LIMIT 40
-    `;
+    const dateRows = await withTimeout(
+      prisma.$queryRaw<Array<{ date: string }>>`
+        SELECT DISTINCT date FROM "DailyOhlcv" 
+        WHERE series = 'EQ' 
+        ORDER BY date DESC 
+        LIMIT 40
+      `,
+      MARKET_TOOLS_QUERY_TIMEOUTS.DATE_DISCOVERY_MS,
+      'MomentumLeaders.dateDiscovery'
+    );
 
     if (dateRows.length === 0) {
       throw new Error('No data available in DailyOhlcv table');
@@ -410,26 +416,34 @@ export class MomentumLeadersService {
     const oldestDate = dateRows[Math.min(dateRows.length - 1, 30)]!.date;
 
     // 2. Fetch trailing candles for all series='EQ' symbols
-    const candleRows = await prisma.$queryRaw<
-      Array<{
-        symbol: string;
-        date: string;
-        open: number;
-        high: number;
-        low: number;
-        close: number;
-        prevClose: number;
-        volume: bigint | number;
-        value: number | null;
-      }>
-    >`
-      SELECT symbol, date, open, high, low, close, "prevClose", volume, value
-      FROM "DailyOhlcv"
-      WHERE series = 'EQ'
-        AND date >= ${oldestDate}
-        AND date <= ${latestDate}
-      ORDER BY symbol ASC, date ASC
-    `;
+    // Protected database-side via SET LOCAL statement_timeout (ISSUE-007)
+    const candleRows = await executeGuardedQuery(
+      (tx) =>
+        tx.$queryRaw<
+          Array<{
+            symbol: string;
+            date: string;
+            open: number;
+            high: number;
+            low: number;
+            close: number;
+            prevClose: number;
+            volume: bigint | number;
+            value: number | null;
+          }>
+        >`
+          SELECT symbol, date, open, high, low, close, "prevClose", volume, value
+          FROM "DailyOhlcv"
+          WHERE series = 'EQ'
+            AND date >= ${oldestDate}
+            AND date <= ${latestDate}
+          ORDER BY symbol ASC, date ASC
+        `,
+      {
+        statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.MOMENTUM_LEADERS_MS,
+        label: 'MomentumLeaders.candleRows',
+      }
+    );
 
     const candleMap = new Map<string, OhlcvCandleWithPrevClose[]>();
     for (const r of candleRows) {
