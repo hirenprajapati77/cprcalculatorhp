@@ -7,6 +7,7 @@ import {
   handleLockContentionWithStaleFallback,
 } from '@/lib/distributed-lock';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
+import { isValidOhlcvGeometry } from './historical-window-validation';
 import { NSE_SECTOR_MAP } from './nse-sector-map';
 
 export interface SectorBreadth {
@@ -225,8 +226,12 @@ export class MarketBreadthService {
     const rawStockStats = await prisma.$queryRaw<
       Array<{
         symbol: string;
+        open: number;
+        high: number;
+        low: number;
         close: number;
         prevClose: number;
+        volume: bigint | number;
         changePct: number;
         historyDays: bigint | number;
         ma10: number | null;
@@ -242,8 +247,12 @@ export class MarketBreadthService {
           symbol,
           series,
           date,
+          open,
+          high,
+          low,
           close,
           "prevClose",
+          volume,
           ((close - "prevClose") / NULLIF("prevClose", 0)) * 100 as "changePct",
           COUNT(*) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "historyDays",
           AVG(close) OVER (PARTITION BY symbol ORDER BY date ASC ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) as ma10,
@@ -259,8 +268,12 @@ export class MarketBreadthService {
       SELECT 
         symbol,
         series,
+        open,
+        high,
+        low,
         close,
         "prevClose",
+        volume,
         "changePct",
         "historyDays",
         ma10,
@@ -278,8 +291,12 @@ export class MarketBreadthService {
     // after the query so all downstream comparisons (>, >=, !== null) are correct.
     const stockStats = rawStockStats.map((s) => ({
       ...s,
+      open: Number(s.open),
+      high: Number(s.high),
+      low: Number(s.low),
       close: Number(s.close),
       prevClose: Number(s.prevClose),
+      volume: Number(s.volume),
       changePct: Number(s.changePct),
       historyDays: Number(s.historyDays ?? 0),
       ma10: s.ma10 !== null ? Number(s.ma10) : null,
@@ -290,8 +307,20 @@ export class MarketBreadthService {
       low52w: s.low52w !== null ? Number(s.low52w) : null,
     }));
 
-    // H-08 fix: Exclude ETFs, mutual funds, and debt/liquid schemes so breadth reflects real operating companies
-    const operatingStockStats = stockStats.filter((s) => !isLikelyEtfOrFund(s.symbol));
+    // H-08 fix: Exclude ETFs, mutual funds, and debt/liquid schemes so breadth reflects real operating companies.
+    // ISSUE-003: Enforce canonical OHLCV geometry before aggregating breadth metrics.
+    const operatingStockStats = stockStats.filter(
+      (s) =>
+        !isLikelyEtfOrFund(s.symbol) &&
+        isValidOhlcvGeometry({
+          open: s.open,
+          high: s.high,
+          low: s.low,
+          close: s.close,
+          volume: s.volume,
+          prevClose: s.prevClose > 0 ? s.prevClose : null,
+        })
+    );
 
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
     const allNse = computeUniverseBreadth('ALL_NSE', operatingStockStats);
@@ -434,6 +463,10 @@ function computeUniverseBreadth(
   let new52wLowCount = 0;
 
   for (const s of stats) {
+    if (!Number.isFinite(s.close) || s.close <= 0 || !Number.isFinite(s.prevClose) || s.prevClose <= 0 || !Number.isFinite(s.changePct)) {
+      continue;
+    }
+
     if (s.changePct > 0.05) advances++;
     else if (s.changePct < -0.05) declines++;
     else unchanged++;

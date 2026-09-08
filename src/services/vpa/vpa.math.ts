@@ -1,4 +1,5 @@
 import { safeRatio } from '@/lib/math';
+import { isValidOhlcvGeometry } from '@/services/market-tools/historical-window-validation';
 import type { VpaMarketInputs } from './vpa.types';
 
 /** CLV in [-1, 1]: +1 = close at high, -1 = close at low. */
@@ -58,18 +59,33 @@ export function buildVpaInputs(
 ): VpaMarketInputs | null {
   const close = stock.ltp ?? stock.close ?? 0;
   
+  // Guard against physical impossibility in initial candle values
+  if (
+    !Number.isFinite(stock.high) ||
+    stock.high <= 0 ||
+    !Number.isFinite(stock.low) ||
+    stock.low <= 0 ||
+    stock.high < stock.low
+  ) {
+    return null;
+  }
+
   // LTP can momentarily exceed the recorded candle high/low. Bounding prevents invalid CLV.
   const effectiveHigh = Math.max(stock.high, stock.open, close);
   const effectiveLow = Math.min(stock.low, stock.open, close);
 
   if (
-    !Number.isFinite(close) ||
-    close <= 0 ||
-    !Number.isFinite(effectiveHigh) ||
-    !Number.isFinite(effectiveLow) ||
-    effectiveHigh < effectiveLow ||
-    !Number.isFinite(stock.volume) ||
-    !Number.isFinite(stock.avgVolume)
+    !isValidOhlcvGeometry({
+      open: stock.open,
+      high: effectiveHigh,
+      low: effectiveLow,
+      close,
+      volume: stock.volume,
+    }) ||
+    !Number.isFinite(stock.avgVolume) ||
+    stock.avgVolume < 0 ||
+    !Number.isFinite(cpr.bc) ||
+    !Number.isFinite(cpr.tc)
   ) {
     return null;
   }
