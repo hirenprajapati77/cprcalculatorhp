@@ -127,6 +127,37 @@ describe('ISSUE-002: Computation Resource & Concurrency Protection', () => {
         _setRedisForTesting(null);
       }
     });
+
+    it('fails closed in production when Redis is unavailable to prevent cross-worker concurrency', async () => {
+      const lockKey = 'lock:test:prod_fail_closed';
+      _setRedisForTesting(null);
+      const prevEnv = process.env.NODE_ENV;
+
+      try {
+        (process.env as Record<string, string | undefined>)['NODE_ENV'] = 'production';
+
+        // Direct acquire fails closed
+        const lock = await tryAcquireDistributedLock(lockKey, 60);
+        assert.strictEqual(lock.acquired, false);
+        assert.strictEqual(lock.token, '');
+
+        // withDistributedLock fails closed without executing taskFn
+        let executed = false;
+        const withLockResult = await withDistributedLock(lockKey, 60, async () => {
+          executed = true;
+          return 'should_not_run';
+        });
+        assert.strictEqual(withLockResult.acquired, false);
+        assert.strictEqual(executed, false);
+
+        // Process-local release returns false in production
+        const released = await releaseDistributedLock(lockKey, 'dummy-token');
+        assert.strictEqual(released, false);
+      } finally {
+        (process.env as Record<string, string | undefined>)['NODE_ENV'] = prevEnv;
+        _setRedisForTesting(null);
+      }
+    });
   });
 
   describe('Stale-Cache Serving Contract under Lock Contention', () => {
