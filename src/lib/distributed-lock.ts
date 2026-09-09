@@ -53,18 +53,21 @@ export async function tryAcquireDistributedLock(
     }
   }
 
-  // Degraded process-local fallback
-  if (env.NODE_ENV === 'production') {
+  // Fail closed in production when Redis is unavailable to prevent concurrent multi-worker execution
+  const isProduction = env.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
+  if (isProduction) {
     const now = Date.now();
     if (now - lastDegradedLogTime > DEGRADED_LOG_INTERVAL_MS) {
-      console.warn(
-        '[DistributedLock] DEGRADED MODE: Redis is unavailable in production. ' +
-        'Multi-worker distributed locking is disabled; using process-local lock.'
+      console.error(
+        '[DistributedLock] FAIL-CLOSED: Redis is unavailable in production. ' +
+        'Refusing to acquire lock to prevent concurrent multi-worker execution and DB overload.'
       );
       lastDegradedLogTime = now;
     }
+    return { acquired: false, token: '' };
   }
 
+  // Non-production process-local fallback (dev/test only)
   sweepExpiredMemoryLocks();
   const existing = memoryLocks.get(key);
   if (existing && Date.now() < existing.expiresAt) {
@@ -96,7 +99,13 @@ export async function releaseDistributedLock(
     }
   }
 
-  // Process-local fallback release
+  const isProduction = env.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
+  if (isProduction) {
+    // In production, locks are strictly managed via Redis. Process-local fallback is disabled.
+    return false;
+  }
+
+  // Process-local fallback release (dev/test only)
   sweepExpiredMemoryLocks();
   const existing = memoryLocks.get(key);
   if (existing && existing.token === token) {
