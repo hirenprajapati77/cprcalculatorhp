@@ -19,6 +19,7 @@ export interface SmokeConfig {
   probeTimeoutMs: number;
   totalTimeoutMs: number;
   quiet: boolean;
+  allowInsecure?: boolean;
 }
 
 export interface ProbeResult {
@@ -38,6 +39,7 @@ export function parseCliArgs(args: string[]): SmokeConfig {
   let probeTimeoutMs = 5000;
   let totalTimeoutMs = 30000;
   let quiet = false;
+  let allowInsecure = process.env.SMOKE_ALLOW_INSECURE === 'true' || process.env.ALLOW_INSECURE_TLS === 'true';
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -51,6 +53,8 @@ export function parseCliArgs(args: string[]): SmokeConfig {
       totalTimeoutMs = parseInt(args[++i]!, 10) || 30000;
     } else if (arg === '--quiet') {
       quiet = true;
+    } else if (arg === '--insecure' || arg === '--allow-insecure') {
+      allowInsecure = true;
     }
   }
 
@@ -63,6 +67,7 @@ export function parseCliArgs(args: string[]): SmokeConfig {
     probeTimeoutMs,
     totalTimeoutMs,
     quiet,
+    allowInsecure,
   };
 }
 
@@ -73,9 +78,11 @@ export async function executeHttpRequest(
     headers?: Record<string, string>;
     redirect?: 'follow' | 'manual';
     timeoutMs?: number;
+    rejectUnauthorized?: boolean;
   } = {}
 ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
   const timeoutMs = options.timeoutMs ?? 5000;
+  const rejectUnauthorized = options.rejectUnauthorized ?? true;
   const parsed = new URL(targetUrl);
   const isHttps = parsed.protocol === 'https:';
   const transport = isHttps ? https : http;
@@ -97,8 +104,8 @@ export async function executeHttpRequest(
           Accept: '*/*',
           ...(options.headers || {}),
         },
-        // In local/self-signed environments allow verification if necessary
-        rejectUnauthorized: false,
+        // Enforce TLS verification by default; opt-out only via explicit configuration
+        rejectUnauthorized,
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -194,12 +201,17 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     }
   };
 
+  const requestOptions = {
+    timeoutMs: config.probeTimeoutMs,
+    rejectUnauthorized: !config.allowInsecure,
+  };
+
   // ── Probe 1: Healthcheck & DB ping ─────────────────────────────
   await runProbe(
     'Healthcheck Probe',
     '/api/health',
     [200, 503],
-    () => executeHttpRequest(`${config.baseUrl}/api/health`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/health`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -218,7 +230,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Market Status Runtime',
     '/api/market-status',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/api/market-status`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/market-status`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -237,7 +249,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Public Page: /unlock',
     '/unlock',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/unlock`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/unlock`, requestOptions),
     (res) => {
       if (!res.body.includes('<html') && !res.body.includes('<!DOCTYPE')) {
         return 'Body does not appear to be HTML';
@@ -251,7 +263,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Public Page: /about',
     '/about',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/about`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/about`, requestOptions),
     (res) => {
       if (!res.body.includes('<html') && !res.body.includes('<!DOCTYPE')) {
         return 'Body does not appear to be HTML';
@@ -265,7 +277,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Auth Guard: Page Root Redirect',
     '/',
     307,
-    () => executeHttpRequest(`${config.baseUrl}/`, { timeoutMs: config.probeTimeoutMs, redirect: 'manual' }),
+    () => executeHttpRequest(`${config.baseUrl}/`, { ...requestOptions, redirect: 'manual' }),
     (res) => {
       const location = res.headers['location'] || '';
       if (!location.includes('/unlock')) {
@@ -280,7 +292,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Auth Guard: API 401 Rejection',
     '/api/scanner',
     401,
-    () => executeHttpRequest(`${config.baseUrl}/api/scanner`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/scanner`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -299,7 +311,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Market Tools: Breadth Contract',
     '/api/market-tools/breadth',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/breadth`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/breadth`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -318,7 +330,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Market Tools: Breakout Contract',
     '/api/market-tools/breakout',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/breakout`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/breakout`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -337,7 +349,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Market Tools: Pattern Breakout Contract',
     '/api/market-tools/pattern-breakout',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/pattern-breakout`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/pattern-breakout`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -356,7 +368,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
     'Market Tools: Momentum Leaders Contract',
     '/api/market-tools/momentum-leaders',
     200,
-    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/momentum-leaders`, { timeoutMs: config.probeTimeoutMs }),
+    () => executeHttpRequest(`${config.baseUrl}/api/market-tools/momentum-leaders`, requestOptions),
     (res) => {
       try {
         const json = JSON.parse(res.body);
@@ -378,7 +390,7 @@ export async function runSmokeVerifier(config: SmokeConfig): Promise<{
       200,
       () =>
         executeHttpRequest(`${config.baseUrl}/api/health`, {
-          timeoutMs: config.probeTimeoutMs,
+          ...requestOptions,
           headers: {
             Authorization: `Bearer ${config.appAccessToken}`,
           },
