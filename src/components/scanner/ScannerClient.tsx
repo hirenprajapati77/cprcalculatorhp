@@ -461,6 +461,9 @@ const StockRow = React.memo(({
   if (row.btstClassification) {
     rowClass += btstRowHighlightClass(row.btstClassification);
   }
+  if (row.alertSuppressedReason) {
+    rowClass += ' opacity-60 bg-accent-red/5 border-l-2 border-accent-red/50';
+  }
 
   // Flag gap/chase setups (same thresholds as breakout Telegram + CPR journal).
   // Without day high/low on the API row, entry-chase still catches GODREJCP/NATIONALUM.
@@ -504,8 +507,8 @@ const StockRow = React.memo(({
 
   const persistedSuppression = row.alertSuppressedReason
     ? {
-        label: `No alert: ${alertSuppressionShortLabel(row.alertSuppressedReason)}`,
-        detail: row.alertSuppressedDetail ?? row.alertSuppressedReason,
+        label: `⛔ DO NOT TRADE`,
+        detail: `Alert suppressed — ${row.alertSuppressedDetail ?? row.alertSuppressedReason}. Signal contradicted by market internals.`,
       }
     : null;
 
@@ -521,7 +524,7 @@ const StockRow = React.memo(({
             ? 'VS CLOSE'
             : 'EXTENDED';
 
-  const staleVariant = isTargetAchieved ? 'green' : 'amber';
+  const staleVariant = persistedSuppression ? 'red' : isTargetAchieved ? 'green' : 'amber';
   const staleDetail = isTargetAchieved
     ? `LTP ₹${fmt(row.ltp)} has reached Target 1 (₹${fmt(row.target)})`
     : (persistedSuppression?.detail ?? (setupStale.stale ? setupStale.detail : undefined));
@@ -648,7 +651,9 @@ const StockRow = React.memo(({
                   className={`inline-flex w-fit px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wide border ${
                     staleVariant === 'green'
                       ? 'bg-accent-green/15 text-accent-green border-accent-green/40'
-                      : 'bg-accent-amber/15 text-accent-amber border-accent-amber/40'
+                      : staleVariant === 'red'
+                        ? 'bg-accent-red/20 text-accent-red border-accent-red/50 animate-pulse'
+                        : 'bg-accent-amber/15 text-accent-amber border-accent-amber/40'
                   }`}
                   title={staleDetail}
                 >
