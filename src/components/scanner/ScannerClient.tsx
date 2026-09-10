@@ -507,7 +507,7 @@ const StockRow = React.memo(({
 
   const persistedSuppression = row.alertSuppressedReason
     ? {
-        label: `⛔ DO NOT TRADE`,
+        label: `⛔ DO NOT TRADE (${alertSuppressionShortLabel(row.alertSuppressedReason)})`,
         detail: `Alert suppressed — ${row.alertSuppressedDetail ?? row.alertSuppressedReason}. Signal contradicted by market internals.`,
       }
     : null;
