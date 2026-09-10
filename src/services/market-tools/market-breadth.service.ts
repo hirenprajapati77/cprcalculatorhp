@@ -542,7 +542,12 @@ function computeUniverseBreadth(
     if (s.low52w !== null && s.close <= s.low52w) new52wLowCount++;
   }
 
-  const adRatio = declines > 0 ? Math.round((advances / declines) * 100) / 100 : advances;
+  const adRatio =
+    declines > 0
+      ? Math.round((advances / declines) * 100) / 100
+      : advances > 0
+      ? advances
+      : 1.0;
   const netNewHighs = new52wHighCount - new52wLowCount;
   const status52w: UniverseBreadth['status52w'] =
     netNewHighs > 0 ? '+VE' : netNewHighs < 0 ? '-VE' : 'NEUTRAL';

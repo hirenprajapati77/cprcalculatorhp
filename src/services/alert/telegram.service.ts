@@ -58,34 +58,57 @@ export class TelegramService {
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const maxAttempts = 2;
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: resolvedChatId,
-          text,
-          parse_mode: 'HTML'
-        }),
-        signal: controller.signal
-      });
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      clearTimeout(timeoutId);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: resolvedChatId,
+            text,
+            parse_mode: 'HTML'
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.error('[Telegram] Failed to send message:', errBody);
-        return { ok: false, reason: `telegram_api_error: ${errBody}` };
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          if (response.status === 429 && attempt < maxAttempts) {
+            let retrySeconds = 1;
+            try {
+              const parsed = JSON.parse(errBody);
+              if (parsed?.parameters?.retry_after && typeof parsed.parameters.retry_after === 'number') {
+                retrySeconds = Math.min(parsed.parameters.retry_after, 5);
+              }
+            } catch {
+              // fallback default retry
+            }
+            console.warn(`[Telegram] Rate limited (429). Retrying in ${retrySeconds}s...`);
+            await new Promise((res) => setTimeout(res, retrySeconds * 1000));
+            continue;
+          }
+          console.error('[Telegram] Failed to send message:', errBody);
+          return { ok: false, reason: `telegram_api_error: ${errBody}` };
+        }
+        return { ok: true };
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (attempt < maxAttempts) {
+          await new Promise((res) => setTimeout(res, 500));
+          continue;
+        }
+        console.error('[Telegram] Network/fetch error sending message:', err);
+        return { ok: false, reason: `fetch_error: ${err instanceof Error ? err.message : String(err)}` };
       }
-      return { ok: true };
-    } catch (err) {
-      clearTimeout(timeoutId);
-      console.error('[Telegram] Network/fetch error sending message:', err);
-      return { ok: false, reason: `fetch_error: ${err instanceof Error ? err.message : String(err)}` };
     }
+    return { ok: false, reason: 'max_retries_exceeded' };
   }
 
   /**
