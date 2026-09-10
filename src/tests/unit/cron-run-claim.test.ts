@@ -141,4 +141,44 @@ describe('cron-run-claim service', () => {
       (CacheService as any).redisClient = originalRedisClient;
     }
   });
+
+  it('releases lock and returns false if cron_done was set concurrently before lock acquisition (TOCTOU guard)', async () => {
+    const origDesc = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(CacheService), 'isRedisConnected');
+    const originalRedisClient = (CacheService as any).redisClient;
+
+    let getCallCount = 0;
+    let deletedKey: string | null = null;
+    const mockRedis = {
+      status: 'ready',
+      get: async (key: string) => {
+        if (key.startsWith('cron_done:')) {
+          getCallCount++;
+          // First call (pre-lock): returns null (not done yet)
+          // Second call (post-lock): returns '1' (concurrent worker completed it)
+          return getCallCount === 1 ? null : '1';
+        }
+        return null;
+      },
+      set: async (_key: string, _token: string, _ex: string, _ttl: number, _nx: string) => 'OK',
+      del: async (key: string) => {
+        deletedKey = key;
+        return 1;
+      },
+    };
+
+    try {
+      Object.defineProperty(CacheService, 'isRedisConnected', { value: true, configurable: true });
+      (CacheService as any).redisClient = mockRedis;
+
+      const claimed = await tryClaimCronRun('toctou-race-job');
+      assert.equal(claimed, false, 'Must release lock and reject claim if donePost is set');
+      assert.equal(deletedKey, 'cron_lock:toctou-race-job', 'Acquired lock must be rolled back via redis.del');
+    } finally {
+      if (origDesc) {
+        Object.defineProperty(Object.getPrototypeOf(CacheService), 'isRedisConnected', origDesc);
+      }
+      delete (CacheService as any).isRedisConnected;
+      (CacheService as any).redisClient = originalRedisClient;
+    }
+  });
 });

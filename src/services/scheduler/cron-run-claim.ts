@@ -129,6 +129,11 @@ export async function tryClaimCronRun(key: string): Promise<boolean> {
           'NX'
         );
         if (result === 'OK') {
+          const donePost = await redis.get(`cron_done:${key}`);
+          if (donePost) {
+            await redis.del(`cron_lock:${key}`);
+            return false;
+          }
           activeRunningLocks.add(key);
           activeLockTokens.set(key, token);
           return true;

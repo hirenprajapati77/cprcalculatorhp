@@ -217,4 +217,64 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       'prisma.overnightSignal.findMany must be restored to its original reference'
     );
   });
+
+  await t.test('skips journal exit update for option legs when fetchOptionCmp returns null (guards against stock LTP pollution)', async () => {
+    const origSignalFindMany = prisma.overnightSignal.findMany;
+    const origSignalUpdate = prisma.overnightSignal.update;
+    const origJournalFindMany = prisma.tradeJournal.findMany;
+    const origJournalUpdate = prisma.tradeJournal.update;
+    const origGetStockData = MarketService.getStockData;
+    const origSendRaw = TelegramService.sendRawMessage;
+    const origFetchOptionCmp = TradeJournalService.fetchOptionCmp;
+
+    const signal = makeSignal({
+      id: 'sig-opt-fail-1',
+      symbol: 'OPTSTK',
+      direction: 'LONG',
+      entry: 1000,
+      qualityBucket: 'TRADEABLE',
+    });
+
+    let journalUpdateCalled = false;
+
+    prisma.overnightSignal.findMany = (async () => [signal]) as typeof prisma.overnightSignal.findMany;
+    prisma.overnightSignal.update = (async () => ({} as OvernightSignal)) as unknown as typeof prisma.overnightSignal.update;
+    MarketService.getStockData = (async () => ({ ltp: 950 })) as unknown as typeof MarketService.getStockData;
+    TelegramService.sendRawMessage = (async () => ({ ok: true })) as typeof TelegramService.sendRawMessage;
+
+    prisma.tradeJournal.findMany = (async () => [
+      {
+        id: 'journal-opt-1',
+        symbol: 'OPTSTK',
+        optionContract: 'OPTSTK 1020 CE',
+        optionStrike: 1020,
+        optionType: 'CE',
+        entryCmp: 25,
+        cmp916: null,
+        exitCmp: null,
+      },
+    ]) as any;
+
+    TradeJournalService.fetchOptionCmp = (async () => null) as typeof TradeJournalService.fetchOptionCmp;
+
+    prisma.tradeJournal.update = (async () => {
+      journalUpdateCalled = true;
+      return {};
+    }) as any;
+
+    try {
+      const res = await checkGapFailureExits();
+      assert.strictEqual(res.checked, 1);
+      assert.deepStrictEqual(res.exited, ['OPTSTK']);
+      assert.strictEqual(journalUpdateCalled, false, 'Journal update must be skipped when option CMP is unavailable');
+    } finally {
+      prisma.overnightSignal.findMany = origSignalFindMany;
+      prisma.overnightSignal.update = origSignalUpdate;
+      prisma.tradeJournal.findMany = origJournalFindMany;
+      prisma.tradeJournal.update = origJournalUpdate;
+      MarketService.getStockData = origGetStockData;
+      TelegramService.sendRawMessage = origSendRaw;
+      TradeJournalService.fetchOptionCmp = origFetchOptionCmp;
+    }
+  });
 });

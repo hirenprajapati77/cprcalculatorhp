@@ -15,8 +15,8 @@ export function escapeCsvCell(value: CsvCellValue): string {
     return String(value);
   }
   let str = String(value);
-  // Neutralize CSV formula injection (CWE-1236): prepend single-quote if string starts with =, +, -, @, \t, or \r
-  if (/^[=+\-@\t\r]/.test(str)) {
+  // Neutralize CSV formula injection (CWE-1236): prepend single-quote if string starts with =, +, -, @, \t, or \r (including after leading whitespace)
+  if (/^\s*[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
   // If the cell contains quotes, commas, or newlines, wrap in quotes and escape internal quotes

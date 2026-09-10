@@ -1,4 +1,4 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert';
 import { escapeCsvCell, generateCsvContent } from '../../lib/export-utils';
 
@@ -33,6 +33,11 @@ test('export-utils: escapeCsvCell and generateCsvContent', async (t) => {
     // Starts with tab or carriage return
     assert.strictEqual(escapeCsvCell('\tmalicious'), "'\tmalicious");
     assert.strictEqual(escapeCsvCell('\rmalicious'), "\"'\rmalicious\"");
+
+    // Starts with leading whitespace followed by formula prefix
+    assert.strictEqual(escapeCsvCell(' =1+1'), "' =1+1");
+    assert.strictEqual(escapeCsvCell("  =cmd|' /C calc'!A0"), "'  =cmd|' /C calc'!A0");
+    assert.strictEqual(escapeCsvCell('   @SUM(A1:A10)'), "'   @SUM(A1:A10)");
   });
 
   await t.test('properly escapes quotes, commas, and newlines per RFC 4180', () => {

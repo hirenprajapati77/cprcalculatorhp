@@ -1,11 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { OvernightSignal } from '@prisma/client';
+import { Prisma, type OvernightSignal } from '@prisma/client';
+import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
 import {
   indexClassificationToQualityBucket,
   selectTradableIndexBtstPicks,
   selectTradableIndexStbtPicks,
+  persistIndexBtstOvernightSignals,
 } from '../../services/overnight/index-overnight-persist';
 
 describe('index-overnight-persist (Tier 2 coverage)', () => {
@@ -158,6 +160,92 @@ describe('index-overnight-persist (Tier 2 coverage)', () => {
 
       const picks = selectTradableIndexStbtPicks(signals, { minScore: 75 });
       assert.equal(picks.length, 0);
+    });
+  });
+
+  describe('persistIndexBtstOvernightSignals', () => {
+    it('upserts signals and gracefully absorbs Prisma P2002 unique constraint violations', async () => {
+      const origUpsert = prisma.overnightSignal.upsert;
+      const upsertArgs: unknown[] = [];
+      let callCount = 0;
+
+      prisma.overnightSignal.upsert = (async (args: unknown) => {
+        upsertArgs.push(args);
+        callCount++;
+        if (callCount === 2) {
+          // Simulate concurrent worker collision throwing P2002
+          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: '6.0.0',
+          });
+        }
+        return {} as OvernightSignal;
+      }) as typeof prisma.overnightSignal.upsert;
+
+      try {
+        const mockResults: any[] = [
+          {
+            symbol: 'NIFTY',
+            signalDate: '2026-09-09',
+            signalTime: '15:10',
+            direction: 'LONG',
+            entry: 25000,
+            stopLoss: 24800,
+            target: 25400,
+            score: 85,
+            confidence: 85,
+            classification: 'INDEX_STRONG',
+          },
+          {
+            symbol: 'BANKNIFTY',
+            signalDate: '2026-09-09',
+            signalTime: '15:10',
+            direction: 'LONG',
+            entry: 51000,
+            stopLoss: 50700,
+            target: 51600,
+            score: 80,
+            confidence: 80,
+            classification: 'INDEX_READY',
+          },
+        ];
+
+        // Should complete without throwing despite P2002 on second item
+        await persistIndexBtstOvernightSignals(mockResults);
+        assert.equal(upsertArgs.length, 2, 'Both signals should have attempted upsert');
+      } finally {
+        prisma.overnightSignal.upsert = origUpsert;
+      }
+    });
+
+    it('re-throws non-P2002 errors', async () => {
+      const origUpsert = prisma.overnightSignal.upsert;
+      prisma.overnightSignal.upsert = (async () => {
+        throw new Error('Database connection lost');
+      }) as unknown as typeof prisma.overnightSignal.upsert;
+
+      try {
+        const mockResults: any[] = [
+          {
+            symbol: 'NIFTY',
+            signalDate: '2026-09-09',
+            signalTime: '15:10',
+            direction: 'LONG',
+            entry: 25000,
+            stopLoss: 24800,
+            target: 25400,
+            score: 85,
+            classification: 'INDEX_STRONG',
+          },
+        ];
+
+        await assert.rejects(
+          async () => persistIndexBtstOvernightSignals(mockResults),
+          /Database connection lost/
+        );
+      } finally {
+        prisma.overnightSignal.upsert = origUpsert;
+      }
     });
   });
 });

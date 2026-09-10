@@ -1,4 +1,4 @@
-import type { OvernightSignal } from '@prisma/client';
+import { Prisma, type OvernightSignal } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { env } from '@/config/env';
 import type { IndexSignalResult } from './index-discover.service';
@@ -33,43 +33,51 @@ export async function persistIndexBtstOvernightSignals(
 ): Promise<void> {
   for (const r of results) {
     const qualityBucket = indexClassificationToQualityBucket(r.classification);
-    await prisma.overnightSignal.upsert({
-      where: {
-        symbol_signalDate_signalTime_direction: {
+    try {
+      await prisma.overnightSignal.upsert({
+        where: {
+          symbol_signalDate_signalTime_direction: {
+            symbol: r.symbol,
+            signalDate: r.signalDate,
+            signalTime: r.signalTime,
+            direction: r.direction,
+          },
+        },
+        update: {
+          direction: r.direction,
+          entry: r.entry,
+          stopLoss: r.stopLoss,
+          target: r.target,
+          overnightScore: r.score,
+          confidence: r.confidence ?? r.score ?? 0,
+          classification: r.classification,
+          instrumentType: 'INDEX',
+          qualityBucket,
+          exitStrategy: 'EOD',
+        },
+        create: {
           symbol: r.symbol,
           signalDate: r.signalDate,
           signalTime: r.signalTime,
           direction: r.direction,
+          entry: r.entry,
+          stopLoss: r.stopLoss,
+          target: r.target,
+          overnightScore: r.score,
+          confidence: r.confidence ?? r.score ?? 0,
+          classification: r.classification,
+          instrumentType: 'INDEX',
+          qualityBucket,
+          exitStrategy: 'EOD',
         },
-      },
-      update: {
-        direction: r.direction,
-        entry: r.entry,
-        stopLoss: r.stopLoss,
-        target: r.target,
-        overnightScore: r.score,
-        confidence: r.confidence ?? r.score ?? 0,
-        classification: r.classification,
-        instrumentType: 'INDEX',
-        qualityBucket,
-        exitStrategy: 'EOD',
-      },
-      create: {
-        symbol: r.symbol,
-        signalDate: r.signalDate,
-        signalTime: r.signalTime,
-        direction: r.direction,
-        entry: r.entry,
-        stopLoss: r.stopLoss,
-        target: r.target,
-        overnightScore: r.score,
-        confidence: r.confidence ?? r.score ?? 0,
-        classification: r.classification,
-        instrumentType: 'INDEX',
-        qualityBucket,
-        exitStrategy: 'EOD',
-      },
-    });
+      });
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        console.warn(`[IndexPersist] Concurrent upsert handled for ${r.symbol} on ${r.signalDate}`);
+      } else {
+        throw err;
+      }
+    }
   }
 }
 
