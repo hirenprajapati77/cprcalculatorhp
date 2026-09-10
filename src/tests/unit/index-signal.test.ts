@@ -70,7 +70,7 @@ describe('index-signal.util', () => {
       liquidity: 15,
       closeStrength: 10,
     };
-    const reasons = buildStbtReasons(breakdown, { reason: 'Bearish macro regime' });
+    const reasons = buildStbtReasons(breakdown, { reason: 'Bearish macro regime' } as any);
     assert.ok(reasons.some((r: string) => r.includes('VIX elevated')));
     assert.ok(reasons.some((r: string) => r.includes('CPR narrow')));
     assert.ok(reasons.some((r: string) => r.includes('Lower value CPR')));
