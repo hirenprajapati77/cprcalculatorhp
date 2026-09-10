@@ -95,6 +95,7 @@ describe('EntryManagerService (Tier 2 coverage)', () => {
         ...validStock,
         symbol: 'UNKNOWN',
         close: 100,
+        previousClose: 0,
         history: [],
       };
       const prev = EntryManagerService.resolvePreviousClose(emptyStock, '2026-09-09');
