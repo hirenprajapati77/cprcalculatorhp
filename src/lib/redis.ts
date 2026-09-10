@@ -189,7 +189,7 @@ export const cache = {
       try {
         const pipeline = redis.multi();
         pipeline.incr(key);
-        pipeline.expire(key, ttlSeconds, 'NX'); // sets TTL only if not already set
+        pipeline.expire(key, ttlSeconds);
         const results = await pipeline.exec();
         const count = results?.[0]?.[1] as number ?? 1;
         return count;
