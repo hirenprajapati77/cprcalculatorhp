@@ -57,6 +57,26 @@ describe('resolveBreakoutVixPolicy', () => {
     assert.equal(policy.entryExtensionPct, null);
     assert.equal(policy.minScore, null);
   });
+
+  it('returns unknown regime when latestClose is null and not elevated', () => {
+    const policy = resolveBreakoutVixPolicy({
+      elevated: false,
+      vixCalm: false,
+      latestClose: null as any,
+    });
+    assert.equal(policy.regimeLabel, 'unknown');
+    assert.equal(policy.pauseAll, false);
+  });
+
+  it('pauses when latestClose >= PAUSE_ALERTS_MIN even if elevated is false', () => {
+    const policy = resolveBreakoutVixPolicy({
+      elevated: false,
+      vixCalm: false,
+      latestClose: 26,
+    });
+    assert.equal(policy.pauseAll, true);
+    assert.equal(policy.regimeLabel, 'pause');
+  });
 });
 
 describe('filterBreakoutsForVixRegime', () => {

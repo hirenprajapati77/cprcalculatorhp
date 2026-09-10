@@ -58,3 +58,22 @@ test('parseFyers15mVwapAndCandle returns nulls for empty input', () => {
   assert.equal(m.vwap, null);
   assert.equal(m.candle15m, null);
 });
+
+test('parseFyers15mVwapAndCandle handles zero-volume fallback and invalid candles', () => {
+  const t0 = Math.floor(Date.UTC(2026, 7, 10, 3, 45) / 1000);
+  const candles: [number, number, number, number, number, number][] = [
+    [t0, 100, 102, 98, 101, 0],
+    [t0 + 900, 101, 103, 99, 102, 0],
+    // malformed / non-numeric price candle
+    [t0 + 1800, NaN, 105, 99, 100, 100],
+    // future timestamp beyond asOfTime
+    [t0 + 999999, 105, 106, 104, 105, 1000],
+  ];
+  const asOf = new Date(Date.UTC(2026, 7, 10, 5, 0));
+  const m = parseFyers15mVwapAndCandle(candles, asOf);
+  assert.ok(m.vwap != null);
+  assert.equal(m.vwap, 101); // (101 + 102 + 100) / 3
+  assert.ok(m.candle15m != null);
+  assert.equal(m.candle15m!.close, 102);
+});
+

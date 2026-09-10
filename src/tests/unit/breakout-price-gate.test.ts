@@ -281,3 +281,74 @@ describe('atrScaledExtensionCap', () => {
     assert.equal(atrScaledExtensionCap(5.0), 3.0);
   });
 });
+
+describe('breakout price gate — additional branch coverage', () => {
+  it('infers SHORT direction when alertKind is undefined and signals contains BREAKDOWN', () => {
+    const row = base({
+      symbol: 'INFER_SHORT',
+      signals: ['BREAKDOWN'],
+      ltp: 95,
+      entry: 105, // gapped down past entry -> GAP_INVALIDATED
+      high: 96,
+      low: 94,
+      previousClose: 104,
+    });
+    delete row.alertKind;
+    const result = filterBreakoutsForPriceActionability([row]);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'GAP_INVALIDATED');
+  });
+
+  it('suppresses setup when atrPct is provided and triggers EntryManager ATR extension', () => {
+    const result = filterBreakoutsForPriceActionability([
+      base({
+        symbol: 'ATR_EXT',
+        alertKind: 'BREAKOUT',
+        signals: ['BREAKOUT'],
+        ltp: 103, // +3% vs 100 prevClose
+        entry: 102.5,
+        high: 103.5,
+        low: 99.5,
+        previousClose: 100,
+        open: 100,
+        atrPct: 0.5, // 0.5% ATR -> max return 2.0 * 0.5 = 1.0%
+      }),
+    ]);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'EXTENDED');
+  });
+
+  it('respects entryExtensionPct override in filterBreakoutsForPriceActionability', () => {
+    const row = base({
+      symbol: 'VIX_TIGHT',
+      alertKind: 'BREAKOUT',
+      signals: ['BREAKOUT'],
+      ltp: 101.8, // 1.8% chase
+      entry: 100,
+      high: 102,
+      low: 99.8,
+      previousClose: 100,
+      open: 100.2,
+    });
+    // With tighter 1.0% cap, 1.8% chase should be suppressed
+    const result = filterBreakoutsForPriceActionability([row], { entryExtensionPct: 1.0 });
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'EXTENDED');
+  });
+
+  it('detects extension when high/low are missing but ltp is extended beyond chaseCap', () => {
+    const row = base({
+      symbol: 'NO_HL',
+      alertKind: 'BREAKOUT',
+      signals: ['BREAKOUT'],
+      ltp: 105,
+      entry: 100,
+    });
+    delete row.high;
+    delete row.low;
+    delete row.previousClose;
+    const result = filterBreakoutsForPriceActionability([row]);
+    assert.equal(result.suppressed.length, 1);
+    assert.equal(result.suppressed[0].gateReason, 'EXTENDED');
+  });
+});
