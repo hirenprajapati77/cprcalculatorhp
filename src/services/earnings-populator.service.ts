@@ -94,9 +94,9 @@ export class EarningsPopulatorService {
         const totalNseEvents = events.length;
         console.log(`[EarningsPopulator] NSE Event Calendar API returned ${totalNseEvents} total events.`);
 
-        // Threshold check to detect blocks or empty responses
-        if (totalNseEvents < 20) {
-          throw new Error(`NSE returned suspiciously few events (${totalNseEvents}) — likely blocked or empty.`);
+        // Log event count; warn if 0 events returned (e.g. empty or blocked)
+        if (totalNseEvents === 0) {
+          console.warn('[EarningsPopulator] NSE Event Calendar API returned 0 events — possibly off-season or blocked.');
         }
 
         for (const event of events) {

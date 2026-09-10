@@ -69,6 +69,7 @@ export async function middleware(request: NextRequest) {
     // Callback stays exempt (OAuth return cannot send the session cookie).
     if (
       url.pathname.startsWith('/api/health') ||
+      url.pathname.startsWith('/api/market-status') ||
       url.pathname.startsWith('/api/market-tools/breadth') ||
       url.pathname.startsWith('/api/market-tools/breakout') ||
       url.pathname.startsWith('/api/market-tools/pattern-breakout') ||

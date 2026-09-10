@@ -6,8 +6,8 @@ import { evaluateCprSetupPriceStaleness } from '@/services/alert/breakout-price-
 
 const MIN_BREAKOUT_ALERT_SCORE = 75;
 
-/** Minimum gap between two alerts for the same symbol+kind (default 4 hours = one intraday session). */
-const BREAKOUT_ALERT_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+/** Minimum gap between two alerts for the same symbol+kind (1 hour — allows re-alert within the same session). */
+const BREAKOUT_ALERT_COOLDOWN_MS = 1 * 60 * 60 * 1000;
 
 export type BreakoutAlertKind = 'BREAKOUT' | 'BREAKDOWN';
 /** Number of consecutive scan cycles a signal must be absent before resetting alert state. */

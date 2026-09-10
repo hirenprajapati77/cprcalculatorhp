@@ -87,6 +87,7 @@ describe('Middleware Authentication & Gating', () => {
   it('exempts public and cron API routes from token checks', async () => {
     const exemptPaths = [
       '/api/health',
+      '/api/market-status',
       '/api/broker/fyers/callback',
       '/api/share/123',
       '/api/auth/unlock',

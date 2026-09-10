@@ -145,7 +145,12 @@ Ok "Local tarballs cleaned up"
 
 # ── 9. POST-DEPLOY PRODUCTION SMOKE VERIFICATION ─────────────
 Log "Running post-deploy production smoke verification against $PROD_URL..."
-$smokeToken = if ($env:APP_ACCESS_TOKEN) { $env:APP_ACCESS_TOKEN } else { "" }
+$smokeToken = if ($env:APP_ACCESS_TOKEN) {
+    $env:APP_ACCESS_TOKEN
+} else {
+    $envLine = (Get-Content .env.server -ErrorAction SilentlyContinue | Where-Object { $_ -match '^APP_ACCESS_TOKEN=' })
+    if ($envLine) { $envLine -replace '^APP_ACCESS_TOKEN=\s*["'']?', '' -replace '["'']?\s*$', '' } else { "" }
+}
 $smokeArgs = @("scripts/smoke-verify.ts", "--url", $PROD_URL, "--total-timeout", "35000", "--timeout", "6000")
 if ($smokeToken) {
     $smokeArgs += @("--token", $smokeToken)
