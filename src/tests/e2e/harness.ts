@@ -94,14 +94,18 @@ export async function startE2EServer(): Promise<E2ETestServer> {
     readyReject = rej;
   });
 
+  const timeoutMs = process.env.E2E_READY_TIMEOUT_MS
+    ? parseInt(process.env.E2E_READY_TIMEOUT_MS, 10)
+    : 60000;
+
   const readyTimeout = setTimeout(() => {
     try {
       child.kill('SIGKILL');
     } catch {
       // ignore
     }
-    readyReject(new Error('Timed out waiting for E2E Next.js server to become ready (30s)'));
-  }, 30000);
+    readyReject(new Error(`Timed out waiting for E2E Next.js server to become ready (${timeoutMs / 1000}s)`));
+  }, timeoutMs);
 
   child.stdout?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();

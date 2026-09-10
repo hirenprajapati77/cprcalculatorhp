@@ -42,8 +42,8 @@ export async function executeGuardedQuery<T>(
   const { statementTimeoutMs, label } = options;
   // Safety margin for Prisma interactive transaction timeout
   const prismaTxTimeoutMs = statementTimeoutMs + 5000;
-  // Safety margin for application-side Promise.race deadline
-  const appDeadlineMs = options.applicationDeadlineMs ?? statementTimeoutMs + 3000;
+  // Safety margin for application-side Promise.race deadline aligned with transaction timeout
+  const appDeadlineMs = options.applicationDeadlineMs ?? prismaTxTimeoutMs;
 
   const txRunner = async (tx: Prisma.TransactionClient) => {
     // 1. Transaction-scoped statement timeout (milliseconds)

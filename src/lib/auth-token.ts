@@ -21,7 +21,6 @@ export async function hashToken(token: string): Promise<string> {
  */
 export function timingSafeEqual(a: string, b: string): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length === 0 && b.length === 0) return true;
 
   const maxLen = Math.max(a.length, b.length);
   const aPadded = a.padEnd(maxLen, '\0');

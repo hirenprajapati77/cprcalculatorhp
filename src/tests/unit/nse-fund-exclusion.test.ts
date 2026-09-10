@@ -28,6 +28,8 @@ test('isLikelyEtfOrFund excludes known ETF/liquid-fund symbols seen live in scan
     'MIDSELIETF',
     'MIDCAPINDEX',
     'MIDSMALLCASE',
+    'ABSLGSEC',
+    'SBIGILT',
   ];
   for (const s of shouldExclude) {
     assert.strictEqual(isLikelyEtfOrFund(s), true, `expected ${s} to be excluded`);

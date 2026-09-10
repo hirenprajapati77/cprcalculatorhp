@@ -26,10 +26,16 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2026-11-04', // Diwali — Balipratipada
     '2026-11-10', // Prakash Gurpurb Sri Guru Nanak Dev
     '2026-12-25', // Christmas
-    // NOTE: Always cross-check with official NSE holiday circular at
-    // https://www.nseindia.com/resources/exchange-communication-holidays
-    // Diwali dates above are based on Panchang; NSE may vary by one day.
-  ]
+  ],
+  '2027': [
+    '2027-01-26', // Republic Day
+    '2027-04-14', // Dr. Baba Saheb Ambedkar Jayanti
+    '2027-05-01', // Maharashtra Day
+    '2027-08-15', // Independence Day
+    '2027-10-02', // Mahatma Gandhi Jayanti
+    '2027-12-25', // Christmas
+    // Note: Full calendar will be reconciled when NSE publishes official 2027 circular (Nov/Dec 2026)
+  ],
 };
 
 /**

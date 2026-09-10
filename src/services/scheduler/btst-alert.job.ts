@@ -639,7 +639,8 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
         for (const journalEntry of journalEntries) {
           let exitPrice = ltp;
-          if (!TradeJournalService.isUnderlyingJournalLeg(journalEntry.optionContract) && journalEntry.optionStrike && journalEntry.optionType) {
+          const isOptionLeg = !TradeJournalService.isUnderlyingJournalLeg(journalEntry.optionContract) && Boolean(journalEntry.optionStrike && journalEntry.optionType);
+          if (isOptionLeg) {
             try {
               const optCmp = await TradeJournalService.fetchOptionCmp(
                 journalEntry.symbol,
@@ -650,9 +651,13 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
               );
               if (optCmp !== null && optCmp > 0) {
                 exitPrice = optCmp;
+              } else {
+                console.warn(`[GapFailureExit] Option CMP unavailable for ${journalEntry.symbol} (${journalEntry.optionContract}) — skipping exit write to prevent stock LTP pollution.`);
+                continue;
               }
             } catch (optErr) {
-              console.warn(`[GapFailureExit] Option CMP fetch failed for ${journalEntry.symbol}, using entryCmp or ltp:`, optErr);
+              console.warn(`[GapFailureExit] Option CMP fetch failed for ${journalEntry.symbol}:`, optErr);
+              continue;
             }
           }
 

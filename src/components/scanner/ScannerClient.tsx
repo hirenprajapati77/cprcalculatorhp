@@ -2152,17 +2152,20 @@ export default function ScannerClient() {
     if (stockNotes === saved) return;
 
     setIsNotesSaving(true);
+    let hideTimer: NodeJS.Timeout | undefined;
     const timeout = setTimeout(() => {
       localStorage.setItem(key, stockNotes);
       setIsNotesSaving(false);
       setShowSavedIndicator(true);
-      const hideIndicator = setTimeout(() => {
+      hideTimer = setTimeout(() => {
         setShowSavedIndicator(false);
       }, 2000);
-      return () => clearTimeout(hideIndicator);
     }, 500);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      if (hideTimer) clearTimeout(hideTimer);
+    };
   }, [stockNotes, drawerStock, drawerTab, drawerOpen]);
   // Multi-stock compare selection (capped at 5)
   const handleToggleCompareCheckbox = useCallback((symbol: string) => {

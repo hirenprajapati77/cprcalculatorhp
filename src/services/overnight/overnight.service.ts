@@ -458,7 +458,7 @@ export class OvernightService {
         }
 
         const todayCandle = isLastToday
-          ? (isTodayCandleFinal ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
+          ? (isTodayCandleFinal || !hasValidSessionOhlc ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
           : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
 
         // When today's bar is in history, yesterday is history[n-2].
