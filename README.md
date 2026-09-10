@@ -18,6 +18,11 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 - **Resilient Fallback Design:** Database Circuit Breaker pattern with gracefully degraded cached responses, ensuring 99.9% uptime for the UI even during database outages.
 - **Strict Environment Validation:** Zod-enforced environment variable schemas fail fast at startup if configuration is invalid. **`APP_ACCESS_TOKEN` is required in production.**
 - **Market Session Profile (CAS-ready):** Timings come from `MARKET_PROFILE` (`CONTINUOUS` default = current production clocks). `CLOSING_AUCTION` is dormant until explicitly enabled — see [`docs/CAS_ANALYSIS.md`](docs/CAS_ANALYSIS.md).
+- **Tiered Code Coverage Governance:** Enforces strict coverage floors across 4 architectural tiers (`Tier 1 Core Lib: >=90% lines, >=85% branches, >=90% functions; Tier 2 Trading Engine: >=85% lines, >=80% branches, >=90% functions; Tier 3A Market Tools: >=64% lines, >=70% branches; Tier 3B Backtest: >=46% lines, >=62% branches`) via `scripts/check-coverage-tiers.ts`.
+- **Zero-Dependency E2E Testing & Security Hardening:** 37 automated E2E integration tests across 17 test suites verifying critical user workflows, concurrency resilience, and security attack vectors (CWE-1236 CSV injection, timing attack immunity, path traversal, auth bypasses).
+- **Deterministic Build Identity & Deploy Visibility:** Bounded 12-character git commit SHA build ID (`scripts/generate-build-id.js`) exposed via `/api/build-id` and verified during deployments.
+- **Production Smoke Verification:** Standalone smoke verification script (`scripts/smoke-verify.ts` / `npm run smoke`) with default TLS enforcement verifying health, build ID, security headers, and authenticated endpoints.
+- **Scoped Database Query Protection:** Strict transaction-scoped statement timeouts and application-level deadlines (`executeGuardedQuery` in `src/lib/db-query-guard.ts`) preventing runaway queries and dangling Prisma transaction slots.
 - **Redis First Caching:** All module-level maps replaced with TTL-managed Redis caches for horizontal scalability.
 
 ---
@@ -52,6 +57,53 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **10 Sep — 10-Day Deep Code Review Remediation & Tiered Coverage Governance (PRs #197, #198, #199)**:
+  - **10-Day Deep Code Review Defect Remediation (PR #199)**: Audited 29 findings across all 4 operational domains and resolved 15 confirmed defects with regression tests:
+    - Fixed spot price leak into option trade journal on gap-failure exits by skipping journal leg when option CMP is unresolvable (`btst-alert.job.ts`).
+    - Closed distributed cron lock TOCTOU race with post-lock `cron_done` check (`cron-run-claim.ts`).
+    - Caught and absorbed Prisma `P2002` errors on concurrent index BTST signal upserts (`index-overnight-persist.ts`).
+    - Hardened CSV injection regex against leading whitespace payloads (`export-utils.ts`).
+    - Expanded ETF exclusion regex for non-word-boundary GSEC/GILT suffixes (`nse-fund-exclusion.ts`).
+    - Hoisted unmounted timer reference cleanup in scanner notes (`ScannerClient.tsx`).
+    - Increased E2E server startup ready timeout to 60s (`harness.ts`).
+    - Added `process.exit(1)` on `unhandledRejection` to prevent corrupted background process hangs (`server-starter.js`).
+    - Added HTTP 429 exponential backoff retry using `retry_after` header (`telegram.service.ts`).
+    - Enforced uniform constant-time execution path in `timingSafeEqual` (`auth-token.ts`).
+    - Aligned application query deadline with Prisma transaction timeout (`db-query-guard.ts`).
+    - Added provisional 2027 national market holidays (`market-hours.ts`).
+    - Guarded against zero advances and declines with 1.0 neutral parity fallback (`market-breadth.service.ts`).
+    - Added fallback to `lastCandle` when live session OHLC is zeroed or invalid (`overnight.service.ts`).
+    - Injected HTTP security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) in `next.config.ts`.
+  - **Orphaned Coverage Scripts Removed (PR #198)**: Removed outdated `test:coverage:core` and `test:coverage:services` from `package.json`.
+  - **Tiered Code Coverage Governance (PR #197 / ISSUE-004)**: Established 4-tier architectural governance model via `scripts/check-coverage-tiers.ts` (Tier 1 Core Lib: 90% lines / 85% branches / 90% functions; Tier 2 Trading Engine: 85% lines / 80% branches / 90% functions; Tier 3A Market Tools: 64% lines / 70% branches; Tier 3B Backtest: 46% lines / 62% branches). Added 27 new unit test suites (+3,105 lines of tests).
+  - Tests: **1,105 total unit tests (1,104 pass, 1 skip, 0 fail)** + **37 E2E tests across 17 suites**.
+- **08–09 Sep — Production Hardening, E2E Testing & Security Backlog (PRs #181–#196)**:
+  - **Fail-Closed Distributed Lock (PR #196)**: Enforced fail-closed behavior in production when Redis is unreachable, preventing concurrent background cron runs.
+  - **Production Smoke Script TLS Enforcement (PR #195)**: Enforced strict TLS verification by default in `scripts/smoke_verify.sh` with explicit `--insecure` opt-in.
+  - **Security Dependency Upgrades (PR #194)**: Remediated CVEs in `next`, `sharp`, `js-yaml`, and `hono`.
+  - **CPR Journal EOD Lookahead Bias Reversal (PR #191 & #193)**: Reverted the EOD target-achieved override to eliminate selection bias and preserve authentic trade win rates.
+  - **Market Tools Cache Freshness Wiring (PR #192 / ISSUE C)**: Wired `evaluateReportFreshness` directly into `/api/market-tools/*` read endpoints.
+  - **Deterministic 12-Char Build ID (PR #190 / ISSUE-011)**: Implemented bounded 12-char git commit SHA build ID strategy via `scripts/generate-build-id.js` and runtime `/api/build-id`.
+  - **E2E Security Hardening (PR #189 / ISSUE-010)**: Expanded E2E test suite to cover CWE-1236 CSV injection, timing attack immunity, path traversal, and auth bypass vectors.
+  - **Production Smoke Verification & Deploy Hook (PR #188 / ISSUE-009)**: Established `scripts/smoke-verify.ts` and automated post-deployment smoke verification.
+  - **7-Day Safety TTL & Freshness Contract (PR #187 / ISSUE-008)**: Enforced 7-day safety TTL on Redis cache keys and trading-date freshness contracts.
+  - **Scoped Database Query Timeouts (PR #186 / ISSUE-007)**: Enforced scoped statement timeouts via `db-query-guard.ts` and optimized composite indexes on `DailyOhlcv`.
+  - **Zero-Dependency E2E Test Foundation (PR #185 / ISSUE-005)**: Built native Node.js test harness against ephemeral Next.js server instances (`npm run test:e2e`).
+  - **CI Release Gate Parity (PR #184 / ISSUE-004)**: Enforced `npm run release:check` directly inside GitHub Actions CI.
+  - **Canonical Candle Geometry Validation (PR #178 & #183 / ISSUE-003)**: Validated OHLCV geometry (`high >= low`, `high >= open`, `high >= close`, `low <= open`, `low <= close`) across calculation boundaries.
+  - **Distributed Computation Concurrency Protection (PR #182 / ISSUE-002)**: Protected heavy computation jobs with distributed Redis locks and bounded timeouts.
+  - **Cold-Cache Protection (PR #181 / ISSUE-001)**: Prevented unauthenticated anonymous cold-cache compute requests on market tools.
+  - **Query Parameter Preservation (PR #180)**: Preserved unencoded `A+` tier parameters in market-tools API routes.
+- **04–07 Sep — Resilience, Edge Runtime & Ingestion Integrity (PRs #166–#179)**:
+  - Enforced zero trailing turnover contract when historical candle depth < 2 sessions (PR #179).
+  - Added bounded 5s per-request timeouts to Yahoo Finance calls in `earnings-populator.service.ts` (PR #177).
+  - Enforced runtime query parameter validation with Zod across `/api/market-tools/*` routes (PR #176).
+  - Ensured auth unlock rate limiter and distributed cron fail closed during Redis outages (PR #175).
+  - Remediated high-severity CVEs and strengthened automated PR check gates (PR #174).
+  - Configured graceful shutdown orchestrator to exit with code 1 if critical hooks fail (PR #173).
+  - Enforced consecutive trading session validation for Momentum Leaders historical calculation windows (PR #172).
+  - Replaced Node-only crypto references with Web Crypto API compatible `timingSafeEqual` for Edge Runtime middleware (PR #170, #171).
+  - Consolidated graceful shutdown orchestrator, settled hanging hook promises in Node 22 test runner, and established minimum Bhavcopy ingestion row floors (PRs #166–#169).
 - **04 Sep — 2-Month Deep Code Review: 52 Defects Resolved across Tiers 1–4 (PRs #161, #162, #163, #164)**:
   - **Exhaustive Architectural Review**: Audited 822 commits and 596 files (July 4 – September 4, 2026) across Overnight/Journal, Market Tools/Ingestion, Scanner/Alerts, and Infrastructure/Security. Resolved all 52 confirmed defects in strict priority order (**CRITICAL > HIGH > MEDIUM > LOW**):
   - **Tier 1 (11 CRITICAL / PR #161)**: Fixed spot stock price leaking into option trade journal on gap failure exit (`btst-alert.job.ts`); inverted 09:16 AM snapshot and gap-exit execution order to prevent dropped closures (`market-cron.scheduler.ts`); synthesized live Fyers candle in `MarketStockData` to restore live BTST discovery (`overnight.service.ts`); shifted 52W high window from `CURRENT ROW` to `1 PRECEDING` fixing zero breadth breakouts (`market-breadth.service.ts`); protected `EQ` series rows from being overwritten by `BE`/`SM` batches in Bhavcopy deduplication (`bhavcopy-ingest.ts`); fixed truthy object check in Telegram alert retry (`telegram.service.ts`); aligned option target/SL distance to current spot LTP (`option-suggestion.service.ts`); created missing `/api/options/chain` route handler; enforced distributed cron claims across all HTTP cron routes (`api/cron/*`); added explicit `process.exit(0)` to `SIGINT`/`SIGTERM` handlers eliminating PM2 reload hangs; replaced fatal process exits on `unhandledRejection` with structured traces and added PM2 backoff.
@@ -161,9 +213,40 @@ Once the build completes, you can safely revert `next.config.ts` so as not to co
 
 ## 🧪 Testing
 
-Execute the unit and schema validation test suite using Node's native runner:
+The platform enforces a multi-tiered testing and governance verification model using Node's native test runner (`node:test`, `node:assert`) and TypeScript execution (`tsx`):
+
+### 1. Unit Test Suite
+Execute the fast unit and schema validation test suite (1,105 tests across 216 suites):
 ```bash
 npm test
+```
+
+### 2. Tiered Code Coverage Governance
+Run the full coverage suite and verify that all 4 architectural coverage tiers meet or exceed their governance floors:
+```bash
+npm run test:coverage
+```
+- **Tier 1: Core Lib (`src/lib/**`)**: $\ge 90\%$ lines, $\ge 85\%$ branches, $\ge 90\%$ functions
+- **Tier 2: Trading Engine & Alerts (`src/services/{overnight,vpa,alert}/**`)**: $\ge 85\%$ lines, $\ge 80\%$ branches, $\ge 90\%$ functions
+- **Tier 3A: Market Tools (`src/services/market-tools/**`)**: $\ge 64\%$ lines, $\ge 70\%$ branches, $\ge 84\%$ functions
+- **Tier 3B: Backtest Engine (`src/services/backtest/**`)**: $\ge 46\%$ lines, $\ge 62\%$ branches, $\ge 79\%$ functions
+
+### 3. Zero-Dependency End-to-End (E2E) Suite
+Spin up an ephemeral Next.js server instance and execute the 37 E2E workflow and security test scenarios:
+```bash
+npm run test:e2e
+```
+
+### 4. Production Smoke Verification
+Verify server runtime health, build ID, security headers, and authenticated routes against a live deployment:
+```bash
+npm run smoke
+```
+
+### 5. Full Pre-Release Gate
+Execute the identical verification pipeline enforced by GitHub Actions CI:
+```bash
+npm run release:check
 ```
 
 *Note: For testing BTST endpoints locally outside the strict 15:10–15:25 IST execution window, you can use the `BTST_BYPASS_WINDOW=true` environment variable.*

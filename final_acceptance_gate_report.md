@@ -2,13 +2,71 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Report pass:** 13 (Post-1-Month Deep Code Review & Hardening)  
-**Report generated:** 2026-09-01  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 1, 2026.
+**Report pass:** 14 (Post-10-Day Deep Code Review, Tiered Coverage Governance & Production Hardening)  
+**Report generated:** 2026-09-10  
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 10, 2026 (`npm run release:check` + `npm run test:e2e`).
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 13 / Sep 1, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 14 / Sep 10, 2026)
+
+This pass integrates and verifies the comprehensive 10-day deep code review remediation, architectural tiered coverage governance, and production hardening backlog across PRs #166 through #199:
+
+1. **10-Day Deep Code Review Defect Remediation (PR #199)**:
+   - **Gap-Failure Exit Data Integrity (`btst-alert.job.ts`)**: Skips option trade journal leg when option CMP cannot be resolved, preventing spot stock LTP pollution into option PnL calculations.
+   - **Distributed Cron Lock TOCTOU Race Condition Closure (`cron-run-claim.ts`)**: Re-checks `cron_done:${key}` immediately after acquiring `cron_lock:${key}` to eliminate duplicate execution windows.
+   - **Prisma P2002 Concurrency Error Handling (`index-overnight-persist.ts`)**: Absorbs unique constraint collisions on concurrent index BTST signal upserts.
+   - **CSV Formula Injection Defense Hardening (`export-utils.ts`)**: Hardened regex to `/^\s*[=+\-@\t\r]/` neutralizing payloads with leading whitespace.
+   - **ETF Exclusion Regex Suffix Matching (`nse-fund-exclusion.ts`)**: Added `(GSEC|GILT)\d*$` for government security funds without word boundaries.
+   - **Unmounted Component Timer Cleanup (`ScannerClient.tsx`)**: Hoisted and cleared drawer indicator timers on component unmount.
+   - **E2E Test Harness Timeout Expansion (`harness.ts`)**: Increased ready timeout to 60s (`E2E_READY_TIMEOUT_MS`) for slow startup environments.
+   - **Unhandled Rejection Recovery (`server-starter.js`)**: Added `process.exit(1)` on `unhandledRejection` so corrupt processes restart cleanly via PM2.
+   - **Telegram Rate-Limit Exponential Backoff (`telegram.service.ts`)**: Added HTTP 429 retry using `retry_after` header (capped at 5s).
+   - **Uniform Constant-Time String Comparison (`auth-token.ts`)**: Eliminated early exit on empty strings in `timingSafeEqual`.
+   - **Query Deadline Alignment (`db-query-guard.ts`)**: Aligned application query deadline with Prisma transaction timeout.
+   - **Provisional 2027 Market Holidays (`market-hours.ts`)**: Added provisional fixed national holidays for 2027.
+   - **Market Breadth Zero Advance/Decline Guard (`market-breadth.service.ts`)**: Defaulted `adRatio` to 1.0 (neutral parity) when both advances and declines are 0.
+   - **Invalid Session OHLC Fallback (`overnight.service.ts`)**: Fallback to `lastCandle` when live session OHLC is zeroed or invalid.
+   - **HTTP Security Headers (`next.config.ts`)**: Enforced `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: strict-origin-when-cross-origin`.
+
+2. **Orphaned Coverage Script Cleanup (PR #198)**:
+   - Removed deprecated `test:coverage:core` and `test:coverage:services` from `package.json`, directing all validation through `scripts/check-coverage-tiers.ts`.
+
+3. **Tiered Code Coverage Governance (PR #197 / ISSUE-004)**:
+   - Implemented 4-tier architectural coverage governance (`scripts/check-coverage-tiers.ts`):
+     - **Tier 1 (Core Lib)**: 92.39% lines (req >=90%), 85.18% branches (req >=85%), 95.82% functions (req >=90%) — PASS
+     - **Tier 2 (Trading Engine & Alerts)**: 85.64% lines (req >=85%), 81.26% branches (req >=80%), 95.47% functions (req >=90%) — PASS
+     - **Tier 3A (Market Tools)**: 68.98% lines (req >=64%), 75.17% branches (req >=70%), 89.11% functions (req >=84%) — PASS
+     - **Tier 3B (Backtest Engine)**: 51.39% lines (req >=46%), 67.06% branches (req >=62%), 84.48% functions (req >=79%) — PASS
+   - Added 27 new unit test suites across all tiers (+3,105 lines of tests).
+
+4. **Production Hardening, E2E Security & Operational Governance (PRs #181–#196)**:
+   - **Fail-Closed Distributed Locks (PR #196)**: Fail closed in production when Redis is unreachable.
+   - **Smoke Verification TLS Enforcement (PR #195)**: Default strict TLS checks in `scripts/smoke_verify.sh`.
+   - **Dependency CVE Remediations (PR #194)**: Upgraded `next`, `sharp`, `js-yaml`, and `hono`.
+   - **CPR Journal EOD Lookahead Bias Reversal (PR #191 & #193)**: Reverted EOD target-achieved override to eliminate selection bias.
+   - **Market Tools Cache Freshness Contract (PR #187, #192 / ISSUE C, ISSUE-008)**: Wired `evaluateReportFreshness` directly into read endpoints; enforced 7-day maximum safety TTL.
+   - **Deterministic Build ID Strategy (PR #190 / ISSUE-011)**: Implemented 12-char git commit SHA build ID and `/api/build-id` runtime endpoint.
+   - **E2E Security Attack Scenarios (PR #189 / ISSUE-010)**: Hardened against CSV injection, path traversal, auth bypasses, and timing attacks.
+   - **Production Smoke Verification Script (PR #188 / ISSUE-009)**: Built `scripts/smoke-verify.ts` with post-deploy verification hooks.
+   - **Scoped Database Query Timeouts (PR #186 / ISSUE-007)**: Enforced statement timeouts via `db-query-guard.ts` and optimized composite indexes on `DailyOhlcv`.
+   - **Zero-Dependency E2E Test Harness (PR #185 / ISSUE-005)**: 37 automated E2E tests across 17 suites against ephemeral server.
+   - **CI Release Gate Parity (PR #184 / ISSUE-004)**: Enforced `release:check` in GitHub Actions CI workflows.
+   - **Canonical OHLCV Candle Geometry Validation (PR #178 & #183 / ISSUE-003)**: Enforced strict candle geometry across computation boundaries.
+   - **Concurrency & Cold-Cache Protection (PR #181 & #182 / ISSUE-001, ISSUE-002)**: Protected heavy computation with distributed locks and blocked anonymous cold-cache compute.
+
+5. **Verification Metrics (Pass 14 / Sep 10, 2026)**:
+   - **TypeScript `tsc --noEmit`:** 0 errors.
+   - **ESLint (`npm run lint`):** 0 errors.
+   - **Regression Lock (`npm run regression-lock`):** Hash `2ef002db...` 100% stable; core execution 4.70ms.
+   - **Security Audit (`npm run security:check`):** 0 high or critical vulnerabilities.
+   - **Unit Tests:** **1,105 tests across 216 suites (1,104 pass, 1 skip, 0 fail)** (~36.4s).
+   - **E2E Tests:** **37 tests across 17 suites (37 pass, 0 fail)**.
+   - **GitHub Actions CI:** All check gates (`verify`) green.
+
+---
+
+## 2. Verified Infrastructure and Code Changes (Pass 13 / Sep 1, 2026)
 
 This pass integrates and verifies the 1-month comprehensive deep review across all 303 commits (Aug 1 – Sep 1, 2026):
 
