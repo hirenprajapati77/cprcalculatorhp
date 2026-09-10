@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 10 Sep: 10-Day Deep Code Review Remediation & Tiered Coverage Governance (PRs #197, #198, #199)
+
+- **10-Day Deep Code Review Defect Remediation (PR #199)**:
+  Exhaustive audit of 29 findings identified during the 10-day deep code review across all 4 operational domains (Overnight/Journal, Market Tools, Scanner/Alerts, Infrastructure/Security). Resolved 15 confirmed defects and edge cases with complete test verification:
+  - **Gap-Failure Exit Data Integrity (`btst-alert.job.ts`)**: When resolving option CMP during gap-failure exits, if `fetchOptionCmp` fails or returns null/0, skips updating the option trade journal leg instead of using stock spot LTP (`exitPrice = ltp`), preventing severe option PnL distortion.
+  - **Distributed Cron Lock TOCTOU Fix (`cron-run-claim.ts`)**: Added immediate re-check of `cron_done:${key}` after acquiring `cron_lock:${key}` to close TOCTOU race conditions where concurrent workers execute simultaneously during lock acquisition.
+  - **Concurrent Index Signal Upsert Protection (`index-overnight-persist.ts`)**: Caught and absorbed Prisma `P2002` (unique constraint) errors during concurrent index BTST signal upserts, eliminating unhandled transaction crashes.
+  - **CSV Formula Injection Regex Hardening (`export-utils.ts`)**: Hardened regex to `/^\s*[=+\-@\t\r]/` so payloads with leading whitespace are neutralized with single-quote escaping (CWE-1236).
+  - **ETF Exclusion Regex Expansion (`nse-fund-exclusion.ts`)**: Added `(GSEC|GILT)\d*$` to exclude government security funds ending in GSEC/GILT without requiring a word boundary.
+  - **Unmounted Component Timer Cleanup (`ScannerClient.tsx`)**: Hoisted `hideIndicator` timer reference to properly clear timeout on unmount or prop change, preventing unhandled callback execution on unmounted components.
+  - **E2E Test Server Startup Timeout (`harness.ts`)**: Increased ephemeral test server ready timeout to 60s (`E2E_READY_TIMEOUT_MS`) to eliminate cold-start flakiness on loaded environments.
+  - **Unhandled Rejection Process Exit (`server-starter.js`)**: Added `process.exit(1)` on `unhandledRejection` so background processes fail fast and recover via PM2 rather than hanging in a corrupted state.
+  - **Telegram Rate-Limit Backoff & Retry (`telegram.service.ts`)**: Added automatic HTTP 429 exponential backoff retry using `retry_after` header (capped at 5s, max 2 attempts).
+  - **Uniform Constant-Time Comparison (`auth-token.ts`)**: Removed redundant early exit on empty string pairs in `timingSafeEqual`, ensuring uniform execution paths across all inputs.
+  - **Prisma Statement & Application Timeout Alignment (`db-query-guard.ts`)**: Aligned default `applicationDeadlineMs` with `prismaTxTimeoutMs` (`statementTimeoutMs + 5000`) so application-level timeouts do not leave dangling Prisma transaction slots.
+  - **Provisional 2027 Market Holidays (`market-hours.ts`)**: Added provisional fixed national holidays for 2027 (Republic Day, Ambedkar Jayanti, Maharashtra Day, Independence Day, Gandhi Jayanti, Christmas) to prevent holiday resolution warnings on forward-projected dates.
+  - **Market Breadth Zero Advance/Decline Guard (`market-breadth.service.ts`)**: Set default `adRatio` to 1.0 (neutral parity) when both advances and declines are 0, avoiding misleading zero ratios on holiday or pre-market sweeps.
+  - **Invalid Session OHLC Fallback (`overnight.service.ts`)**: Fallback to `lastCandle` if `!hasValidSessionOhlc` when `isLastToday` is true, guarding against zeroed live quotes.
+  - **HTTP Security Headers (`next.config.ts`)**: Added `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: strict-origin-when-cross-origin`.
+
+- **Orphaned Coverage Script Cleanup (PR #198)**:
+  - Removed deprecated `test:coverage:core` and `test:coverage:services` entries from `package.json` that enforced legacy 95% thresholds, standardizing all coverage validation onto `test:coverage` and `scripts/check-coverage-tiers.ts`.
+
+- **Tiered Code Coverage Governance Model (PR #197 / ISSUE-004)**:
+  - **4-Tier Architectural Model**: Replaced arbitrary flat coverage thresholds with an architectural 4-tier governance policy enforced by `scripts/check-coverage-tiers.ts`:
+    - **Tier 1: Core Lib (`src/lib/**`)** — Lines $\ge 90\%$, Branches $\ge 85\%$, Functions $\ge 90\%$ (Current: 92.39% lines / 85.18% branches / 95.82% functions).
+    - **Tier 2: Trading Engine & Alerts (`src/services/{overnight,vpa,alert}/**`)** — Lines $\ge 85\%$, Branches $\ge 80\%$, Functions $\ge 90\%$ (Current: 85.64% lines / 81.26% branches / 95.47% functions).
+    - **Tier 3A: Market Tools (`src/services/market-tools/**`)** — Lines $\ge 64\%$, Branches $\ge 70\%$, Functions $\ge 84\%$ (Current: 68.98% lines / 75.17% branches / 89.11% functions).
+    - **Tier 3B: Backtest Engine (`src/services/backtest/**`)** — Lines $\ge 46\%$, Branches $\ge 62\%$, Functions $\ge 79\%$ (Current: 51.39% lines / 67.06% branches / 84.48% functions).
+  - **New Unit Test Suites**: Added 27 new unit test suites across all tiers (+3,105 lines of rigorous test logic), expanding total unit tests to **1,105 total tests (1,104 pass, 1 skip, 0 fail)**.
+
+### Added & Fixed — 08–09 Sep: Production Hardening, E2E Testing & Security Backlog (PRs #181–#196)
+
+- **Distributed Lock Fail-Closed Protection (PR #196)**:
+  - Updated `acquireDistributedLock` in `src/lib/distributed-lock.ts` to fail closed (`acquired: false`) in production when Redis is unreachable, preventing multi-worker concurrency and split-brain background jobs.
+
+- **Production Smoke Verification TLS Enforcement (PR #195)**:
+  - Enforced strict TLS certificate verification by default in `scripts/smoke_verify.sh` and `scripts/smoke-verify.ts`, adding an explicit `--insecure` opt-in flag for local testing.
+
+- **Security Dependency Vulnerability Remediation (PR #194)**:
+  - Patched high/moderate CVEs across dependencies including `next`, `sharp`, `js-yaml`, and `hono`.
+
+- **CPR Journal EOD Lookahead Bias Reversal (PR #191 & #193)**:
+  - Reverted the EOD target-achieved override (`#191`) via `#193` after identifying lookahead bias that artificially inflated journal win rates, preserving strict historical trade fidelity.
+
+- **Market Tools Cache Freshness Wiring (PR #192 / ISSUE C)**:
+  - Wired `evaluateReportFreshness` directly into `/api/market-tools/*` read endpoints to guarantee trading-day freshness before serving cached reports.
+
+- **Deterministic 12-Char Git Commit Build ID (PR #190 / ISSUE-011)**:
+  - Implemented deterministic build ID generation via `scripts/generate-build-id.js` using a bounded 12-character commit SHA with fallback, exposed through `/api/build-id` for runtime deployment visibility.
+
+- **E2E Security Attack Scenarios & Boundary Hardening (PR #189 / ISSUE-010)**:
+  - Expanded E2E test suite to cover security attack vectors including CWE-1236 CSV injection payloads, path traversal, unauthorized API access, and timing attacks.
+
+- **Production Smoke Verification Script & Deploy Hook (PR #188 / ISSUE-009)**:
+  - Established `scripts/smoke-verify.ts` and automated post-deployment smoke verification checking health, build ID, security headers, and authenticated routes.
+
+- **7-Day Safety TTL & Freshness Contract (PR #187 / ISSUE-008)**:
+  - Enforced a 7-day maximum safety TTL on Redis cache keys and established explicit trading-date freshness validation contracts (`CACHE_SAFETY_MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000`).
+
+- **Scoped Database Query Timeouts & Index Optimization (PR #186 / ISSUE-007)**:
+  - Created `src/lib/db-query-guard.ts` enforcing scoped statement timeouts and application deadlines (`executeGuardedQuery`), and optimized composite indexing on `DailyOhlcv`.
+
+- **Zero-Dependency E2E Test Foundation (PR #185 / ISSUE-005)**:
+  - Established zero-dependency E2E test harness using native Node.js test runner against an ephemeral Next.js server, covering 37 critical tests across 17 suites (`npm run test:e2e`).
+
+- **CI Release Gate Parity (PR #184 / ISSUE-004)**:
+  - Integrated `release:check` into GitHub Actions CI (`.github/workflows/verify.yml`), ensuring pull requests execute identical gates as production deployments (typecheck, lint, regression-lock, test:coverage, security:check, build:clean).
+
+- **Canonical OHLCV Candle Geometry Validation (PR #178 & #183 / ISSUE-003)**:
+  - Enforced candle geometry validation (`high >= low`, `high >= open`, `high >= close`, `low <= open`, `low <= close`, positive volume) across calculation boundaries.
+
+- **Distributed Concurrency & Timeout Protection (PR #182 / ISSUE-002)**:
+  - Protected expensive computation jobs with distributed Redis locks and bounded execution timeouts.
+
+- **Cold-Cache Protection (PR #181 / ISSUE-001)**:
+  - Blocked anonymous unauthenticated cold-cache compute requests on market tools endpoints to prevent compute exhaustion attacks.
+
+- **Query Parameter Preservation (PR #180)**:
+  - Preserved unencoded `A+` tier parameters during URL query parsing in market-tools API route handlers.
+
+### Added & Fixed — 04–07 Sep: Resilience, Edge Runtime & Ingestion Integrity (PRs #166–#179)
+
+- **Trailing Turnover Contract (PR #179)**:
+  - Enforced 0 trailing turnover when historical candle depth is less than 2 sessions.
+- **Yahoo Finance Per-Request Timeouts (PR #177)**:
+  - Added bounded 5s per-request timeouts to Yahoo Finance queries in `earnings-populator.service.ts` to prevent hung cron workers.
+- **Runtime Query Parameter Validation (PR #176)**:
+  - Enforced runtime query parameter schema validation using Zod across all `/api/market-tools/*` endpoints.
+- **Redis Outage Fail-Closed Auth & Cron (PR #175)**:
+  - Ensured auth unlock rate-limiter and distributed cron runners fail closed during Redis connection outages.
+- **PR Gate Hardening & Vulnerability Remediation (PR #174)**:
+  - Remediated high-severity CVEs and strengthened automated PR check gates.
+- **Fatal Exit on Critical Hook Failures (PR #173)**:
+  - Configured graceful shutdown orchestrator to exit with code 1 if critical database or queue teardown hooks fail.
+- **Consecutive Canonical Trading Sessions (PR #172)**:
+  - Enforced consecutive trading session validation for Momentum Leaders historical calculation windows.
+- **Edge Runtime Auth Token Compatibility (PR #170 & #171)**:
+  - Replaced Node-only crypto references in `auth-token.ts` with Web Crypto API compatible `timingSafeEqual` in middleware.
+- **Graceful Shutdown & CI Stability (PRs #166–#169)**:
+  - Consolidated graceful shutdown orchestrator, settled hanging hook promises in Node 22 test runner, tracked background promises in test teardown, and established minimum Bhavcopy row ingestion floors.
+
 ### Added & Fixed — 04 Sep: 2-Month Deep Code Review — 52 Defects Resolved across Tiers 1–4 (PRs #161, #162, #163, #164)
 
 Exhaustive 60-day architectural and quantitative code review covering 822 commits and 596 unique files (July 4 – September 4, 2026). All 52 confirmed defects resolved across all 4 operational domains in strict priority order (**CRITICAL > HIGH > MEDIUM > LOW**):
