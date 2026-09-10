@@ -1,9 +1,6 @@
 {
   "all": true,
-  "check-coverage": true,
-  "lines": 70,
-  "branches": 72,
-  "functions": 88,
+  "check-coverage": false,
   "include": [
     "src/lib/**",
     "src/services/**"
@@ -14,6 +11,7 @@
   ],
   "reporter": [
     "text",
-    "text-summary"
+    "text-summary",
+    "json-summary"
   ]
 }

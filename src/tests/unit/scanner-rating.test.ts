@@ -87,6 +87,45 @@ describe('btstRowHighlightClass', () => {
     assert.match(btstRowHighlightClass('STBT_READY'), /accent-red/);
     assert.match(btstRowHighlightClass('BTST_READY'), /accent-blue/);
   });
+
+  it('covers WATCH, IGNORE, empty, and default classifications', () => {
+    assert.match(btstRowHighlightClass('WATCH'), /accent-amber/);
+    assert.match(btstRowHighlightClass('IGNORE'), /bg-tertiary/);
+    assert.equal(btstRowHighlightClass('UNKNOWN_CLASS'), '');
+    assert.equal(btstRowHighlightClass(null), '');
+    assert.equal(btstRowHighlightClass(undefined), '');
+  });
+});
+
+describe('cprRatingLabel overnightMode & fallback coverage', () => {
+  it('handles overnightMode for all tiers', () => {
+    assert.equal(cprRatingLabel('strong', 'LONG', true), 'Strong');
+    assert.equal(cprRatingLabel('ready', 'SHORT', true), 'Ready');
+    assert.equal(cprRatingLabel('watch', null, true), 'Watch');
+    assert.equal(cprRatingLabel('ignore', null, true), 'Ignore');
+  });
+
+  it('handles watch and ignore in normal mode', () => {
+    assert.equal(cprRatingLabel('watch', 'LONG', false), 'Watch');
+    assert.equal(cprRatingLabel('ignore', 'SHORT', false), 'Ignore');
+  });
+});
+
+describe('inferScannerBadgeDirection edge conditions', () => {
+  it('returns null when entry <= 0 or bc/tc <= 0', () => {
+    assert.equal(inferScannerBadgeDirection({ entry: 0, bc: 100, tc: 105 }), null);
+    assert.equal(inferScannerBadgeDirection({ entry: 100, bc: 0, tc: 105 }), null);
+    assert.equal(inferScannerBadgeDirection({ entry: 100, bc: 100, tc: 0 }), null);
+  });
+
+  it('returns null when entry is neither TC nor BC (ambiguous RANGE)', () => {
+    assert.equal(inferScannerBadgeDirection({ entry: 102, bc: 100, tc: 105 }), null);
+  });
+
+  it('handles degenerate bc === tc', () => {
+    const res = inferScannerBadgeDirection({ entry: 100, bc: 100, tc: 100 });
+    assert.ok(res === 'LONG' || res === 'SHORT');
+  });
 });
 
 describe('cprDirectionToOptionBias', () => {

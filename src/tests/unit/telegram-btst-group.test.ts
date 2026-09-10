@@ -309,3 +309,186 @@ test('sendBreakoutAlert returns ok: false when Telegram API returns failure (CRI
     env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
   }
 });
+
+test('sendRawMessage sends pre-formatted message to group or fallback chat', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalGroup = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'raw-test-token';
+  env.TELEGRAM_GROUP_CHAT_ID = 'raw-group-chat';
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  let sentBody: string = '';
+  global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    sentBody = String(init?.body);
+    return {
+      ok: true,
+      text: async () => 'ok',
+      json: async () => ({ ok: true }),
+    };
+  }) as unknown as typeof global.fetch;
+
+  try {
+    const res = await TelegramService.sendRawMessage('<b>System Alert</b>');
+    assert.strictEqual(res.ok, true);
+    assert.match(sentBody, /raw-group-chat/);
+    assert.match(sentBody, /System Alert/);
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroup;
+  }
+});
+
+test('sendMessage returns false when bot token is not configured', async () => {
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  env.TELEGRAM_BOT_TOKEN = undefined;
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  try {
+    const res = await TelegramService.sendMessage('test message');
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.reason, 'missing_config');
+  } finally {
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    prisma.appSettings.findUnique = originalFindUnique;
+  }
+});
+
+test('sendBtstAlert with only SHORT setups displays 0 LONG setups and formats SHORT section', async () => {
+  const mocks = withMocks({ group: 'group-chat' });
+  try {
+    const shortOnlyPayload = [
+      {
+        tag: 'SHORT',
+        longScore: 0,
+        shortScore: 115,
+        symbol: 'SHORT_TCS',
+        entry: 3500,
+        sl: 3535,
+        target: 3430,
+        rr: '1:2',
+        signals: ['BEARISH'],
+        classification: 'STRONG_STBT',
+      },
+    ] as unknown as Parameters<typeof TelegramService.sendBtstAlert>[0];
+
+    const result = await TelegramService.sendBtstAlert(shortOnlyPayload);
+    assert.strictEqual(result.sent, true);
+    assert.match(mocks.sentBodies[0], /🟢 <b>LONG SETUPS \(0\)<\/b>/);
+    assert.match(mocks.sentBodies[0], /🔴 <b>SHORT SETUPS \(1\)<\/b>/);
+    assert.match(mocks.sentBodies[0], /SHORT_TCS/);
+  } finally {
+    mocks.restore();
+  }
+});
+
+test('sendBreakoutAlert edge cases and formatting options', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalGroup = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'token';
+  env.TELEGRAM_GROUP_CHAT_ID = 'group';
+  prisma.appSettings.findUnique = (async () => null) as unknown as typeof prisma.appSettings.findUnique;
+
+  const sentBodies: string[] = [];
+  global.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { text: string };
+    sentBodies.push(body.text);
+    return { ok: true, text: async () => 'ok', json: async () => ({ ok: true }) };
+  }) as unknown as typeof global.fetch;
+
+  try {
+    // 1. Empty array
+    const emptyRes = await TelegramService.sendBreakoutAlert([]);
+    assert.strictEqual(emptyRes.ok, false);
+    assert.strictEqual(emptyRes.reason, 'no_breakouts');
+
+    // 2. Missing chatId
+    env.TELEGRAM_GROUP_CHAT_ID = undefined;
+    env.TELEGRAM_CHAT_ID = undefined;
+    const noChatRes = await TelegramService.sendBreakoutAlert([{ symbol: 'T', ltp: 10, entry: 10, sl: 9, target: 11, rr: '1:1', score: 80, sector: 'IT' }]);
+    assert.strictEqual(noChatRes.ok, false);
+    assert.strictEqual(noChatRes.reason, 'missing_config');
+
+    // Restore group chatId
+    env.TELEGRAM_GROUP_CHAT_ID = 'group';
+
+    // 3. target2, optionSuggestion, RANGE and TREND signals
+    await TelegramService.sendBreakoutAlert([
+      {
+        symbol: 'ADV_STOCK',
+        ltp: 200,
+        entry: 200,
+        sl: 195,
+        target: 210,
+        target2: 220,
+        rr: '1:2',
+        rr2: '1:4',
+        score: 85,
+        sector: 'Auto',
+        alertKind: 'BREAKOUT',
+        signals: ['BREAKOUT', 'RANGE'],
+        optionSuggestion: { formattedName: 'ADV 200 CE', ltp: 8.5 },
+      },
+      {
+        symbol: 'TREND_STOCK',
+        ltp: 500,
+        entry: 500,
+        sl: 510,
+        target: 480,
+        rr: '1:2',
+        score: 82,
+        sector: 'Bank',
+        alertKind: 'BREAKDOWN',
+        signals: ['BREAKDOWN', 'TREND'],
+      },
+    ]);
+
+    const mixedBody = sentBodies[0];
+    assert.match(mixedBody, /NEW BREAKOUT \/ BREAKDOWN SIGNALS/);
+    assert.match(mixedBody, /Target 2: ₹220\.00/);
+    assert.match(mixedBody, /Option: <b>ADV 200 CE @ ₹8\.50<\/b>/);
+    assert.match(mixedBody, /RANGE breakout/);
+    assert.match(mixedBody, /TREND continuation/);
+    assert.match(mixedBody, /at CPR band edge/);
+
+    // 4. Chunking large batch (>3900 chars)
+    sentBodies.length = 0;
+    const largeBatch = Array.from({ length: 30 }, (_, i) => ({
+      symbol: `CHUNK_SYM_${i}`,
+      ltp: 1000 + i,
+      entry: 1000 + i,
+      sl: 990 + i,
+      target: 1020 + i,
+      target2: 1040 + i,
+      rr: '1:2',
+      rr2: '1:4',
+      score: 80 + (i % 10),
+      sector: 'Energy',
+      alertKind: 'BREAKOUT' as const,
+      signals: ['BREAKOUT'],
+      optionSuggestion: { formattedName: `CHUNK ${1000 + i} CE`, ltp: 25 },
+    }));
+
+    const chunkRes = await TelegramService.sendBreakoutAlert(largeBatch);
+    assert.strictEqual(chunkRes.ok, true);
+    assert.ok(sentBodies.length > 1, `Must chunk into multiple messages, got ${sentBodies.length}`);
+    for (const body of sentBodies) {
+      assert.ok(body.length <= 4096, `Chunk length ${body.length} <= 4096`);
+    }
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroup;
+  }
+});
+
+

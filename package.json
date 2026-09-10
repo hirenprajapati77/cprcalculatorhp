@@ -15,7 +15,7 @@
     "test:unit": "node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "test:integration": "node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/integration/**/*.test.ts",
     "test:e2e": "node --import ./scripts/set-test-env.mjs --import tsx --test --test-concurrency=1 --test-force-exit src/tests/e2e/**/*.test.ts",
-    "test:coverage": "c8 node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
+    "test:coverage": "c8 node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts && tsx scripts/check-coverage-tiers.ts",
     "test:coverage:core": "c8 --check-coverage --lines 95 --include src/lib/** --include src/services/backtest/** node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "test:coverage:services": "c8 --check-coverage --lines 85 --include src/services/** --exclude src/services/backtest/** node --import ./scripts/set-test-env.mjs --import tsx --test --test-force-exit src/tests/unit/**/*.test.ts",
     "security:check": "npm audit --audit-level=high",

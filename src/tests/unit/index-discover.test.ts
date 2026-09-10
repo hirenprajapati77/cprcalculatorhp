@@ -273,5 +273,30 @@ describe('IndexDiscoverService.discover - Gating Flags', () => {
     assert.equal(longSignals.length, INDEX_INSTRUMENTS.length);
     assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
   });
+
+  it('resolvePreviousCompletedCandle handles empty history, matching today date, and prior dates', () => {
+    assert.equal(IndexDiscoverService.resolvePreviousCompletedCandle([], new Date('2026-09-09T10:00:00+05:30')), null);
+
+    const history = [
+      { date: '2026-09-07', open: 100, high: 105, low: 95, close: 102, volume: 1000 },
+      { date: '2026-09-08', open: 102, high: 108, low: 101, close: 106, volume: 1200 },
+    ];
+    // Today is 2026-09-09 (not in history) -> returns last element
+    const res1 = IndexDiscoverService.resolvePreviousCompletedCandle(history, new Date('2026-09-09T10:00:00+05:30'));
+    assert.equal(res1?.date, '2026-09-08');
+
+    // If today (2026-09-08) is last in history -> returns history[n-2]
+    const res2 = IndexDiscoverService.resolvePreviousCompletedCandle(history, new Date('2026-09-08T10:00:00+05:30'));
+    assert.equal(res2?.date, '2026-09-07');
+
+    // Single item where date matches today -> returns null
+    const singleHistory = [{ date: '2026-09-08', open: 100, high: 105, low: 95, close: 102, volume: 1000 }];
+    const res3 = IndexDiscoverService.resolvePreviousCompletedCandle(singleHistory, new Date('2026-09-08T10:00:00+05:30'));
+    assert.equal(res3, null);
+  });
+
+  it('clearRequestMemo executes cleanly without throwing', () => {
+    assert.doesNotThrow(() => IndexDiscoverService.clearRequestMemo());
+  });
 });
 

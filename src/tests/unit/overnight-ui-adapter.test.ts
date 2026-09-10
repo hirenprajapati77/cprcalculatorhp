@@ -7,6 +7,7 @@ import {
   selectTradableOvernightPicks,
   compareOvernightPickRows,
   compareLatestScanBySymbol,
+  filterOvernightByUniverse,
 } from '../../services/overnight/overnight-ui-adapter';
 import { BTST_CLOCK } from '../../lib/market-hours';
 
@@ -171,5 +172,62 @@ describe('overnight-ui-adapter (Phase H)', () => {
     );
     assert.strictEqual(longs[0].overnightScore, 105, 'keeps latest scan row for duplicate symbol');
     assert.strictEqual(longs[0].signalTime, '15:15');
+  });
+
+  it('filterOvernightByUniverse respects NSE_FNO, ALL, and specific universes', () => {
+    const signals = [
+      makeSignal({ symbol: 'NIFTY' }),
+      makeSignal({ symbol: 'RELIANCE' }),
+    ];
+    assert.equal(filterOvernightByUniverse(signals, 'NSE_FNO').length, 2);
+    assert.equal(filterOvernightByUniverse(signals, 'ALL').length, 2);
+    assert.equal(filterOvernightByUniverse(signals, '').length, 2);
+  });
+
+  it('handles NEUTRAL_CONFLICT and weak tags in overnightSignalToBtstUi', () => {
+    const uiConflict = overnightSignalToBtstUi(makeSignal({ classification: 'NEUTRAL_CONFLICT', direction: 'NEUTRAL_CONFLICT' }));
+    assert.strictEqual(uiConflict.tag, 'NEUTRAL_CONFLICT');
+
+    const uiWeak = overnightSignalToBtstUi(makeSignal({ direction: 'UNKNOWN_DIR' }));
+    assert.strictEqual(uiWeak.tag, 'WEAK');
+
+    const uiZeroRisk = overnightSignalToBtstUi(makeSignal({ entry: 100, stopLoss: 100, target: 120 }));
+    assert.strictEqual(uiZeroRisk.rr, '0.00');
+  });
+
+  it('buildInsightsFromOvernight covers index ready, ignore, avoid, and conflict branches', () => {
+    const signals = [
+      makeSignal({ symbol: 'N1', classification: 'INDEX_STRONG', overnightScore: 85, direction: 'LONG' }),
+      makeSignal({ symbol: 'N2', classification: 'INDEX_READY', overnightScore: 70, direction: 'LONG' }),
+      makeSignal({ symbol: 'N3', classification: 'IGNORE', overnightScore: 50, direction: 'SHORT' }),
+      makeSignal({ symbol: 'N4', classification: 'NEUTRAL_CONFLICT', overnightScore: 55, direction: 'LONG' }),
+      makeSignal({ symbol: 'N5', classification: 'WATCH', overnightScore: 35, direction: 'SHORT' }),
+      makeSignal({ symbol: 'N6', classification: 'WATCH', overnightScore: 60, direction: 'LONG' }),
+    ];
+    const insights = buildInsightsFromOvernight(signals);
+    assert.strictEqual(insights.strongSignal, 1);
+    assert.strictEqual(insights.breakoutReady, 1);
+    assert.strictEqual(insights.avoid, 3); // IGNORE + NEUTRAL_CONFLICT + score < 40
+    assert.strictEqual(insights.totalConflict, 1);
+  });
+
+  it('selectTradableOvernightPicks respects suppressLong flag', () => {
+    const signals = [
+      makeSignal({ symbol: 'A', overnightScore: 100, classification: 'STRONG_BTST' }),
+    ];
+    const res = selectTradableOvernightPicks(signals, { suppressLong: true });
+    assert.strictEqual(res.longs.length, 0);
+  });
+
+  it('compareOvernightPickRows breaks score+time tie with symbol name', () => {
+    const pickA = { symbol: 'AAPL', signalTime: '15:15', overnightScore: 90 };
+    const pickB = { symbol: 'MSFT', signalTime: '15:15', overnightScore: 90 };
+    assert.ok(compareOvernightPickRows(pickA, pickB) < 0, 'AAPL should come before MSFT alphabetically');
+  });
+
+  it('compareLatestScanBySymbol breaks time tie with higher score', () => {
+    const low = { symbol: 'TCS', signalTime: '15:15', overnightScore: 80 };
+    const high = { symbol: 'TCS', signalTime: '15:15', overnightScore: 90 };
+    assert.ok(compareLatestScanBySymbol(high, low) < 0, 'Higher score wins when signal times match');
   });
 });
