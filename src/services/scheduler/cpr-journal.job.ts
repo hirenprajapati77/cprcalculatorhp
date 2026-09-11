@@ -140,16 +140,6 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         return { tag: `${signal.symbol}:${confluenceCheck.reason}`, didLog: false };
       }
 
-      // Entry is the breakout-continuation / mean-revert trigger.
-      // Bullish must hold ABOVE entry; bearish must hold BELOW entry.
-      const triggered = isBearish ? signal.ltp <= signal.entry : signal.ltp >= signal.entry;
-      if (!triggered) {
-        console.log(
-          `[CPRJournal] ${signal.symbol} not triggered: LTP ${signal.ltp} vs Entry ${signal.entry} (${tag})`
-        );
-        return { tag: signal.symbol, didLog: false };
-      }
-
       // SECTOR_DIVERGENCE is baked into signalSummary by SectorRegimeService at
       // scan time. In live mode, skip journaling — the stock's own sector was
       // net-bearish that day. Shadow mode logs only, never blocks.
@@ -181,6 +171,17 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
         }
       } catch (mktErr) {
         console.warn(`[CPRJournal] Market data fetch failed for ${signal.symbol}:`, mktErr);
+      }
+
+      // Entry is the breakout-continuation / mean-revert trigger.
+      // Bullish must hold ABOVE entry; bearish must hold BELOW entry.
+      // D1-3 fix: evaluate trigger using liveLtp (fetched above) rather than stale morning snapshot
+      const triggered = isBearish ? liveLtp <= signal.entry : liveLtp >= signal.entry;
+      if (!triggered) {
+        console.log(
+          `[CPRJournal] ${signal.symbol} not triggered: LTP ${liveLtp} vs Entry ${signal.entry} (${tag})`
+        );
+        return { tag: signal.symbol, didLog: false };
       }
 
       const staleness = evaluateCprSetupPriceStaleness({
