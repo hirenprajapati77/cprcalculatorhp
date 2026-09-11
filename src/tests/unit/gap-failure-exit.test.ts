@@ -277,4 +277,30 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       TradeJournalService.fetchOptionCmp = origFetchOptionCmp;
     }
   });
+
+  await t.test('queries unexecuted signals with signalDate <= yesterday to include orphaned multi-day signals (D1-4)', async () => {
+    const origFindMany = prisma.overnightSignal.findMany;
+    let findManyArgs: any = null;
+
+    prisma.overnightSignal.findMany = (async (args: any) => {
+      findManyArgs = args;
+      return [];
+    }) as typeof prisma.overnightSignal.findMany;
+
+    try {
+      await checkGapFailureExits();
+      assert.ok(findManyArgs, 'findMany should be called');
+      assert.deepStrictEqual(
+        typeof findManyArgs.where?.signalDate,
+        'object',
+        'signalDate filter must be an object with lte'
+      );
+      assert.ok(
+        'lte' in (findManyArgs.where?.signalDate ?? {}),
+        'signalDate filter must contain lte'
+      );
+    } finally {
+      prisma.overnightSignal.findMany = origFindMany;
+    }
+  });
 });
