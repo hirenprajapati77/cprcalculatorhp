@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 11 Sep: Redis Fixed-Window Rate Limiting & Auth Gating Exemption (PRs #201, #202)
+
+- **Atomic Fixed-Window Rate Limiting via Lua Script (PR #202 / Issue D)**:
+  - Fixed a critical sliding-window TTL extension defect in `src/lib/redis.ts` (`cache.incr`).
+  - Implemented an atomic Lua script executed via Redis `EVAL`:
+    ```lua
+    local count = redis.call('INCR', KEYS[1])
+    if redis.call('TTL', KEYS[1]) == -1 then
+      redis.call('EXPIRE', KEYS[1], ARGV[1])
+    end
+    return count
+    ```
+  - Compatible with Redis 6 and Redis 7+; sets TTL if and only if the key has no existing expiry (`TTL == -1`), ensuring exact fixed-window rate limiting and preventing indefinite IP/user lockouts.
+  - Updated mock behavior in `src/tests/unit/auth-unlock.test.ts` and added explicit regression test in `src/tests/unit/redis.test.ts`.
+
+- **Public Navbar & Smoke Verification Auth Exemption (PR #201)**:
+  - Added `/api/market-status` to public API exemptions in `src/middleware.ts`.
+  - Enables unauthenticated navbar market status probes and headless post-deployment smoke verification to succeed without requiring an `APP_ACCESS_TOKEN`.
+  - Verified with real local Redis 7 and live HTTP smoke probes.
+
 ### Added & Fixed — 10 Sep: 10-Day Deep Code Review Remediation & Tiered Coverage Governance (PRs #197, #198, #199)
 
 - **10-Day Deep Code Review Defect Remediation (PR #199)**:

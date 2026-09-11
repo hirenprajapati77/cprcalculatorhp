@@ -2,17 +2,34 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Report pass:** 14 (Post-10-Day Deep Code Review, Tiered Coverage Governance & Production Hardening)  
-**Report generated:** 2026-09-10  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 10, 2026 (`npm run release:check` + `npm run test:e2e`).
+**Report pass:** 15 (Post-Redis Fixed-Window Rate Limiting & Auth Exemption Fixes)  
+**Report generated:** 2026-09-11  
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 11, 2026 (CI `verify` passed, Oracle production deployment verified).
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 14 / Sep 10, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 15 / Sep 11, 2026)
 
-This pass integrates and verifies the comprehensive 10-day deep code review remediation, architectural tiered coverage governance, and production hardening backlog across PRs #166 through #199:
+This pass integrates and verifies PRs #201 and #202 on top of the 10-day deep code review remediation and production hardening baseline (PRs #166 through #200):
 
-1. **10-Day Deep Code Review Defect Remediation (PR #199)**:
+1. **Atomic Fixed-Window Rate Limiting via Lua Script (PR #202 / Issue D)**:
+   - Fixed a sliding-window rate limit regression where missing `NX` flag caused repeated increments to refresh the key's TTL to 15 minutes, resulting in potential indefinite lockout.
+   - Replaced Redis multi/pipeline with an atomic Lua script executed via `redis.eval`:
+     ```lua
+     local count = redis.call('INCR', KEYS[1])
+     if redis.call('TTL', KEYS[1]) == -1 then
+       redis.call('EXPIRE', KEYS[1], ARGV[1])
+     end
+     return count
+     ```
+   - Works across Redis 6 and Redis 7+; sets TTL only when key has no prior expiry (`TTL == -1`).
+   - Mock updated in `src/tests/unit/auth-unlock.test.ts` and regression test added in `src/tests/unit/redis.test.ts`.
+
+2. **Public Market Status Route Auth Gating Exemption (PR #201)**:
+   - Added `/api/market-status` to public API exemptions in `src/middleware.ts`.
+   - Allows unauthenticated public navbar probes and automated headless smoke checks to complete cleanly without requiring auth credentials.
+
+3. **10-Day Deep Code Review Defect Remediation (PR #199)**:
    - **Gap-Failure Exit Data Integrity (`btst-alert.job.ts`)**: Skips option trade journal leg when option CMP cannot be resolved, preventing spot stock LTP pollution into option PnL calculations.
    - **Distributed Cron Lock TOCTOU Race Condition Closure (`cron-run-claim.ts`)**: Re-checks `cron_done:${key}` immediately after acquiring `cron_lock:${key}` to eliminate duplicate execution windows.
    - **Prisma P2002 Concurrency Error Handling (`index-overnight-persist.ts`)**: Absorbs unique constraint collisions on concurrent index BTST signal upserts.
