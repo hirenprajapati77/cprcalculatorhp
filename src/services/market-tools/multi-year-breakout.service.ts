@@ -487,37 +487,37 @@ export class MultiYearBreakoutService {
       let breakoutPrice: number | null = null;
       let breakoutGainPct: number | null = null;
 
-      if (breakout10Y) {
-        strongestBreakout = '10Y';
+      // D2-2 fix: Use getStrongestBreakout helper with 2Y history depth guard for ATH
+      // so recent IPOs with limited data (< 500 days) are not falsely classified as ATH breakouts.
+      const isEligibleForATH = Boolean(
+        breakoutATH && historyDays >= tradingDaysAvailable && historyDays >= WINDOW_SPECS['2Y']
+      );
+
+      strongestBreakout = getStrongestBreakout({
+        is10Y: breakout10Y,
+        is5Y: breakout5Y,
+        is3Y: breakout3Y,
+        is2Y: breakout2Y,
+        is1Y: breakout1Y,
+        isATH: isEligibleForATH,
+      });
+
+      if (strongestBreakout === '10Y') {
         breakoutPrice = high10Y;
         breakoutGainPct = gain10YPct;
-      } else if (breakout5Y) {
-        strongestBreakout = '5Y';
+      } else if (strongestBreakout === '5Y') {
         breakoutPrice = high5Y;
         breakoutGainPct = gain5YPct;
-      } else if (breakout3Y) {
-        strongestBreakout = '3Y';
+      } else if (strongestBreakout === '3Y') {
         breakoutPrice = high3Y;
         breakoutGainPct = gain3YPct;
-      } else if (breakout2Y) {
-        strongestBreakout = '2Y';
+      } else if (strongestBreakout === '2Y') {
         breakoutPrice = high2Y;
         breakoutGainPct = gain2YPct;
-      } else if (breakout1Y) {
-        strongestBreakout = '1Y';
+      } else if (strongestBreakout === '1Y') {
         breakoutPrice = high1Y;
         breakoutGainPct = gain1YPct;
-      } else if (breakoutATH) {
-        strongestBreakout = 'ATH';
-        breakoutPrice = highATH;
-        breakoutGainPct = gainATHPct;
-      }
-
-      // H-07 fix: If stock has ATH breakout alongside a multi-year breakout,
-      // upgrade label to ATH only if history covers full available history and at least 2Y (500 days),
-      // preventing recent IPOs with limited data from falsely overriding established 1Y/2Y breakouts.
-      if (breakoutATH && historyDays >= tradingDaysAvailable && historyDays >= WINDOW_SPECS['2Y']) {
-        strongestBreakout = 'ATH';
+      } else if (strongestBreakout === 'ATH') {
         breakoutPrice = highATH;
         breakoutGainPct = gainATHPct;
       }
