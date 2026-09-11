@@ -375,6 +375,52 @@ export class BreakoutWatcherService {
   }
 
   /**
+   * Set cooldown on BreakoutAlertState for pre-claim gate suppressions (VIX, price gate)
+   * so suppressed symbols enter the cooldown and are not re-evaluated / re-persisted
+   * on every subsequent cron tick (D3-2 fix).
+   */
+  static async recordSuppressionCooldown(
+    symbolsOrBreakouts: Array<{ symbol: string; alertKind?: BreakoutAlertKind } | string>
+  ): Promise<void> {
+    if (symbolsOrBreakouts.length === 0) return;
+    const now = new Date();
+    const keys = new Set<string>();
+    for (const item of symbolsOrBreakouts) {
+      if (typeof item === 'string') {
+        if (item.endsWith(':BREAKOUT') || item.endsWith(':BREAKDOWN')) {
+          keys.add(item);
+        } else {
+          keys.add(breakoutAlertClaimKey(item, 'BREAKOUT'));
+          keys.add(breakoutAlertClaimKey(item, 'BREAKDOWN'));
+        }
+      } else {
+        const kind = item.alertKind ?? 'BREAKOUT';
+        keys.add(breakoutAlertClaimKey(item.symbol, kind));
+      }
+    }
+
+    for (const key of keys) {
+      try {
+        await prisma.breakoutAlertState.upsert({
+          where: { symbol: key },
+          create: {
+            symbol: key,
+            hadBreakout: false,
+            lastAlerted: now,
+            missCount: 0,
+          },
+          update: {
+            hadBreakout: false,
+            lastAlerted: now,
+          },
+        });
+      } catch (err) {
+        console.warn(`[BreakoutWatcher] Failed to record suppression cooldown for ${key}:`, err);
+      }
+    }
+  }
+
+  /**
    * Clear hadBreakout for already-delivered alerts whose entry is now
    * gap-invalidated / extended, but keep lastAlerted so the 4h cooldown still
    * blocks an immediate re-spam. After cooldown, a pullback into the entry
