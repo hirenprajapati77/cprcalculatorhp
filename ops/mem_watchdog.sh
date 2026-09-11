@@ -12,8 +12,9 @@ rotate_log() {
 }
 
 restart_pm2_fresh() {
-  pm2 delete cpr-platform >/dev/null 2>&1 || true
-  if [ -f "$ECOSYSTEM" ]; then
+  if pm2 describe cpr-platform >/dev/null 2>&1; then
+    pm2 restart cpr-platform --update-env || return 1
+  elif [ -f "$ECOSYSTEM" ]; then
     pm2 start "$ECOSYSTEM" || return 1
   elif [ -f "$APP/server.js" ]; then
     cd "$APP" || return 1
