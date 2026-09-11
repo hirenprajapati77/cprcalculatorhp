@@ -259,5 +259,26 @@ describe('ISSUE-003: Canonical OHLCV Validation at Calculation Boundaries', () =
       assert.strictEqual(filtered[0].date, '2026-01-05');
       assert.strictEqual(filtered[1].date, '2026-01-09');
     });
+
+    it('rejects gap over 4 days between consecutive candles (D5-3)', () => {
+      const dataWith5DayGap: OHLC[] = [
+        { date: '2026-01-05', open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+        { date: '2026-01-10', open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+      ];
+
+      assert.throws(
+        () => (HistoricalProvider as unknown as { validateOHLC: (data: OHLC[]) => void }).validateOHLC(dataWith5DayGap),
+        /Validation failed: Unacceptable gap/
+      );
+
+      const dataWith4DayGap: OHLC[] = [
+        { date: '2026-01-05', open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+        { date: '2026-01-09', open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+      ];
+
+      assert.doesNotThrow(() =>
+        (HistoricalProvider as unknown as { validateOHLC: (data: OHLC[]) => void }).validateOHLC(dataWith4DayGap)
+      );
+    });
   });
 });

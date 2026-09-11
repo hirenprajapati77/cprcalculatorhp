@@ -149,7 +149,7 @@ export class HistoricalProvider {
         const curr = new Date(candle.date);
         const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 3600 * 24));
         // Over 4 days gap implies missing data even over long weekends
-        if (diffDays > 5) {
+        if (diffDays > 4) {
           throw new Error(`Validation failed: Unacceptable gap between ${data[i-1].date} and ${candle.date}`);
         }
       }
