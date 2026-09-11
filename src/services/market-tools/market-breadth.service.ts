@@ -96,7 +96,8 @@ export class MarketBreadthService {
         if (redisCached) {
           const parsed = JSON.parse(redisCached) as MarketBreadthReport;
           cachedReport = parsed;
-          lastComputedTime = now;
+          const parsedTime = parsed.computedAt ? new Date(parsed.computedAt).getTime() : NaN;
+          lastComputedTime = Number.isFinite(parsedTime) ? parsedTime : now;
 
           const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTime);
           if (freshness === 'STALE') {
