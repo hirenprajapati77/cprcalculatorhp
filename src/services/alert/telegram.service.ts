@@ -285,15 +285,19 @@ export class TelegramService {
   ): Promise<{ ok: boolean; reason?: string }> {
     if (!stocks.length) return { ok: false, reason: 'no_breakouts' };
 
-    let chatId = overrideChatId || env.TELEGRAM_GROUP_CHAT_ID || env.TELEGRAM_CHAT_ID;
+    let groupChatId = env.TELEGRAM_GROUP_CHAT_ID;
+    let personalChatId = env.TELEGRAM_CHAT_ID;
     let token = overrideToken || env.TELEGRAM_BOT_TOKEN;
 
-    if (!chatId || !token) {
+    if ((!overrideChatId && (!groupChatId || !personalChatId)) || !token) {
       try {
         const settings = await prisma.appSettings.findUnique({ where: { id: 'global' } });
         if (settings) {
-          if (!chatId) {
-            chatId = settings.telegramGroupChatId || settings.telegramChatId || undefined;
+          if (!groupChatId) {
+            groupChatId = settings.telegramGroupChatId || undefined;
+          }
+          if (!personalChatId) {
+            personalChatId = settings.telegramChatId || undefined;
           }
           if (!token && settings.telegramToken) {
             try {
@@ -315,6 +319,8 @@ export class TelegramService {
         console.error('[Telegram] Failed to load breakout credentials from AppSettings:', dbErr);
       }
     }
+
+    const chatId = overrideChatId || groupChatId || personalChatId;
 
     if (!chatId) {
       console.warn('[Telegram] Neither TELEGRAM_GROUP_CHAT_ID nor TELEGRAM_CHAT_ID is set, skipping breakout alert');
