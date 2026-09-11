@@ -568,10 +568,10 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
   if (!yesterday) return { checked: 0, exited: [] };
 
-  // Load all unexecuted overnight signals from the previous session
+  // Load all unexecuted overnight signals from the previous session (or earlier orphaned signals)
   const pendingSignals = await prisma.overnightSignal.findMany({
     where: {
-      signalDate: yesterday,
+      signalDate: { lte: yesterday },
       executed: false,
       entry: { not: null },
       qualityBucket: { in: ['TRADEABLE', 'WATCHLIST'] },
