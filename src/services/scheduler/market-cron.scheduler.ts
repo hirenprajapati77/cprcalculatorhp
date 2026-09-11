@@ -148,18 +148,23 @@ export function startMarketCronScheduler(): void {
     }
     tickInFlight = true;
     try {
-      const istTime = getISTTime();
+      // D1-1 fix: freeze now at tick start so sequential awaits during heavy jobs
+      // do not advance the clock past subsequent windows (e.g. CPR Journal 15:20–15:24).
+      const now = new Date();
+      const istTime = getISTTime(now);
       if (!istTime.isTradingDay) return;
 
-      const dateKey = getISTDateString();
-      const inCloseWorkflow =
-        isBtstDiscoveryOpen() || isBtstJournalWindowOpen() || isCprJournalWindowOpen();
+      const dateKey = getISTDateString(now);
+      const isBtstDiscOpen = isBtstDiscoveryOpen(now);
+      const isBtstJrnlOpen = isBtstJournalWindowOpen(now);
+      const isCprJrnlOpen = isCprJournalWindowOpen(now);
+      const inCloseWorkflow = isBtstDiscOpen || isBtstJrnlOpen || isCprJrnlOpen;
 
       // Intentional: cpr-scan is NIFTY_FNO-only, so the aggregate cash-session gate
       // from MARKET_SESSION.CLOSE is the correct clock. Under CLOSING_AUCTION this
       // closes at 15:15 for F&O names and must not extend to 15:30.
       // Skip during BTST/CPR close workflow so overnight discover + scan never stack on 1GB.
-      if (isMarketOpen() && !inCloseWorkflow) {
+      if (isMarketOpen(now) && !inCloseWorkflow) {
         // Time-bucketed claim key: retainClaim=true blocks re-entry within the same
         // N-minute bucket; the next bucket key allows the next fire. Do NOT use
         // retainClaim=false here — that would re-run on every 60s poll tick.
@@ -173,7 +178,7 @@ export function startMarketCronScheduler(): void {
       // btst-alert selects overnight/index tradable picks (F&O-only legs for stock
       // options; index legs are derivative products). It should follow profile BTST
       // windows (15:10–15:25 CONTINUOUS, 15:10–15:15 CLOSING_AUCTION).
-      if (isBtstDiscoveryOpen()) {
+      if (isBtstDiscOpen) {
         // Time-bucketed key (5-min buckets) — mirrors cpr-scan pattern so the
         // scheduler re-checks every 5 minutes across the 15:10–15:25 window.
         // Double-send is prevented by BtstAlertState DB unique constraint inside
@@ -190,14 +195,14 @@ export function startMarketCronScheduler(): void {
 
       // cpr-journal window is profile-derived via CPR_JOURNAL_WINDOW and intentionally
       // separate from the scanner route's mixed-universe live recompute behavior.
-      if (isCprJournalWindowOpen()) {
+      if (isCprJrnlOpen) {
         // H-02 fix: 120s timeout for CPR journal generation with option chain lookups
         await runClaimedJob(`cpr-journal:${dateKey}`, runCprJournalJob, 'cpr-journal', true, 120_000);
       }
 
       // btst-journal is tied to overnight/derivatives workflow and should track
       // profile BTST journal windows (including CAS extension profile clocks).
-      if (isBtstJournalWindowOpen()) {
+      if (isBtstJrnlOpen) {
         await runClaimedJob(
           `btst-journal:${dateKey}`,
           runBtstJournalJob,
@@ -218,7 +223,7 @@ export function startMarketCronScheduler(): void {
         );
       }
 
-      const snapshotSlot = resolveJournalSnapshotSlot();
+      const snapshotSlot = resolveJournalSnapshotSlot(now);
       if (snapshotSlot) {
         await runClaimedJob(
           `journal-snapshot:${snapshotSlot}:${dateKey}`,
@@ -227,7 +232,7 @@ export function startMarketCronScheduler(): void {
         );
       }
 
-      if (isEarningsPopulateWindowOpen()) {
+      if (isEarningsPopulateWindowOpen(now)) {
         await runClaimedJob(
           `earnings-populate:${dateKey}`,
           () => EarningsPopulatorService.populate(),
