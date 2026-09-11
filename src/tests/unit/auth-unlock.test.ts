@@ -138,11 +138,7 @@ describe('POST /api/auth/unlock', () => {
 
       const mockRedis = {
         status: 'ready',
-        multi: () => ({
-          incr: () => {},
-          expire: () => {},
-          exec: async () => [[null, 1]],
-        }),
+        eval: async () => 1,
       } as any;
       _setRedisForTesting(mockRedis);
 
