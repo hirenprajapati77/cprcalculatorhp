@@ -325,9 +325,10 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       assert.strictEqual(res.checked, 1);
       assert.deepStrictEqual(res.exited, ['SHORTSTK']);
       assert.ok(journalUpdateData !== null);
-      assert.strictEqual(journalUpdateData.pnl, -5, 'STBT stock leg entry=100 exit=105 must yield pnl = -5');
-      assert.strictEqual(journalUpdateData.pnlPct, -5, 'STBT stock leg entry=100 exit=105 must yield pnlPct = -5%');
-      assert.strictEqual(journalUpdateData.executionOutcome, 'GAP_FAILURE');
+      const updateData = journalUpdateData as Record<string, unknown>;
+      assert.strictEqual(updateData.pnl, -5, 'STBT stock leg entry=100 exit=105 must yield pnl = -5');
+      assert.strictEqual(updateData.pnlPct, -5, 'STBT stock leg entry=100 exit=105 must yield pnlPct = -5%');
+      assert.strictEqual(updateData.executionOutcome, 'GAP_FAILURE');
     } finally {
       prisma.overnightSignal.findMany = origSignalFindMany;
       prisma.overnightSignal.update = origSignalUpdate;
