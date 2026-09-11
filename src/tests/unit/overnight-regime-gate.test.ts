@@ -112,4 +112,34 @@ describe('OvernightService fail-closed regime reliability gate', () => {
       globalObj.prisma = originalPrisma;
     }
   });
+
+  it('blocks BTST LONG unconditionally on Fridays even in BULL regime and score >= 85 (D5-2)', async () => {
+    const originalGetRegime = RegimeService.getMarketRegime;
+    const globalObj = globalThis as any;
+    const originalPrisma = globalObj.prisma;
+    globalObj.prisma = {
+      $transaction: async (ops: any[]) => ops,
+      overnightSignal: { upsert: async () => ({}) },
+    };
+
+    const bullRegime: MarketRegime = {
+      trend: 'BULL',
+      volatility: 'LOW',
+      score: 80,
+      reliable: true,
+    };
+    RegimeService.getMarketRegime = (async () => bullRegime) as typeof RegimeService.getMarketRegime;
+
+    try {
+      // 2026-09-04 is a Friday
+      const stock = createMockStock('2026-09-04');
+      stock.longScoreOverride = 95; // Very high score
+      const date = new Date('2026-09-04T15:15:00.000Z');
+      const results = await OvernightService.discover('BOTH', date, [stock]);
+      assert.equal(results.length, 0, 'Must block Friday BTST LONG even with high score in BULL regime');
+    } finally {
+      RegimeService.getMarketRegime = originalGetRegime;
+      globalObj.prisma = originalPrisma;
+    }
+  });
 });
