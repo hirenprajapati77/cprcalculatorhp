@@ -57,6 +57,9 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **11 Sep — Redis Fixed-Window Rate Limiting & Auth Gating Exemption (PRs #201, #202)**:
+  - **Atomic Fixed-Window Rate Limiting (PR #202 / Issue D)**: Enforced exact fixed-window rate limiting in `src/lib/redis.ts` using an atomic Lua script (`INCR` + conditional `EXPIRE` when `TTL == -1`), preventing sliding-window TTL resets and indefinite IP lockouts across Redis 6 & 7+.
+  - **Public Navbar & Smoke Verification Route Exemption (PR #201)**: Exempted `/api/market-status` from middleware auth gating, allowing public navbar market status probes and headless post-deployment smoke verification to succeed cleanly.
 - **10 Sep — 10-Day Deep Code Review Remediation & Tiered Coverage Governance (PRs #197, #198, #199)**:
   - **10-Day Deep Code Review Defect Remediation (PR #199)**: Audited 29 findings across all 4 operational domains and resolved 15 confirmed defects with regression tests:
     - Fixed spot price leak into option trade journal on gap-failure exits by skipping journal leg when option CMP is unresolvable (`btst-alert.job.ts`).
