@@ -187,11 +187,21 @@ export const cache = {
   async incr(key: string, ttlSeconds: number, failClosed: boolean = false): Promise<number> {
     if (redis && redis.status === 'ready') {
       try {
-        const pipeline = redis.multi();
-        pipeline.incr(key);
-        pipeline.expire(key, ttlSeconds);
-        const results = await pipeline.exec();
-        const count = results?.[0]?.[1] as number ?? 1;
+        // Atomic INCR + "set TTL only if this key has no expiry yet" via Lua,
+        // so the window is fixed (set once on first hit) rather than sliding.
+        // Redis 6 doesn't support `EXPIRE key ttl NX` (that's Redis 7+), so we
+        // can't rely on the pipeline flag here — TTL('key') == -1 means "no
+        // expiry set", which is the equivalent guard.
+        const count = (await redis.eval(
+          `local count = redis.call('INCR', KEYS[1])
+           if redis.call('TTL', KEYS[1]) == -1 then
+             redis.call('EXPIRE', KEYS[1], ARGV[1])
+           end
+           return count`,
+          1,
+          key,
+          ttlSeconds
+        )) as number;
         return count;
       } catch (err) {
         if (failClosed) {
