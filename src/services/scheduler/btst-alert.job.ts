@@ -661,7 +661,19 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
             }
           }
 
-          const { pnl, pnlPct: calcPnlPct } = computeOptionPnl(journalEntry.entryCmp, exitPrice);
+          let pnl: number;
+          let calcPnlPct: number;
+          if (!isOptionLeg && (sig.direction === 'SHORT' || journalEntry.signalType === 'STBT')) {
+            // D1-2 fix: STBT underlying stock leg loses when price gaps UP (exitPrice > entryCmp)
+            const rawPnl = journalEntry.entryCmp - exitPrice;
+            const rawPnlPct = journalEntry.entryCmp > 0 ? (rawPnl / journalEntry.entryCmp) * 100 : 0;
+            pnl = Math.round(rawPnl * 100) / 100;
+            calcPnlPct = Math.round(rawPnlPct * 100) / 100;
+          } else {
+            const res = computeOptionPnl(journalEntry.entryCmp, exitPrice);
+            pnl = res.pnl;
+            calcPnlPct = res.pnlPct;
+          }
 
           await prisma.tradeJournal.update({
             where: { id: journalEntry.id },

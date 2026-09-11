@@ -277,4 +277,64 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       TradeJournalService.fetchOptionCmp = origFetchOptionCmp;
     }
   });
+
+  await t.test('computes negative PnL for STBT underlying stock leg when price gaps up (D1-2)', async () => {
+    const origSignalFindMany = prisma.overnightSignal.findMany;
+    const origSignalUpdate = prisma.overnightSignal.update;
+    const origJournalFindMany = prisma.tradeJournal.findMany;
+    const origJournalUpdate = prisma.tradeJournal.update;
+    const origGetStockData = MarketService.getStockData;
+    const origSendRaw = TelegramService.sendRawMessage;
+
+    const signal = makeSignal({
+      id: 'sig-stbt-underlying',
+      symbol: 'SHORTSTK',
+      direction: 'SHORT',
+      entry: 100,
+      qualityBucket: 'TRADEABLE',
+    });
+
+    let journalUpdateData: Record<string, unknown> | null = null;
+
+    prisma.overnightSignal.findMany = (async () => [signal]) as typeof prisma.overnightSignal.findMany;
+    prisma.overnightSignal.update = (async () => ({} as OvernightSignal)) as unknown as typeof prisma.overnightSignal.update;
+    MarketService.getStockData = (async () => ({ ltp: 105 })) as unknown as typeof MarketService.getStockData; // Gapped UP 5%
+    TelegramService.sendRawMessage = (async () => ({ ok: true })) as typeof TelegramService.sendRawMessage;
+
+    prisma.tradeJournal.findMany = (async () => [
+      {
+        id: 'journal-stbt-stock',
+        symbol: 'SHORTSTK',
+        signalType: 'STBT',
+        optionContract: 'UNDERLYING PE',
+        optionStrike: null,
+        optionType: null,
+        entryCmp: 100,
+        cmp916: null,
+        exitCmp: null,
+      },
+    ]) as any;
+
+    prisma.tradeJournal.update = (async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+      journalUpdateData = args.data;
+      return {};
+    }) as any;
+
+    try {
+      const res = await checkGapFailureExits();
+      assert.strictEqual(res.checked, 1);
+      assert.deepStrictEqual(res.exited, ['SHORTSTK']);
+      assert.ok(journalUpdateData !== null);
+      assert.strictEqual(journalUpdateData.pnl, -5, 'STBT stock leg entry=100 exit=105 must yield pnl = -5');
+      assert.strictEqual(journalUpdateData.pnlPct, -5, 'STBT stock leg entry=100 exit=105 must yield pnlPct = -5%');
+      assert.strictEqual(journalUpdateData.executionOutcome, 'GAP_FAILURE');
+    } finally {
+      prisma.overnightSignal.findMany = origSignalFindMany;
+      prisma.overnightSignal.update = origSignalUpdate;
+      prisma.tradeJournal.findMany = origJournalFindMany;
+      prisma.tradeJournal.update = origJournalUpdate;
+      MarketService.getStockData = origGetStockData;
+      TelegramService.sendRawMessage = origSendRaw;
+    }
+  });
 });
