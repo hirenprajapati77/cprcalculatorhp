@@ -153,8 +153,9 @@ export class IndexRankingService {
       breakdown.vwap = 20;
     }
 
-    // Rule 5: EOD Liquidity — close > highest price in 15:15–15:30 IST window (if window available)
-    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close > inputs.last15mHigh) {
+    // Rule 5: EOD Liquidity — close >= highest price in 15:15–15:30 IST window (if window available)
+    // D5-1 fix: close cannot strictly exceed the high of the window containing it; use >=
+    if (inputs.last15mHigh !== null && inputs.last15mHigh !== undefined && inputs.close >= inputs.last15mHigh) {
       breakdown.liquidity = 20;
     }
 
@@ -228,7 +229,9 @@ export class IndexRankingService {
       breakdown.vwap = 20;
     }
 
-    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close < inputs.last15mLow) {
+    // Rule 5: EOD Weakness — close <= lowest price in 15:15–15:30 IST window (if window available)
+    // D5-1 fix: close cannot strictly undercut the low of the window containing it; use <=
+    if (inputs.last15mLow !== null && inputs.last15mLow !== undefined && inputs.close <= inputs.last15mLow) {
       breakdown.liquidity = 20;
     }
 
