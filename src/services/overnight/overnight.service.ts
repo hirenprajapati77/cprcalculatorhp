@@ -603,8 +603,8 @@ export class OvernightService {
           //   regimes. Only a confirmed BEAR regime (Nifty close < EMA20, EMA sloping
           //   down) provides enough downtrend conviction to hold a Friday PUT overnight.
           //
-          // Rule 2 — BTST/LONG weekend premium: Friday LONGs require Score >= 85
-          //   (vs normal 75) to survive the weekend gap risk on any non-BEAR session.
+          // Rule 2 — BTST/LONG hard block: Friday LONGs are blocked unconditionally
+          //   to eliminate 60+ hour weekend gap-down risk (D5-2 fix).
           if (isFriday) {
             if (finalDir === 'SHORT' && regime.trend !== 'BEAR') {
               console.warn(
@@ -613,10 +613,10 @@ export class OvernightService {
               );
               continue;
             }
-            if (finalDir === 'LONG' && (finalSig.score ?? 0) < 85 && regime.trend !== 'BULL') {
+            if (finalDir === 'LONG') {
               console.warn(
-                `[OvernightScan] FRIDAY_BTST_GATE: ${fullStock.symbol} LONG blocked — ` +
-                `score=${finalSig.score} < 85 required on Friday (weekend premium threshold).`
+                `[OvernightScan] FRIDAY_BTST_GATE: ${fullStock.symbol} LONG blocked on Friday — ` +
+                `no weekend BTST positions permitted (weekend gap risk).`
               );
               continue;
             }
