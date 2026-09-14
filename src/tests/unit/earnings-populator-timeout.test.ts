@@ -95,4 +95,51 @@ describe('EarningsPopulatorService Yahoo Finance timeout resilience', () => {
       YahooFinance.prototype.quoteSummary = origQuoteSummary;
     }
   });
+
+  it('rejects non-array and malformed event responses from NSE (Finding 3)', async () => {
+    const origFetch = globalThis.fetch;
+    const origGetUniverse = MarketService.getUniverse;
+    MarketService.getUniverse = () => [] as any;
+
+    try {
+      // 1. Non-array response (e.g. error object or HTML response)
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        const urlStr = String(url);
+        if (urlStr.includes('nseindia.com') && !urlStr.includes('event-calendar')) {
+          return new Response('', { headers: { 'set-cookie': 'nseapp=1; Path=/' } });
+        }
+        return new Response(JSON.stringify({ error: 'Access denied' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const resNonArray = await EarningsPopulatorService.populate(true, 50);
+      assert.ok(
+        resNonArray.errors.some((e) => /expected an array of events/i.test(e)),
+        `Expected non-array error in result.errors, got: ${JSON.stringify(resNonArray.errors)}`
+      );
+
+      // 2. Malformed array where items lack expected fields
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        const urlStr = String(url);
+        if (urlStr.includes('nseindia.com') && !urlStr.includes('event-calendar')) {
+          return new Response('', { headers: { 'set-cookie': 'nseapp=1; Path=/' } });
+        }
+        return new Response(JSON.stringify([{ unexpectedField: 123 }, { anotherBogusField: 'bad' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch;
+
+      const resMalformed = await EarningsPopulatorService.populate(true, 50);
+      assert.ok(
+        resMalformed.errors.some((e) => /payload malformed: events lack expected/i.test(e)),
+        `Expected malformed error in result.errors, got: ${JSON.stringify(resMalformed.errors)}`
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+      MarketService.getUniverse = origGetUniverse;
+    }
+  });
 });
