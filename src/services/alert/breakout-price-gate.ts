@@ -4,6 +4,7 @@ import type { MarketStockData } from '@/services/market.service';
 import {
   evaluateCprSetupPriceStalenessBasic,
   isBreakoutEntryExtended,
+  atrScaledExtensionCap,
   CPR_ENTRY_EXTENSION_PCT,
   type CprSetupStaleReason,
 } from '@/lib/cpr-setup-staleness';
@@ -129,16 +130,16 @@ export function evaluateCprSetupPriceStaleness(args: {
 
   if (basic.stale) return basic;
 
-  // Falls back to the CPR/Telegram-specific cap (not the shared BTST
-  // EXTENSION_LIMITS) — this previously defaulted to EXTENSION_LIMITS.MAX_DAY_RETURN_PCT
-  // even though a CPR-specific constant already existed for this exact purpose.
-  const chaseCap = entryExtensionPct ?? CPR_ENTRY_EXTENSION_PCT;
-  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct: chaseCap })) {
+  // D3-1 fix: Pass entryExtensionPct (if explicitly configured) and atrPct so
+  // volatile stocks are evaluated against their natural ATR-scaled cap instead
+  // of being unconditionally overridden by the static CPR_ENTRY_EXTENSION_PCT.
+  if (isBreakoutEntryExtended({ entry, ltp, direction, maxExtensionPct: entryExtensionPct, atrPct })) {
     const pct = (((ltp - entry) / entry) * 100).toFixed(2);
+    const cap = entryExtensionPct ?? atrScaledExtensionCap(atrPct);
     return {
       stale: true,
       reason: 'EXTENDED',
-      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${chaseCap}%)`,
+      detail: `ltp ${ltp} is ${pct}% from entry ${entry} (limit ±${cap.toFixed(1)}%)`,
     };
   }
 
