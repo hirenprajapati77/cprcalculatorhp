@@ -13,12 +13,12 @@ Follow-up hardening and defensive edge-case remediations identified during secon
 
 - **Fail-Stale on Missing or Invalid Cache Timestamp (PR #227 - HIGH)**:
   - In `src/lib/cache-freshness.ts`, updated `evaluateReportFreshness` so `reportComputedTime <= 0` immediately triggers `STALE` status.
-  - In `market-breadth.service.ts`, `multi-year-breakout.service.ts`, `pattern-breakout.service.ts`, and `momentum-leaders.service.ts`, eliminated the `Date.now()` fallback for missing or unparseable `computedAt` Redis payload metadata, failing safely to `0` so corrupt/missing cache timestamps cannot masquerade as 0ms fresh.
+  - In `market-breadth.service.ts`, `multi-year-breakout.service.ts`, `pattern-breakout.service.ts`, and `momentum-leaders.service.ts`, eliminated the `Date.now()` fallback for missing or unparseable `computedAt` Redis payload metadata, passing `0` so corrupt or missing timestamps are explicitly treated as stale rather than masquerading as 0ms fresh.
   - Added unit tests in `src/tests/unit/cache-freshness-contract.test.ts`.
 
 - **Bounded Lookback Window for Orphaned Overnight Signals (PR #228 - MEDIUM)**:
   - In `src/services/scheduler/btst-alert.job.ts` (`checkGapFailureExits`), bounded the unexecuted overnight signal query with `signalDate: { gte: minSignalDate, lte: yesterday }` using `MAX_ORPHANED_SIGNAL_LOOKBACK_DAYS = 7`.
-  - Prevents table scans and inadvertent processing of arbitrarily old legacy orphaned rows from previous seasons or test suites.
+  - Constrains the query scope to the recent 7-day window, preventing inadvertent processing of arbitrarily old legacy orphaned rows from previous seasons or test suites.
   - Updated unit test in `src/tests/unit/gap-failure-exit.test.ts`.
 
 - **Structural Validation & Low-Count Warnings for Corporate Events (PR #229 - MEDIUM)**:
