@@ -27,6 +27,8 @@ import { withTimeout, TimeoutError } from '@/lib/with-timeout';
 let started = false;
 /** Prevent overlapping 60s ticks when a prior tick is still running overnight/scan work. */
 let tickInFlight = false;
+/** Track the last IST date on which an earnings populator failure alert was sent to prevent duplicate Telegram alerts during retries. */
+let lastEarningsFailureAlertDate: string | null = null;
 
 /**
  * Decide whether a claimed cron job should retain its claim (done) or release for retry.
@@ -71,13 +73,29 @@ function isCprJournalWindowOpen(date: Date = new Date()): boolean {
   );
 }
 
-function isEarningsPopulateWindowOpen(date: Date = new Date()): boolean {
+export function isEarningsPopulateWindowOpen(date: Date = new Date()): boolean {
   const { hour, minute, isTradingDay } = getISTTime(date);
   if (!isTradingDay) return false;
   const timeValue = hour * 100 + minute;
   // 14:15 - 14:25 IST window (matches the OS-level 14:15 IST / 08:45 UTC cron)
   return timeValue >= 1415 && timeValue <= 1425;
 }
+
+export async function runEarningsPopulateJob(dateKey: string): Promise<void> {
+  await runClaimedJob(
+    `earnings-populate:${dateKey}`,
+    async () => {
+      const shouldSendAlert = lastEarningsFailureAlertDate !== dateKey;
+      const res = await EarningsPopulatorService.populate(false, 10_000, shouldSendAlert);
+      if (!res.success && shouldSendAlert) {
+        lastEarningsFailureAlertDate = dateKey;
+      }
+      return res;
+    },
+    'earnings-populate'
+  );
+}
+
 
 async function runClaimedJob<T>(
   claimKey: string,
@@ -233,11 +251,7 @@ export function startMarketCronScheduler(): void {
       }
 
       if (isEarningsPopulateWindowOpen(now)) {
-        await runClaimedJob(
-          `earnings-populate:${dateKey}`,
-          () => EarningsPopulatorService.populate(),
-          'earnings-populate'
-        );
+        await runEarningsPopulateJob(dateKey);
       }
 
       // 19:15 IST — post-bhavcopy market tools pre-computation window.
@@ -281,4 +295,17 @@ export function stopMarketCronScheduler(): void {
     _cronInterval = null;
   }
   started = false;
+  lastEarningsFailureAlertDate = null;
+}
+
+/**
+ * Reset last earnings failure alert date state.
+ * For use in unit tests.
+ */
+export function resetEarningsFailureAlertDate(): void {
+  lastEarningsFailureAlertDate = null;
+}
+
+export function getLastEarningsFailureAlertDate(): string | null {
+  return lastEarningsFailureAlertDate;
 }
