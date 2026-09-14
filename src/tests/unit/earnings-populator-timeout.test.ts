@@ -142,4 +142,41 @@ describe('EarningsPopulatorService Yahoo Finance timeout resilience', () => {
       MarketService.getUniverse = origGetUniverse;
     }
   });
+
+  it('respects sendAlert parameter on failure (does not send Telegram alert when false)', async () => {
+    const { TelegramService } = await import('../../services/alert/telegram.service');
+    const origSendMessage = TelegramService.sendMessage;
+    const origGetUniverse = MarketService.getUniverse;
+    const origFetch = globalThis.fetch;
+
+    let alertSent = false;
+    TelegramService.sendMessage = async () => {
+      alertSent = true;
+      return { ok: true };
+    };
+
+    MarketService.getUniverse = () => [] as any;
+    globalThis.fetch = async () => {
+      throw new Error('NSE offline');
+    };
+
+    try {
+      // 1. sendAlert = false, dryRun = false -> alert should NOT be sent
+      alertSent = false;
+      const resSuppressed = await EarningsPopulatorService.populate(false, 50, false);
+      assert.equal(resSuppressed.success, false);
+      assert.equal(alertSent, false, 'Telegram alert should be suppressed when sendAlert=false');
+
+      // 2. sendAlert = true, dryRun = false -> alert SHOULD be sent
+      alertSent = false;
+      const resAlerted = await EarningsPopulatorService.populate(false, 50, true);
+      assert.equal(resAlerted.success, false);
+      assert.equal(alertSent, true, 'Telegram alert should be sent when sendAlert=true');
+    } finally {
+      TelegramService.sendMessage = origSendMessage;
+      MarketService.getUniverse = origGetUniverse;
+      globalThis.fetch = origFetch;
+    }
+  });
 });
+

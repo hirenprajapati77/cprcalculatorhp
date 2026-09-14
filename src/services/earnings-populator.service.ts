@@ -45,7 +45,11 @@ function extractCookieHeader(headers: Headers): string {
 }
 
 export class EarningsPopulatorService {
-  static async populate(dryRun = false, yahooTimeoutMs = 10_000): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[] }> {
+  static async populate(
+    dryRun = false,
+    yahooTimeoutMs = 10_000,
+    sendAlert = true
+  ): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[] }> {
     const errors: string[] = [];
     let nseCount = 0;
     let yahooCount = 0;
@@ -231,7 +235,7 @@ export class EarningsPopulatorService {
 
     const success = errors.length === 0;
 
-    if (!success && !dryRun) {
+    if (!success && !dryRun && sendAlert) {
       // M-08 fix: Escape HTML entities and truncate error preview to prevent Telegram 400 Bad Request
       const escapedErrors = errors
         .slice(0, 10)
