@@ -33,6 +33,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: dummy
+          POSTGRES_PASSWORD: dummy
+          POSTGRES_DB: dummy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dummy"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +58,11 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
+
+      - name: Push Prisma schema to test DB
+        run: npx prisma db push --skip-generate
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
 
       - name: Security audit
         run: npm run security:check
