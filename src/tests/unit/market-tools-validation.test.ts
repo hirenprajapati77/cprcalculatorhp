@@ -383,4 +383,173 @@ describe('Market-Tools API Query Parameter Validation', () => {
       }
     });
   });
+
+  describe('Pagination limit parameter (D2-3)', () => {
+    it('slices breakout results by limit', async () => {
+      const orig = MultiYearBreakoutService.getBreakoutReport;
+      const makeStock = (i: number) => ({
+        symbol: `SYM_${i}`,
+        sector: 'IT',
+        close: 100,
+        prevClose: 99,
+        changePct: 1,
+        volume: 1000,
+        rvol20d: null,
+        clv: null,
+        historyDays: 250,
+        breakout1Y: true,
+        high1Y: 99,
+        gain1YPct: 1,
+        breakout2Y: null,
+        high2Y: null,
+        gain2YPct: null,
+        breakout3Y: null,
+        high3Y: null,
+        gain3YPct: null,
+        breakout5Y: null,
+        high5Y: null,
+        gain5YPct: null,
+        breakout10Y: null,
+        high10Y: null,
+        gain10YPct: null,
+        breakoutATH: null,
+        highATH: null,
+        gainATHPct: null,
+        vpaFootprint: 'NEUTRAL' as any,
+      });
+
+      (MultiYearBreakoutService as any).getBreakoutReport = async () => ({
+        date: '2026-09-07',
+        tradingDaysAvailable: 250,
+        totalScanned: 10,
+        qualifiedCount: 10,
+        windowCounts: { '1Y': 10, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
+        breakoutCounts: { '1Y': 10, '2Y': 0, '3Y': 0, '5Y': 0, '10Y': 0, ATH: 0 },
+        windowAvailability: { '1Y': true, '2Y': true, '3Y': true, '5Y': true, '10Y': true, ATH: true },
+        stocks: Array.from({ length: 10 }, (_, i) => makeStock(i)),
+        computedAt: new Date().toISOString(),
+      });
+
+      try {
+        const req = createRequest('http://localhost:3000/api/market-tools/breakout?limit=3');
+        const res = await breakoutGet(req);
+        assert.strictEqual(res.status, 200);
+        const json = await res.json();
+        assert.strictEqual(json.data.stocks.length, 3);
+      } finally {
+        MultiYearBreakoutService.getBreakoutReport = orig;
+      }
+    });
+
+    it('slices pattern-breakout results by limit', async () => {
+      const orig = PatternBreakoutService.getPatternBreakoutReport;
+      const makeStock = (i: number) => ({
+        symbol: `P_SYM_${i}`,
+        sector: 'IT',
+        close: 100,
+        prevClose: 99,
+        changePct: 1,
+        volume: 1000,
+        avgVolume20d: 900,
+        rvol20d: null,
+        clv: null,
+        historyDays: 250,
+        primaryPattern: 'FLAG_POLE' as const,
+        status: 'BREAKOUT' as const,
+        pivotPrice: 99,
+        distToPivotPct: 1,
+        patterns: [],
+        vpaFootprint: 'NEUTRAL' as any,
+        scoreBreakdown: {
+          patternCompletenessScore: 30,
+          volumeExpansionScore: 30,
+          baseTightnessScore: 20,
+          relativeStrengthScore: 10,
+          totalScore: 90,
+          qualityTier: 'A+' as const,
+        },
+      });
+
+      (PatternBreakoutService as any).getPatternBreakoutReport = async () => ({
+        date: '2026-09-07',
+        tradingDaysAvailable: 250,
+        totalScanned: 10,
+        qualifiedCount: 10,
+        patternCounts: { FLAG_POLE: 10, VCP: 0, CUP_AND_HANDLE: 0, DOUBLE_BOTTOM: 0, FLAT_BASE: 0, NONE: 0 },
+        tierCounts: { 'A+': 10, A: 0, B: 0, C: 0 },
+        stocks: Array.from({ length: 10 }, (_, i) => makeStock(i)),
+        computedAt: new Date().toISOString(),
+      });
+
+      try {
+        const req = createRequest('http://localhost:3000/api/market-tools/pattern-breakout?limit=4');
+        const res = await patternBreakoutGet(req);
+        assert.strictEqual(res.status, 200);
+        const json = await res.json();
+        assert.strictEqual(json.data.stocks.length, 4);
+      } finally {
+        PatternBreakoutService.getPatternBreakoutReport = orig;
+      }
+    });
+
+    it('slices momentum-leaders results by limit', async () => {
+      const orig = MomentumLeadersService.getMomentumLeadersReport;
+      const makeStock = (i: number) => ({
+        symbol: `M_SYM_${i}`,
+        sector: 'IT',
+        close: 100,
+        prevClose: 99,
+        changePct: 1,
+        volume: 1000,
+        turnoverCr: 50,
+        avgTurnoverCr20d: 45,
+        rvol20d: null,
+        clv: null,
+        vpaFootprint: 'NEUTRAL' as any,
+        windows: {
+          w1d: { returnPct: 1, rank: 1, percentile: 90, isLeader: true },
+          w5d: { returnPct: 2, rank: 1, percentile: 90, isLeader: true },
+          w10d: { returnPct: 3, rank: 1, percentile: 90, isLeader: true },
+          w21d: { returnPct: 4, rank: 1, percentile: 90, isLeader: true },
+        },
+        leaderWindowCount: 4,
+        baseScore: 50,
+        consistencyBonus: 20,
+        dispersionPenalty: 0,
+        vpaModifier: 0,
+        compositeScore: 70,
+        tier: 'A+' as const,
+        isCircuitLocked: false,
+        circuitLimitPct: null,
+      });
+
+      (MomentumLeadersService as any).getMomentumLeadersReport = async () => ({
+        universe: 'NSE_FNO',
+        asOfDate: '2026-09-07',
+        scannedCount: 10,
+        leaderCount: 10,
+        windowSummaries: {
+          w1d: { window: '1D', medianReturnPct: 1, topDecileReturnPct: 2, leaderThresholdPct: 1.5, leaderCount: 10 },
+          w5d: { window: '5D', medianReturnPct: 2, topDecileReturnPct: 3, leaderThresholdPct: 2.5, leaderCount: 10 },
+          w10d: { window: '10D', medianReturnPct: 3, topDecileReturnPct: 4, leaderThresholdPct: 3.5, leaderCount: 10 },
+          w21d: { window: '21D', medianReturnPct: 4, topDecileReturnPct: 5, leaderThresholdPct: 4.5, leaderCount: 10 },
+        },
+        sectorBreakdown: [],
+        topTierAplus: [],
+        allStocks: Array.from({ length: 10 }, (_, i) => makeStock(i)),
+        computedAt: new Date().toISOString(),
+        status: 'ready',
+      });
+
+      try {
+        const req = createRequest('http://localhost:3000/api/market-tools/momentum-leaders?limit=2');
+        const res = await momentumLeadersGet(req);
+        assert.strictEqual(res.status, 200);
+        const json = await res.json();
+        assert.strictEqual(json.data.allStocks.length, 2);
+      } finally {
+        MomentumLeadersService.getMomentumLeadersReport = orig;
+      }
+    });
+  });
 });

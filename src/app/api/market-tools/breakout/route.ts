@@ -15,6 +15,15 @@ const breakoutQuerySchema = z.object({
     .enum(['ALL', '1Y', '2Y', '3Y', '5Y', '10Y', 'ATH'])
     .optional()
     .default('ALL'),
+  limit: z
+    .string()
+    .optional()
+    .default('200')
+    .transform((val) => {
+      const n = parseInt(val, 10);
+      if (Number.isNaN(n) || n <= 0) return 200;
+      return Math.min(n, 500);
+    }),
 });
 
 export async function GET(request: NextRequest) {
@@ -27,6 +36,7 @@ export async function GET(request: NextRequest) {
     const parsed = breakoutQuerySchema.safeParse({
       refresh: getParam('refresh'),
       window: getParam('window'),
+      limit: getParam('limit'),
     });
 
     if (!parsed.success) {
@@ -43,7 +53,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { refresh: forceRefresh, window: windowFilter } = parsed.data;
+    const { refresh: forceRefresh, window: windowFilter, limit } = parsed.data;
 
     // B3 fix: ?refresh=true scans 2,636 symbols × multiple year windows.
     // Gate behind auth even though middleware exempts this route for page loads.
@@ -70,7 +80,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...report,
-        stocks: filteredStocks,
+        stocks: filteredStocks.slice(0, limit),
       },
     });
   } catch (err) {
