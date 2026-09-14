@@ -157,4 +157,52 @@ describe('getIndexBtstCompare', () => {
       prisma.trade.findMany = originalTradeFindMany;
     }
   });
+
+  it('queries BTST_STBT_DRIVEN strategyMode for backtest resolution and trades (D5-4)', async () => {
+    const originalBacktestFindFirst = prisma.backtestRun.findFirst;
+    const originalTradeFindMany = prisma.trade.findMany;
+    const originalJournalFindMany = prisma.tradeJournal.findMany;
+
+    let backtestQueryArgs: any = null;
+    let tradeQueryArgs: any = null;
+
+    prisma.backtestRun.findFirst = (async (args: any) => {
+      backtestQueryArgs = args;
+      return {
+        id: 'run-auto',
+        name: 'Auto Run',
+        startDate: new Date('2026-07-21T00:00:00.000Z'),
+        endDate: new Date('2026-07-21T00:00:00.000Z'),
+      };
+    }) as unknown as typeof prisma.backtestRun.findFirst;
+
+    prisma.tradeJournal.findMany = (async () => []) as typeof prisma.tradeJournal.findMany;
+
+    prisma.trade.findMany = (async (args: any) => {
+      tradeQueryArgs = args;
+      return [];
+    }) as typeof prisma.trade.findMany;
+
+    try {
+      await getIndexBtstCompare();
+
+      assert.ok(backtestQueryArgs, 'backtestRun.findFirst should be called');
+      assert.strictEqual(
+        backtestQueryArgs.where?.strategyMode,
+        'BTST_STBT_DRIVEN',
+        'resolveBacktestRun must query strategyMode BTST_STBT_DRIVEN'
+      );
+
+      assert.ok(tradeQueryArgs, 'trade.findMany should be called');
+      assert.strictEqual(
+        tradeQueryArgs.where?.strategyMode,
+        'BTST_STBT_DRIVEN',
+        'trade.findMany must query strategyMode BTST_STBT_DRIVEN'
+      );
+    } finally {
+      prisma.backtestRun.findFirst = originalBacktestFindFirst;
+      prisma.trade.findMany = originalTradeFindMany;
+      prisma.tradeJournal.findMany = originalJournalFindMany;
+    }
+  });
 });
