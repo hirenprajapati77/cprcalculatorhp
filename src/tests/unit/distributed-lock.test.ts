@@ -1,12 +1,14 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { env } from '@/config/env';
+import { _setRedisForTesting } from '../../lib/redis';
 import {
   tryAcquireDistributedLock,
   releaseDistributedLock,
   withDistributedLock,
   handleLockContentionWithStaleFallback,
   _resetDistributedLocksForTesting,
+  _getHeldLocksForTesting,
 } from '../../lib/distributed-lock';
 
 describe('distributed-lock (Tier 1 coverage)', () => {
@@ -47,7 +49,12 @@ describe('distributed-lock (Tier 1 coverage)', () => {
       const emptyRel = await releaseDistributedLock('test:lock:mismatch', '');
       assert.equal(emptyRel, false);
 
-      await releaseDistributedLock('test:lock:mismatch', token);
+      // Verify heldLocksByProcess still retains token after mismatched release
+      assert.equal(_getHeldLocksForTesting().get('test:lock:mismatch'), token);
+
+      const successRel = await releaseDistributedLock('test:lock:mismatch', token);
+      assert.equal(successRel, true);
+      assert.equal(_getHeldLocksForTesting().has('test:lock:mismatch'), false);
     });
 
     it('expires expired memory locks automatically', async () => {
@@ -63,6 +70,67 @@ describe('distributed-lock (Tier 1 coverage)', () => {
       } finally {
         Date.now = originalDateNow;
       }
+    });
+  });
+
+  describe('lock release cleanup order (D4-5)', () => {
+    afterEach(() => {
+      _setRedisForTesting(null);
+    });
+
+    it('retains lock in heldLocksByProcess if Redis release throws an error', async () => {
+      const mockRedis = {
+        status: 'ready',
+        set: async () => 'OK',
+        eval: async () => {
+          throw new Error('Redis connection severed during release');
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const { acquired, token } = await tryAcquireDistributedLock('test:redis:fail', 10);
+      assert.equal(acquired, true);
+      assert.equal(_getHeldLocksForTesting().get('test:redis:fail'), token);
+
+      // Attempt release which fails in Redis
+      const released = await releaseDistributedLock('test:redis:fail', token);
+      assert.equal(released, false);
+
+      // D4-5: Process must retain lock in heldLocksByProcess so shutdown hook can attempt cleanup
+      assert.equal(_getHeldLocksForTesting().get('test:redis:fail'), token);
+    });
+
+    it('removes lock from heldLocksByProcess upon successful Redis release', async () => {
+      let currentVal: string | null = null;
+      const mockRedis = {
+        status: 'ready',
+        set: async (_key: string, val: string) => {
+          currentVal = val;
+          return 'OK';
+        },
+        eval: async (_script: string, _numKeys: number, _key: string, token: string) => {
+          if (currentVal === token) {
+            currentVal = null;
+            return 1;
+          }
+          return 0;
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const { acquired, token } = await tryAcquireDistributedLock('test:redis:success', 10);
+      assert.equal(acquired, true);
+      assert.equal(_getHeldLocksForTesting().get('test:redis:success'), token);
+
+      // Release with wrong token should fail and NOT clear heldLocksByProcess
+      const wrongRel = await releaseDistributedLock('test:redis:success', 'wrong-token');
+      assert.equal(wrongRel, false);
+      assert.equal(_getHeldLocksForTesting().get('test:redis:success'), token);
+
+      // Release with correct token should succeed and remove from heldLocksByProcess
+      const correctRel = await releaseDistributedLock('test:redis:success', token);
+      assert.equal(correctRel, true);
+      assert.equal(_getHeldLocksForTesting().has('test:redis:success'), false);
     });
   });
 

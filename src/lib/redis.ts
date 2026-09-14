@@ -49,6 +49,10 @@ export function isRedisAvailable(): boolean {
   return Boolean(redis && redis.status === 'ready');
 }
 
+export function getRedisClient(): Redis | null {
+  return redis;
+}
+
 /** For unit tests to simulate Redis connection state */
 export function _setRedisForTesting(client: Redis | null): void {
   redis = client;
