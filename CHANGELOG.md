@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 14 Sep: 3-Week Comprehensive Code Review Remediation (PRs #205–#225)
+
+Comprehensive audit remediation addressing all 21 findings identified during the 3-week code review across all operational domains:
+
+- **Domain 1: Overnight & Journal Engine**
+  - **Frozen Tick Timestamp (PR #205 / D1-1 - CRITICAL)**: Captured immutable `const now = new Date()` at entry of `runMarketJobs` in `market-cron.scheduler.ts`, eliminating window drift between sequential job invocations.
+  - **STBT Underlying Leg PnL Inversion (PR #207 / D1-2 - HIGH)**: Corrected PnL calculation for short BTST/STBT underlying stock legs in `btst-alert.job.ts` to `(entryPrice - exitPrice) * quantity`.
+  - **CPR Journal Live LTP Trigger (PR #214 / D1-3 - MEDIUM)**: Evaluated CPR journal entry triggers using real-time `liveLtp` in `cpr-journal.job.ts` rather than candle close to avoid missed fills.
+  - **Multi-Day Orphaned Overnight Signals (PR #215 / D1-4 - MEDIUM)**: Expanded gap-failure exit query in `btst-alert.job.ts` from `signalDate: yesterday` to `signalDate: { lte: yesterday }` to catch orphaned multi-day signals.
+
+- **Domain 2: Market Tools & Caching**
+  - **Preserve Redis Cached Report Age (PR #206 / D2-1 - CRITICAL)**: Stored and forwarded original `computedAt` timestamp from Redis cache payload rather than resetting with `Date.now()` across market breadth, breakout, and momentum services.
+  - **Unified ATH Breakout Cascade (PR #208 / D2-2 - HIGH)**: Replaced inline duplicated breakout cascade with `getStrongestBreakout` helper and added 2-year minimum data depth check for all-time-high breakouts in `multi-year-breakout.service.ts`.
+  - **Market Tools Pagination Limit (PR #222 / D2-3 - MEDIUM)**: Added `limit` query param capped at 500 (default 200) to `/api/market-tools/breakout`, `/momentum-leaders`, and `/pattern-breakout`.
+
+- **Domain 3: Scanner & Alert Pipelines**
+  - **ATR-Scaled Dynamic Breakout Cap (PR #209 / D3-1 - HIGH)**: Passed `atrPct` to `isWithinExtensionLimit` in `breakout-price-gate.ts` to prevent unconditional 5% hard-cap overriding dynamic volatility thresholds.
+  - **Pre-Claim Suppression Cooldown (PR #210 / D3-2 - HIGH)**: Added `recordSuppressionCooldown` in `breakout-alert.pipeline.ts` so suppressed signals update alert cooldowns and prevent repetitive evaluation spikes.
+  - **Independent Personal & Group Telegram Chat IDs (PR #216 / D3-3 - MEDIUM)**: Decoupled DB-stored `groupChatId` resolution from personal `TELEGRAM_CHAT_ID` fallback in `telegram.service.ts`.
+  - **Setup Geometry Before Scoring (PR #217 / D3-4 - MEDIUM)**: In `scanner.service.ts`, ensured Trade Setup V3 geometry is computed before evaluating score and confidence filters.
+  - **Tightened Option Suggestion Timeout (PR #223 / D3-5 - LOW)**: Reduced `BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS` from 8.0s to 2.5s in `breakout-alert.pipeline.ts` to prevent alert pipeline blocking.
+
+- **Domain 4: Infrastructure, Database & Concurrency**
+  - **CI Service Postgres Container (PR #211 / D4-1 - HIGH)**: Added `postgres:15-alpine` container and schema sync step in `.github/workflows/verify.yml`, enabling Prisma-dependent integration tests in CI.
+  - **PM2 Watchdog Restart Semantics (PR #218 / D4-2 - MEDIUM)**: Updated `ops/mem_watchdog.sh` to use `pm2 restart cpr-platform --update-env` when the process is already running to preserve restart telemetry.
+  - **Crash Handler Grace Period (PR #219 / D4-3 - MEDIUM)**: Added a 500ms grace period with an `isTerminating` guard in `server-starter.js` to ensure telemetry flushes cleanly before exit.
+  - **Drop Redundant Scanner Symbol Index (PR #224 / D4-4 - LOW)**: Dropped redundant single-column `ScannerResult(symbol)` index covered by composite `ScannerResult(symbol, date)` via migration `20260914150000_drop_redundant_scanner_symbol_index`.
+  - **Distributed Lock Release Cleanup Order (PR #225 / D4-5 - LOW)**: In `src/lib/distributed-lock.ts`, deferred removal from `heldLocksByProcess` until Redis Lua release script succeeds, ensuring shutdown orchestrator retains cleanup capability on network faults.
+
+- **Domain 5: Backtest & Quantitative Models**
+  - **Rule 5 EOD Liquidity Boundary (PR #212 / D5-1 - HIGH)**: Corrected strict inequality to inclusive `>=` / `<=` in `index-ranking.service.ts` for Rule 5 volume/price validation.
+  - **Friday BTST Long Gate (PR #213 / D5-2 - HIGH)**: Added a hard block in `overnight.service.ts` rejecting Friday BTST LONG signals to eliminate weekend gap exposure.
+  - **Historical Gap Threshold Tightening (PR #220 / D5-3 - MEDIUM)**: Tightened boundary in `historical.provider.ts` from `diffDays > 5` to `diffDays > 4` to catch long-weekend trading anomalies.
+  - **Index BTST Comparison Strategy Mode (PR #221 / D5-4 - MEDIUM)**: Updated `index-btst-compare.service.ts` to query `strategyMode: 'BTST_STBT_DRIVEN'` backtest runs for accurate live vs backtest benchmarking.
+
 ### Added & Fixed — 11 Sep: Redis Fixed-Window Rate Limiting & Auth Gating Exemption (PRs #201, #202)
 
 - **Atomic Fixed-Window Rate Limiting via Lua Script (PR #202 / Issue D)**:
