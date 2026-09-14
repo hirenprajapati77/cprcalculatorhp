@@ -114,14 +114,18 @@ describe('IndexRankingService.calculateScoreDetails — rules', () => {
     assert.equal(notConfirmed.breakdown?.vwap, 0);
   });
 
-  it('Rule 5: awards liquidity (20) only when close > last15mHigh', () => {
+  it('Rule 5: awards liquidity (20) only when close >= last15mHigh', () => {
     const ok = IndexRankingService.calculateScoreDetails(
       baseInputs({ close: 105, last15mHigh: 104 })
     );
-    const no = IndexRankingService.calculateScoreDetails(
+    const equal = IndexRankingService.calculateScoreDetails(
       baseInputs({ close: 105, last15mHigh: 105 })
     );
+    const no = IndexRankingService.calculateScoreDetails(
+      baseInputs({ close: 105, last15mHigh: 106 })
+    );
     assert.equal(ok.breakdown?.liquidity, 20);
+    assert.equal(equal.breakdown?.liquidity, 20);
     assert.equal(no.breakdown?.liquidity, 0);
   });
 

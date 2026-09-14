@@ -63,14 +63,14 @@ describe('IndexRankingService (STBT SHORT)', () => {
         todayBc: 90,
         vwap: 95,
         low: 50, // prevent closeStrength
-        last15mLow: 85, // prevent EOD weakness
+        last15mLow: 80, // prevent EOD weakness (close 85 > last15mLow 80)
       };
       const result = IndexRankingService.calculateShortScoreDetails(inputs);
       assert.strictEqual(result.breakdown?.vwap, 20);
       assert.strictEqual(result.score, 20);
     });
 
-    it('Rule 5: EOD Weakness (20 pts) - close < last15mLow', () => {
+    it('Rule 5: EOD Weakness (20 pts) - close <= last15mLow', () => {
       const inputs = {
         ...baseInputs,
         close: 95,
@@ -80,6 +80,14 @@ describe('IndexRankingService (STBT SHORT)', () => {
       const result = IndexRankingService.calculateShortScoreDetails(inputs);
       assert.strictEqual(result.breakdown?.liquidity, 20);
       assert.strictEqual(result.score, 20);
+
+      // Verify close === last15mLow also qualifies for EOD weakness (D5-1)
+      const equalResult = IndexRankingService.calculateShortScoreDetails({
+        ...inputs,
+        close: 100,
+        last15mLow: 100,
+      });
+      assert.strictEqual(equalResult.breakdown?.liquidity, 20);
     });
 
     it('Rule 6: Closing Weakness (15 pts) - close in bottom 30% of day range', () => {
