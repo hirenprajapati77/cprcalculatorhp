@@ -145,7 +145,7 @@ export class PatternBreakoutService {
           const parsed = JSON.parse(redisCached) as PatternBreakoutReport;
           cachedReport = parsed;
           const parsedTime = parsed.computedAt ? new Date(parsed.computedAt).getTime() : NaN;
-          lastComputedTime = Number.isFinite(parsedTime) ? parsedTime : now;
+          lastComputedTime = Number.isFinite(parsedTime) ? parsedTime : 0;
 
           const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTime);
           if (freshness === 'STALE') {

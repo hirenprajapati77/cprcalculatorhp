@@ -111,7 +111,7 @@ export class MultiYearBreakoutService {
           const parsed = JSON.parse(redisCached) as MultiYearBreakoutReport;
           cachedReport = parsed;
           const parsedTime = parsed.computedAt ? new Date(parsed.computedAt).getTime() : NaN;
-          lastComputedTime = Number.isFinite(parsedTime) ? parsedTime : now;
+          lastComputedTime = Number.isFinite(parsedTime) ? parsedTime : 0;
 
           const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTime);
           if (freshness === 'STALE') {

@@ -57,8 +57,8 @@ export function evaluateReportFreshness(options: FreshnessCheckOptions): CacheFr
     return 'STALE';
   }
 
-  // If the report exceeds maximum retention age
-  if (reportComputedTime && now - reportComputedTime > maxAgeMs) {
+  // If the report exceeds maximum retention age or has an invalid/zero timestamp (fails stale on missing/invalid metadata)
+  if (reportComputedTime != null && (reportComputedTime <= 0 || now - reportComputedTime > maxAgeMs)) {
     return 'STALE';
   }
 
