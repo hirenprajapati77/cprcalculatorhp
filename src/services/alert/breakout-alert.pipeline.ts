@@ -239,6 +239,8 @@ export function notifyBreakoutsFromScan(
             detail: s.gateDetail ?? s.gateReason,
           }))
         );
+        // D3-2 fix: Touch lastAlerted for pre-claim VIX suppressions to engage cooldown
+        await BreakoutWatcherService.recordSuppressionCooldown(vixSuppressed);
       }
       if (vixActionable.length === 0) return;
 
@@ -262,6 +264,8 @@ export function notifyBreakoutsFromScan(
             detail: s.gateDetail ?? s.gateReason,
           }))
         );
+        // D3-2 fix: Touch lastAlerted for pre-claim price gate suppressions to engage cooldown
+        await BreakoutWatcherService.recordSuppressionCooldown(suppressed);
       }
       if (actionable.length === 0) return;
 
