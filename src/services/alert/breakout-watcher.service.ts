@@ -380,7 +380,9 @@ export class BreakoutWatcherService {
    * on every subsequent cron tick (D3-2 fix).
    */
   static async recordSuppressionCooldown(
-    symbolsOrBreakouts: Array<{ symbol: string; alertKind?: BreakoutAlertKind } | string>
+    symbolsOrBreakouts: Array<
+      { symbol: string; alertKind?: BreakoutAlertKind; signals?: string[] } | string
+    >
   ): Promise<void> {
     if (symbolsOrBreakouts.length === 0) return;
     const now = new Date();
@@ -394,8 +396,23 @@ export class BreakoutWatcherService {
           keys.add(breakoutAlertClaimKey(item, 'BREAKDOWN'));
         }
       } else {
-        const kind = item.alertKind ?? 'BREAKOUT';
-        keys.add(breakoutAlertClaimKey(item.symbol, kind));
+        if (item.alertKind) {
+          keys.add(breakoutAlertClaimKey(item.symbol, item.alertKind));
+        } else if (item.signals && item.signals.length > 0) {
+          const hasBreakout = item.signals.includes('BREAKOUT');
+          const hasBreakdown = item.signals.includes('BREAKDOWN');
+          if (hasBreakout && !hasBreakdown) {
+            keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKOUT'));
+          } else if (hasBreakdown && !hasBreakout) {
+            keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKDOWN'));
+          } else {
+            keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKOUT'));
+            keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKDOWN'));
+          }
+        } else {
+          keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKOUT'));
+          keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKDOWN'));
+        }
       }
     }
 
