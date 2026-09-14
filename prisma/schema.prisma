@@ -73,7 +73,6 @@ model ScannerResult {
   @@index([date, score])  // covers leading-column [date] queries — standalone [date] index dropped
   @@index([score])
   @@index([createdAt])
-  @@index([symbol])
 }
 
 model MarketSnapshot {
