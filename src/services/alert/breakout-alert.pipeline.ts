@@ -27,7 +27,7 @@ export const BREAKOUT_OPTION_ENRICH_BATCH_SIZE = 2;
  * CSV download uses 5s). Race each suggestOption so a hung Fyers call cannot delay
  * Telegram indefinitely.
  */
-export const BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS = 8_000;
+export const BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS = 2_500;
 
 /** Minimal scan row shape needed to evaluate breakout Telegram alerts. */
 export type ScanResultForBreakoutAlert = {

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BREAKOUT_OPTION_ENRICH_BATCH_SIZE,
+  BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS,
   enrichBreakoutsWithOptionSuggestions,
 } from '@/services/alert/breakout-alert.pipeline';
 import { TelegramService } from '@/services/alert/telegram.service';
@@ -148,5 +149,13 @@ describe('sendBreakoutAlert optionSuggestion rendering', () => {
       assert.match(sentBodies[0], /NOSUGGEST/);
       assert.match(sentBodies[0], /ERRORED/);
     });
+  });
+
+  it('enforces 2.5s option suggestion timeout constant (D3-5)', () => {
+    assert.strictEqual(
+      BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS,
+      2_500,
+      'BREAKOUT_OPTION_SUGGESTION_TIMEOUT_MS must be 2,500ms to prevent Fyers hangs from delaying Telegram alerts'
+    );
   });
 });
