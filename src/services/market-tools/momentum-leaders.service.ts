@@ -279,7 +279,7 @@ export class MomentumLeadersService {
           const parsed = JSON.parse(redisCached) as MomentumLeadersReport;
           cachedReports[universe] = parsed;
           const parsedTime = parsed.computedAt ? new Date(parsed.computedAt).getTime() : NaN;
-          lastComputedTimes[universe] = Number.isFinite(parsedTime) ? parsedTime : now;
+          lastComputedTimes[universe] = Number.isFinite(parsedTime) ? parsedTime : 0;
 
           const freshness = await checkCachedReportFreshness(parsed.date, lastComputedTimes[universe]);
           if (freshness === 'STALE') {

@@ -75,6 +75,22 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
       assert.strictEqual(status, 'STALE', 'Reports exceeding 7-day safety TTL must be flagged STALE');
     });
+
+    it('transitions to STALE when reportComputedTime is 0 or invalid (fails stale on missing/invalid computedAt)', () => {
+      const zeroStatus = evaluateReportFreshness({
+        reportDate: '2026-09-08',
+        latestTradingDate: '2026-09-08',
+        reportComputedTime: 0,
+      });
+      assert.strictEqual(zeroStatus, 'STALE', 'reportComputedTime = 0 must evaluate to STALE');
+
+      const negativeStatus = evaluateReportFreshness({
+        reportDate: '2026-09-08',
+        latestTradingDate: '2026-09-08',
+        reportComputedTime: -100,
+      });
+      assert.strictEqual(negativeStatus, 'STALE', 'negative reportComputedTime must evaluate to STALE');
+    });
   });
 
   describe('Bhavcopy Ingest Invalidation Contract', () => {
