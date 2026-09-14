@@ -278,7 +278,7 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
     }
   });
 
-  await t.test('queries unexecuted signals with signalDate <= yesterday to include orphaned multi-day signals (D1-4)', async () => {
+  await t.test('queries unexecuted signals with signalDate <= yesterday and bounded by lookback window (D1-4 / Finding 2)', async () => {
     const origFindMany = prisma.overnightSignal.findMany;
     let findManyArgs: any = null;
 
@@ -293,11 +293,19 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       assert.deepStrictEqual(
         typeof findManyArgs.where?.signalDate,
         'object',
-        'signalDate filter must be an object with lte'
+        'signalDate filter must be an object with gte and lte'
       );
       assert.ok(
         'lte' in (findManyArgs.where?.signalDate ?? {}),
         'signalDate filter must contain lte'
+      );
+      assert.ok(
+        'gte' in (findManyArgs.where?.signalDate ?? {}),
+        'signalDate filter must contain gte to prevent processing ancient orphaned signals'
+      );
+      assert.ok(
+        findManyArgs.where?.signalDate.gte <= findManyArgs.where?.signalDate.lte,
+        'signalDate.gte must be <= signalDate.lte'
       );
     } finally {
       prisma.overnightSignal.findMany = origFindMany;

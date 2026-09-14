@@ -552,6 +552,9 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
  *   LONG  (CE): trigger exit if LTP < entry × 0.99  (stock gapped DOWN > 1%)
  *   SHORT (PE): trigger exit if LTP > entry × 1.01  (stock gapped UP   > 1%)
  */
+/** Maximum calendar days to look back for orphaned unexecuted overnight signals (~5 trading sessions) */
+export const MAX_ORPHANED_SIGNAL_LOOKBACK_DAYS = 7;
+
 export async function checkGapFailureExits(): Promise<{ checked: number; exited: string[] }> {
   const yesterday = (() => {
     const d = new Date();
@@ -568,10 +571,17 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
   if (!yesterday) return { checked: 0, exited: [] };
 
-  // Load all unexecuted overnight signals from the previous session (or earlier orphaned signals)
+  // Lower bound to prevent arbitrarily old unexecuted signals from being evaluated against today's LTP
+  const minSignalDate = (() => {
+    const d = new Date();
+    const candidate = new Date(d.getTime() - MAX_ORPHANED_SIGNAL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+    return getISTTime(candidate).dateString;
+  })();
+
+  // Load unexecuted overnight signals from previous session or recent orphans within bounded window
   const pendingSignals = await prisma.overnightSignal.findMany({
     where: {
-      signalDate: { lte: yesterday },
+      signalDate: { gte: minSignalDate, lte: yesterday },
       executed: false,
       entry: { not: null },
       qualityBucket: { in: ['TRADEABLE', 'WATCHLIST'] },
