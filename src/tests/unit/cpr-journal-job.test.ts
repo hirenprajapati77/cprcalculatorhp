@@ -160,6 +160,40 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     }
   });
 
+  await t.test('evaluates trigger using live LTP when DB snapshot was below entry (D1-3)', async () => {
+    // DB snapshot: ltp=98, entry=100 (not triggered in morning)
+    // Live market: ltp=100.5 (triggered intraday)
+    const mocks = mockJobDeps(
+      [
+        makeSignal({
+          symbol: 'LIVETRIG',
+          ltp: 98,
+          entry: 100,
+          sl: 95,
+          target: 110,
+          signalSummary: 'BULLISH,ABOVE_TC',
+        }),
+      ],
+      {
+        LIVETRIG: {
+          ltp: 100.5,
+          high: 101,
+          low: 99,
+          open: 99.5,
+          close: 100.5,
+          previousClose: 100,
+        },
+      }
+    );
+    try {
+      const result = await runCprJournalJob();
+      assert.deepStrictEqual(result.logged, ['LIVETRIG']);
+      assert.strictEqual(result.skipped.length, 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
   await t.test('LTP exactly at entry counts as triggered', async () => {
     const mocks = mockJobDeps([makeSignal({ symbol: 'ATENTRY', ltp: 100, entry: 100 })]);
     try {
