@@ -89,7 +89,7 @@ async function resolveBacktestRun(backtestRunId?: string) {
     return prisma.backtestRun.findUnique({ where: { id: backtestRunId } });
   }
   return prisma.backtestRun.findFirst({
-    where: { strategyMode: 'INDEX_BTST_DRIVEN', status: 'COMPLETED' },
+    where: { strategyMode: 'BTST_STBT_DRIVEN', status: 'COMPLETED' },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -112,7 +112,7 @@ export async function getIndexBtstCompare(
     ? await prisma.trade.findMany({
         where: {
           backtestRunId: run.id,
-          strategyMode: 'INDEX_BTST_DRIVEN',
+          strategyMode: 'BTST_STBT_DRIVEN',
         },
         orderBy: { entryDate: 'asc' },
       })
