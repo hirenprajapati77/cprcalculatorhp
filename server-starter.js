@@ -1,12 +1,22 @@
 // C-04: Register crash handlers BEFORE any async work so they catch startup failures too
+let isTerminating = false;
+function crashExit(code = 1) {
+  if (isTerminating) return;
+  isTerminating = true;
+  // D4-3 fix: 500ms grace period allows console buffers and pending cleanup I/O to flush before exit
+  setTimeout(() => {
+    process.exit(code);
+  }, 500);
+}
+
 process.on('uncaughtException', (err) => {
   console.error('[server-starter] Uncaught exception:', err);
-  process.exit(1);
+  crashExit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[server-starter] Unhandled promise rejection at:', promise, 'reason:', reason);
-  process.exit(1);
+  crashExit(1);
 });
 
 const { createServer } = require('http');
