@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import redis, { isRedisAvailable, cache } from '@/lib/redis';
+import redis, { isRedisAvailable, getRedisClient, cache } from '@/lib/redis';
 import { env } from '@/config/env';
 import { registerShutdownHook } from '@/lib/shutdown-orchestrator';
 
@@ -40,9 +40,10 @@ export async function tryAcquireDistributedLock(
 ): Promise<{ acquired: boolean; token: string }> {
   const token = crypto.randomUUID();
 
-  if (isRedisAvailable() && redis) {
+  const client = getRedisClient() ?? redis;
+  if (isRedisAvailable() && client) {
     try {
-      const res = await redis.set(key, token, 'EX', ttlSeconds, 'NX');
+      const res = await client.set(key, token, 'EX', ttlSeconds, 'NX');
       if (res === 'OK') {
         heldLocksByProcess.set(key, token);
         return { acquired: true, token };
@@ -88,14 +89,19 @@ export async function releaseDistributedLock(
   token: string
 ): Promise<boolean> {
   if (!token) return false;
-  heldLocksByProcess.delete(key);
 
-  if (isRedisAvailable() && redis) {
+  const client = getRedisClient() ?? redis;
+  if (isRedisAvailable() && client) {
     try {
-      const res = await redis.eval(RELEASE_LOCK_LUA, 1, key, token);
+      const res = await client.eval(RELEASE_LOCK_LUA, 1, key, token);
+      if (heldLocksByProcess.get(key) === token) {
+        heldLocksByProcess.delete(key);
+      }
       return res === 1;
     } catch (err) {
       console.warn('[DistributedLock] Redis error during lock release:', err);
+      // Retain key in heldLocksByProcess so shutdown orchestrator can retry release
+      return false;
     }
   }
 
@@ -110,6 +116,9 @@ export async function releaseDistributedLock(
   const existing = memoryLocks.get(key);
   if (existing && existing.token === token) {
     memoryLocks.delete(key);
+    if (heldLocksByProcess.get(key) === token) {
+      heldLocksByProcess.delete(key);
+    }
     return true;
   }
   return false;
@@ -195,6 +204,13 @@ export async function handleLockContentionWithStaleFallback<T>(options: {
 export function _resetDistributedLocksForTesting(): void {
   memoryLocks.clear();
   heldLocksByProcess.clear();
+}
+
+/**
+ * Test-only helper to inspect active locks tracked for process shutdown.
+ */
+export function _getHeldLocksForTesting(): Map<string, string> {
+  return heldLocksByProcess;
 }
 
 /**
