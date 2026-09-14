@@ -175,35 +175,7 @@ export class ScannerService {
       });
     }
 
-    // 3. Calculate Quant Score & Classification (uses cprToday values)
-    const tempResult: Omit<ScannerSignalResult, 'score' | 'confidence'> = {
-      ...stock,
-      pivot: cprToday.pivot,
-      bc,
-      tc,
-      r1: cprToday.r1,
-      r2: cprToday.r2,
-      r3: cprToday.r3,
-      r4: cprToday.r4,
-      s1: cprToday.s1,
-      s2: cprToday.s2,
-      s3: cprToday.s3,
-      s4: cprToday.s4,
-      width: cprToday.width,
-      classification: cprToday.classification,
-      signals,
-      entry: 0,
-      sl: 0,
-      target: 0,
-      rr: '1:1',
-    };
-    const score = RankingService.calculateScore(tempResult);
-
-    // Advanced CPR Analytics
-    const cprCompression = await CprCompressionService.getStats(stock);
-    const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
-
-    // 4. Trade Setup V3 — Entry, SL, Target, RR (bias/entry/sl/target/rr)
+    // 3. Trade Setup V3 — Entry, SL, Target, RR (bias/entry/sl/target/rr)
     // INTENTIONALLY uses cprToday.* for entry/sl/target/rr — not cprTomorrow.*.
     // Bias is LTP vs today's band; trade levels must match the same session's CPR.
     // Do NOT revert to cprTomorrow.* without explicit owner approval —
@@ -214,7 +186,7 @@ export class ScannerService {
     let rr = '1:2.0';
     let target2: number | null = null;
     let rr2: string | null = null;
- 
+
     // Determine bias from LTP vs TODAY's CPR band
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
     if (ltp > cprToday.tc) bias = 'BULLISH';
@@ -230,7 +202,7 @@ export class ScannerService {
       const maxDistanceSL = entry * (1 - MAX_SL_PCT);
       sl = Math.max(Math.min(dayLowSL, minSL), maxDistanceSL);
       const risk = entry - sl;
- 
+
       if (risk > 0) {
         // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
         // M-10 fix: Target must be ahead of both entry AND current LTP (t > entry && t > ltp)
@@ -263,7 +235,7 @@ export class ScannerService {
       const maxDistanceSL = entry * (1 + MAX_SL_PCT);
       sl = Math.min(Math.max(dayHighSL, maxSL), maxDistanceSL);
       const risk = sl - entry;
- 
+
       if (risk > 0) {
         // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
         // M-10 fix: Target must be below both entry AND current LTP (t < entry && t < ltp)
@@ -338,10 +310,45 @@ export class ScannerService {
         }
       }
     }
- 
+
+    const computedEntry = Number(entry.toFixed(2));
+    const computedSl = Number(sl.toFixed(2));
+    const computedTarget = Number(target.toFixed(2));
+    const computedTarget2 = target2 !== null ? Number(target2.toFixed(2)) : null;
+
+    // 4. Calculate Quant Score & Classification (uses cprToday values and computed geometry)
+    const tempResult: Omit<ScannerSignalResult, 'score' | 'confidence'> = {
+      ...stock,
+      pivot: cprToday.pivot,
+      bc,
+      tc,
+      r1: cprToday.r1,
+      r2: cprToday.r2,
+      r3: cprToday.r3,
+      r4: cprToday.r4,
+      s1: cprToday.s1,
+      s2: cprToday.s2,
+      s3: cprToday.s3,
+      s4: cprToday.s4,
+      width: cprToday.width,
+      classification: cprToday.classification,
+      signals,
+      entry: computedEntry,
+      sl: computedSl,
+      target: computedTarget,
+      rr,
+      target2: computedTarget2,
+      rr2,
+    };
+    const score = RankingService.calculateScore(tempResult);
+
+    // Advanced CPR Analytics
+    const cprCompression = await CprCompressionService.getStats(stock);
+    const distPivot = safeRatio(ltp - cprToday.pivot, cprToday.pivot, 0) * 100;
+
     // 5. Confidence Score Calculation
     let confidence = this.calculateConfidence(tempResult);
- 
+
     let vpaBreakdown: import('@/services/vpa').VpaConfirmationResult | undefined;
     if (isVpaEnabled()) {
       // Align VPA with Trade Setup V3 geometry (incl. RANGE short mean-revert).
@@ -368,16 +375,16 @@ export class ScannerService {
         }
       }
     }
- 
+
     return {
       ...tempResult,
       score,
       confidence,
-      entry: Number(entry.toFixed(2)),
-      sl: Number(sl.toFixed(2)),
-      target: Number(target.toFixed(2)),
+      entry: computedEntry,
+      sl: computedSl,
+      target: computedTarget,
       rr,
-      target2: target2 !== null ? Number(target2.toFixed(2)) : null,
+      target2: computedTarget2,
       rr2,
       tomorrowCPRProvisional: isTradingSession && !isTodayCandleFinal,
       degenerateData,

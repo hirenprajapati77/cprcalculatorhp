@@ -1210,6 +1210,49 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
     // Capped at 100 * (1 + 0.03) = 103
     assert.strictEqual(shortRes.sl, 103);
   });
+
+  await t.test('ScannerService computes geometry before calling RankingService.calculateScore (D3-4)', async () => {
+    const origCalcScore = RankingService.calculateScore;
+    let interceptedResult: any = null;
+
+    RankingService.calculateScore = (result: any) => {
+      interceptedResult = { ...result };
+      return origCalcScore(result);
+    };
+
+    const mockStock = {
+      symbol: 'GEOM_CHECK',
+      market: 'NSE' as const,
+      sector: 'IT',
+      open: 105,
+      high: 108,
+      low: 102,
+      close: 106,
+      volume: 100000,
+      avgVolume: 100000,
+      marketCap: 120000,
+      ltp: 106,
+      history: [
+        { date: '2026-08-07', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+        { date: '2026-08-10', open: 100, high: 101, low: 99, close: 100, volume: 100000 },
+      ],
+    };
+
+    try {
+      const res = await ScannerService.scanStock(mockStock, '2026-08-11');
+      assert.ok(interceptedResult, 'calculateScore should have been called');
+      assert.ok(interceptedResult.entry > 0, `entry passed to calculateScore must be > 0, got ${interceptedResult.entry}`);
+      assert.ok(interceptedResult.sl > 0, `sl passed to calculateScore must be > 0, got ${interceptedResult.sl}`);
+      assert.ok(interceptedResult.target > 0, `target passed to calculateScore must be > 0, got ${interceptedResult.target}`);
+      assert.notStrictEqual(interceptedResult.rr, '1:1', 'rr passed to calculateScore must not be default 1:1');
+      assert.strictEqual(interceptedResult.entry, res.entry);
+      assert.strictEqual(interceptedResult.sl, res.sl);
+      assert.strictEqual(interceptedResult.target, res.target);
+      assert.strictEqual(interceptedResult.rr, res.rr);
+    } finally {
+      RankingService.calculateScore = origCalcScore;
+    }
+  });
 });
 
 
