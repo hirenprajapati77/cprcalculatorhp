@@ -491,4 +491,59 @@ test('sendBreakoutAlert edge cases and formatting options', async () => {
   }
 });
 
+test('sendBreakoutAlert prefers DB group chat ID over personal env chat ID (D3-3)', async () => {
+  const originalFetch = global.fetch;
+  const originalFindUnique = prisma.appSettings.findUnique;
+  const originalToken = env.TELEGRAM_BOT_TOKEN;
+  const originalChatId = env.TELEGRAM_CHAT_ID;
+  const originalGroupChatId = env.TELEGRAM_GROUP_CHAT_ID;
+
+  env.TELEGRAM_BOT_TOKEN = 'test-token';
+  env.TELEGRAM_CHAT_ID = 'personal-env-chat-id';
+  env.TELEGRAM_GROUP_CHAT_ID = undefined;
+
+  prisma.appSettings.findUnique = (async () => ({
+    id: 'global',
+    telegramGroupChatId: 'db-group-chat-id',
+    telegramChatId: 'db-personal-chat-id',
+  })) as any;
+
+  const sentChatIds: string[] = [];
+  global.fetch = (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { chat_id: string };
+    sentChatIds.push(body.chat_id);
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as any;
+
+  try {
+    const res = await TelegramService.sendBreakoutAlert([
+      {
+        symbol: 'TESTSYM',
+        ltp: 100,
+        entry: 100,
+        sl: 98,
+        target: 104,
+        rr: '1:2',
+        score: 85,
+        sector: 'IT',
+        alertKind: 'BREAKOUT',
+        signals: ['BREAKOUT'],
+      },
+    ]);
+
+    assert.strictEqual(res.ok, true);
+    assert.deepStrictEqual(
+      sentChatIds,
+      ['db-group-chat-id'],
+      'Must route to DB group chat ID rather than falling back to personal env chat ID'
+    );
+  } finally {
+    global.fetch = originalFetch;
+    prisma.appSettings.findUnique = originalFindUnique;
+    env.TELEGRAM_BOT_TOKEN = originalToken;
+    env.TELEGRAM_CHAT_ID = originalChatId;
+    env.TELEGRAM_GROUP_CHAT_ID = originalGroupChatId;
+  }
+});
+
 
