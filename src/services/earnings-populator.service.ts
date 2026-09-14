@@ -90,18 +90,35 @@ export class EarningsPopulatorService {
       }
 
       const events = await res.json();
-      if (Array.isArray(events)) {
-        const totalNseEvents = events.length;
-        console.log(`[EarningsPopulator] NSE Event Calendar API returned ${totalNseEvents} total events.`);
+      if (!Array.isArray(events)) {
+        throw new Error('[EarningsPopulator] Unexpected response format from NSE: expected an array of events.');
+      }
 
-        // Log event count; warn if 0 events returned (e.g. empty or blocked)
-        if (totalNseEvents === 0) {
-          console.warn('[EarningsPopulator] NSE Event Calendar API returned 0 events — possibly off-season or blocked.');
+      const totalNseEvents = events.length;
+      console.log(`[EarningsPopulator] NSE Event Calendar API returned ${totalNseEvents} total events.`);
+
+      // Log event count; warn if 0 or suspiciously few events returned
+      if (totalNseEvents === 0) {
+        console.warn('[EarningsPopulator] NSE Event Calendar API returned 0 events — possibly off-season or blocked.');
+      } else if (totalNseEvents < 5) {
+        console.warn(`[EarningsPopulator] NSE Event Calendar API returned suspiciously few events (${totalNseEvents}) — possible partial response or off-season.`);
+      }
+
+      // Structural validation: verify items have expected event structure
+      let validEventStructureCount = 0;
+      for (const event of events) {
+        if (event && typeof event === 'object' && ('symbol' in event || 'purpose' in event || 'date' in event)) {
+          validEventStructureCount++;
         }
+      }
 
-        for (const event of events) {
-          const symbol = (event.symbol || '').trim();
-          const purpose = (event.purpose || '').toLowerCase();
+      if (totalNseEvents > 0 && validEventStructureCount === 0) {
+        throw new Error('[EarningsPopulator] NSE Event Calendar payload malformed: events lack expected symbol/purpose/date fields.');
+      }
+
+      for (const event of events) {
+        const symbol = (event.symbol || '').trim();
+        const purpose = (event.purpose || '').toLowerCase();
 
           // We look for Financial Results board meetings
           if (fnoSymbols.has(symbol) && purpose.includes('results')) {
@@ -138,9 +155,6 @@ export class EarningsPopulatorService {
           }
         }
         console.log(`[EarningsPopulator] NSE: Matched ${nseCount} F&O results events out of ${totalNseEvents} total.`);
-      } else {
-        throw new Error('NSE Event Calendar response is not an array');
-      }
     } catch (err) {
       console.error('[EarningsPopulator] NSE Populate failed:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
