@@ -39,6 +39,15 @@ const momentumLeadersQuerySchema = z.object({
     .max(100)
     .optional()
     .default('ALL'),
+  limit: z
+    .string()
+    .optional()
+    .default('200')
+    .transform((val) => {
+      const n = parseInt(val, 10);
+      if (Number.isNaN(n) || n <= 0) return 200;
+      return Math.min(n, 500);
+    }),
 });
 
 export async function GET(request: NextRequest) {
@@ -60,6 +69,7 @@ export async function GET(request: NextRequest) {
       tier: getParam('tier'),
       windows: getParam('windows'),
       sector: getParam('sector'),
+      limit: getParam('limit'),
     });
 
     if (!parsed.success) {
@@ -82,6 +92,7 @@ export async function GET(request: NextRequest) {
       tier: tierFilter,
       windows: windowLeaderFilter,
       sector: sectorFilter,
+      limit,
     } = parsed.data;
 
     // Gate heavy refresh behind auth — prevents unauthenticated DDoS of the DB scan
@@ -110,7 +121,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...report,
-        allStocks: filteredStocks,
+        allStocks: filteredStocks.slice(0, limit),
       },
     });
   } catch (err) {

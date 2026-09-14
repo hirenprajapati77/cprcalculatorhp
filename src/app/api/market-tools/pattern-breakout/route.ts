@@ -33,6 +33,15 @@ const patternBreakoutQuerySchema = z.object({
     )
     .optional()
     .default('ALL'),
+  limit: z
+    .string()
+    .optional()
+    .default('200')
+    .transform((val) => {
+      const n = parseInt(val, 10);
+      if (Number.isNaN(n) || n <= 0) return 200;
+      return Math.min(n, 500);
+    }),
 });
 
 export async function GET(request: NextRequest) {
@@ -53,6 +62,7 @@ export async function GET(request: NextRequest) {
       pattern: getParam('pattern'),
       status: getParam('status'),
       tier: getParam('tier'),
+      limit: getParam('limit'),
     });
 
     if (!parsed.success) {
@@ -69,7 +79,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { refresh: forceRefresh, pattern: patternFilter, status: statusFilter, tier: tierFilter } = parsed.data;
+    const { refresh: forceRefresh, pattern: patternFilter, status: statusFilter, tier: tierFilter, limit } = parsed.data;
 
     // Gate heavy refresh behind auth — prevents unauthenticated DDoS of the DB scan
     if (forceRefresh && !(await isAuthorizedForRefresh(request))) {
@@ -93,7 +103,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...report,
-        stocks: filteredStocks,
+        stocks: filteredStocks.slice(0, limit),
       },
     });
   } catch (err) {
