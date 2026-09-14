@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 14 Sep: Code Review Follow-Up Hardening (PRs #227–#230)
+
+Follow-up hardening and defensive edge-case remediations identified during secondary code review:
+
+- **Fail-Stale on Missing or Invalid Cache Timestamp (PR #227 - HIGH)**:
+  - In `src/lib/cache-freshness.ts`, updated `evaluateReportFreshness` so `reportComputedTime <= 0` immediately triggers `STALE` status.
+  - In `market-breadth.service.ts`, `multi-year-breakout.service.ts`, `pattern-breakout.service.ts`, and `momentum-leaders.service.ts`, eliminated the `Date.now()` fallback for missing or unparseable `computedAt` Redis payload metadata, failing safely to `0` so corrupt/missing cache timestamps cannot masquerade as 0ms fresh.
+  - Added unit tests in `src/tests/unit/cache-freshness-contract.test.ts`.
+
+- **Bounded Lookback Window for Orphaned Overnight Signals (PR #228 - MEDIUM)**:
+  - In `src/services/scheduler/btst-alert.job.ts` (`checkGapFailureExits`), bounded the unexecuted overnight signal query with `signalDate: { gte: minSignalDate, lte: yesterday }` using `MAX_ORPHANED_SIGNAL_LOOKBACK_DAYS = 7`.
+  - Prevents table scans and inadvertent processing of arbitrarily old legacy orphaned rows from previous seasons or test suites.
+  - Updated unit test in `src/tests/unit/gap-failure-exit.test.ts`.
+
+- **Structural Validation & Low-Count Warnings for Corporate Events (PR #229 - MEDIUM)**:
+  - In `src/services/earnings-populator.service.ts`, added structural checks verifying that NSE corporate event API responses are non-empty arrays containing valid event schema objects (`symbol`, `purpose`, or `date`).
+  - Added operational warning logging when response count is unexpectedly low (`totalNseEvents < 5`), alerting on silent upstream format shifts.
+  - Added unit test suite in `src/tests/unit/earnings-populator-timeout.test.ts`.
+
+- **Direction Isolation in Suppression Cooldown Keys (PR #230 - LOW/MEDIUM)**:
+  - In `src/services/alert/breakout-watcher.service.ts` (`recordSuppressionCooldown`), ensured that suppression cooldown updates isolate direction keys (`symbol:BREAKOUT` vs `symbol:BREAKDOWN`) when explicit `alertKind` or directional `signals` are provided.
+  - Prevents a suppressed breakdown from inadvertently cooling down a valid breakout on the same symbol (and vice versa), while maintaining fallback coverage for bare symbol keys.
+  - Added unit test suite in `src/tests/unit/breakout-watcher-helpers.test.ts`.
+
 ### Added & Fixed — 14 Sep: 3-Week Comprehensive Code Review Remediation (PRs #205–#225)
 
 Comprehensive audit remediation addressing all 21 findings identified during the 3-week code review across all operational domains:
