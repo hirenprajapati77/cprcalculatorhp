@@ -44,6 +44,61 @@ describe('breakout-watcher helpers (Tier 2)', () => {
     }
   });
 
+  it('recordSuppressionCooldown isolates direction keys properly', async () => {
+    const { prisma } = await import('@/lib/db');
+    const origUpsert = prisma.breakoutAlertState.upsert;
+    const upsertedKeys: string[] = [];
+
+    (prisma.breakoutAlertState as any).upsert = async ({ where }: any) => {
+      upsertedKeys.push(where.symbol);
+      return {};
+    };
+
+    try {
+      // 1. Explicit alertKind BREAKDOWN should only touch BREAKDOWN key
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown([
+        { symbol: 'TATAMOTORS', alertKind: 'BREAKDOWN' },
+      ]);
+      assert.deepEqual(upsertedKeys, ['TATAMOTORS:BREAKDOWN']);
+
+      // 2. Explicit alertKind BREAKOUT should only touch BREAKOUT key
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown([
+        { symbol: 'RELIANCE', alertKind: 'BREAKOUT' },
+      ]);
+      assert.deepEqual(upsertedKeys, ['RELIANCE:BREAKOUT']);
+
+      // 3. Object with signals fallback
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown([
+        { symbol: 'INFY', signals: ['BREAKDOWN'] },
+      ]);
+      assert.deepEqual(upsertedKeys, ['INFY:BREAKDOWN']);
+
+      // 4. Object without alertKind or signals falls back safely to both keys
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown([
+        { symbol: 'SBIN' },
+      ]);
+      assert.ok(upsertedKeys.includes('SBIN:BREAKOUT'));
+      assert.ok(upsertedKeys.includes('SBIN:BREAKDOWN'));
+
+      // 5. String with explicit kind
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown(['TCS:BREAKDOWN']);
+      assert.deepEqual(upsertedKeys, ['TCS:BREAKDOWN']);
+
+      // 6. Bare string symbol falls back to both keys
+      upsertedKeys.length = 0;
+      await BreakoutWatcherService.recordSuppressionCooldown(['HDFC']);
+      assert.ok(upsertedKeys.includes('HDFC:BREAKOUT'));
+      assert.ok(upsertedKeys.includes('HDFC:BREAKDOWN'));
+    } finally {
+      prisma.breakoutAlertState.upsert = origUpsert;
+    }
+  });
+
   it('detectNewBreakouts suppresses alerts with low score, high event risk, or live sector divergence', async () => {
     const { prisma } = await import('@/lib/db');
     const { env } = await import('@/config/env');
