@@ -372,4 +372,187 @@ test('checkGapFailureExits - signed return & gap-failure alerts', async (t) => {
       TelegramService.sendRawMessage = origSendRaw;
     }
   });
+
+  await t.test('resolves orphaned signal journal entry via primary overnightSignalId linkage (Finding #3)', async () => {
+    const origSignalFindMany = prisma.overnightSignal.findMany;
+    const origSignalUpdate = prisma.overnightSignal.update;
+    const origJournalFindMany = prisma.tradeJournal.findMany;
+    const origJournalUpdate = prisma.tradeJournal.update;
+    const origGetStockData = MarketService.getStockData;
+    const origSendRaw = TelegramService.sendRawMessage;
+
+    // Orphaned signal from an earlier date (e.g. 2026-08-01)
+    const orphanSignal = makeSignal({
+      id: 'sig-orphan-linked-123',
+      symbol: 'ORPHANSTK',
+      signalDate: '2026-08-01',
+      direction: 'LONG',
+      entry: 200,
+      qualityBucket: 'TRADEABLE',
+    });
+
+    const journalFindCalls: Array<Record<string, unknown>> = [];
+    let journalUpdateData: Record<string, unknown> | null = null;
+    let telegramMessageSent = '';
+
+    prisma.overnightSignal.findMany = (async () => [orphanSignal]) as typeof prisma.overnightSignal.findMany;
+    prisma.overnightSignal.update = (async () => ({} as OvernightSignal)) as unknown as typeof prisma.overnightSignal.update;
+    MarketService.getStockData = (async () => ({ ltp: 190 })) as unknown as typeof MarketService.getStockData; // Gapped down 5%
+    TelegramService.sendRawMessage = (async (msg: string) => {
+      telegramMessageSent = msg;
+      return { ok: true };
+    }) as typeof TelegramService.sendRawMessage;
+
+    prisma.tradeJournal.findMany = (async (args: { where: Record<string, unknown> }) => {
+      journalFindCalls.push(args.where);
+      if (args.where.overnightSignalId === 'sig-orphan-linked-123') {
+        return [
+          {
+            id: 'journal-orphan-1',
+            symbol: 'ORPHANSTK',
+            signalType: 'BTST',
+            optionContract: 'UNDERLYING CE',
+            optionStrike: null,
+            optionType: null,
+            entryCmp: 200,
+            cmp916: null,
+            exitCmp: null,
+          },
+        ];
+      }
+      return [];
+    }) as any;
+
+    prisma.tradeJournal.update = (async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+      journalUpdateData = args.data;
+      return {};
+    }) as any;
+
+    try {
+      const res = await checkGapFailureExits();
+      assert.strictEqual(res.checked, 1);
+      assert.deepStrictEqual(res.exited, ['ORPHANSTK']);
+
+      // 1. Primary lookup by overnightSignalId must be executed with exitCmp: null
+      assert.strictEqual(journalFindCalls.length, 1, 'Should find journal entry via primary match on first call');
+      assert.strictEqual(journalFindCalls[0].overnightSignalId, 'sig-orphan-linked-123');
+      assert.strictEqual(journalFindCalls[0].exitCmp, null);
+
+      // 2. Journal update executed
+      assert.ok(journalUpdateData !== null, 'Journal should be updated');
+      const updateData = journalUpdateData as Record<string, unknown>;
+      assert.strictEqual(updateData.exitCmp, 190);
+      assert.strictEqual(updateData.executionOutcome, 'GAP_FAILURE');
+
+      // 3. Telegram message uses actual orphan signalDate, not yesterday
+      assert.ok(
+        telegramMessageSent.includes('Signal from 2026-08-01'),
+        `Telegram message should cite signalDate 2026-08-01, got: ${telegramMessageSent}`
+      );
+    } finally {
+      prisma.overnightSignal.findMany = origSignalFindMany;
+      prisma.overnightSignal.update = origSignalUpdate;
+      prisma.tradeJournal.findMany = origJournalFindMany;
+      prisma.tradeJournal.update = origJournalUpdate;
+      MarketService.getStockData = origGetStockData;
+      TelegramService.sendRawMessage = origSendRaw;
+    }
+  });
+
+  await t.test('resolves orphaned signal journal entry via fallback match using sig.signalDate (Finding #3)', async () => {
+    const origSignalFindMany = prisma.overnightSignal.findMany;
+    const origSignalUpdate = prisma.overnightSignal.update;
+    const origJournalFindMany = prisma.tradeJournal.findMany;
+    const origJournalUpdate = prisma.tradeJournal.update;
+    const origGetStockData = MarketService.getStockData;
+    const origSendRaw = TelegramService.sendRawMessage;
+
+    // Orphaned signal without matching overnightSignalId (legacy journal entry)
+    const orphanSignal = makeSignal({
+      id: 'sig-legacy-orphan',
+      symbol: 'LEGACYSTK',
+      signalDate: '2026-08-05',
+      direction: 'LONG',
+      entry: 500,
+      qualityBucket: 'TRADEABLE',
+    });
+
+    const journalFindCalls: Array<Record<string, unknown>> = [];
+    let journalUpdateData: Record<string, unknown> | null = null;
+    const expectedTradeDate = TradeJournalService.istDateStringToMidnightUTC('2026-08-05');
+
+    prisma.overnightSignal.findMany = (async () => [orphanSignal]) as typeof prisma.overnightSignal.findMany;
+    prisma.overnightSignal.update = (async () => ({} as OvernightSignal)) as unknown as typeof prisma.overnightSignal.update;
+    MarketService.getStockData = (async () => ({ ltp: 490 })) as unknown as typeof MarketService.getStockData; // Gapped down 2%
+    TelegramService.sendRawMessage = (async () => ({ ok: true })) as typeof TelegramService.sendRawMessage;
+
+    prisma.tradeJournal.findMany = (async (args: { where: Record<string, unknown> }) => {
+      journalFindCalls.push(args.where);
+      // Primary match on overnightSignalId returns empty (simulating legacy entry)
+      if (args.where.overnightSignalId) {
+        return [];
+      }
+      // Fallback match on symbol + tradeDate + signalType
+      if (
+        args.where.symbol === 'LEGACYSTK' &&
+        args.where.tradeDate instanceof Date &&
+        args.where.tradeDate.getTime() === expectedTradeDate.getTime() &&
+        args.where.signalType === 'BTST' &&
+        args.where.exitCmp === null
+      ) {
+        return [
+          {
+            id: 'journal-legacy-1',
+            symbol: 'LEGACYSTK',
+            signalType: 'BTST',
+            optionContract: 'UNDERLYING CE',
+            optionStrike: null,
+            optionType: null,
+            entryCmp: 500,
+            cmp916: null,
+            exitCmp: null,
+          },
+        ];
+      }
+      return [];
+    }) as any;
+
+    prisma.tradeJournal.update = (async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+      journalUpdateData = args.data;
+      return {};
+    }) as any;
+
+    try {
+      const res = await checkGapFailureExits();
+      assert.strictEqual(res.checked, 1);
+      assert.deepStrictEqual(res.exited, ['LEGACYSTK']);
+
+      // 1. Primary lookup checked first, then fallback lookup executed
+      assert.strictEqual(journalFindCalls.length, 2, 'Should execute primary then fallback lookup');
+      assert.strictEqual(journalFindCalls[0].overnightSignalId, 'sig-legacy-orphan');
+
+      // 2. Fallback lookup MUST use sig.signalDate (2026-08-05), NOT yesterday
+      assert.strictEqual(journalFindCalls[1].symbol, 'LEGACYSTK');
+      assert.strictEqual(
+        (journalFindCalls[1].tradeDate as Date).getTime(),
+        expectedTradeDate.getTime(),
+        'Fallback tradeDate must match sig.signalDate midnight IST UTC timestamp'
+      );
+      assert.strictEqual(journalFindCalls[1].signalType, 'BTST');
+      assert.strictEqual(journalFindCalls[1].exitCmp, null);
+
+      // 3. Journal entry successfully updated
+      assert.ok(journalUpdateData !== null);
+      const updateData = journalUpdateData as Record<string, unknown>;
+      assert.strictEqual(updateData.exitCmp, 490);
+      assert.strictEqual(updateData.executionOutcome, 'GAP_FAILURE');
+    } finally {
+      prisma.overnightSignal.findMany = origSignalFindMany;
+      prisma.overnightSignal.update = origSignalUpdate;
+      prisma.tradeJournal.findMany = origJournalFindMany;
+      prisma.tradeJournal.update = origJournalUpdate;
+      MarketService.getStockData = origGetStockData;
+      TelegramService.sendRawMessage = origSendRaw;
+    }
+  });
 });
