@@ -635,17 +635,30 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
 
       // Update TradeJournal row if one exists
       try {
-        const [y, m, d] = yesterday.split('-').map(Number);
-        const journalTradeDate = new Date(Date.UTC(y, m - 1, d, 0, -330, 0, 0));
+        const signalDateStr = sig.signalDate || yesterday;
+        const journalTradeDate = TradeJournalService.istDateStringToMidnightUTC(signalDateStr);
 
-        const journalEntries = await prisma.tradeJournal.findMany({
-          where: {
-            symbol: sig.symbol,
-            tradeDate: journalTradeDate,
-            signalType: sig.direction === 'SHORT' ? 'STBT' : 'BTST',
-            exitCmp: null,
-          },
-        });
+        // Primary match: direct foreign key linkage to the generating signal
+        let journalEntries = sig.id
+          ? await prisma.tradeJournal.findMany({
+              where: {
+                overnightSignalId: sig.id,
+                exitCmp: null,
+              },
+            })
+          : [];
+
+        // Fallback match: for legacy journal rows without overnightSignalId linkage
+        if (journalEntries.length === 0) {
+          journalEntries = await prisma.tradeJournal.findMany({
+            where: {
+              symbol: sig.symbol,
+              tradeDate: journalTradeDate,
+              signalType: sig.direction === 'SHORT' ? 'STBT' : 'BTST',
+              exitCmp: null,
+            },
+          });
+        }
 
         for (const journalEntry of journalEntries) {
           let exitPrice = ltp;
@@ -704,6 +717,7 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
       // Send Telegram exit alert
       try {
         const gapDir = sig.direction === 'LONG' ? '📉 GAP DOWN' : '📈 GAP UP';
+        const signalDateStr = sig.signalDate || yesterday;
         const message =
           `⚠️ <b>GAP FAILURE EXIT</b>\n` +
           `<b>${sig.symbol}</b> ${optionType} — Exit Immediately at Open\n\n` +
@@ -711,7 +725,7 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
           `• Entry: ₹${entry.toFixed(2)}\n` +
           `• Open LTP: ₹${ltp.toFixed(2)}\n` +
           `• Gap: ${gapPct.toFixed(2)}%\n\n` +
-          `<i>Signal from ${yesterday}. Weekend gap risk triggered. Exit at market open to protect capital.</i>`;
+          `<i>Signal from ${signalDateStr}. Weekend gap risk triggered. Exit at market open to protect capital.</i>`;
         await TelegramService.sendRawMessage(message);
         exited.push(sig.symbol);
       } catch (tgErr) {

@@ -556,7 +556,7 @@ export class TradeJournalService {
     );
   }
 
-  private static istDateStringToMidnightUTC(dateStr: string): Date {
+  static istDateStringToMidnightUTC(dateStr: string): Date {
     const [y, m, d] = dateStr.split('-').map(Number);
     const midnightUTC = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
     midnightUTC.setUTCMinutes(midnightUTC.getUTCMinutes() - 330);
