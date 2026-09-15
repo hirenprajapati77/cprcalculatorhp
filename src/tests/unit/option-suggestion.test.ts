@@ -422,16 +422,59 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     OptionChainService.getOptionChain = originalGetOptionChain;
   });
 
-  await t.test('monthly option expiry calculates true last Thursday (M-07)', () => {
-    const fn = (OptionSuggestionService as any).parseOptionSymbol;
-    if (typeof fn === 'function') {
-      // August 2026: Aug 31 is Monday, last Thursday is Aug 27
-      const parsedAug26 = fn('NSE:SBIN26AUG800CE', ['SBIN']);
-      assert.ok(parsedAug26?.expiryDate);
-      assert.strictEqual(parsedAug26.expiryDate.getUTCDay(), 4, 'Expiry day of week must be Thursday');
-      assert.strictEqual(parsedAug26.expiryDate.getUTCDate(), 27, 'Aug 2026 expiry must be 27th');
-      assert.strictEqual(parsedAug26.expiryDate.getUTCMonth(), 7, 'Month must be August');
-    }
+  await t.test('monthly option expiry calculates true last Tuesday or rolls back on holiday (Findings #1 & #2)', () => {
+    const computeDTE = (OptionSuggestionService as any).computeDTE;
+    assert.strictEqual(typeof computeDTE, 'function', 'computeDTE must be a function');
+
+    // 1. August 2026: Aug 31 is Monday. Last Tuesday is Aug 25, 2026.
+    // Aug 25, 2026 is a trading day (not weekend, not holiday).
+    // From 2026-08-25 to 2026-08-25: DTE = 1 (inclusive of expiry day)
+    const dteAugExpiryDay = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-25');
+    assert.strictEqual(dteAugExpiryDay, 1, 'Expiry day itself should have DTE = 1 business day');
+
+    // From 2026-08-24 (Monday before expiry) to 2026-08-25 (Tuesday): DTE = 2
+    const dteAugDayBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-24');
+    assert.strictEqual(dteAugDayBefore, 2, 'Monday before Tuesday expiry should have DTE = 2');
+
+    // From 2026-08-20 (Thursday prior week) to 2026-08-25 (Tuesday):
+    // Business days: Thu Aug 20, Fri Aug 21, Mon Aug 24, Tue Aug 25 = 4 business days
+    const dteAugWeekBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-20');
+    assert.strictEqual(dteAugWeekBefore, 4, 'Aug 20 to Aug 25 should be 4 business days');
+
+    // 2. September 2026: Sep 30 is Wednesday. Last Tuesday is Sep 29, 2026.
+    // Sep 29, 2026 is a trading day.
+    const dteSepExpiryDay = computeDTE('NSE:NIFTY26SEP25000CE', 'NIFTY', '2026-09-29');
+    assert.strictEqual(dteSepExpiryDay, 1, 'Sep 29 expiry day should have DTE = 1');
+
+    // 3. March 2026: March 31, 2026 is Tuesday, BUT it is listed as an NSE holiday (Shri Mahavir Jayanti)!
+    // NSE rules: if last Tuesday is a holiday, expiry rolls back to previous trading day.
+    // March 30, 2026 is Monday (trading day).
+    // So expiryDate should roll back to March 30, 2026!
+    // On 2026-03-30 (the effective expiry day), DTE should be 1.
+    const dteMar30 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-30');
+    assert.strictEqual(dteMar30, 1, 'March 2026 expiry should roll back to Mon March 30 because Tue March 31 is Mahavir Jayanti');
+
+    // On 2026-03-31 (the holiday itself, after rolled-back expiry): cursor (March 31) > expiryDate (March 30), DTE = 0
+    const dteMar31 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-31');
+    assert.strictEqual(dteMar31, 0, 'Holiday after rolled-back expiry should yield DTE = 0');
+
+    // 4. Weekly contracts: 26820 (20 Aug 2026)
+    const dteWeeklySameDay = computeDTE('NSE:NIFTY2682025000CE', 'NIFTY', '2026-08-20');
+    assert.strictEqual(dteWeeklySameDay, 1, 'Weekly expiry day should have DTE = 1');
+
+    const dteWeeklyDayBefore = computeDTE('NSE:NIFTY2682025000CE', 'NIFTY', '2026-08-19');
+    assert.strictEqual(dteWeeklyDayBefore, 2, 'Weekly day before expiry should have DTE = 2');
+  });
+
+  await t.test('FALLBACK_LOT_SIZES matches current NSE revised lot sizes (Finding #1)', async () => {
+    const loadLotSizes = (OptionSuggestionService as any).loadLotSizes;
+    const lotMap: Map<string, number> = await loadLotSizes();
+
+    assert.strictEqual(lotMap.get('NIFTY'), 65, 'NIFTY fallback lot size must be 65');
+    assert.strictEqual(lotMap.get('BANKNIFTY'), 30, 'BANKNIFTY fallback lot size must be 30');
+    assert.strictEqual(lotMap.get('FINNIFTY'), 60, 'FINNIFTY fallback lot size must be 60');
+    assert.strictEqual(lotMap.get('MIDCPNIFTY'), 120, 'MIDCPNIFTY fallback lot size must be 120');
+    assert.strictEqual(lotMap.get('SENSEX'), 10, 'SENSEX fallback lot size must remain 10');
   });
 });
 

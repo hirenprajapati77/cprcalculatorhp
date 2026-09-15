@@ -98,6 +98,11 @@ export function getISTTime(date: Date = new Date()) {
   };
 }
 
+/** Returns true if date is an NSE trading day (not a weekend and not an NSE holiday). */
+export function isNseTradingDay(date: Date = new Date()): boolean {
+  return getISTTime(date).isTradingDay;
+}
+
 function toTotalMinutes(hour: number, minute: number): number {
   return hour * 60 + minute;
 }
