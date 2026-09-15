@@ -214,18 +214,36 @@ export function _getHeldLocksForTesting(): Map<string, string> {
 }
 
 /**
+ * Cleanup active locks held by this process.
+ * Defer deleting from heldLocksByProcess until release succeeds.
+ * If first release attempt fails, retries once after 50ms.
+ */
+export async function cleanupDistributedLocksOnProcessExit(): Promise<void> {
+  if (heldLocksByProcess.size === 0) return;
+  const entries = Array.from(heldLocksByProcess.entries());
+
+  for (const [key, token] of entries) {
+    let released = false;
+    try {
+      released = await releaseDistributedLock(key, token);
+    } catch {
+      // transient failure
+    }
+    // Single retry with 50ms pause if first attempt failed
+    if (!released) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      try {
+        await releaseDistributedLock(key, token);
+      } catch {
+        // Best-effort cleanup on exit
+      }
+    }
+  }
+}
+
+/**
  * Register process exit hook to clean up active locks held by this process.
  */
 registerShutdownHook('release_locks', 'market_tools_distributed_locks', async () => {
-  if (heldLocksByProcess.size === 0) return;
-  const entries = Array.from(heldLocksByProcess.entries());
-  heldLocksByProcess.clear();
-
-  for (const [key, token] of entries) {
-    try {
-      await releaseDistributedLock(key, token);
-    } catch {
-      // Best-effort cleanup on exit
-    }
-  }
+  await cleanupDistributedLocksOnProcessExit();
 }, { critical: false });

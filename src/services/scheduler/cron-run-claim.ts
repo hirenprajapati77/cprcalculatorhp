@@ -22,7 +22,7 @@ import { registerShutdownHook, isShuttingDown } from '@/lib/shutdown-orchestrato
  * (local dev without Redis, or unit tests).
  */
 
-const LOCK_TTL_SECONDS = 600;
+const LOCK_TTL_SECONDS = 180;
 /** How long a completed retainClaim stays blocked across workers. */
 const DONE_TTL_SECONDS = 24 * 60 * 60;
 
@@ -62,19 +62,45 @@ export async function cleanupLocksOnProcessExit(): Promise<void> {
     key: k,
     token: activeLockTokens.get(k),
   }));
-  activeRunningLocks.clear();
-  activeLockTokens.clear();
+
   try {
     const redis = getRedis();
     if (redis && CacheService.isRedisConnected) {
       for (const { key, token } of entries) {
-        if (token) {
-          await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
-        } else {
-          await redis.del(`cron_lock:${key}`);
+        let released = false;
+        try {
+          if (token) {
+            await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
+          } else {
+            await redis.del(`cron_lock:${key}`);
+          }
+          released = true;
+        } catch {
+          // transient failure — retry below
+        }
+
+        // Fast retry (50ms) if first attempt failed
+        if (!released) {
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            if (token) {
+              await redis.eval(RELEASE_LOCK_LUA, 1, `cron_lock:${key}`, token);
+            } else {
+              await redis.del(`cron_lock:${key}`);
+            }
+            released = true;
+          } catch (retryErr) {
+            console.warn(`[CronClaim] Failed to release lock cron_lock:${key} on retry:`, retryErr);
+          }
+        }
+
+        if (released) {
+          activeRunningLocks.delete(key);
+          activeLockTokens.delete(key);
         }
       }
-      console.log(`[CronClaim] Released ${entries.length} orphaned cron lock(s) on process exit.`);
+      const releasedCount = entries.length - activeRunningLocks.size;
+      console.log(`[CronClaim] Released ${releasedCount} of ${entries.length} active cron lock(s) on process exit.`);
     }
   } catch (err) {
     console.warn('[CronClaim] Failed to release cron locks on exit:', err);
@@ -215,4 +241,14 @@ export function resetCronRunClaims(): void {
   memoryRunning.clear();
   activeRunningLocks.clear();
   activeLockTokens.clear();
+}
+
+/** Test helper — inspect active running locks tracked for process exit cleanup. */
+export function _getActiveRunningLocksForTesting(): Set<string> {
+  return activeRunningLocks;
+}
+
+/** Test helper — inspect active lock tokens tracked for process exit cleanup. */
+export function _getActiveLockTokensForTesting(): Map<string, string> {
+  return activeLockTokens;
 }
