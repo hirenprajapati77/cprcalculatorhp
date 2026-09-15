@@ -25,7 +25,7 @@ export type CacheFreshnessStatus = 'FRESH' | 'STALE' | 'PENDING';
 export interface FreshnessCheckOptions {
   reportDate?: string | null | undefined;
   latestTradingDate?: string | null | undefined;
-  reportComputedTime?: number | undefined;
+  reportComputedTime?: number | null | undefined;
   now?: number | undefined;
   maxAgeMs?: number | undefined;
 }
@@ -36,7 +36,8 @@ export interface FreshnessCheckOptions {
  * Rules:
  * 1. If reportDate is absent or report is explicitly pending -> PENDING
  * 2. If latestTradingDate is provided and reportDate < latestTradingDate -> STALE
- * 3. If elapsed time since computation exceeds maxAgeMs (default: 7 days) -> STALE
+ * 3. Enforce fail-stale: If reportComputedTime is missing (undefined/null), not a finite number (NaN),
+ *    non-positive (<= 0), or exceeds maxAgeMs (default: 7 days) -> STALE
  * 4. Otherwise -> FRESH
  */
 export function evaluateReportFreshness(options: FreshnessCheckOptions): CacheFreshnessStatus {
@@ -57,8 +58,13 @@ export function evaluateReportFreshness(options: FreshnessCheckOptions): CacheFr
     return 'STALE';
   }
 
-  // If the report exceeds maximum retention age or has an invalid/zero timestamp (fails stale on missing/invalid metadata)
-  if (reportComputedTime != null && (reportComputedTime <= 0 || now - reportComputedTime > maxAgeMs)) {
+  // Enforce fail-stale: missing (undefined/null), non-finite (NaN), non-positive (<= 0), or expired computedAt must evaluate to STALE
+  if (
+    reportComputedTime == null ||
+    !Number.isFinite(reportComputedTime) ||
+    reportComputedTime <= 0 ||
+    now - reportComputedTime > maxAgeMs
+  ) {
     return 'STALE';
   }
 
@@ -84,7 +90,7 @@ export async function markMarketToolsCacheStale(newTradingDate: string): Promise
  */
 export async function checkCachedReportFreshness(
   reportDate?: string | null | undefined,
-  reportComputedTime?: number | undefined
+  reportComputedTime?: number | null | undefined
 ): Promise<CacheFreshnessStatus> {
   try {
     const latestTradingDate = await cache.get(LATEST_INGESTED_DATE_KEY);

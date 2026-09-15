@@ -76,20 +76,65 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
       assert.strictEqual(status, 'STALE', 'Reports exceeding 7-day safety TTL must be flagged STALE');
     });
 
-    it('transitions to STALE when reportComputedTime is 0 or invalid (fails stale on missing/invalid computedAt)', () => {
-      const zeroStatus = evaluateReportFreshness({
-        reportDate: '2026-09-08',
-        latestTradingDate: '2026-09-08',
-        reportComputedTime: 0,
-      });
-      assert.strictEqual(zeroStatus, 'STALE', 'reportComputedTime = 0 must evaluate to STALE');
+    it('enforces fail-stale contract: undefined / null / NaN / <= 0 evaluate to STALE when reportDate exists (Finding 6)', () => {
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+          reportComputedTime: undefined,
+        }),
+        'STALE',
+        'reportComputedTime = undefined must evaluate to STALE'
+      );
 
-      const negativeStatus = evaluateReportFreshness({
-        reportDate: '2026-09-08',
-        latestTradingDate: '2026-09-08',
-        reportComputedTime: -100,
-      });
-      assert.strictEqual(negativeStatus, 'STALE', 'negative reportComputedTime must evaluate to STALE');
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+        }),
+        'STALE',
+        'omitted reportComputedTime must evaluate to STALE'
+      );
+
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+          reportComputedTime: null,
+        }),
+        'STALE',
+        'reportComputedTime = null must evaluate to STALE'
+      );
+
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+          reportComputedTime: NaN,
+        }),
+        'STALE',
+        'reportComputedTime = NaN must evaluate to STALE'
+      );
+
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+          reportComputedTime: 0,
+        }),
+        'STALE',
+        'reportComputedTime = 0 must evaluate to STALE'
+      );
+
+      assert.strictEqual(
+        evaluateReportFreshness({
+          reportDate: '2026-09-08',
+          latestTradingDate: '2026-09-08',
+          reportComputedTime: -100,
+        }),
+        'STALE',
+        'negative reportComputedTime must evaluate to STALE'
+      );
     });
   });
 
@@ -178,6 +223,34 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
     it('checkCachedReportFreshness returns PENDING when report date is missing', async () => {
       const status = await checkCachedReportFreshness(null, Date.now());
       assert.strictEqual(status, 'PENDING');
+    });
+
+    it('checkCachedReportFreshness returns STALE when reportComputedTime is missing, null, or NaN (Finding 6)', async () => {
+      await cache.set(LATEST_INGESTED_DATE_KEY, '2026-09-08', 3600);
+
+      assert.strictEqual(
+        await checkCachedReportFreshness('2026-09-08', undefined),
+        'STALE',
+        'checkCachedReportFreshness with undefined reportComputedTime must return STALE'
+      );
+
+      assert.strictEqual(
+        await checkCachedReportFreshness('2026-09-08', null),
+        'STALE',
+        'checkCachedReportFreshness with null reportComputedTime must return STALE'
+      );
+
+      assert.strictEqual(
+        await checkCachedReportFreshness('2026-09-08', NaN),
+        'STALE',
+        'checkCachedReportFreshness with NaN reportComputedTime must return STALE'
+      );
+
+      assert.strictEqual(
+        await checkCachedReportFreshness('2026-09-08'),
+        'STALE',
+        'checkCachedReportFreshness without second argument must return STALE'
+      );
     });
 
     it('MarketBreadthService.getMarketBreadth serves STALE report safely without blocking', async () => {
