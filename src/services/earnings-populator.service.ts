@@ -49,7 +49,7 @@ export class EarningsPopulatorService {
     dryRun = false,
     yahooTimeoutMs = 10_000,
     sendAlert = true
-  ): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[] }> {
+  ): Promise<{ success: boolean; nseCount: number; yahooCount: number; errors: string[]; alertSent?: boolean }> {
     const errors: string[] = [];
     let nseCount = 0;
     let yahooCount = 0;
@@ -234,6 +234,7 @@ export class EarningsPopulatorService {
     }
 
     const success = errors.length === 0;
+    let alertSent = false;
 
     if (!success && !dryRun && sendAlert) {
       // M-08 fix: Escape HTML entities and truncate error preview to prevent Telegram 400 Bad Request
@@ -244,9 +245,14 @@ export class EarningsPopulatorService {
         .slice(0, 1500);
       const alertMsg = `🚨 <b>Earnings Populator Failure Alert</b> 🚨\nNSE Count: ${nseCount}\nErrors:\n${escapedErrors}`;
       try {
-        await TelegramService.sendMessage(alertMsg);
+        const tgRes = await TelegramService.sendMessage(alertMsg);
+        alertSent = Boolean(tgRes?.ok);
+        if (!alertSent) {
+          console.warn('[EarningsPopulator] Failed to deliver Telegram alert:', tgRes?.reason);
+        }
       } catch (tgErr) {
         console.error('[EarningsPopulator] Failed to send Telegram alert:', tgErr);
+        alertSent = false;
       }
     }
 
@@ -255,7 +261,8 @@ export class EarningsPopulatorService {
       success,
       nseCount,
       yahooCount,
-      errors
+      errors,
+      alertSent,
     };
   }
 }

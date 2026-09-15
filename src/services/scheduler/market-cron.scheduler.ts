@@ -87,7 +87,7 @@ export async function runEarningsPopulateJob(dateKey: string): Promise<void> {
     async () => {
       const shouldSendAlert = lastEarningsFailureAlertDate !== dateKey;
       const res = await EarningsPopulatorService.populate(false, 10_000, shouldSendAlert);
-      if (!res.success && shouldSendAlert) {
+      if (!res.success && shouldSendAlert && res.alertSent !== false) {
         lastEarningsFailureAlertDate = dateKey;
       }
       return res;

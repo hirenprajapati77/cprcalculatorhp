@@ -164,5 +164,64 @@ describe('earnings populator failure alert deduplication', () => {
       EarningsPopulatorService.populate = origPopulate;
     }
   });
+
+  it('retries alert on subsequent attempt if Telegram delivery failed on the first attempt (Finding 4)', async () => {
+    const origPopulate = EarningsPopulatorService.populate;
+    const calls: { dryRun?: boolean; yahooTimeoutMs?: number; sendAlert?: boolean }[] = [];
+    let deliverySuccess = false;
+
+    EarningsPopulatorService.populate = async (dryRun = false, yahooTimeoutMs = 10_000, sendAlert = true) => {
+      calls.push({ dryRun, yahooTimeoutMs, sendAlert });
+      return {
+        success: false,
+        nseCount: 0,
+        yahooCount: 0,
+        errors: ['NSE down'],
+        alertSent: deliverySuccess,
+      };
+    };
+
+    try {
+      const dateKey = '2026-07-22';
+
+      // Attempt 1: First attempt fails, Telegram delivery ALSO fails (alertSent: false)
+      deliverySuccess = false;
+      await runEarningsPopulateJob(dateKey);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].sendAlert, true, 'First attempt must attempt to send alert');
+      assert.equal(
+        getLastEarningsFailureAlertDate(),
+        null,
+        'Alert date must NOT be locked when Telegram delivery failed'
+      );
+
+      // Attempt 2: Next retry in same window MUST retry sending the alert because delivery was not confirmed
+      deliverySuccess = true; // this time Telegram succeeds
+      await runEarningsPopulateJob(dateKey);
+      assert.equal(calls.length, 2);
+      assert.equal(
+        calls[1].sendAlert,
+        true,
+        'Retry in same window must NOT suppress alert if previous delivery failed'
+      );
+      assert.equal(
+        getLastEarningsFailureAlertDate(),
+        dateKey,
+        'Alert date must be locked once delivery succeeds'
+      );
+
+      // Attempt 3: Subsequent retry in same window is now properly suppressed
+      await runEarningsPopulateJob(dateKey);
+      assert.equal(calls.length, 3);
+      assert.equal(
+        calls[2].sendAlert,
+        false,
+        'Subsequent retry must be suppressed once delivery succeeded'
+      );
+    } finally {
+      EarningsPopulatorService.populate = origPopulate;
+      resetEarningsFailureAlertDate();
+    }
+  });
 });
 
