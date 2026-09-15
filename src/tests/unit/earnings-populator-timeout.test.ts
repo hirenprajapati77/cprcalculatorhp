@@ -172,6 +172,19 @@ describe('EarningsPopulatorService Yahoo Finance timeout resilience', () => {
       const resAlerted = await EarningsPopulatorService.populate(false, 50, true);
       assert.equal(resAlerted.success, false);
       assert.equal(alertSent, true, 'Telegram alert should be sent when sendAlert=true');
+      assert.equal(resAlerted.alertSent, true, 'alertSent should be true when Telegram delivery succeeds');
+
+      // 3. Telegram delivery returns ok: false -> alertSent should be false
+      TelegramService.sendMessage = async () => ({ ok: false, reason: 'rate_limited' });
+      const resFailedDelivery = await EarningsPopulatorService.populate(false, 50, true);
+      assert.equal(resFailedDelivery.success, false);
+      assert.equal(resFailedDelivery.alertSent, false, 'alertSent should be false when Telegram delivery fails');
+
+      // 4. Telegram delivery throws error -> alertSent should be false
+      TelegramService.sendMessage = async () => { throw new Error('network down'); };
+      const resThrownDelivery = await EarningsPopulatorService.populate(false, 50, true);
+      assert.equal(resThrownDelivery.success, false);
+      assert.equal(resThrownDelivery.alertSent, false, 'alertSent should be false when Telegram delivery throws');
     } finally {
       TelegramService.sendMessage = origSendMessage;
       MarketService.getUniverse = origGetUniverse;
