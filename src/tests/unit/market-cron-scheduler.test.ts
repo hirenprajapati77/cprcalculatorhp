@@ -5,7 +5,11 @@ import {
   completeCronRun,
   releaseCronRun,
   resetCronRunClaims,
+  cleanupLocksOnProcessExit,
+  _getActiveRunningLocksForTesting,
+  _getActiveLockTokensForTesting,
 } from '../../services/scheduler/cron-run-claim';
+import { CacheService } from '../../services/cache.service';
 import { resolveJournalSnapshotSlot } from '../../services/scheduler/journal-snapshot.job';
 import {
   shouldCompleteClaimedJob,
@@ -32,6 +36,84 @@ describe('cron-run-claim', () => {
     assert.equal(await tryClaimCronRun('cpr-journal:2026-07-22'), true);
     await releaseCronRun('cpr-journal:2026-07-22');
     assert.equal(await tryClaimCronRun('cpr-journal:2026-07-22'), true);
+  });
+
+  it('cleanupLocksOnProcessExit retains lock in activeRunningLocks if Redis release fails on initial attempt and retry (Finding 5)', async () => {
+    const origClient = (CacheService as any).redisClient;
+    const origProvider = (CacheService as any).provider;
+
+    let evalAttempts = 0;
+    const mockRedis = {
+      status: 'ready',
+      eval: async () => {
+        evalAttempts++;
+        throw new Error('Redis connection down during exit cleanup');
+      },
+      del: async () => {
+        evalAttempts++;
+        throw new Error('Redis connection down during exit cleanup');
+      },
+    };
+
+    (CacheService as any).provider = 'redis';
+    (CacheService as any).redisClient = mockRedis;
+
+    // Simulate an active lock with token
+    _getActiveRunningLocksForTesting().add('cron-test-key');
+    _getActiveLockTokensForTesting().set('cron-test-key', 'mock-token');
+
+    try {
+      await cleanupLocksOnProcessExit();
+      assert.equal(evalAttempts, 2, 'Should attempt initial release + 1 retry');
+      assert.equal(_getActiveRunningLocksForTesting().has('cron-test-key'), true, 'Failed lock must be retained');
+      assert.equal(_getActiveLockTokensForTesting().has('cron-test-key'), true, 'Failed token must be retained');
+    } finally {
+      (CacheService as any).redisClient = origClient;
+      (CacheService as any).provider = origProvider;
+      resetCronRunClaims();
+    }
+  });
+
+  it('cleanupLocksOnProcessExit removes lock from activeRunningLocks upon successful retry (Finding 5)', async () => {
+    const origClient = (CacheService as any).redisClient;
+    const origProvider = (CacheService as any).provider;
+
+    let evalAttempts = 0;
+    const mockRedis = {
+      status: 'ready',
+      eval: async () => {
+        evalAttempts++;
+        if (evalAttempts === 1) {
+          throw new Error('Transient error');
+        }
+        return 1;
+      },
+      del: async () => {
+        evalAttempts++;
+        if (evalAttempts === 1) {
+          throw new Error('Transient error');
+        }
+        return 1;
+      },
+    };
+
+    (CacheService as any).provider = 'redis';
+    (CacheService as any).redisClient = mockRedis;
+
+    // Simulate an active lock with token
+    _getActiveRunningLocksForTesting().add('cron-retry-key');
+    _getActiveLockTokensForTesting().set('cron-retry-key', 'mock-token');
+
+    try {
+      await cleanupLocksOnProcessExit();
+      assert.equal(evalAttempts, 2, 'Should have retried once after initial failure');
+      assert.equal(_getActiveRunningLocksForTesting().has('cron-retry-key'), false, 'Should be removed upon successful retry');
+      assert.equal(_getActiveLockTokensForTesting().has('cron-retry-key'), false, 'Token should be removed upon successful retry');
+    } finally {
+      (CacheService as any).redisClient = origClient;
+      (CacheService as any).provider = origProvider;
+      resetCronRunClaims();
+    }
   });
 });
 

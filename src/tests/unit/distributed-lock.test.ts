@@ -7,6 +7,7 @@ import {
   releaseDistributedLock,
   withDistributedLock,
   handleLockContentionWithStaleFallback,
+  cleanupDistributedLocksOnProcessExit,
   _resetDistributedLocksForTesting,
   _getHeldLocksForTesting,
 } from '../../lib/distributed-lock';
@@ -131,6 +132,67 @@ describe('distributed-lock (Tier 1 coverage)', () => {
       const correctRel = await releaseDistributedLock('test:redis:success', token);
       assert.equal(correctRel, true);
       assert.equal(_getHeldLocksForTesting().has('test:redis:success'), false);
+    });
+
+    it('retains lock in heldLocksByProcess during shutdown cleanup if Redis release fails on both initial attempt and retry (Finding 5)', async () => {
+      let evalAttempts = 0;
+      const mockRedis = {
+        status: 'ready',
+        set: async () => 'OK',
+        eval: async () => {
+          evalAttempts++;
+          throw new Error('Redis down during shutdown cleanup');
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const { acquired, token } = await tryAcquireDistributedLock('test:shutdown:fail', 10);
+      assert.equal(acquired, true);
+      assert.equal(_getHeldLocksForTesting().get('test:shutdown:fail'), token);
+
+      // Execute shutdown cleanup
+      await cleanupDistributedLocksOnProcessExit();
+
+      // Must have tried initial attempt + 1 retry = 2 attempts
+      assert.equal(evalAttempts, 2, 'Should attempt initial release + 1 retry during shutdown');
+      // Failed lock must be retained in heldLocksByProcess
+      assert.equal(_getHeldLocksForTesting().get('test:shutdown:fail'), token);
+    });
+
+    it('removes lock from heldLocksByProcess during shutdown cleanup if Redis release succeeds on retry (Finding 5)', async () => {
+      let evalAttempts = 0;
+      let currentVal: string | null = null;
+      const mockRedis = {
+        status: 'ready',
+        set: async (_key: string, val: string) => {
+          currentVal = val;
+          return 'OK';
+        },
+        eval: async (_script: string, _numKeys: number, _key: string, token: string) => {
+          evalAttempts++;
+          if (evalAttempts === 1) {
+            // First attempt throws
+            throw new Error('Transient network glitch');
+          }
+          // Retry succeeds
+          if (currentVal === token) {
+            currentVal = null;
+            return 1;
+          }
+          return 0;
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const { acquired, token } = await tryAcquireDistributedLock('test:shutdown:retry', 10);
+      assert.equal(acquired, true);
+      assert.equal(_getHeldLocksForTesting().get('test:shutdown:retry'), token);
+
+      // Execute shutdown cleanup
+      await cleanupDistributedLocksOnProcessExit();
+
+      assert.equal(evalAttempts, 2, 'Should have retried once after initial failure');
+      assert.equal(_getHeldLocksForTesting().has('test:shutdown:retry'), false, 'Should be removed upon successful retry');
     });
   });
 
