@@ -596,30 +596,98 @@ export class MarketService {
     return { mode: 'mock', source: 'Mock Data (Static)' };
   }
 
+  private static dynamicFnoSymbols: Set<string> | null = null;
+
+  /**
+   * Updates the runtime F&O eligibility set derived from the authoritative NSE list.
+   * Only symbols in STOCK_UNIVERSE that match these symbols will have isFnO = true.
+   * If null or empty is passed, dynamic overrides are cleared and MarketService falls back to static isFnO.
+   */
+  static setDynamicFnoSymbols(symbols: Set<string> | string[] | null): void {
+    if (!symbols) {
+      this.dynamicFnoSymbols = null;
+      return;
+    }
+    const cleanSet = new Set<string>();
+    for (const s of symbols) {
+      const clean = s.trim().toUpperCase();
+      if (clean) cleanSet.add(clean);
+    }
+    this.dynamicFnoSymbols = cleanSet.size > 0 ? cleanSet : null;
+  }
+
+  /**
+   * Returns a copy of the current dynamic F&O symbols set, or null if using static fallback.
+   */
+  static getDynamicFnoSymbols(): Set<string> | null {
+    return this.dynamicFnoSymbols ? new Set(this.dynamicFnoSymbols) : null;
+  }
+
+  /**
+   * Test / reset helper to clear dynamic F&O state.
+   */
+  static clearDynamicFnoSymbols(): void {
+    this.dynamicFnoSymbols = null;
+  }
+
+  /**
+   * Returns the static, un-overridden raw stock universe baseline.
+   */
+  static getStaticRawUniverse() {
+    return [...STOCK_UNIVERSE];
+  }
+
+  /**
+   * Attempts to load cached authoritative F&O symbols from Redis.
+   * Returns true if dynamic F&O symbols were successfully loaded and applied.
+   */
+  static async loadDynamicFnoUniverse(): Promise<boolean> {
+    try {
+      const cached = await CacheService.get<string[]>('fno_universe:authoritative_symbols');
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        this.setDynamicFnoSymbols(cached);
+        return true;
+      }
+    } catch (err) {
+      console.warn('[MarketService] Failed to load dynamic F&O universe from cache:', err);
+    }
+    return false;
+  }
+
   /**
    * Returns stock universe metadata based on the selected universe.
    * Supports Auto, NSE_FNO, NIFTY50, NIFTY100, NIFTY200, ALL_NSE, WATCHLIST.
+   * When dynamicFnoSymbols is active, isFnO is derived from the authoritative NSE list.
+   * Otherwise, falls back to the static STOCK_UNIVERSE isFnO flags.
    */
   static getRawUniverse() {
-    return [...STOCK_UNIVERSE];
+    if (!this.dynamicFnoSymbols) {
+      return [...STOCK_UNIVERSE];
+    }
+    const fnoSet = this.dynamicFnoSymbols;
+    return STOCK_UNIVERSE.map(s => ({
+      ...s,
+      isFnO: fnoSet.has(s.symbol.trim().toUpperCase()),
+    }));
   }
 
   static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' | string) {
     if (universe === 'WATCHLIST') return []; // Managed in caller by checking Watchlist database model
 
-    let list = STOCK_UNIVERSE;
+    const baseList = this.getRawUniverse();
+    let list = baseList;
     if (universe.includes(',')) {
       const symbols = universe.split(',').map(s => s.trim().toUpperCase());
-      list = STOCK_UNIVERSE.filter(s => symbols.includes(s.symbol.trim()));
+      list = baseList.filter(s => symbols.includes(s.symbol.trim()));
     }
-    else if (universe === 'NIFTY50')    list = STOCK_UNIVERSE.filter(s => s.isNifty50);
+    else if (universe === 'NIFTY50')    list = baseList.filter(s => s.isNifty50);
     else if (universe === 'NIFTY100') {
-      list = STOCK_UNIVERSE.filter(s => s.isNifty200)
+      list = baseList.filter(s => s.isNifty200)
         .sort((a, b) => b.marketCap - a.marketCap)
         .slice(0, 100);
     }
-    else if (universe === 'NIFTY200')   list = STOCK_UNIVERSE.filter(s => s.isNifty200);
-    else if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  list = STOCK_UNIVERSE.filter(s => s.isFnO);
+    else if (universe === 'NIFTY200')   list = baseList.filter(s => s.isNifty200);
+    else if (universe === 'NSE_FNO' || universe === 'NIFTY_FNO')  list = baseList.filter(s => s.isFnO);
     else if (universe === 'WATCHLIST')  return []; // Managed in caller by checking Watchlist database model
 
     const mapped = list.map(s => ({

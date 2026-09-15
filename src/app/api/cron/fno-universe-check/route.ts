@@ -43,7 +43,7 @@ ${diff.newlyIneligible.length > 0 ? truncateList(diff.newlyIneligible) : 'None'}
 *Symbols Only In NSE (${diff.symbolsOnlyInNse.length}):*
 ${diff.symbolsOnlyInNse.length > 0 ? truncateList(diff.symbolsOnlyInNse) : 'None'}
 
-_Review and manually update STOCK_UNIVERSE in market.service.ts._`;
+_Runtime F&O eligibility updated automatically from authoritative NSE list. Update STOCK_UNIVERSE in market.service.ts to align static baseline._`;
 
       await TelegramService.sendMessage(msg);
     }
