@@ -1,6 +1,6 @@
 import { OptionChainService, OptionChainResult } from './option-chain.service';
 import { CacheService } from './cache.service';
-import { getISTDateString } from '@/lib/market-hours';
+import { getISTDateString, isNseTradingDay } from '@/lib/market-hours';
 import { safeRatio } from '@/lib/math';
 import { EventCalendarService } from './overnight/event.service';
 import { OPTION_PCR } from '@/config/trading-constants';
@@ -48,12 +48,13 @@ interface ScoredCandidate extends ItmCandidate {
 }
 
 const FALLBACK_LOT_SIZES: Record<string, number> = {
-  // L-3 fix: lot sizes last verified: Aug 2026. SEBI revises F&O lot sizes in
-  // May and November each year. Cross-check against NSE F&O lot size table
+  // Lot sizes revised per NSE circular FAOP70616 (Oct 2025 cycle):
+  // NIFTY: 65, BANKNIFTY: 30, FINNIFTY: 60, MIDCPNIFTY: 120. SENSEX remains 10 (BSE).
+  // Cross-check against NSE F&O lot size table
   // (https://www.nseindia.com/regulations/content/NSE_circular_FAOP.pdf or
   //  https://www.nseindia.com/products-services/equity-derivatives-lot-size)
   // before every revision cycle and update entries below.
-  'NIFTY': 25, 'BANKNIFTY': 15, 'SENSEX': 10, 'FINNIFTY': 40, 'MIDCPNIFTY': 75,
+  'NIFTY': 65, 'BANKNIFTY': 30, 'SENSEX': 10, 'FINNIFTY': 60, 'MIDCPNIFTY': 120,
   'HDFCBANK': 400, 'RELIANCE': 250, 'ICICIBANK': 700, 'INFY': 400,
   'ITC': 1600, 'TCS': 175, 'LT': 300, 'SBIN': 750, 'BAJFINANCE': 125,
   'BHARTIARTL': 950, 'KOTAKBANK': 400, 'AXISBANK': 625, 'M&M': 350,
@@ -183,26 +184,29 @@ export class OptionSuggestionService {
       for (const prefix of prefixes) {
         if (!optionSymbol.startsWith(prefix)) continue;
         const remainder = optionSymbol.substring(prefix.length);
-        // Strip trailing strike+type (e.g. "910PE" or "25000CE")
-        const body = remainder.replace(/\d+(CE|PE)$/, '');
 
-        // Monthly: 26AUG → Aug 2026 (last thursday)
-        const monthlyMatch = body.match(/^(\d{2})([A-Z]{3})$/);
+        // Monthly: 26AUG790CE → Aug 2026 (last Tuesday, or previous trading day if holiday)
+        const monthlyMatch = remainder.match(/^(\d{2})([A-Z]{3})\d+(?:\.\d+)?(?:CE|PE)$/);
         if (monthlyMatch) {
           const yy = parseInt(monthlyMatch[1], 10) + 2000;
           const mo = monthMap[monthlyMatch[2]];
           if (mo !== undefined) {
-            // M-07 fix: Compute the true last Thursday of the month in UTC
+            // Compute the true last Tuesday of the month in UTC (NSE standard for equity & index derivatives)
             const lastDay = new Date(Date.UTC(yy, mo + 1, 0));
-            const dayOfWeek = lastDay.getUTCDay(); // 0 = Sun, 4 = Thu
-            const diffToThu = (dayOfWeek - 4 + 7) % 7;
-            lastDay.setUTCDate(lastDay.getUTCDate() - diffToThu);
+            const dayOfWeek = lastDay.getUTCDay(); // 0 = Sun, 2 = Tue
+            const diffToTue = (dayOfWeek - 2 + 7) % 7;
+            lastDay.setUTCDate(lastDay.getUTCDate() - diffToTue);
+
+            // If the last Tuesday is an exchange trading holiday, roll back to the previous trading day
+            while (!isNseTradingDay(lastDay)) {
+              lastDay.setUTCDate(lastDay.getUTCDate() - 1);
+            }
             expiryDate = lastDay;
           }
         }
 
-        // Weekly: 26820 → 20 Aug 2026
-        const weeklyMatch = body.match(/^(\d{2})([1-9OND])(\d{2})$/);
+        // Weekly: 2682025000CE → 20 Aug 2026
+        const weeklyMatch = remainder.match(/^(\d{2})([1-9OND])(\d{2})\d+(?:\.\d+)?(?:CE|PE)$/);
         if (weeklyMatch) {
           const yy = parseInt(weeklyMatch[1], 10) + 2000;
           const mCode = weeklyMatch[2];
