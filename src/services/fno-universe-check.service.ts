@@ -1,4 +1,5 @@
 import { MarketService } from './market.service';
+import { CacheService } from './cache.service';
 
 export interface FnoUniverseDiff {
   checkedAt: string;
@@ -8,6 +9,7 @@ export interface FnoUniverseDiff {
   newlyIneligible: string[];
   symbolsOnlyInNse: string[];
   hasDrift: boolean;
+  appliedToRuntime: boolean;
 }
 
 export class FnoUniverseCheckService {
@@ -54,7 +56,9 @@ export class FnoUniverseCheckService {
         return { ok: false, error: 'Parsed NSE list is empty, CSV format may have changed.' };
       }
 
-      const rawUniverse = MarketService.getRawUniverse();
+      const rawUniverse = MarketService.getStaticRawUniverse
+        ? MarketService.getStaticRawUniverse()
+        : MarketService.getRawUniverse();
       const nseListArray = Array.from(nseSymbols);
       
       const newlyEligible: string[] = [];
@@ -81,6 +85,16 @@ export class FnoUniverseCheckService {
 
       const hasDrift = newlyEligible.length > 0 || newlyIneligible.length > 0 || symbolsOnlyInNse.length > 0;
 
+      // Update runtime F&O eligibility in MarketService derived from authoritative NSE list
+      MarketService.setDynamicFnoSymbols(nseSymbols);
+
+      // Persist to Redis cache for cross-process / post-restart recovery
+      try {
+        await CacheService.set('fno_universe:authoritative_symbols', nseListArray, 7 * 24 * 3600);
+      } catch {
+        // non-fatal
+      }
+
       const diff: FnoUniverseDiff = {
         checkedAt: new Date().toISOString(),
         nseListCount: nseSymbols.size,
@@ -89,6 +103,7 @@ export class FnoUniverseCheckService {
         newlyIneligible,
         symbolsOnlyInNse,
         hasDrift,
+        appliedToRuntime: true,
       };
 
       return { ok: true, data: diff };
