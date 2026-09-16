@@ -532,7 +532,7 @@ export class MomentumLeadersService {
 
     for (const symbol of allSymbols) {
       const candles = candleMap.get(symbol);
-      if (!candles || candles.length < 22) continue; // Must have at least 21 historical days + current day
+      if (!candles || candles.length < 21) continue; // Must have at least 20 historical days + current day (21 total sessions)
 
       const latestCandle = candles[candles.length - 1]!;
       if (latestCandle.date !== latestDate) continue; // Must be actively traded today
