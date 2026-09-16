@@ -1,4 +1,5 @@
 import { calculateCPR } from '@/lib/cpr-engine';
+import type { CPRResult } from '@/types/cpr.types';
 import { getAtrPct } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
 import { VOLUME_THRESHOLDS } from '../config/trading-constants';
@@ -52,10 +53,179 @@ export interface ScannerSignalResult extends MarketStockData {
 }
 
 
+export interface TradeSetupResult {
+  entry: number;
+  sl: number;
+  target: number;
+  rr: string;
+  target2: number | null;
+  rr2: string | null;
+  bias: 'BULLISH' | 'BEARISH' | 'RANGE';
+  isLongRange: boolean;
+}
+
 /** Maximum allowable stop-loss risk as a percentage of entry (guards against flash wicks). */
 const MAX_SL_PCT = 0.03;
 
 export class ScannerService {
+  /**
+   * Computes entry, stop loss, targets, and risk-reward geometry from CPR levels and current LTP.
+   */
+  public static computeTradeSetup(params: {
+    ltp: number;
+    cprToday: Pick<CPRResult, 'pivot' | 'bc' | 'tc' | 'r1' | 'r2' | 'r3' | 'r4' | 's1' | 's2' | 's3' | 's4'>;
+    dayHigh: number;
+    dayLow: number;
+  }): TradeSetupResult {
+    const { ltp, cprToday, dayHigh, dayLow } = params;
+    let entry = 0;
+    let sl = 0;
+    let target = 0;
+    let rr = '1:2.0';
+    let target2: number | null = null;
+    let rr2: string | null = null;
+
+    // Determine bias from LTP vs TODAY's CPR band
+    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
+    if (ltp > cprToday.tc) bias = 'BULLISH';
+    else if (ltp < cprToday.bc) bias = 'BEARISH';
+    let isLongRange = false;
+
+    if (bias === 'BULLISH') {
+      // LONG SETUP: pullback/hold entry at today's TC
+      entry = cprToday.tc;
+      // SL = day low OR minimum 0.5% below entry (whichever is lower)
+      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
+      const dayLowSL = dayLow;
+      const minSL = entry * 0.995;
+      const maxDistanceSL = entry * (1 - MAX_SL_PCT);
+      sl = Math.max(Math.min(dayLowSL, minSL), maxDistanceSL);
+      const risk = entry - sl;
+
+      if (risk > 0) {
+        // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
+        // M-10 fix: Target must be ahead of both entry AND current LTP (t > entry && t > ltp)
+        const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
+        let chosenTarget = Math.max(entry + risk * 1.5, ltp * 1.005); // fallback
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t > entry && t > ltp && (t - entry) / risk >= 1.5) {
+            chosenTarget = t;
+            if (i + 1 < targets.length) {
+              const nextTarget = targets[i + 1];
+              target2 = nextTarget;
+              rr2 = `1:${((nextTarget - entry) / risk).toFixed(1)}`;
+            }
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((target - entry) / risk).toFixed(1)}`;
+      } else {
+        target = Math.max(entry * 1.01, ltp * 1.005);
+        rr = '1:2.0';
+      }
+    } else if (bias === 'BEARISH') {
+      // SHORT SETUP: bounce/hold entry at today's BC
+      entry = cprToday.bc;
+      // SL = day high OR minimum 0.5% above entry (whichever is higher)
+      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
+      const dayHighSL = dayHigh;
+      const maxSL = entry * 1.005;
+      const maxDistanceSL = entry * (1 + MAX_SL_PCT);
+      sl = Math.min(Math.max(dayHighSL, maxSL), maxDistanceSL);
+      const risk = sl - entry;
+
+      if (risk > 0) {
+        // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
+        // M-10 fix: Target must be below both entry AND current LTP (t < entry && t < ltp)
+        const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
+        let chosenTarget = Math.min(entry - risk * 1.5, ltp * 0.995); // fallback
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t < entry && t < ltp && (entry - t) / risk >= 1.5) {
+            chosenTarget = t;
+            if (i + 1 < targets.length) {
+              const nextTarget = targets[i + 1];
+              target2 = nextTarget;
+              rr2 = `1:${((entry - nextTarget) / risk).toFixed(1)}`;
+            }
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((entry - target) / risk).toFixed(1)}`;
+      } else {
+        target = Math.min(entry * 0.99, ltp * 0.995);
+        rr = '1:2.0';
+      }
+    } else {
+      // RANGE SETUP — fade/mean-revert around today's pivot
+      entry = cprToday.pivot;
+      isLongRange = ltp >= cprToday.pivot;
+      if (isLongRange) {
+        sl = entry * 0.995;
+        const risk = entry - sl;
+        if (risk > 0) {
+          const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
+          let chosenTarget = Math.max(entry + risk * 1.5, ltp * 1.005); // fallback
+          for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
+            if (t > entry && t > ltp && (t - entry) / risk >= 1.5) {
+              chosenTarget = t;
+              if (i + 1 < targets.length) {
+                const nextTarget = targets[i + 1];
+                target2 = nextTarget;
+                rr2 = `1:${((nextTarget - entry) / risk).toFixed(1)}`;
+              }
+              break;
+            }
+          }
+          target = chosenTarget;
+          rr = `1:${((target - entry) / risk).toFixed(1)}`;
+        } else {
+          target = Math.max(entry * 1.01, ltp * 1.005);
+          rr = '1:2.0';
+        }
+      } else {
+        sl = entry * 1.005;
+        const risk = sl - entry;
+        if (risk > 0) {
+          const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
+          let chosenTarget = Math.min(entry - risk * 1.5, ltp * 0.995); // fallback
+          for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
+            if (t < entry && t < ltp && (entry - t) / risk >= 1.5) {
+              chosenTarget = t;
+              if (i + 1 < targets.length) {
+                const nextTarget = targets[i + 1];
+                target2 = nextTarget;
+                rr2 = `1:${((entry - nextTarget) / risk).toFixed(1)}`;
+              }
+              break;
+            }
+          }
+          target = chosenTarget;
+          rr = `1:${((entry - target) / risk).toFixed(1)}`;
+        } else {
+          target = Math.min(entry * 0.99, ltp * 0.995);
+          rr = '1:2.0';
+        }
+      }
+    }
+
+    return {
+      entry,
+      sl,
+      target,
+      rr,
+      target2,
+      rr2,
+      bias,
+      isLongRange,
+    };
+  }
+
   /**
    * Evaluates all CPR levels, price-action signals, entry targets, and SL parameters.
    * Now async to fetch cached CPR compression history.
@@ -177,139 +347,25 @@ export class ScannerService {
 
     // 3. Trade Setup V3 — Entry, SL, Target, RR (bias/entry/sl/target/rr)
     // INTENTIONALLY uses cprToday.* for entry/sl/target/rr — not cprTomorrow.*.
+    // 3. Trade Setup & Bias Calculation
     // Bias is LTP vs today's band; trade levels must match the same session's CPR.
     // Do NOT revert to cprTomorrow.* without explicit owner approval —
     // see docs/decisions/cpr-entry-basis-2026-08-10.md (PR #98 / 9395ef5).
-    let entry = 0;
-    let sl = 0;
-    let target = 0;
-    let rr = '1:2.0';
-    let target2: number | null = null;
-    let rr2: string | null = null;
-
-    // Determine bias from LTP vs TODAY's CPR band
-    let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
-    if (ltp > cprToday.tc) bias = 'BULLISH';
-    else if (ltp < cprToday.bc) bias = 'BEARISH';
-    let isLongRange = false;
-    if (bias === 'BULLISH') {
-      // LONG SETUP: pullback/hold entry at today's TC
-      entry = cprToday.tc;
-      // SL = day low OR minimum 0.5% below entry (whichever is lower)
-      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
-      const dayLowSL = stock.low;
-      const minSL = entry * 0.995;
-      const maxDistanceSL = entry * (1 - MAX_SL_PCT);
-      sl = Math.max(Math.min(dayLowSL, minSL), maxDistanceSL);
-      const risk = entry - sl;
-
-      if (risk > 0) {
-        // Find the first resistance level (R1 -> R2 -> R3 -> R4) that satisfies at least 1:1.5 RR
-        // M-10 fix: Target must be ahead of both entry AND current LTP (t > entry && t > ltp)
-        const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
-        let chosenTarget = Math.max(entry + risk * 1.5, ltp * 1.005); // fallback
-        for (let i = 0; i < targets.length; i++) {
-          const t = targets[i];
-          if (t > entry && t > ltp && (t - entry) / risk >= 1.5) {
-            chosenTarget = t;
-            if (i + 1 < targets.length) {
-              target2 = targets[i + 1];
-              rr2 = `1:${((target2 - entry) / risk).toFixed(1)}`;
-            }
-            break;
-          }
-        }
-        target = chosenTarget;
-        rr = `1:${((target - entry) / risk).toFixed(1)}`;
-      } else {
-        target = Math.max(entry * 1.01, ltp * 1.005);
-        rr = '1:2.0';
-      }
-    } else if (bias === 'BEARISH') {
-      // SHORT SETUP: bounce/hold entry at today's BC
-      entry = cprToday.bc;
-      // SL = day high OR minimum 0.5% above entry (whichever is higher)
-      // L-04 fix: Cap SL distance to maximum MAX_SL_PCT (3.0%) of entry to guard against opening flash wicks
-      const dayHighSL = stock.high;
-      const maxSL = entry * 1.005;
-      const maxDistanceSL = entry * (1 + MAX_SL_PCT);
-      sl = Math.min(Math.max(dayHighSL, maxSL), maxDistanceSL);
-      const risk = sl - entry;
-
-      if (risk > 0) {
-        // Find the first support level (S1 -> S2 -> S3 -> S4) that satisfies at least 1:1.5 RR
-        // M-10 fix: Target must be below both entry AND current LTP (t < entry && t < ltp)
-        const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
-        let chosenTarget = Math.min(entry - risk * 1.5, ltp * 0.995); // fallback
-        for (let i = 0; i < targets.length; i++) {
-          const t = targets[i];
-          if (t < entry && t < ltp && (entry - t) / risk >= 1.5) {
-            chosenTarget = t;
-            if (i + 1 < targets.length) {
-              target2 = targets[i + 1];
-              rr2 = `1:${((entry - target2) / risk).toFixed(1)}`;
-            }
-            break;
-          }
-        }
-        target = chosenTarget;
-        rr = `1:${((entry - target) / risk).toFixed(1)}`;
-      } else {
-        target = Math.min(entry * 0.99, ltp * 0.995);
-        rr = '1:2.0';
-      }
-    } else {
-      // RANGE SETUP — fade/mean-revert around today's pivot
-      entry = cprToday.pivot;
-      isLongRange = ltp >= cprToday.pivot;
-      if (isLongRange) {
-        sl = entry * 0.995;
-        const risk = entry - sl;
-        if (risk > 0) {
-          const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
-          let chosenTarget = entry + risk * 1.5; // fallback
-          for (let i = 0; i < targets.length; i++) {
-            const t = targets[i];
-            if (t > entry && (t - entry) / risk >= 1.5) {
-              chosenTarget = t;
-              if (i + 1 < targets.length) {
-                target2 = targets[i + 1];
-                rr2 = `1:${((target2 - entry) / risk).toFixed(1)}`;
-              }
-              break;
-            }
-          }
-          target = chosenTarget;
-          rr = `1:${((target - entry) / risk).toFixed(1)}`;
-        } else {
-          target = entry * 1.01;
-          rr = '1:2.0';
-        }
-      } else {
-        sl = entry * 1.005;
-        const risk = sl - entry;
-        if (risk > 0) {
-          const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
-          let chosenTarget = entry - risk * 1.5; // fallback
-          for (let i = 0; i < targets.length; i++) {
-            const t = targets[i];
-            if (t < entry && (entry - t) / risk >= 1.5) {
-              chosenTarget = t;
-              if (i + 1 < targets.length) {
-                target2 = targets[i + 1];
-                rr2 = `1:${((entry - target2) / risk).toFixed(1)}`;
-              }
-              break;
-            }
-          }
-          target = chosenTarget;
-          rr = `1:${((entry - target) / risk).toFixed(1)}`;
-        } else {
-          target = entry * 0.99;
-          rr = '1:2.0';
-        }
-      }
-    }
+    const {
+      entry,
+      sl,
+      target,
+      rr,
+      target2,
+      rr2,
+      bias,
+      isLongRange,
+    } = ScannerService.computeTradeSetup({
+      ltp,
+      cprToday,
+      dayHigh: stock.high,
+      dayLow: stock.low,
+    });
 
     const computedEntry = Number(entry.toFixed(2));
     const computedSl = Number(sl.toFixed(2));
