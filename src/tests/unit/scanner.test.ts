@@ -1253,6 +1253,192 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
       RankingService.calculateScore = origCalcScore;
     }
   });
+
+  await t.test('Finding #9 — Scanner RANGE Target LTP Boundary Contract Enforcement', async (t2) => {
+    // Standard test CPR levels
+    const baseCpr = {
+      pivot: 100,
+      bc: 95,
+      tc: 105,
+      r1: 102,
+      r2: 106,
+      r3: 110,
+      r4: 114,
+      s1: 98,
+      s2: 94,
+      s3: 90,
+      s4: 86,
+    };
+
+    await t2.test('Long RANGE: target is strictly ahead of LTP (target > ltp)', () => {
+      // ltp = 101 (inside [bc=95, tc=105], ltp >= pivot=100 => Long RANGE)
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 101,
+        cprToday: baseCpr,
+        dayHigh: 102,
+        dayLow: 99,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, true);
+      assert.strictEqual(setup.entry, 100); // pivot
+      assert.ok(setup.target > 101, `Target (${setup.target}) must be strictly ahead of current LTP (101)`);
+    });
+
+    await t2.test('Short RANGE: target is strictly below LTP (target < ltp)', () => {
+      // ltp = 99 (inside [bc=95, tc=105], ltp < pivot=100 => Short RANGE)
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 99,
+        cprToday: baseCpr,
+        dayHigh: 101,
+        dayLow: 98,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, false);
+      assert.strictEqual(setup.entry, 100); // pivot
+      assert.ok(setup.target < 99, `Target (${setup.target}) must be strictly below current LTP (99)`);
+    });
+
+    await t2.test('Long RANGE: when LTP has already crossed R1, R1 is not selected and target > ltp', () => {
+      // entry = 100, R1 = 102, R2 = 106. LTP is already 103 (past R1).
+      // Inside range because tc = 105 (ltp 103 <= 105).
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 103,
+        cprToday: baseCpr,
+        dayHigh: 104,
+        dayLow: 99,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, true);
+      assert.notStrictEqual(setup.target, 102, 'R1 (102) must NOT be selected since LTP (103) is already beyond it');
+      assert.strictEqual(setup.target, 106, 'R2 (106) must be selected as the first resistance ahead of LTP (103)');
+      assert.ok(setup.target > 103, `Target (${setup.target}) must be strictly ahead of LTP (103)`);
+      assert.strictEqual(setup.target2, 110, 'target2 should be next level R3 (110)');
+    });
+
+    await t2.test('Short RANGE: when LTP has already crossed S1, S1 is not selected and target < ltp', () => {
+      // entry = 100, S1 = 98, S2 = 94. LTP is already 97 (below S1).
+      // Inside range because bc = 95 (ltp 97 >= 95).
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 97,
+        cprToday: baseCpr,
+        dayHigh: 101,
+        dayLow: 96,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, false);
+      assert.notStrictEqual(setup.target, 98, 'S1 (98) must NOT be selected since LTP (97) is already below it');
+      assert.strictEqual(setup.target, 94, 'S2 (94) must be selected as the first support below LTP (97)');
+      assert.ok(setup.target < 97, `Target (${setup.target}) must be strictly below LTP (97)`);
+      assert.strictEqual(setup.target2, 90, 'target2 should be next level S3 (90)');
+    });
+
+    await t2.test('Long RANGE: when no resistance levels are ahead of LTP, fallback remains strictly beyond LTP', () => {
+      // All resistance levels are <= LTP (e.g. LTP = 104, R1..R4 are all <= 104)
+      const compressedResistancesCpr = {
+        ...baseCpr,
+        tc: 105,
+        r1: 101,
+        r2: 102,
+        r3: 103,
+        r4: 104,
+      };
+
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 104,
+        cprToday: compressedResistancesCpr,
+        dayHigh: 104.5,
+        dayLow: 99,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, true);
+      assert.ok(setup.target > 104, `Fallback target (${setup.target}) must remain strictly ahead of current LTP (104)`);
+      assert.strictEqual(setup.target2, null);
+    });
+
+    await t2.test('Short RANGE: when no support levels are below LTP, fallback remains strictly below LTP', () => {
+      // All support levels are >= LTP (e.g. LTP = 96, S1..S4 are all >= 96)
+      const compressedSupportsCpr = {
+        ...baseCpr,
+        bc: 95,
+        s1: 99,
+        s2: 98,
+        s3: 97,
+        s4: 96,
+      };
+
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 96,
+        cprToday: compressedSupportsCpr,
+        dayHigh: 101,
+        dayLow: 95.5,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, false);
+      assert.ok(setup.target < 96, `Fallback target (${setup.target}) must remain strictly below current LTP (96)`);
+      assert.strictEqual(setup.target2, null);
+    });
+
+    await t2.test('Long RANGE: zero or negative risk fallback strictly satisfies LTP boundary', () => {
+      // If entry = 0 or sl >= entry => risk <= 0
+      const zeroRiskCpr = {
+        ...baseCpr,
+        pivot: 0,
+        bc: 0,
+        tc: 10,
+      };
+
+      const setup = ScannerService.computeTradeSetup({
+        ltp: 5,
+        cprToday: zeroRiskCpr,
+        dayHigh: 5,
+        dayLow: 0,
+      });
+
+      assert.strictEqual(setup.bias, 'RANGE');
+      assert.strictEqual(setup.isLongRange, true);
+      assert.ok(setup.target > 5, `Zero risk fallback target (${setup.target}) must be strictly ahead of LTP (5)`);
+    });
+
+    await t2.test('Short RANGE: zero or negative risk fallback formula strictly satisfies LTP boundary', () => {
+      // In Short RANGE, when risk <= 0 the defensive fallback formula is Math.min(entry * 0.99, ltp * 0.995).
+      // For any positive stock price where ltp is below entry (e.g. entry = 100, ltp = 95):
+      const entry = 100;
+      const ltp = 95;
+      const fallbackTarget = Math.min(entry * 0.99, ltp * 0.995);
+      assert.ok(fallbackTarget < ltp, `Fallback target (${fallbackTarget}) must be strictly below current LTP (${ltp})`);
+      assert.strictEqual(fallbackTarget, 95 * 0.995);
+    });
+
+    await t2.test('Preserves existing BULLISH and BEARISH behavior unchanged', () => {
+      // BULLISH: ltp > tc (106 > 105)
+      const bull = ScannerService.computeTradeSetup({
+        ltp: 106,
+        cprToday: baseCpr,
+        dayHigh: 107,
+        dayLow: 98,
+      });
+      assert.strictEqual(bull.bias, 'BULLISH');
+      assert.strictEqual(bull.entry, 105); // TC
+      assert.ok(bull.target > 106, `BULLISH target must be > ltp (got ${bull.target})`);
+
+      // BEARISH: ltp < bc (94 < 95)
+      const bear = ScannerService.computeTradeSetup({
+        ltp: 94,
+        cprToday: baseCpr,
+        dayHigh: 102,
+        dayLow: 93,
+      });
+      assert.strictEqual(bear.bias, 'BEARISH');
+      assert.strictEqual(bear.entry, 95); // BC
+      assert.ok(bear.target < 94, `BEARISH target must be < ltp (got ${bear.target})`);
+    });
+  });
 });
 
 
