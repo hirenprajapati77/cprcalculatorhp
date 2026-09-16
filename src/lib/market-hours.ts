@@ -103,6 +103,31 @@ export function isNseTradingDay(date: Date = new Date()): boolean {
   return getISTTime(date).isTradingDay;
 }
 
+/**
+ * Returns the last `count` NSE trading days (YYYY-MM-DD strings) in chronological order
+ * (oldest to newest), ending on or before `asOf` (inclusive of `asOf` if it is a trading day).
+ */
+export function getRecentNseTradingDays(count: number, asOf: Date = new Date()): string[] {
+  if (count <= 0) return [];
+
+  const tradingDays: string[] = [];
+  const candidate = new Date(asOf.getTime());
+  // Bounded iteration guard: allow enough calendar days to bridge long holiday clusters (e.g., 4x count, min 30)
+  const maxIterations = Math.max(count * 4, 30);
+  let iterations = 0;
+
+  while (tradingDays.length < count && iterations < maxIterations) {
+    const { isTradingDay, dateString } = getISTTime(candidate);
+    if (isTradingDay) {
+      tradingDays.push(dateString);
+    }
+    candidate.setDate(candidate.getDate() - 1);
+    iterations++;
+  }
+
+  return tradingDays.reverse();
+}
+
 function toTotalMinutes(hour: number, minute: number): number {
   return hour * 60 + minute;
 }

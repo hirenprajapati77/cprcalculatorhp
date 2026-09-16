@@ -4,6 +4,7 @@ import { MarketService, MarketStockData } from '../../services/market.service';
 import { CacheService } from '../../services/cache.service';
 import { FyersAuthService } from '../../services/fyers-auth.service';
 import { env } from '../../config/env';
+import { isNseTradingDay } from '../../lib/market-hours';
 
 test('Market Service - 200 SMA Plumbing', async (t) => {
 
@@ -583,6 +584,116 @@ test('MarketService Fyers quote batch prefetch', async (t) => {
       FyersAuthService.getAccessToken = originalGetAccessToken;
       FyersAuthService.getCredentials = originalGetCredentials;
       FyersAuthService.clearToken = originalClearToken;
+    }
+  });
+
+  await t.test('Finding #10: Yahoo fallback safely skips candles with missing/invalid timestamps without fabricating dates', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+    FyersAuthService.getAccessToken = async () => null;
+
+    // 2026-07-08 10:00:00 UTC = 15:30:00 IST (Wednesday)
+    const validTs = Math.floor(new Date('2026-07-08T10:00:00Z').getTime() / 1000);
+
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('api-t1.fyers.in')) {
+        return new Response(JSON.stringify({ s: 'error', code: 401, message: 'unauthorized' }), { status: 401 });
+      }
+      if (url.includes('interval=1d')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              meta: { regularMarketPrice: 200 },
+              // Candle 0: valid timestamp
+              // Candle 1: null timestamp (corrupted)
+              // Candle 2: undefined timestamp
+              // Candle 3: NaN timestamp
+              // Candle 4: negative timestamp
+              timestamp: [validTs, null, undefined, NaN, -100],
+              indicators: {
+                quote: [{
+                  open: [100, 101, 102, 103, 104],
+                  high: [105, 106, 107, 108, 109],
+                  low: [95, 96, 97, 98, 99],
+                  close: [102, 103, 104, 105, 106],
+                  volume: [1000, 1000, 1000, 1000, 1000],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      if (url.includes('interval=15m')) {
+        return new Response(JSON.stringify({
+          chart: { result: [{ indicators: { quote: [{ close: [200], high: [201], low: [199], volume: [100] }] } }] },
+        }));
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('LTM', 'NSE');
+      assert.ok(data !== null);
+      // History should only contain the 1 candle with valid timestamp; all invalid/missing timestamps skipped
+      assert.strictEqual(data!.history?.length, 1);
+      assert.strictEqual(data!.history![0].date, '2026-07-08');
+      assert.strictEqual(data!.history![0].close, 102);
+    } finally {
+      MarketService.clearFyersPermissionBlock();
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+    }
+  });
+
+  await t.test('Finding #10: Mock/Paper history generates only valid NSE trading days without weekend dates', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'mock';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+
+    try {
+      const data = await MarketService.getStockData('RELIANCE', 'NSE');
+      assert.ok(data !== null);
+      assert.ok(data!.history);
+      assert.strictEqual(data!.history!.length, 5);
+
+      // Verify every candle date is an authentic NSE trading day
+      for (const candle of data!.history!) {
+        const d = new Date(`${candle.date}T12:00:00+05:30`);
+        assert.strictEqual(
+          isNseTradingDay(d),
+          true,
+          `Candle date ${candle.date} must be a valid NSE trading day`
+        );
+      }
+
+      // Verify dates are in strictly increasing chronological order
+      for (let i = 1; i < data!.history!.length; i++) {
+        const prev = data!.history![i - 1].date;
+        const curr = data!.history![i].date;
+        assert.ok(
+          curr > prev,
+          `Dates must be chronologically ascending: ${prev} < ${curr}`
+        );
+      }
+    } finally {
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
     }
   });
 });

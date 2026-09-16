@@ -15,6 +15,7 @@ import {
   isInClosingLiquidityWindow,
   BTST_WINDOW_MINUTES,
   BTST_CLOCK,
+  getRecentNseTradingDays,
 } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
@@ -181,6 +182,66 @@ describe('Market Hours Utilities', () => {
       assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.MARKET_CLOSE - 5), true);
       assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.CLOSING_WINDOW_START - 5), false);
       assert.strictEqual(isInClosingLiquidityWindow(BTST_WINDOW_MINUTES.MARKET_CLOSE), false);
+    });
+  });
+
+  describe('getRecentNseTradingDays', () => {
+    it('returns empty array when count <= 0', () => {
+      assert.deepStrictEqual(getRecentNseTradingDays(0), []);
+      assert.deepStrictEqual(getRecentNseTradingDays(-3), []);
+    });
+
+    it('returns 5 consecutive trading days for a standard trading week (Mon-Fri)', () => {
+      // 2026-07-10 is Friday
+      const friday = new Date('2026-07-10T12:00:00+05:30');
+      const days = getRecentNseTradingDays(5, friday);
+      assert.deepStrictEqual(days, [
+        '2026-07-06',
+        '2026-07-07',
+        '2026-07-08',
+        '2026-07-09',
+        '2026-07-10',
+      ]);
+    });
+
+    it('bridges across weekends omitting Saturday and Sunday', () => {
+      // 2026-07-13 is Monday
+      const monday = new Date('2026-07-13T12:00:00+05:30');
+      const days = getRecentNseTradingDays(5, monday);
+      assert.deepStrictEqual(days, [
+        '2026-07-07',
+        '2026-07-08',
+        '2026-07-09',
+        '2026-07-10',
+        '2026-07-13',
+      ]);
+      // Verify neither Saturday 2026-07-11 nor Sunday 2026-07-12 is in the list
+      assert.strictEqual(days.includes('2026-07-11'), false);
+      assert.strictEqual(days.includes('2026-07-12'), false);
+    });
+
+    it('handles weekend asOf date by starting from the most recent completed Friday', () => {
+      // 2026-07-12 is Sunday
+      const sunday = new Date('2026-07-12T12:00:00+05:30');
+      const days = getRecentNseTradingDays(3, sunday);
+      assert.deepStrictEqual(days, [
+        '2026-07-08',
+        '2026-07-09',
+        '2026-07-10',
+      ]);
+    });
+
+    it('skips NSE holidays (e.g., Republic Day 2026-01-26)', () => {
+      // 2026-01-26 is Republic Day (Monday). Friday was 2026-01-23. Tuesday is 2026-01-27.
+      const tuesday = new Date('2026-01-27T12:00:00+05:30');
+      const days = getRecentNseTradingDays(3, tuesday);
+      assert.deepStrictEqual(days, [
+        '2026-01-22',
+        '2026-01-23',
+        '2026-01-27',
+      ]);
+      // Republic Day Monday must be skipped
+      assert.strictEqual(days.includes('2026-01-26'), false);
     });
   });
 });

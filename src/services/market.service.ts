@@ -1,6 +1,6 @@
 import { env } from '@/config/env';
 import { CacheService } from './cache.service';
-import { getISTDateString, isTodayCandleClosed } from '@/lib/market-hours';
+import { getISTDateString, isTodayCandleClosed, getRecentNseTradingDays } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { FyersAuthService } from './fyers-auth.service';
 import {
@@ -874,9 +874,20 @@ export class MarketService {
               }
 
               const timestamp = result.timestamp?.[i];
-              const dateStr = timestamp
-                ? getISTDateString(new Date(timestamp * 1000))
-                : getISTDateString(new Date(Date.now() - (len - 1 - i) * 86400 * 1000));
+              if (
+                timestamp === null ||
+                timestamp === undefined ||
+                typeof timestamp !== 'number' ||
+                !Number.isFinite(timestamp) ||
+                timestamp <= 0
+              ) {
+                if (!isNullOhlcPlaceholder) {
+                  console.warn(`[MarketService] Skipping candle ${i} for ${cleanSymbol}: missing or invalid timestamp (${timestamp}).`);
+                }
+                continue;
+              }
+
+              const dateStr = getISTDateString(new Date(timestamp * 1000));
 
               history.push({
                 date: dateStr,
@@ -1085,7 +1096,8 @@ export class MarketService {
       volume = volume * (0.8 + ((seed + timeSeed) % 5) / 10);
     }
 
-    // Generate deterministic history of last 5 days
+    // Generate deterministic history of last 5 trading days
+    const tradingDates = getRecentNseTradingDays(5);
     const history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
     for (let day = 4; day >= 0; day--) {
       const daySeed = seed + dateSeed - day;
@@ -1095,7 +1107,8 @@ export class MarketService {
       const dayHigh = Math.max(dayOpen, dayClose) * (1 + narrowFactor);
       const dayLow = Math.min(dayOpen, dayClose) * (1 - narrowFactor);
       const dayVolume = avgVolume * (0.8 + (daySeed % 5) * 0.1);
-      const dateStr = getISTDateString(new Date(Date.now() - day * 86400 * 1000));
+      const dateIndex = 4 - day;
+      const dateStr = tradingDates[dateIndex] || getISTDateString();
 
       history.push({
         date: dateStr,
