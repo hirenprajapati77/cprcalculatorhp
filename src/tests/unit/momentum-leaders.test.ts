@@ -217,6 +217,101 @@ describe('MomentumLeadersService - Unit Tests', () => {
     });
   });
 
+  describe('Momentum History Length Requirement (20 vs 21 vs 22 Candles)', () => {
+    function generateCandles(count: number): OhlcvCandleWithPrevClose[] {
+      const candles: OhlcvCandleWithPrevClose[] = [];
+      for (let i = 1; i <= count; i++) {
+        const dayStr = i.toString().padStart(2, '0');
+        candles.push({
+          date: `2026-08-${dayStr}`,
+          open: 100 + i,
+          high: 105 + i,
+          low: 95 + i,
+          close: 102 + i,
+          prevClose: 100 + i,
+          volume: 1000000,
+          value: 100000000, // 10 Cr
+        });
+      }
+      return candles;
+    }
+
+    it('processes stock with exactly 21 candles successfully across all windows and trailing metrics', () => {
+      const candles21 = generateCandles(21);
+      const canonicalTradingDates = candles21.map(c => c.date);
+
+      // 1. History requirement check: guard candles.length < 21 must not skip
+      assert.equal(candles21.length, 21);
+      const isSkippedByGuard = candles21.length < 21;
+      assert.equal(isSkippedByGuard, false, 'Stock with exactly 21 candles must pass the history guard');
+
+      // 2. Trailing 20-day volume window (prior 20 candles leading up to current session)
+      const prior20Candles = candles21.slice(-21, -1);
+      assert.equal(prior20Candles.length, 20, 'Prior 20-day slice must contain exactly 20 sessions');
+      assert.equal(prior20Candles[0]?.date, '2026-08-01', 'First prior session must be Day 01');
+      assert.equal(prior20Candles[19]?.date, '2026-08-20', 'Last prior session must be Day 20');
+
+      // 3. Current active session
+      const latestCandle = candles21[candles21.length - 1]!;
+      assert.equal(latestCandle.date, '2026-08-21', 'Latest candle must be Day 21 (current day)');
+
+      // 4. Trailing 20-day average turnover
+      const avgTurnover = MomentumLeadersService.computeTrailingAvgTurnoverCr(candles21, 20);
+      assert.equal(avgTurnover, 10.0, 'Must compute trailing turnover across the 20 prior sessions');
+
+      // 5. Compounded returns across all windows (1D, 5D, 10D, 21D)
+      const r1 = MomentumLeadersService.computeCompoundedReturn(candles21, 1, canonicalTradingDates);
+      const r5 = MomentumLeadersService.computeCompoundedReturn(candles21, 5, canonicalTradingDates);
+      const r10 = MomentumLeadersService.computeCompoundedReturn(candles21, 10, canonicalTradingDates);
+      const r21 = MomentumLeadersService.computeCompoundedReturn(candles21, 21, canonicalTradingDates);
+
+      assert.notEqual(r1, null, 'r1d must be valid for 21 candles');
+      assert.notEqual(r5, null, 'r5d must be valid for 21 candles');
+      assert.notEqual(r10, null, 'r10d must be valid for 21 candles');
+      assert.notEqual(r21, null, 'r21d must be valid for 21 candles');
+      assert.ok(typeof r21 === 'number' && Number.isFinite(r21));
+    });
+
+    it('safely skips stock with 20 candles as insufficient history for 21-day momentum', () => {
+      const candles20 = generateCandles(20);
+      const canonicalTradingDates = candles20.map(c => c.date);
+
+      // 1. History requirement check: guard candles.length < 21 must skip
+      assert.equal(candles20.length, 20);
+      const isSkippedByGuard = candles20.length < 21;
+      assert.equal(isSkippedByGuard, true, 'Stock with 20 candles must be skipped by the history guard');
+
+      // 2. computeCompoundedReturn for k=21 must return null
+      const r21 = MomentumLeadersService.computeCompoundedReturn(candles20, 21, canonicalTradingDates);
+      assert.equal(r21, null, 'r21d must return null when only 20 candles exist');
+
+      // 3. Prior 20-day volume slice would be truncated (< 20)
+      const prior20Candles = candles20.slice(-21, -1);
+      assert.equal(prior20Candles.length, 19, 'Stock with 20 candles only has 19 prior sessions');
+    });
+
+    it('processes stock with 22 candles identically, preserving historical behavior', () => {
+      const candles22 = generateCandles(22);
+      const canonicalTradingDates = candles22.slice(-21).map(c => c.date);
+
+      assert.equal(candles22.length, 22);
+      const isSkippedByGuard = candles22.length < 21;
+      assert.equal(isSkippedByGuard, false);
+
+      const prior20Candles = candles22.slice(-21, -1);
+      assert.equal(prior20Candles.length, 20);
+      assert.equal(prior20Candles[0]?.date, '2026-08-02', 'First prior session in 20D window is Day 02');
+      assert.equal(prior20Candles[19]?.date, '2026-08-21', 'Last prior session in 20D window is Day 21');
+
+      const latestCandle = candles22[candles22.length - 1]!;
+      assert.equal(latestCandle.date, '2026-08-22');
+
+      const r21 = MomentumLeadersService.computeCompoundedReturn(candles22, 21, canonicalTradingDates);
+      assert.notEqual(r21, null);
+      assert.ok(typeof r21 === 'number' && Number.isFinite(r21));
+    });
+  });
+
   describe('Bounded Additive Composite Scoring Formula', () => {
     it('scores Stock A (Persistent 4-window leader) at ~95 with CONFIRMED and ~90 with NEUTRAL', () => {
       // Percentiles: 95, 92, 96, 94
