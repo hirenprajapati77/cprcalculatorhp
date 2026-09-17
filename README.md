@@ -57,6 +57,21 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **16 Sep — Second Code Review Remediation (PRs #232–#241)**:
+  - **Yahoo Timestamp Validation & Genuine NSE Trading Dates (PR #241 - Finding #10)**: Skipped Yahoo candles with invalid/missing timestamps and aligned mock/paper stock data to genuine NSE trading days via `getRecentNseTradingDays(5)`.
+  - **RANGE Setup Target LTP Boundary Enforced (PR #240 - Finding #9)**: Enforced `target > ltp` for RANGE Longs and `target < ltp` for RANGE Shorts, eliminating already-passed targets. Extracted pure `computeTradeSetup`.
+  - **Momentum Leaders History Length Guard (PR #239 - Finding #8)**: Aligned minimum required history from 22 to 21 candles for 21-day compounded return calculations.
+  - **Runtime F&O Universe Synchronization (PR #238 - Finding #7)**: Added runtime sync against official NSE F&O participant list with verified static fallback.
+  - **Fail-Stale Cache Freshness Contract (PR #237 - Finding #6)**: Strictly enforced `reportComputedTime <= 0` triggers `'STALE'` status across all market tools.
+  - **Distributed Lock Shutdown Retention (PR #236 - Finding #5)**: Retained active lock tracking until Redis confirmation and bounded default cron lock TTL to 180s.
+  - **Telegram Delivery Verification (PR #235 - Finding #3 / #4)**: Deferred earnings populator alert lock until message delivery is verified.
+  - **Orphan Journal Date Mismatch Resolution (PR #234 - Finding #2)**: Tracked `signalDate` separately from exit `dateKey` and preferred `overnightSignalId` linkage.
+  - **Updated Lot Sizes & Tuesday DTE Expiry (PR #233 - Finding #1)**: Updated fallback lot sizes to current NSE contracts and aligned DTE to Tuesday expiry with holiday rollback.
+  - **Earnings Alert Deduplication (PR #232)**: Deduplicated earnings failure alerts per trading day via Redis.
+  - Tests: **1,158 total unit tests (1,158 pass, 0 fail)** + **37 E2E tests across 17 suites**.
+- **14 Sep — Code Review Follow-Up Hardening & 3-Week Review (PRs #205–#230)**:
+  - Resolved 21 findings across overnight engine, market tools caching, scanner alerts, and infrastructure (PRs #205–#225).
+  - Added fail-stale on missing cache timestamp (PR #227), bounded lookback for orphaned signals (PR #228), corporate event validation (PR #229), and suppression cooldown direction isolation (PR #230).
 - **11 Sep — Redis Fixed-Window Rate Limiting & Auth Gating Exemption (PRs #201, #202)**:
   - **Atomic Fixed-Window Rate Limiting (PR #202 / Issue D)**: Enforced exact fixed-window rate limiting in `src/lib/redis.ts` using an atomic Lua script (`INCR` + conditional `EXPIRE` when `TTL == -1`), preventing sliding-window TTL resets and indefinite IP lockouts across Redis 6 & 7+.
   - **Public Navbar & Smoke Verification Route Exemption (PR #201)**: Exempted `/api/market-status` from middleware auth gating, allowing public navbar market status probes and headless post-deployment smoke verification to succeed cleanly.

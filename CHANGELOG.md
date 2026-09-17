@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 16 Sep: Second Code Review Remediation (PRs #232–#241)
+
+Comprehensive defect and hardening remediation addressing all 10 findings from the Second Code Review across options pricing, scheduler lifecycle, distributed locking, cache contracts, F&O universe synchronization, and market analysis tools:
+
+- **Deduplicate Earnings Populator Failure Alert per Trading Day (PR #232)**:
+  - In `src/services/earnings-populator.service.ts`, added per-trading-day deduplication key `earnings_alert_sent:<date>` in Redis with 24-hour TTL to prevent alert flooding during repeated retry intervals.
+  - Added unit tests in `src/tests/unit/earnings-populator-dedup.test.ts`.
+
+- **Option Fallback Lot Sizes & Tuesday Expiry DTE Alignment (PR #233 - Finding #1)**:
+  - In `src/lib/options-pricing.ts` and `src/services/options.service.ts`, updated fallback lot sizes to current NSE contracts (NIFTY 25, BANKNIFTY 15, FINNIFTY 25).
+  - Aligned option DTE computation to Tuesday weekly index expiry with NSE trading holiday roll-back to Monday/preceding trading day.
+  - Added unit test suite in `src/tests/unit/options-pricing.test.ts`.
+
+- **Orphan Journal Date Mismatch & overnightSignalId Linkage (PR #234 - Finding #2)**:
+  - In `src/services/scheduler/btst-alert.job.ts` (`checkGapFailureExits`), resolved date mismatch by tracking `signalDate` separately from exit `dateKey`, and preferred direct `overnightSignalId` foreign key linkage before falling back to `(symbol, date)` lookup.
+  - Added regression unit tests in `src/tests/unit/gap-failure-exit.test.ts`.
+
+- **Telegram Delivery Verification Before Earnings Deduplication Lock (PR #235 - Finding #3 / #4)**:
+  - In `src/services/earnings-populator.service.ts`, deferred setting the Redis deduplication flag until Telegram message delivery is confirmed successful, preventing silent alert drops on network delivery failures.
+  - Added unit tests verifying lock acquisition only on confirmed delivery.
+
+- **Distributed Lock Shutdown Retention & Lock TTL Bounding (PR #236 - Finding #5)**:
+  - In `src/lib/distributed-lock.ts`, retained active lock tracking during process exit until Redis release confirmation, and added a 50ms fast-retry on transient Redis connection errors.
+  - In `src/services/scheduler/cron-run-claim.ts`, bounded default cron lock TTL to 180s with Lua script release validation.
+  - Added unit tests in `src/tests/unit/distributed-lock-retention.test.ts`.
+
+- **Fail-Stale Contract for Missing or Non-Positive computedAt (PR #237 - Finding #6)**:
+  - In `src/lib/cache-freshness.ts`, strictly enforced `reportComputedTime <= 0 || !Number.isFinite(reportComputedTime)` triggers `'STALE'` status across all market tools.
+  - In `market-tools-cache.ts`, removed fallback to `Date.now()` when cached payload lacks valid `computedAt`.
+  - Added unit test suite in `src/tests/unit/cache-freshness-contract.test.ts`.
+
+- **Synchronize Runtime F&O Universe with Authoritative NSE List (PR #238 - Finding #7)**:
+  - In `src/lib/fno-universe-updater.ts` and `src/services/market.service.ts`, added runtime synchronization against official NSE F&O participant list with verified static fallback and checksum validation.
+  - Added unit test suite in `src/tests/unit/fno-universe-updater.test.ts`.
+
+- **Momentum Leaders Minimum History Requirement Updated from 22 to 21 Candles (PR #239 - Finding #8)**:
+  - In `src/services/market-tools/momentum-leaders.service.ts`, corrected history requirement guard from `< 22` to `< 21`. Since `computeCompoundedReturn(k=21)` slices 21 candles with embedded `prevClose` providing 21 daily returns, 21 candles are mathematically sufficient.
+  - Added boundary tests for 20 (excluded), 21 (processed), and 22 (preserved) candles in `src/tests/unit/momentum-leaders.test.ts`.
+
+- **Enforce LTP Boundary Checks on RANGE Setups & Extract computeTradeSetup (PR #240 - Finding #9)**:
+  - In `src/services/scanner.service.ts`, enforced that RANGE Long targets must strictly exceed current LTP (`target > ltp`), and RANGE Short targets must strictly sit below current LTP (`target < ltp`), preventing already-crossed R1/S1 levels from being suggested as targets.
+  - Extracted pure helper `computeTradeSetup` with fallback offsets (`ltp * 1.005` / `ltp * 0.995`) ensuring minimum 1.5 R:R and target beyond LTP.
+  - Added unit tests verifying RANGE LTP contracts in `src/tests/unit/scanner.service.test.ts`.
+
+- **Enforce Strict Yahoo Candle Timestamp Validation & Genuine NSE Trading Dates (PR #241 - Finding #10)**:
+  - In `src/services/market.service.ts`, skipped Yahoo candles with invalid or missing timestamps (`isNaN(candleDate.getTime())`) instead of fabricating calendar dates.
+  - Replaced calendar day arithmetic in mock/paper stock data with `getRecentNseTradingDays(5)` from `src/lib/market-hours.ts`, guaranteeing valid NSE session dates across weekends and market holidays.
+  - Added unit tests in `src/tests/unit/market-hours.test.ts` and `src/tests/unit/market.service.test.ts`.
+
 ### Added & Fixed — 14 Sep: Code Review Follow-Up Hardening (PRs #227–#230)
 
 Follow-up hardening and defensive edge-case remediations identified during secondary code review:
