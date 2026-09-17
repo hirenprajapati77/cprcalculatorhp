@@ -422,41 +422,42 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     OptionChainService.getOptionChain = originalGetOptionChain;
   });
 
-  await t.test('monthly option expiry calculates true last Tuesday or rolls back on holiday (Findings #1 & #2)', () => {
+  await t.test('monthly option expiry calculates true last Thursday or rolls back on holiday (Findings #1 & #2)', () => {
     const computeDTE = (OptionSuggestionService as any).computeDTE;
     assert.strictEqual(typeof computeDTE, 'function', 'computeDTE must be a function');
 
-    // 1. August 2026: Aug 31 is Monday. Last Tuesday is Aug 25, 2026.
-    // Aug 25, 2026 is a trading day (not weekend, not holiday).
-    // From 2026-08-25 to 2026-08-25: DTE = 1 (inclusive of expiry day)
-    const dteAugExpiryDay = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-25');
+    // 1. August 2026: Aug 31 is Monday. Last Thursday is Aug 27, 2026.
+    // Aug 27, 2026 is a trading day (not weekend, not holiday).
+    // From 2026-08-27 to 2026-08-27: DTE = 1 (inclusive of expiry day)
+    const dteAugExpiryDay = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-27');
     assert.strictEqual(dteAugExpiryDay, 1, 'Expiry day itself should have DTE = 1 business day');
 
-    // From 2026-08-24 (Monday before expiry) to 2026-08-25 (Tuesday): DTE = 2
-    const dteAugDayBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-24');
-    assert.strictEqual(dteAugDayBefore, 2, 'Monday before Tuesday expiry should have DTE = 2');
+    // From 2026-08-26 (Wednesday before expiry) to 2026-08-27 (Thursday): DTE = 2
+    const dteAugDayBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-26');
+    assert.strictEqual(dteAugDayBefore, 2, 'Wednesday before Thursday expiry should have DTE = 2');
 
-    // From 2026-08-20 (Thursday prior week) to 2026-08-25 (Tuesday):
-    // Business days: Thu Aug 20, Fri Aug 21, Mon Aug 24, Tue Aug 25 = 4 business days
+    // From 2026-08-20 (Thursday prior week) to 2026-08-27 (Thursday):
+    // Trading days: Thu Aug 20, Fri Aug 21, Mon Aug 24, Tue Aug 25, Wed Aug 26, Thu Aug 27 = 6 trading days
     const dteAugWeekBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-20');
-    assert.strictEqual(dteAugWeekBefore, 4, 'Aug 20 to Aug 25 should be 4 business days');
+    assert.strictEqual(dteAugWeekBefore, 6, 'Aug 20 to Aug 27 should be 6 trading days');
 
-    // 2. September 2026: Sep 30 is Wednesday. Last Tuesday is Sep 29, 2026.
-    // Sep 29, 2026 is a trading day.
-    const dteSepExpiryDay = computeDTE('NSE:NIFTY26SEP25000CE', 'NIFTY', '2026-09-29');
-    assert.strictEqual(dteSepExpiryDay, 1, 'Sep 29 expiry day should have DTE = 1');
+    // 2. September 2026: Sep 30 is Wednesday. Last Thursday is Sep 24, 2026.
+    // Sep 24, 2026 is a trading day.
+    const dteSepExpiryDay = computeDTE('NSE:NIFTY26SEP25000CE', 'NIFTY', '2026-09-24');
+    assert.strictEqual(dteSepExpiryDay, 1, 'Sep 24 expiry day should have DTE = 1');
 
-    // 3. March 2026: March 31, 2026 is Tuesday, BUT it is listed as an NSE holiday (Shri Mahavir Jayanti)!
-    // NSE rules: if last Tuesday is a holiday, expiry rolls back to previous trading day.
-    // March 30, 2026 is Monday (trading day).
-    // So expiryDate should roll back to March 30, 2026!
-    // On 2026-03-30 (the effective expiry day), DTE should be 1.
-    const dteMar30 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-30');
-    assert.strictEqual(dteMar30, 1, 'March 2026 expiry should roll back to Mon March 30 because Tue March 31 is Mahavir Jayanti');
+    // 3. March 2026: March 31 is Tuesday. Last Thursday is March 26, 2026.
+    // March 26, 2026 is listed as an NSE holiday (Shri Ram Navami)!
+    // NSE rules: if last Thursday is a holiday, expiry rolls back to previous trading day.
+    // March 25, 2026 is Wednesday (trading day).
+    // So expiryDate should roll back to March 25, 2026!
+    // On 2026-03-25 (the effective expiry day), DTE should be 1.
+    const dteMar25 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-25');
+    assert.strictEqual(dteMar25, 1, 'March 2026 expiry should roll back to Wed March 25 because Thu March 26 is Ram Navami');
 
-    // On 2026-03-31 (the holiday itself, after rolled-back expiry): cursor (March 31) > expiryDate (March 30), DTE = 0
-    const dteMar31 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-31');
-    assert.strictEqual(dteMar31, 0, 'Holiday after rolled-back expiry should yield DTE = 0');
+    // On 2026-03-26 (the holiday itself, after rolled-back expiry): cursor (March 26) > expiryDate (March 25), DTE = 0
+    const dteMar26 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-26');
+    assert.strictEqual(dteMar26, 0, 'Holiday after rolled-back expiry should yield DTE = 0');
 
     // 4. Weekly contracts: 26820 (20 Aug 2026)
     const dteWeeklySameDay = computeDTE('NSE:NIFTY2682025000CE', 'NIFTY', '2026-08-20');

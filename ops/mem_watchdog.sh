@@ -175,8 +175,7 @@ if [ "$MEM_USED" -gt 85 ]; then
       echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session & high Node RSS: PM2 restart WITHOUT Redis flush" >> "$LOG"
       restart_pm2_fresh >> "$LOG" 2>&1
     else
-      echo "$TIMESTAMP [INFO] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — market session: RAM elevated but Node healthy; dropping page cache instead of restarting" >> "$LOG"
-      sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+      sync; sudo -n sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
     fi
   else
     echo "$TIMESTAMP [WARN] RAM=${MEM_USED}% SWAP=${SWAP_USED}% PM2=${PM2_MEM}MB — pruning Redis cache + fresh PM2 restart" >> "$LOG"

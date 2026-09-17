@@ -635,7 +635,8 @@ export class BacktestService {
                 );
 
                 const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-                const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+                // Index BTST represents index futures/derivative contracts, which incur vastly lower transaction friction (~0.002%) than equity delivery (0.03%)
+                const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.00002;
                 const btstNetPnl = btstTradeResult.pnl - btstFees;
 
                 const btstSignalsPayload = JSON.stringify({

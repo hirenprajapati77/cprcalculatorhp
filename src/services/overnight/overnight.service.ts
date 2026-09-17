@@ -457,13 +457,22 @@ export class OvernightService {
           continue;
         }
 
-        const todayCandle = isLastToday
-          ? (isTodayCandleFinal || !hasValidSessionOhlc ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
-          : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
+        // When not a trading day and today's bar is not in history (e.g. weekend UI refresh),
+        // live quotes replay the last trading day's close. Using live quotes as todayCandle and
+        // history[n-1] as yesterdayCandle would evaluate the same session twice (todayCandle === yesterdayCandle).
+        // Instead, treat history[n-1] as the latest completed session and history[n-2] as the prior session.
+        const isNonTradingDayWithoutTodayBar = !isTradingDay && !isLastToday;
 
-        // When today's bar is in history, yesterday is history[n-2].
-        // When today's bar is NOT in history (Fyers live feed), yesterday is history[n-1].
-        const yesterdayCandle = isLastToday
+        const todayCandle = isNonTradingDayWithoutTodayBar
+          ? lastCandle
+          : isLastToday
+            ? (isTodayCandleFinal || !hasValidSessionOhlc ? lastCandle : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp })
+            : { high: fullStock.high, low: fullStock.low, close: fullStock.ltp };
+
+        // When today's bar is in history (or on a weekend where lastCandle is today's bar),
+        // yesterday is history[n-2].
+        // When today's bar is NOT in history during a live trading day, yesterday is history[n-1].
+        const yesterdayCandle = (isLastToday || isNonTradingDayWithoutTodayBar)
           ? history[history.length - 2]
           : history[history.length - 1];
 

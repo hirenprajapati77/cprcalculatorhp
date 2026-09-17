@@ -1,7 +1,7 @@
 import { env } from '@/config/env';
 import { isValidOhlcvGeometry } from '../market-tools/historical-window-validation';
 import { CacheService } from '../cache.service';
-import { getISTTime } from '../../lib/market-hours';
+import { getISTTime, isMarketOpen } from '../../lib/market-hours';
 import { alignedYahooSeriesLength } from '../../lib/yahoo-quote';
 
 export interface OHLC {
@@ -220,10 +220,10 @@ export class HistoricalProvider {
           // avoiding silent breakage if Yahoo ever changes its anchor time or timezone.
           const candleDate = getISTTime(new Date(timestamps[i] * 1000)).dateString;
 
-          // Exclude live/in-progress bars. Confirmed via check_yahoo_partial_bar.ts on 2026-07-13:
+          // Exclude live/in-progress bars while the session is active. Confirmed via check_yahoo_partial_bar.ts:
           // Yahoo's v8 chart interval=1d endpoint returns a bar for the current session whose close/volume
-          // actively update intraday, tracking meta.regularMarketPrice — it is NOT a finalized candle.
-          if (candleDate === todayIST) {
+          // actively update intraday, tracking meta.regularMarketPrice — it is NOT a finalized candle until market close.
+          if (candleDate === todayIST && isMarketOpen()) {
             continue;
           }
 

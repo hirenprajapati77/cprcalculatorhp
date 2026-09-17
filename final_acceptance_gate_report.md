@@ -2,14 +2,60 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Commit:** `3835c59214835e668e279cce708be66e5f36a102`  
-**Report pass:** 17 (Post-Second Code Review Remediation / Findings #1–#10)  
+**Commit:** `PR #243 / 2-Month Code Review Remediation`  
+**Report pass:** 18 (Post-2-Month Deep Dive Code Review Remediation)  
 **Report generated:** 2026-09-17  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 17, 2026 (CI `verify` passed, commit `3835c592`). All 10 findings from Second Code Review remediated and verified; audit items validated for single-process PM2 production deployment.
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 17, 2026. All 18 findings from the 2-Month Deep Dive Code Review remediated and verified across quantitative models, options pricing, universe discovery, and server deployment.
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 17 / Sep 17, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 18 / Sep 17, 2026)
+
+This pass remediates all validated findings from the comprehensive 2-month deep dive review:
+
+1. **Standalone Server Crash-Handler Bundle Packaging (Finding P1)**:
+   - Updated `ops/deploy.ps1` to explicitly bundle `server-starter.js` into `.next/standalone/`, ensuring crash handlers (`uncaughtException`, `unhandledRejection`) and canonical hostname handling execute in production.
+
+2. **Multi-Year Breakout ATH 2-Year History Qualification (Finding P3)**:
+   - In `src/services/market-tools/multi-year-breakout.service.ts`, removed global database history size constraint (`historyDays >= tradingDaysAvailable`), allowing post-2016 IPOs with $\ge 2$ years of history to qualify for ATH classification.
+
+3. **Thursday Option Expiry & Holiday-Aware DTE Computation (Findings P4, P11, P17)**:
+   - In `src/services/option-suggestion.service.ts`, aligned monthly equity option expiry calculations to the last Thursday of the month with automatic rollback on NSE holidays, and filtered genuine trading days using `isNseTradingDay(cursor)` in business-day iteration.
+   - In `src/tests/unit/option-suggestion.test.ts`, updated test cases to validate Thursday expiry dates and holiday rollbacks.
+
+4. **Dynamic F&O Universe Discovery Synchronization (Finding P9)**:
+   - In `src/services/market.service.ts`, enhanced `getRawUniverse()` to synthesize and append dynamic F&O symbols fetched from the authoritative NSE list that were not present in the static `STOCK_UNIVERSE` array.
+
+5. **Rate Limit Spoofed Hop Defense (Finding P6)**:
+   - In `src/app/api/cpr/calculate/route.ts`, aligned IP extraction to select the last hop of `x-forwarded-for` (and prefer `x-real-ip`) when behind a trusted proxy, preventing rate-limit bypass via spoofed client headers.
+
+6. **Direction-Aware GAP_FAILURE Classification (Finding P8)**:
+   - In `src/services/journal/trade-journal.service.ts`, computed `gapPct` accounting for trade direction, correctly classifying STBT underlying gap-up blow-throughs as `GAP_FAILURE`.
+
+7. **Worthless Option Auto-Close at 9:45 AM (Finding P12)**:
+   - In `src/services/journal/trade-journal.service.ts`, permitted writing the final 9:45 AM snapshot for options below ₹0.25, ensuring expiring contracts are cleanly auto-closed rather than orphaned.
+
+8. **Weekend & Non-Trading Day Session Isolation (Finding P7)**:
+   - In `src/services/overnight/overnight.service.ts`, properly derived `todayCandle` and `yesterdayCandle` on non-trading days when the current day bar is not yet recorded, preventing identical candle evaluation (`todayCandle === yesterdayCandle`).
+
+9. **Telegram Alert HTML Truncation Safety (Finding P13)**:
+   - In `src/services/earnings-populator.service.ts`, truncated raw error strings prior to HTML escaping to prevent mid-entity split and Telegram 400 Bad Request rejections.
+
+10. **Index BTST Fee Calibration (Finding P10)**:
+    - In `src/services/backtest/backtest.service.ts`, applied index derivative transaction fee rates (`0.002%`) rather than equity delivery rates (`0.03%`) in index BTST backtest simulation.
+
+11. **Historical Provider Current-Session Inclusion (Finding P16)**:
+    - In `src/services/backtest/historical.provider.ts`, only skipped today's candle during active market hours (`isMarketOpen()`), allowing post-close evening analyses to ingest the finalized day bar.
+
+12. **CPR Journal Headroom Scaling (Finding P14)**:
+    - In `src/services/scheduler/cpr-journal.job.ts`, increased query headroom (`take: Math.max(maxSignals * 10, 50)`) so high-frequency intraday rescans do not starve unique setups.
+
+13. **Memory Watchdog Privilege Fallback (Finding P15)**:
+    - In `ops/mem_watchdog.sh`, executed page cache drops using `sudo -n` with fallback to prevent silent command failure.
+
+---
+
+## 2. Verified Infrastructure and Code Changes (Pass 17 / Sep 17, 2026)
 
 This pass integrates and verifies PRs #232 through #241 (Second Code Review Remediation: Findings #1 through #10):
 

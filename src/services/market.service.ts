@@ -665,10 +665,32 @@ export class MarketService {
       return [...STOCK_UNIVERSE];
     }
     const fnoSet = this.dynamicFnoSymbols;
-    return STOCK_UNIVERSE.map(s => ({
-      ...s,
-      isFnO: fnoSet.has(s.symbol.trim().toUpperCase()),
-    }));
+    const existingSymbols = new Set<string>();
+    const mapped = STOCK_UNIVERSE.map(s => {
+      const cleanSym = s.symbol.trim().toUpperCase();
+      existingSymbols.add(cleanSym);
+      return {
+        ...s,
+        isFnO: fnoSet.has(cleanSym),
+      };
+    });
+
+    // Append any dynamic F&O symbols that are in authoritative NSE list but not in static STOCK_UNIVERSE
+    for (const fnoSym of fnoSet) {
+      if (!existingSymbols.has(fnoSym)) {
+        mapped.push({
+          symbol: fnoSym,
+          name: fnoSym,
+          sector: 'Other',
+          marketCap: 0,
+          isNifty50: false,
+          isNifty200: false,
+          isFnO: true,
+        });
+      }
+    }
+
+    return mapped;
   }
 
   static getUniverse(universe: 'NIFTY50' | 'NIFTY100' | 'NIFTY200' | 'NSE_FNO' | 'NIFTY_FNO' | 'ALL_NSE' | 'ALL' | 'Auto' | 'WATCHLIST' | string) {

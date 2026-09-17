@@ -60,11 +60,12 @@ export async function runCprJournalJob(): Promise<CprJournalJobResult> {
       score: { gte: 75 },
       NOT: { symbol: { endsWith: ':BSE' } },
     },
-    // H2 fix: stable tie-breaker prevents non-deterministic ordering when
+    // Stable tie-breaker prevents non-deterministic ordering when
     // multiple rows share the same score (common in same-date rescans).
     orderBy: [{ score: 'desc' }, { symbol: 'asc' }],
-    // Over-fetch slightly to leave room for symbol dedup below.
-    take: maxSignals * 3,
+    // Over-fetch with sufficient headroom (min 50 rows) to ensure deduplication
+    // yields exactly maxSignals unique symbols even on high-frequency rescan days.
+    take: Math.max(maxSignals * 10, 50),
   });
 
   // H2 fix: deduplicate by symbol (same stock can appear multiple times from
