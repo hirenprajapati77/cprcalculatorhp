@@ -2,13 +2,84 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform  
 **Branch:** `main`  
-**Report pass:** 15 (Post-Redis Fixed-Window Rate Limiting & Auth Exemption Fixes)  
-**Report generated:** 2026-09-11  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 11, 2026 (CI `verify` passed, Oracle production deployment verified).
+**Commit:** `3835c59214835e668e279cce708be66e5f36a102`  
+**Report pass:** 17 (Post-Second Code Review Remediation / Findings #1–#10)  
+**Report generated:** 2026-09-17  
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 17, 2026 (CI `verify` passed, commit `3835c592`). All 10 findings from Second Code Review remediated and verified; audit items validated for single-process PM2 production deployment.
 
 ---
 
-## 1. Verified Infrastructure and Code Changes (Pass 15 / Sep 11, 2026)
+## 1. Verified Infrastructure and Code Changes (Pass 17 / Sep 17, 2026)
+
+This pass integrates and verifies PRs #232 through #241 (Second Code Review Remediation: Findings #1 through #10):
+
+1. **Strict Yahoo Candle Timestamp Validation & Genuine NSE Trading Dates (PR #241 - Finding #10)**:
+   - In `src/services/market.service.ts`, invalid or missing Yahoo candle timestamps (`isNaN(candleDate.getTime())`) are skipped with `continue;` rather than fabricating arbitrary calendar dates.
+   - Mock/paper stock data replaces calendar day subtraction with `getRecentNseTradingDays(5)` from `src/lib/market-hours.ts`, guaranteeing valid NSE session dates across weekends and market holidays.
+
+2. **Enforce LTP Boundary Checks on RANGE Setups & Extract computeTradeSetup (PR #240 - Finding #9)**:
+   - In `src/services/scanner.service.ts`, enforced that RANGE Long targets must strictly exceed current LTP (`target > ltp`), and RANGE Short targets must strictly sit below current LTP (`target < ltp`), preventing already-crossed R1/S1 levels from being suggested as targets.
+   - Extracted pure helper `computeTradeSetup` with fallback offsets (`ltp * 1.005` / `ltp * 0.995`) ensuring minimum 1.5 R:R and target beyond LTP.
+
+3. **Momentum Leaders Minimum History Requirement Updated from 22 to 21 Candles (PR #239 - Finding #8)**:
+   - In `src/services/market-tools/momentum-leaders.service.ts`, corrected history requirement guard from `< 22` to `< 21`. Since `computeCompoundedReturn(k=21)` slices 21 candles with embedded `prevClose` providing 21 daily returns, 21 candles are mathematically sufficient.
+
+4. **Synchronize Runtime F&O Universe with Authoritative NSE List (PR #238 - Finding #7)**:
+   - In `src/lib/fno-universe-updater.ts` and `src/services/market.service.ts`, added runtime synchronization against official NSE F&O participant list with verified static fallback and checksum validation.
+
+5. **Fail-Stale Contract for Missing or Non-Positive computedAt (PR #237 - Finding #6)**:
+   - In `src/lib/cache-freshness.ts`, strictly enforced `reportComputedTime <= 0 || !Number.isFinite(reportComputedTime)` triggers `'STALE'` status across all market tools.
+   - In `market-tools-cache.ts`, removed fallback to `Date.now()` when cached payload lacks valid `computedAt`.
+
+6. **Distributed Lock Shutdown Retention & Lock TTL Bounding (PR #236 - Finding #5)**:
+   - In `src/lib/distributed-lock.ts`, retained active lock tracking during process exit until Redis release confirmation, and added a 50ms fast-retry on transient Redis connection errors.
+   - In `src/services/scheduler/cron-run-claim.ts`, bounded default cron lock TTL to 180s with Lua script release validation.
+
+7. **Telegram Delivery Verification Before Earnings Deduplication Lock (PR #235 - Finding #3 / #4)**:
+   - In `src/services/earnings-populator.service.ts`, deferred setting the Redis deduplication flag until Telegram message delivery is confirmed successful, preventing silent alert drops on network delivery failures.
+
+8. **Orphan Journal Date Mismatch & overnightSignalId Linkage (PR #234 - Finding #2)**:
+   - In `src/services/scheduler/btst-alert.job.ts` (`checkGapFailureExits`), resolved date mismatch by tracking `signalDate` separately from exit `dateKey`, and preferred direct `overnightSignalId` foreign key linkage before falling back to `(symbol, date)` lookup.
+
+9. **Option Fallback Lot Sizes & Tuesday Expiry DTE Alignment (PR #233 - Finding #1)**:
+   - In `src/lib/options-pricing.ts` and `src/services/options.service.ts`, updated fallback lot sizes to current NSE contracts (NIFTY 25, BANKNIFTY 15, FINNIFTY 25).
+   - Aligned option DTE computation to Tuesday weekly index expiry with NSE trading holiday roll-back to Monday/preceding trading day.
+
+10. **Deduplicate Earnings Populator Failure Alert per Trading Day (PR #232)**:
+    - In `src/services/earnings-populator.service.ts`, added per-trading-day deduplication key `earnings_alert_sent:<date>` in Redis with 24-hour TTL to prevent alert flooding during repeated retry intervals.
+
+11. **Final Audit Governance & Architectural Validation**:
+    - **ISSUE-012 (Cron Lock TTL vs 240s Precompute Timeout)**: Validated for single-process PM2 deployment. In-process mutex (`tickInFlight = true`) and single-instance `exec_mode: 'fork'` prevent duplicate job executions; documented as a future multi-worker architectural risk.
+    - **ISSUE-013 (Future-Dated Cache Timestamps)**: Validated as low-severity theoretical boundary gap; timestamps strictly originate from trusted server clocks.
+    - **ISSUE-014 (Coverage Governance Scope)**: Verified as intentional 4-tier architectural boundary design choice.
+
+12. **Verification Metrics (Pass 17 / Sep 17, 2026)**:
+    - **TypeScript `tsc --noEmit`:** 0 errors.
+    - **ESLint (`npm run lint`):** 0 errors, 0 warnings.
+    - **Regression Lock (`npm run regression-lock`):** Constants SHA-256 verified; math benchmark 3.00 ms.
+    - **Unit Tests (`npm run test`):** **1,158 tests passed (0 failures) across 56 test files**.
+    - **E2E Tests:** **37 tests passed across 17 suites**.
+    - **Tiered Coverage (`scripts/check-coverage-tiers.ts`):**
+      - **Tier 1 (Core Lib)**: 93.21% lines (req >=90%), 85.62% branches (req >=85%), 97.47% functions (req >=90%) — PASS
+      - **Tier 2 (Trading Engine & Alerts)**: 85.81% lines (req >=85%), 81.01% branches (req >=80%), 92.59% functions (req >=90%) — PASS
+      - **Tier 3A (Market Tools)**: 69.01% lines (req >=64%), 75.17% branches (req >=70%), 87.75% functions (req >=84%) — PASS
+      - **Tier 3B (Backtest Engine)**: 51.44% lines (req >=46%), 67.38% branches (req >=62%), 88.61% functions (req >=79%) — PASS
+    - **GitHub Actions CI:** `verify` workflow passed.
+
+---
+
+## 2. Verified Infrastructure and Code Changes (Pass 16 / Sep 14, 2026)
+
+This pass integrates and verifies the 3-week comprehensive review remediation (PRs #205–#225) and follow-up hardening (PRs #227–#230):
+- **Overnight & Journal Engine (PRs #205, #207, #214, #215, #228)**: Frozen tick timestamps in scheduler, STBT underlying leg PnL inversion fix, live LTP journal triggers, bounded lookback for orphaned signals.
+- **Market Tools & Caching (PRs #206, #208, #222, #227)**: Preserved Redis cache `computedAt` age, unified ATH breakout cascade with 2-year data depth check, API pagination limits, fail-stale on missing/zero timestamps.
+- **Scanner & Alert Pipelines (PRs #209, #210, #216, #217, #223, #229, #230)**: ATR-scaled breakout cap, pre-claim suppression cooldowns, direction-isolated suppression keys, Telegram chat ID decoupling, option suggestion timeout tightening, corporate event structural validation.
+- **Infrastructure & Concurrency (PRs #211, #218, #219, #224, #225)**: CI Postgres service container, PM2 memory watchdog restart semantics, server crash handler grace period, scanner composite index optimization, distributed lock cleanup retention.
+- **Backtest & Quantitative Models (PRs #212, #213, #220, #221)**: Inclusive Rule 5 liquidity boundary, Friday BTST long gate, long-weekend historical gap tightening, strategy mode benchmarking.
+
+---
+
+## 3. Verified Infrastructure and Code Changes (Pass 15 / Sep 11, 2026)
 
 This pass integrates and verifies PRs #201 and #202 on top of the 10-day deep code review remediation and production hardening baseline (PRs #166 through #200):
 
