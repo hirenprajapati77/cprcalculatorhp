@@ -237,12 +237,13 @@ export class EarningsPopulatorService {
     let alertSent = false;
 
     if (!success && !dryRun && sendAlert) {
-      // M-08 fix: Escape HTML entities and truncate error preview to prevent Telegram 400 Bad Request
-      const escapedErrors = errors
+      // M-08 fix: Truncate error preview first, then escape HTML entities to prevent mid-entity truncation (&am) and Telegram 400 Bad Request
+      const rawErrorsText = errors
         .slice(0, 10)
-        .map((e) => escapeTelegramHtml(String(e)))
+        .map((e) => String(e).slice(0, 150))
         .join('\n')
-        .slice(0, 1500);
+        .slice(0, 1200);
+      const escapedErrors = escapeTelegramHtml(rawErrorsText);
       const alertMsg = `🚨 <b>Earnings Populator Failure Alert</b> 🚨\nNSE Count: ${nseCount}\nErrors:\n${escapedErrors}`;
       try {
         const tgRes = await TelegramService.sendMessage(alertMsg);

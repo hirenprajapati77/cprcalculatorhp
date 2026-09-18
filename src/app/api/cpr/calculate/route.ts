@@ -5,15 +5,17 @@ import { CalculationService } from '@/services/calculation.service';
 import { cache } from '@/lib/redis';
 
 async function checkRateLimit(request: NextRequest): Promise<boolean> {
-  let ip = '127.0.0.1';
+  let ip = request.headers.get('x-real-ip') || '127.0.0.1';
   // Only trust x-forwarded-for if explicitly enabled via environment variable
-  // indicating we are behind a trusted proxy
+  // indicating we are behind a trusted proxy. Take the *last* hop to prevent
+  // rate-limit bypass via spoofed client headers.
   if (env.TRUST_PROXY === 'true') {
     const forwardedFor = request.headers.get('x-forwarded-for');
     if (forwardedFor) {
-      ip = forwardedFor.split(',')[0].trim();
-    } else {
-      ip = request.headers.get('x-real-ip') || '127.0.0.1';
+      const hops = forwardedFor.split(',').map((h) => h.trim()).filter(Boolean);
+      if (hops.length > 0) {
+        ip = hops[hops.length - 1]!;
+      }
     }
   }
 

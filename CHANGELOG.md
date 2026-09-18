@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 17 Sep: 2-Month Deep Dive Code Review Remediation (PR #243)
+
+Comprehensive remediation addressing all validated findings from the 2-month deep dive code review across quantitative models, options pricing, overnight engines, universe discovery, and infrastructure:
+
+- **Standalone Server Crash-Handler Bundle Packaging (Finding P1)**:
+  - In `ops/deploy.ps1`, explicitly copied `server-starter.js` to `.next/standalone/server-starter.js` prior to tar packaging, ensuring custom crash handlers (`uncaughtException`, `unhandledRejection`, and canonical hostnames) run in production.
+
+- **Multi-Year Breakout ATH 2-Year History Qualification (Finding P3)**:
+  - In `src/services/market-tools/multi-year-breakout.service.ts`, removed the excessive global `historyDays >= tradingDaysAvailable` requirement from `isEligibleForATH`, enabling recent IPOs with $\ge 2$ years of trading history to be correctly identified for all-time-high breakouts.
+
+- **Thursday Option Expiry & Holiday-Aware DTE Computation (Findings P4, P11, P17)**:
+  - In `src/services/option-suggestion.service.ts`, aligned monthly equity option expiry calculations to the last Thursday of the month with automatic rollback on NSE holidays, and filtered genuine trading days using `isNseTradingDay(cursor)` in business-day iteration.
+  - In `src/tests/unit/option-suggestion.test.ts`, updated test cases to validate Thursday expiry dates and holiday rollbacks.
+
+- **Dynamic F&O Universe Discovery Synchronization (Finding P9)**:
+  - In `src/services/market.service.ts`, enhanced `getRawUniverse()` to synthesize and append dynamic F&O symbols fetched from the authoritative NSE list that were not present in the static `STOCK_UNIVERSE` array.
+
+- **Rate Limit Spoofed Hop Defense (Finding P6)**:
+  - In `src/app/api/cpr/calculate/route.ts`, aligned IP extraction to select the last hop of `x-forwarded-for` (and prefer `x-real-ip`) when behind a trusted proxy, preventing rate-limit bypass via spoofed client headers.
+
+- **Direction-Aware GAP_FAILURE Classification (Finding P8)**:
+  - In `src/services/journal/trade-journal.service.ts`, computed `gapPct` accounting for trade direction, correctly classifying STBT underlying gap-up blow-throughs as `GAP_FAILURE`.
+
+- **Worthless Option Auto-Close at 9:45 AM (Finding P12)**:
+  - In `src/services/journal/trade-journal.service.ts`, permitted writing the final 9:45 AM snapshot for options below ₹0.25, ensuring expiring contracts are cleanly auto-closed rather than orphaned.
+
+- **Weekend & Non-Trading Day Session Isolation (Finding P7)**:
+  - In `src/services/overnight/overnight.service.ts`, properly derived `todayCandle` and `yesterdayCandle` on non-trading days when the current day bar is not yet recorded, preventing identical candle evaluation (`todayCandle === yesterdayCandle`).
+
+- **Telegram Alert HTML Truncation Safety (Finding P13)**:
+  - In `src/services/earnings-populator.service.ts`, truncated raw error strings prior to HTML escaping to prevent mid-entity split and Telegram 400 Bad Request rejections.
+
+- **Index BTST Fee Calibration (Finding P10)**:
+  - In `src/services/backtest/backtest.service.ts`, applied index derivative transaction fee rates (`0.002%`) rather than equity delivery rates (`0.03%`) in index BTST backtest simulation.
+
+- **Historical Provider Current-Session Inclusion (Finding P16)**:
+  - In `src/services/backtest/historical.provider.ts`, only skipped today's candle during active market hours (`isMarketOpen()`), allowing post-close evening analyses to ingest the finalized day bar.
+
+- **CPR Journal Headroom Scaling (Finding P14)**:
+  - In `src/services/scheduler/cpr-journal.job.ts`, increased query headroom (`take: Math.max(maxSignals * 10, 50)`) so high-frequency intraday rescans do not starve unique setups.
+
+- **Memory Watchdog Privilege Fallback (Finding P15)**:
+  - In `ops/mem_watchdog.sh`, executed page cache drops using `sudo -n` with fallback to prevent silent command failure.
+
 ### Added & Fixed — 16 Sep: Second Code Review Remediation (PRs #232–#241)
 
 Comprehensive defect and hardening remediation addressing all 10 findings from the Second Code Review across options pricing, scheduler lifecycle, distributed locking, cache contracts, F&O universe synchronization, and market analysis tools:

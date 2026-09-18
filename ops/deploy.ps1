@@ -98,6 +98,9 @@ Ok "Build complete"
 
 # ── 4. PACKAGE ───────────────────────────────────────────────
 Log "Packaging standalone + static + public..."
+if (Test-Path server-starter.js) {
+    Copy-Item server-starter.js .next/standalone/server-starter.js -Force
+}
 tar -czf deploy_standalone.tar.gz -C .next/standalone .
 tar -czf deploy_static.tar.gz -C .next/static .
 tar -czf deploy_public.tar.gz public

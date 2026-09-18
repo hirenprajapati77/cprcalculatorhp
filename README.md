@@ -57,6 +57,12 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **17 Sep — 2-Month Deep Dive Code Review Remediation (PR #243)**:
+  - Resolved 18 architectural findings across quantitative models, option pricing, overnight discovery, universe sync, and infrastructure.
+  - Aligned option DTE and expiry resolution to Thursday expiry with trading-holiday awareness.
+  - Packaged custom `server-starter.js` into production standalone container with graceful crash handling.
+  - Synchronized authoritative NSE dynamic F&O symbols to `getRawUniverse()` and enabled 2Y+ IPOs for ATH breakouts.
+  - Automated unit test suite passing at **1,158 / 1,158** tests; E2E suite at **37 / 37** tests.
 - **16 Sep — Second Code Review Remediation (PRs #232–#241)**:
   - **Yahoo Timestamp Validation & Genuine NSE Trading Dates (PR #241 - Finding #10)**: Skipped Yahoo candles with invalid/missing timestamps and aligned mock/paper stock data to genuine NSE trading days via `getRecentNseTradingDays(5)`.
   - **RANGE Setup Target LTP Boundary Enforced (PR #240 - Finding #9)**: Enforced `target > ltp` for RANGE Longs and `target < ltp` for RANGE Shorts, eliminating already-passed targets. Extracted pure `computeTradeSetup`.

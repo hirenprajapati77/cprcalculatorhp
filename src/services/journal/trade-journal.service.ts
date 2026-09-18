@@ -284,12 +284,13 @@ export class TradeJournalService {
           continue;
         }
 
-        // Fix 5: Guard against dead/illiquid option ticks at market open.
+        // Fix 5: Guard against dead/illiquid option ticks at market open (9:16 and 9:30).
         // Options below ₹0.25 have not yet formed a real market (penny/dead contracts
         // or wide auction spread). Writing these distorts PnL and can cause false
-        // GAP_FAILURE classifications. Skip the write — the next slot (9:30/9:45) will
-        // capture a proper market price.
-        if (cmp < 0.25) {
+        // GAP_FAILURE classifications. Skip the write for 9:16/9:30.
+        // For 9:45 (the final snapshot slot), we must NOT skip; decaying options expiring
+        // worthless (e.g. ₹0.05) must be recorded and auto-closed to prevent orphan trades.
+        if (cmp < 0.25 && timeSlot !== '945') {
           console.warn(
             `[TradeJournal] ${timeSlot} snapshot: CMP ₹${cmp} below minimum tick (₹0.25) for ` +
             `${entry.symbol} ${entry.optionContract} — skipping write, will retry next slot.`
@@ -587,9 +588,15 @@ export class TradeJournalService {
       // as a trade GAP_FAILURE (the trade finished as a WINNER with pnlPct >= 0).
       // Only losing trades (pnlPct < 0) that suffered an adverse opening gap should be labeled GAP_FAILURE.
       if (pnlPct < 0 && gapRef != null && trade.entryCmp) {
-        const gapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
-        // Severe adverse gap blow-through in options is usually -15% or worse overnight
-        if (gapPct < -15) {
+        const isUnderlying =
+          typeof trade.optionContract === 'string' &&
+          TradeJournalService.isUnderlyingJournalLeg(trade.optionContract);
+        const isShortUnderlying = trade.signalType === 'STBT' && isUnderlying;
+        const rawGapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
+        const gapPct = isShortUnderlying ? -rawGapPct : rawGapPct;
+        // Severe adverse gap blow-through is usually -15% or worse overnight (or -1.5% for cash underlying)
+        const threshold = isUnderlying ? -1.5 : -15;
+        if (gapPct < threshold) {
           outcome = 'GAP_FAILURE';
         }
       }

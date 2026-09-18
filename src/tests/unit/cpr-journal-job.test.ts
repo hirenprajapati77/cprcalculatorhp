@@ -350,7 +350,7 @@ test('runCprJournalJob entry-trigger and sector-divergence gates', async (t) => 
     const mocks = mockJobDeps(rows);
     try {
       const result = await runCprJournalJob();
-      assert.strictEqual((mocks.findManyArgs[0] as { take: number }).take, 9);
+      assert.strictEqual((mocks.findManyArgs[0] as { take: number }).take, 50);
       assert.strictEqual(result.logged.length, 3);
     } finally {
       mocks.restore();

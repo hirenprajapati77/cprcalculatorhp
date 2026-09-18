@@ -491,7 +491,7 @@ export class MultiYearBreakoutService {
       // D2-2 fix: Use getStrongestBreakout helper with 2Y history depth guard for ATH
       // so recent IPOs with limited data (< 500 days) are not falsely classified as ATH breakouts.
       const isEligibleForATH = Boolean(
-        breakoutATH && historyDays >= tradingDaysAvailable && historyDays >= WINDOW_SPECS['2Y']
+        breakoutATH && historyDays >= WINDOW_SPECS['2Y']
       );
 
       strongestBreakout = getStrongestBreakout({
