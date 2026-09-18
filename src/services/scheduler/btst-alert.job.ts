@@ -2,7 +2,7 @@ import { Prisma, type OvernightSignal } from '@prisma/client';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
-import { computeOptionPnl } from '@/lib/pnl';
+import { computeJournalPnl } from '@/lib/pnl';
 import { OvernightService } from '@/services/overnight/overnight.service';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { MarketService } from '@/services/market.service';
@@ -684,19 +684,8 @@ export async function checkGapFailureExits(): Promise<{ checked: number; exited:
             }
           }
 
-          let pnl: number;
-          let calcPnlPct: number;
-          if (!isOptionLeg && (sig.direction === 'SHORT' || journalEntry.signalType === 'STBT')) {
-            // D1-2 fix: STBT underlying stock leg loses when price gaps UP (exitPrice > entryCmp)
-            const rawPnl = journalEntry.entryCmp - exitPrice;
-            const rawPnlPct = journalEntry.entryCmp > 0 ? (rawPnl / journalEntry.entryCmp) * 100 : 0;
-            pnl = Math.round(rawPnl * 100) / 100;
-            calcPnlPct = Math.round(rawPnlPct * 100) / 100;
-          } else {
-            const res = computeOptionPnl(journalEntry.entryCmp, exitPrice);
-            pnl = res.pnl;
-            calcPnlPct = res.pnlPct;
-          }
+          const isShortUnderlying = !isOptionLeg && (sig.direction === 'SHORT' || journalEntry.signalType === 'STBT');
+          const { pnl, pnlPct: calcPnlPct } = computeJournalPnl(journalEntry.entryCmp, exitPrice, { isShortUnderlying });
 
           await prisma.tradeJournal.update({
             where: { id: journalEntry.id },

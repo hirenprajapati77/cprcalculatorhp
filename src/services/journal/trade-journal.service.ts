@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import type { TradeJournal } from '@prisma/client';
 import { getISTTime } from '@/lib/market-hours';
-import { computeOptionPnl } from '@/lib/pnl';
+import { computeJournalPnl } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { computeWinRate } from '@/lib/win-rate';
@@ -17,6 +17,21 @@ export class TradeJournalService {
 
   static isUnderlyingJournalLeg(optionContract: string): boolean {
     return optionContract.startsWith('UNDERLYING');
+  }
+
+  /**
+   * Checks if a trade leg represents a short cash underlying position (STBT on cash equity).
+   * Tightened to require confirmed underlying-leg marker AND STBT trade direction.
+   */
+  static isShortUnderlyingLeg(entry: {
+    signalType?: string | null | undefined;
+    optionContract?: string | null | undefined;
+  }): boolean {
+    if (!entry.optionContract || typeof entry.optionContract !== 'string') return false;
+    return (
+      TradeJournalService.isUnderlyingJournalLeg(entry.optionContract) &&
+      entry.signalType === 'STBT'
+    );
   }
 
   /**
@@ -321,7 +336,8 @@ export class TradeJournalService {
         // the auto-close would silently clobber their true exit price and P&L.
         let autoClosed = false;
         if (timeSlot === '945') {
-          const { pnl, pnlPct } = computeOptionPnl(entry.entryCmp, cmp);
+          const isShortUnderlying = TradeJournalService.isShortUnderlyingLeg(entry);
+          const { pnl, pnlPct } = computeJournalPnl(entry.entryCmp, cmp, { isShortUnderlying });
           const closeWrite = await prisma.tradeJournal.updateMany({
             where: { id: entry.id, exitCmp: null },
             data: {
@@ -358,7 +374,8 @@ export class TradeJournalService {
         for (const orphan of orphans) {
           const cmp = orphan.cmp945;
           if (cmp == null) continue;
-          const { pnl, pnlPct } = computeOptionPnl(orphan.entryCmp, cmp);
+          const isShortUnderlying = TradeJournalService.isShortUnderlyingLeg(orphan);
+          const { pnl, pnlPct } = computeJournalPnl(orphan.entryCmp, cmp, { isShortUnderlying });
           const closeWrite = await prisma.tradeJournal.updateMany({
             where: { id: orphan.id, exitCmp: null },
             data: {
@@ -591,7 +608,7 @@ export class TradeJournalService {
         const isUnderlying =
           typeof trade.optionContract === 'string' &&
           TradeJournalService.isUnderlyingJournalLeg(trade.optionContract);
-        const isShortUnderlying = trade.signalType === 'STBT' && isUnderlying;
+        const isShortUnderlying = TradeJournalService.isShortUnderlyingLeg(trade);
         const rawGapPct = ((gapRef - trade.entryCmp) / trade.entryCmp) * 100;
         const gapPct = isShortUnderlying ? -rawGapPct : rawGapPct;
         // Severe adverse gap blow-through is usually -15% or worse overnight (or -1.5% for cash underlying)
