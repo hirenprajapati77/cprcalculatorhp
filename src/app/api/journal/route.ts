@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
-import { computeOptionPnl } from '@/lib/pnl';
+import { computeJournalPnl } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
 import { publicApiError } from '@/lib/api-error';
 
@@ -76,7 +76,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { pnl, pnlPct } = computeOptionPnl(entry.entryCmp, exitCmp);
+    const isShortUnderlying = TradeJournalService.isShortUnderlyingLeg(entry);
+    const { pnl, pnlPct } = computeJournalPnl(entry.entryCmp, exitCmp, { isShortUnderlying });
 
     // Race-safe: only set the exit if it is still null in the DB. If the auto-close
     // cron won the race between the read above and this write, count === 0 and we
