@@ -1263,3 +1263,47 @@ export const NSE_SECTOR_MAP: Record<string, string> = {
   "DUMMYINXGN": "INFRA",
   "DUMMYTRVN": "INFRA"
 };
+
+export const SECTOR_NORMALIZE_MAP: Record<string, string> = {
+  'BANKING': 'Financial Services',
+  'FINANCIAL SERVICES': 'Financial Services',
+  'IT': 'IT',
+  'INFORMATION TECHNOLOGY': 'IT',
+  'AUTO': 'Automotive',
+  'AUTOMOTIVE': 'Automotive',
+  'PHARMA': 'Healthcare',
+  'HEALTHCARE': 'Healthcare',
+  'METALS': 'Metals',
+  'ENERGY': 'Energy',
+  'POWER': 'Power',
+  'CONSUMER GOODS': 'Consumer Goods',
+  'TELECOM': 'Telecom',
+  'TELECOMMUNICATION': 'Telecom',
+  'SERVICES': 'Services',
+  'CAPITAL GOODS': 'Capital Goods',
+  'CONSTRUCTION': 'Construction',
+  'INFRA': 'Construction',
+  'REALTY': 'Construction',
+  'MATERIALS': 'Materials',
+  'CHEMICALS': 'Materials',
+  'TEXTILES': 'Consumer Goods',
+  'DIVERSIFIED': 'Other',
+};
+
+/**
+ * Normalizes uppercase or alternative sector names to the canonical platform sector names
+ * used by STOCK_UNIVERSE and ScannerClient (HM-01).
+ */
+export function canonicalizeSector(sector: string | null | undefined): string {
+  if (!sector) return 'Other';
+  const trimmed = sector.trim();
+  const upper = trimmed.toUpperCase();
+  if (SECTOR_NORMALIZE_MAP[upper]) {
+    return SECTOR_NORMALIZE_MAP[upper];
+  }
+  const match = Object.values(SECTOR_NORMALIZE_MAP).find(
+    s => s.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (match) return match;
+  return trimmed;
+}

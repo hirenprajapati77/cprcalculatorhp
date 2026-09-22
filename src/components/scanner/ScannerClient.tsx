@@ -47,6 +47,7 @@ import {
   CPR_ENTRY_EXTENSION_PCT,
 } from '@/lib/cpr-setup-staleness';
 import { inferCprJournalDirection } from '@/lib/cpr-direction';
+import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
 
@@ -2308,7 +2309,8 @@ export default function ScannerClient() {
       };
 
       for (const [sec, sectorData] of Object.entries(serverHeatmap)) {
-        const gridSec = SECTORS_LIST.includes(sec) ? sec : 'Other';
+        const canonicalSec = canonicalizeSector(sec);
+        const gridSec = SECTORS_LIST.includes(canonicalSec) ? canonicalSec : 'Other';
         if (!grid[gridSec]) continue;
         const row = grid[gridSec];
 
@@ -2350,7 +2352,8 @@ export default function ScannerClient() {
 
     // ── Client fallback path (current page only) ──────────────────────────────
     results.forEach(item => {
-      const sec = SECTORS_LIST.includes(item.sector) ? item.sector : 'Other';
+      const canonicalSec = canonicalizeSector(item.sector);
+      const sec = SECTORS_LIST.includes(canonicalSec) ? canonicalSec : 'Other';
       if (!grid[sec]) return;
 
       const signals = item.signals;
@@ -2813,8 +2816,20 @@ export default function ScannerClient() {
       )}
 
       {/* Sector Signal Heatmap Grid — stock/CPR only; INDEX has no sector universe */}
-      {scannerMode !== 'INDEX' && (
-      <Card title="Market Sector Concentration Heatmap" icon={<LayoutGrid size={14} className="text-accent-blue" />}>
+      {scannerMode !== 'INDEX' && (() => {
+        const totalSectorStocks = SECTORS_LIST.reduce((acc, sec) => acc + (heatmapGridData.grid[sec]?.Total?.count || 0), 0);
+        const heatmapSubtitle = totalSectorStocks > 0
+          ? (results.length > 0 && results.length !== totalSectorStocks
+              ? `Displaying ${totalSectorStocks} stocks across ${SECTORS_LIST.length} sectors (${results.length} setups in active scanner view)`
+              : `Displaying ${totalSectorStocks} stocks across ${SECTORS_LIST.length} sectors`)
+          : undefined;
+
+        return (
+        <Card
+          title="Market Sector Concentration Heatmap"
+          subtitle={heatmapSubtitle}
+          icon={<LayoutGrid size={14} className="text-accent-blue" />}
+        >
         {results.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center font-mono select-none">
             <LayoutGrid size={32} className="text-accent-blue/30 mb-2 animate-pulse" />
@@ -2967,8 +2982,9 @@ export default function ScannerClient() {
             </table>
           </div>
         )}
-      </Card>
-      )}
+        </Card>
+        );
+      })()}
 
       {/* Main Terminal Scanner Controls and Table */}
       <Card 

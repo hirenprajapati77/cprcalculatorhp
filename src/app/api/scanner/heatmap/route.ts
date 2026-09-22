@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
+import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
+import { getSymbolSector } from '@/services/market-tools/market-breadth.service';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +42,8 @@ export async function GET() {
     const counts: Record<string, Record<string, number>> = {};
 
     scans.forEach((scan: ScannerResult) => {
-      const sector = sectorMap.get(scan.symbol) || 'Other';
+      const rawSector = sectorMap.get(scan.symbol) || getSymbolSector(scan.symbol);
+      const sector = canonicalizeSector(rawSector);
       const signals = scan.signalSummary ? scan.signalSummary.split(',') : [];
 
       if (!counts[sector]) {
