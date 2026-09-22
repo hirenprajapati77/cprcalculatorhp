@@ -338,6 +338,10 @@ export class MultiYearBreakoutService {
       'ATH': 20, // minimum 20 days history required to qualify for ATH
     };
 
+    // Minimum history depth guard for ATH breakouts to prevent unseasoned IPOs from false ATH classification.
+    // If platform history is >= 500 days, require 2Y (500 days). If between 250 and 499 days, require 1Y (250 days) (MYB-01).
+    const minAthHistoryDays = getMinAthHistoryDays(tradingDaysAvailable);
+
     const windowAvailability: Record<BreakoutWindow, WindowAvailabilityInfo> = {
       '1Y': {
         available: tradingDaysAvailable >= WINDOW_SPECS['1Y'],
@@ -370,10 +374,10 @@ export class MultiYearBreakoutService {
         label: tradingDaysAvailable >= WINDOW_SPECS['10Y'] ? 'Available' : `Insufficient history (${tradingDaysAvailable}/${WINDOW_SPECS['10Y']} days)`,
       },
       'ATH': {
-        available: tradingDaysAvailable >= WINDOW_SPECS['ATH'],
-        requiredDays: WINDOW_SPECS['ATH'],
+        available: tradingDaysAvailable >= minAthHistoryDays,
+        requiredDays: minAthHistoryDays,
         availableDays: tradingDaysAvailable,
-        label: tradingDaysAvailable >= WINDOW_SPECS['ATH'] ? 'Available' : `Insufficient history (${tradingDaysAvailable}/${WINDOW_SPECS['ATH']} days)`,
+        label: tradingDaysAvailable >= minAthHistoryDays ? 'Available' : `Insufficient history (${tradingDaysAvailable}/${minAthHistoryDays} days)`,
       },
     };
 
@@ -414,8 +418,8 @@ export class MultiYearBreakoutService {
       const rvol20d = rvol20dRaw !== null ? Number(rvol20dRaw.toFixed(2)) : null;
       const clvRaw = (high > low) ? computeClv(close, high, low) : null;
       const clv = clvRaw !== null ? Number(clvRaw.toFixed(2)) : null;
-      const rangePct = (close > 0 && high > low) ? computeRangePct(high, low, close) : null;
-      const vpaFootprint = classifyBreakoutVpa(rvol20d, clv, rangePct);
+      const rangePct = computeRangePct(high, low, close);
+      const vpaFootprint = classifyBreakoutVpa(rvol20dRaw, clvRaw, rangePct);
 
       // --- 1Y Window ---
       let breakout1Y: boolean | null = null;
@@ -473,10 +477,13 @@ export class MultiYearBreakoutService {
       }
 
       // --- ATH Window ---
+      // Evaluated against minAthHistoryDays so recent IPOs (< minAthHistoryDays) are not falsely classified,
+      // and ensuring countATH exactly matches per-stock ATH eligibility (MYB-01).
       let breakoutATH: boolean | null = null;
       let highATH: number | null = null;
       let gainATHPct: number | null = null;
-      if (historyDays >= WINDOW_SPECS['ATH'] && raw.highATH !== null) {
+      const isEligibleForATH = historyDays >= minAthHistoryDays && raw.highATH !== null;
+      if (isEligibleForATH) {
         highATH = Math.round(Number(raw.highATH) * 100) / 100;
         breakoutATH = close >= highATH;
         gainATHPct = highATH > 0 ? Math.round(((close - highATH) / highATH) * 10000) / 100 : 0;
@@ -488,19 +495,13 @@ export class MultiYearBreakoutService {
       let breakoutPrice: number | null = null;
       let breakoutGainPct: number | null = null;
 
-      // D2-2 fix: Use getStrongestBreakout helper with 2Y history depth guard for ATH
-      // so recent IPOs with limited data (< 500 days) are not falsely classified as ATH breakouts.
-      const isEligibleForATH = Boolean(
-        breakoutATH && historyDays >= WINDOW_SPECS['2Y']
-      );
-
       strongestBreakout = getStrongestBreakout({
         is10Y: breakout10Y,
         is5Y: breakout5Y,
         is3Y: breakout3Y,
         is2Y: breakout2Y,
         is1Y: breakout1Y,
-        isATH: isEligibleForATH,
+        isATH: Boolean(breakoutATH),
       });
 
       if (strongestBreakout === '10Y') {
@@ -642,4 +643,14 @@ export function getStrongestBreakout(flags: {
   if (flags.is1Y) return '1Y';
   if (flags.isATH) return 'ATH';
   return null;
+}
+
+/**
+ * Computes minimum history days required for ATH eligibility based on available trading days (MYB-01).
+ * When tradingDaysAvailable >= 500 (2Y), requires 500 days.
+ * When tradingDaysAvailable is between 250 and 499, requires 250 days (1Y).
+ * When tradingDaysAvailable < 250, requires 250 days (unavailable).
+ */
+export function getMinAthHistoryDays(tradingDaysAvailable: number): number {
+  return tradingDaysAvailable >= 500 ? 500 : 250;
 }

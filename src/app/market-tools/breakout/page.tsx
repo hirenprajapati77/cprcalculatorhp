@@ -144,7 +144,7 @@ export default function MultiYearBreakoutPage() {
       '3Y Breakout',
       '5Y Breakout',
       '10Y Breakout',
-      'ATH Breakout',
+      report.tradingDaysAvailable < 500 ? 'ATH* Breakout (Dataset-limited)' : 'ATH Breakout',
       'Volume',
       'History Days',
     ];
@@ -154,18 +154,18 @@ export default function MultiYearBreakoutPage() {
       s.sector,
       s.close,
       s.changePct,
-      s.strongestBreakout ?? '',
+      s.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500 ? 'ATH*' : (s.strongestBreakout ?? ''),
       s.vpaFootprint?.label ?? 'Standard',
       s.clv !== null ? s.clv : '',
       s.rvol20d !== null ? s.rvol20d : '',
       s.breakoutPrice !== null ? s.breakoutPrice : '',
-      s.breakoutGainPct !== null ? s.breakoutGainPct : '',
+      s.breakoutGainPct !== null ? `${s.breakoutGainPct}%` : '',
       s.breakout1Y === true ? 'YES' : s.breakout1Y === false ? 'NO' : 'N/A',
       s.breakout2Y === true ? 'YES' : s.breakout2Y === false ? 'NO' : 'N/A',
       s.breakout3Y === true ? 'YES' : s.breakout3Y === false ? 'NO' : 'N/A',
       s.breakout5Y === true ? 'YES' : s.breakout5Y === false ? 'NO' : 'N/A',
       s.breakout10Y === true ? 'YES' : s.breakout10Y === false ? 'NO' : 'N/A',
-      s.breakoutATH === true ? 'YES' : s.breakoutATH === false ? 'NO' : 'N/A',
+      s.breakoutATH === true ? (report.tradingDaysAvailable < 500 ? 'YES*' : 'YES') : s.breakoutATH === false ? 'NO' : 'N/A',
       s.volume,
       s.historyDays,
     ]);
@@ -240,11 +240,18 @@ export default function MultiYearBreakoutPage() {
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">All-Time-High (ATH)</span>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl font-black text-indigo-400">{report.breakoutCounts['ATH']}</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-              Available History
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800"
+              title={report.tradingDaysAvailable < 500 ? `Established from available ${report.tradingDaysAvailable}-day platform dataset` : 'Complete multi-year dataset'}
+            >
+              {report.tradingDaysAvailable < 500 ? `Dataset (${report.tradingDaysAvailable}D)*` : 'Full History'}
             </span>
           </div>
-          <p className="text-[11px] text-gray-500">Closing at highest level in dataset</p>
+          <p className="text-[11px] text-gray-500">
+            {report.tradingDaysAvailable < 500
+              ? `*Closing at highest level in available dataset (${report.tradingDaysAvailable} days; multi-year accumulating)`
+              : 'Closing at highest level in dataset'}
+          </p>
         </div>
 
         {/* Card 3: 2Y–10Y Multi-Year Status */}
@@ -304,8 +311,9 @@ export default function MultiYearBreakoutPage() {
                   ? 'bg-indigo-600 text-white'
                   : 'bg-gray-900 text-gray-400 hover:text-gray-200'
               }`}
+              title={report.tradingDaysAvailable < 500 ? `Dataset-limited ATH (${report.tradingDaysAvailable} days available)` : 'All-Time High Breakout'}
             >
-              ATH Breakout ({report.breakoutCounts['ATH']})
+              ATH{report.tradingDaysAvailable < 500 ? '*' : ''} Breakout ({report.breakoutCounts['ATH']})
             </button>
             {(['2Y', '3Y', '5Y', '10Y'] as BreakoutWindow[]).map((win) => {
               const isAvail = report.windowAvailability[win].available;
@@ -391,7 +399,12 @@ export default function MultiYearBreakoutPage() {
                 <th className="py-3 px-4 text-center">3Y</th>
                 <th className="py-3 px-4 text-center">5Y</th>
                 <th className="py-3 px-4 text-center">10Y</th>
-                <th className="py-3 px-4 text-center">ATH</th>
+                <th
+                  className="py-3 px-4 text-center"
+                  title={report.tradingDaysAvailable < 500 ? `All-Time High within available ${report.tradingDaysAvailable}-day dataset` : 'All-Time High'}
+                >
+                  ATH{report.tradingDaysAvailable < 500 ? '*' : ''}
+                </th>
                 <th className="py-3 px-4 text-right">Volume</th>
               </tr>
             </thead>
@@ -423,8 +436,13 @@ export default function MultiYearBreakoutPage() {
                         className={`px-2.5 py-0.5 rounded text-[10px] font-black tracking-wider border ${getStrongestBadgeClass(
                           stock.strongestBreakout
                         )}`}
+                        title={
+                          stock.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500
+                            ? `All-Time High within available ${report.tradingDaysAvailable}-day dataset (history-limited)`
+                            : undefined
+                        }
                       >
-                        {stock.strongestBreakout || '—'}
+                        {stock.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500 ? 'ATH*' : (stock.strongestBreakout || '—')}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center whitespace-nowrap">
@@ -475,7 +493,11 @@ export default function MultiYearBreakoutPage() {
                       <WindowBadge status={stock.breakout10Y} />
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakoutATH} isAth />
+                      <WindowBadge
+                        status={stock.breakoutATH}
+                        isAth
+                        isDatasetLimited={report.tradingDaysAvailable < 500}
+                      />
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-gray-400">
                       {stock.volume.toLocaleString('en-IN')}
@@ -491,7 +513,15 @@ export default function MultiYearBreakoutPage() {
   );
 }
 
-function WindowBadge({ status, isAth = false }: { status: boolean | null; isAth?: boolean }) {
+function WindowBadge({
+  status,
+  isAth = false,
+  isDatasetLimited = false,
+}: {
+  status: boolean | null;
+  isAth?: boolean;
+  isDatasetLimited?: boolean;
+}) {
   if (status === null) {
     return <span className="text-[10px] text-gray-600 font-mono" title="Insufficient historical data">N/A</span>;
   }
@@ -503,8 +533,9 @@ function WindowBadge({ status, isAth = false }: { status: boolean | null; isAth?
             ? 'bg-indigo-950 text-indigo-300 border-indigo-700'
             : 'bg-emerald-950 text-emerald-300 border-emerald-700'
         }`}
+        title={isAth && isDatasetLimited ? 'Dataset-limited ATH (available history)' : undefined}
       >
-        YES
+        {isAth && isDatasetLimited ? 'YES*' : 'YES'}
       </span>
     );
   }

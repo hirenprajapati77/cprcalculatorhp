@@ -8,6 +8,7 @@ import {
   // production service. Any regression in the real code would be invisible.
   computeWindowBreakout,
   getStrongestBreakout,
+  getMinAthHistoryDays,
 } from '../../services/market-tools/multi-year-breakout.service';
 
 test('Multi-Year Breakout Scanner Engine Logic', async (t) => {
@@ -111,5 +112,74 @@ test('Multi-Year Breakout Scanner Engine Logic', async (t) => {
     // in the prior N candles, which is data-quality issue, not a function bug.
     const result = computeWindowBreakout(100, 0, 250, 300);
     assert.strictEqual(result, true, 'computeWindowBreakout(100, 0, ...) returns true because 100 >= 0');
+  });
+
+  await t.test('ATH minimum history guard at 249, 250, 499, 500 trading days', () => {
+    // 249 days (less than 1 full trading year): ATH is unavailable / requires 250 days
+    assert.strictEqual(getMinAthHistoryDays(249), 250);
+
+    // 250 days (exactly 1 trading year): ATH requires 250 days
+    assert.strictEqual(getMinAthHistoryDays(250), 250);
+
+    // 499 days (between 1Y and 2Y): ATH requires 250 days
+    assert.strictEqual(getMinAthHistoryDays(499), 250);
+
+    // 500 days (full 2Y historical depth reached): ATH strictly requires 500 days
+    assert.strictEqual(getMinAthHistoryDays(500), 500);
+
+    // 750 days: requires 500 days
+    assert.strictEqual(getMinAthHistoryDays(750), 500);
+  });
+
+  await t.test('ATH eligibility and getStrongestBreakout labeling across available day boundaries', () => {
+    // Boundary 1: At 249 available days (minAth = 250):
+    // Window is unavailable (249 < 250), so neither an IPO (240) nor 249-day stock qualifies
+    const minDays249 = getMinAthHistoryDays(249);
+    assert.strictEqual(minDays249, 250);
+    assert.strictEqual(240 >= minDays249, false);
+    assert.strictEqual(249 >= minDays249, false, 'Window unavailable at 249 days');
+
+    // Boundary 2: At 250 available days (minAth = 250):
+    const minDays250 = getMinAthHistoryDays(250);
+    assert.strictEqual(240 >= minDays250, false, 'IPO with 240 days ineligible');
+    assert.strictEqual(250 >= minDays250, true, 'Stock with 250 days eligible');
+    assert.strictEqual(260 >= minDays250, true, 'Stock with 260 days eligible');
+    // Strongest breakout when is1Y=true, isATH=true -> 'ATH'
+    assert.strictEqual(
+      getStrongestBreakout({ is10Y: null, is5Y: null, is3Y: null, is2Y: null, is1Y: true, isATH: true }),
+      'ATH'
+    );
+
+    // Boundary 3: At 499 available days (minAth = 250):
+    const minDays499 = getMinAthHistoryDays(499);
+    assert.strictEqual(minDays499, 250);
+    assert.strictEqual(240 >= minDays499, false, 'Stock with 240 days ineligible');
+    assert.strictEqual(490 >= minDays499, true, 'Stock with 490 days eligible');
+    assert.strictEqual(
+      getStrongestBreakout({ is10Y: null, is5Y: null, is3Y: null, is2Y: null, is1Y: true, isATH: true }),
+      'ATH'
+    );
+
+    // Boundary 4: At 500 available days (minAth = 500):
+    const minDays500 = getMinAthHistoryDays(500);
+    assert.strictEqual(minDays500, 500);
+    assert.strictEqual(490 >= minDays500, false, 'Stock with 490 days ineligible when 500 days available');
+    assert.strictEqual(500 >= minDays500, true, 'Stock with 500 days eligible when 500 days available');
+    assert.strictEqual(510 >= minDays500, true, 'Stock with 510 days eligible when 500 days available');
+    // Multi-year priority order: 2Y takes precedence over ATH when both are broken:
+    assert.strictEqual(
+      getStrongestBreakout({ is10Y: null, is5Y: null, is3Y: null, is2Y: true, is1Y: true, isATH: true }),
+      '2Y'
+    );
+    // 5Y takes precedence over 2Y:
+    assert.strictEqual(
+      getStrongestBreakout({ is10Y: null, is5Y: true, is3Y: true, is2Y: true, is1Y: true, isATH: true }),
+      '5Y'
+    );
+    // 10Y takes precedence over 5Y:
+    assert.strictEqual(
+      getStrongestBreakout({ is10Y: true, is5Y: true, is3Y: true, is2Y: true, is1Y: true, isATH: true }),
+      '10Y'
+    );
   });
 });
