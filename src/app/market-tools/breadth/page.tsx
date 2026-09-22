@@ -180,15 +180,18 @@ export default function MarketBreadthPage() {
         <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Market Regime Score</span>
           <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-white">{report.overallScore > 0 ? `+${report.overallScore}` : report.overallScore}<span className="text-lg text-gray-500 font-normal">/10</span></span>
-            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${getRegimeBadgeClass(report.marketRegime)}`}>
-              {report.marketRegime.replace('_', ' ')}
+            <span className="text-3xl font-black text-white">
+              {report.status === 'pending' ? '--' : (report.overallScore > 0 ? `+${report.overallScore}` : report.overallScore)}
+              <span className="text-lg text-gray-500 font-normal">/10</span>
+            </span>
+            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${report.status === 'pending' ? 'bg-amber-950/60 text-amber-400 border-amber-800' : getRegimeBadgeClass(report.marketRegime)}`}>
+              {report.status === 'pending' ? 'PENDING' : report.marketRegime.replace('_', ' ')}
             </span>
           </div>
           <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 ${getRegimeBarClass(report.marketRegime)}`}
-              style={{ width: `${Math.min(100, Math.max(0, ((report.overallScore + 10) / 20) * 100))}%` }}
+              className={`h-full transition-all duration-500 ${report.status === 'pending' ? 'bg-gray-700' : getRegimeBarClass(report.marketRegime)}`}
+              style={{ width: report.status === 'pending' ? '0%' : `${Math.min(100, Math.max(0, ((report.overallScore + 10) / 20) * 100))}%` }}
             ></div>
           </div>
         </div>
@@ -197,14 +200,14 @@ export default function MarketBreadthPage() {
         <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Advance / Decline</span>
           <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-emerald-400">{currentUniverseData.advances}</span>
-            <span className="text-sm font-semibold text-gray-400">A/D: {currentUniverseData.adRatio}</span>
-            <span className="text-2xl font-bold text-rose-400">{currentUniverseData.declines}</span>
+            <span className="text-2xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : currentUniverseData.advances}</span>
+            <span className="text-sm font-semibold text-gray-400">A/D: {report.status === 'pending' ? '--' : currentUniverseData.adRatio}</span>
+            <span className="text-2xl font-bold text-rose-400">{report.status === 'pending' ? '--' : currentUniverseData.declines}</span>
           </div>
           <div className="w-full bg-rose-950/60 h-2 rounded-full overflow-hidden flex">
             <div
               className="bg-emerald-500 h-full transition-all duration-500"
-              style={{ width: `${(currentUniverseData.advances / (currentUniverseData.advances + currentUniverseData.declines || 1)) * 100}%` }}
+              style={{ width: report.status === 'pending' ? '0%' : `${(currentUniverseData.advances / (currentUniverseData.advances + currentUniverseData.declines || 1)) * 100}%` }}
             ></div>
           </div>
         </div>
@@ -214,16 +217,16 @@ export default function MarketBreadthPage() {
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">52-Week Highs vs Lows</span>
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-xl font-bold text-emerald-400">{currentUniverseData.new52wHighCount}</span>
+              <span className="text-xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : currentUniverseData.new52wHighCount}</span>
               <span className="text-xs text-gray-500 block">Highs</span>
             </div>
             <div className="text-center">
-              <span className={`text-sm font-black px-2 py-0.5 rounded ${currentUniverseData.netNewHighs >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
-                {currentUniverseData.netNewHighs >= 0 ? `+${currentUniverseData.netNewHighs}` : currentUniverseData.netNewHighs}
+              <span className={`text-sm font-black px-2 py-0.5 rounded ${report.status === 'pending' ? 'bg-gray-800 text-gray-400 border border-gray-700' : currentUniverseData.netNewHighs >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
+                {report.status === 'pending' ? '--' : currentUniverseData.netNewHighs >= 0 ? `+${currentUniverseData.netNewHighs}` : currentUniverseData.netNewHighs}
               </span>
             </div>
             <div className="text-right">
-              <span className="text-xl font-bold text-rose-400">{currentUniverseData.new52wLowCount}</span>
+              <span className="text-xl font-bold text-rose-400">{report.status === 'pending' ? '--' : currentUniverseData.new52wLowCount}</span>
               <span className="text-xs text-gray-500 block">Lows</span>
             </div>
           </div>
@@ -234,11 +237,11 @@ export default function MarketBreadthPage() {
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Extreme Moves (&ge; 4%)</span>
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-xl font-bold text-emerald-400">+{currentUniverseData.up4PctCount}</span>
+              <span className="text-xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : `+${currentUniverseData.up4PctCount}`}</span>
               <span className="text-xs text-gray-500 block">Up &ge; 4%</span>
             </div>
             <div>
-              <span className="text-xl font-bold text-rose-400">-{currentUniverseData.down4PctCount}</span>
+              <span className="text-xl font-bold text-rose-400">{report.status === 'pending' ? '--' : `-${currentUniverseData.down4PctCount}`}</span>
               <span className="text-xs text-gray-500 block text-right">Down &ge; 4%</span>
             </div>
           </div>
@@ -272,10 +275,10 @@ export default function MarketBreadthPage() {
         <h2 className="text-base font-bold text-white uppercase tracking-wider">Moving Average Breadth (% Above MA)</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <MaGauge label="Above MA 10" count={currentUniverseData.aboveMa10Count} total={currentUniverseData.ma10EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa10Pct} />
-          <MaGauge label="Above MA 20" count={currentUniverseData.aboveMa20Count} total={currentUniverseData.ma20EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa20Pct} />
-          <MaGauge label="Above MA 50" count={currentUniverseData.aboveMa50Count} total={currentUniverseData.ma50EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa50Pct} />
-          <MaGauge label="Above MA 200" count={currentUniverseData.aboveMa200Count} total={currentUniverseData.ma200EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa200Pct} />
+          <MaGauge label="Above MA 10" count={currentUniverseData.aboveMa10Count} total={currentUniverseData.ma10EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa10Pct} pending={report.status === 'pending'} />
+          <MaGauge label="Above MA 20" count={currentUniverseData.aboveMa20Count} total={currentUniverseData.ma20EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa20Pct} pending={report.status === 'pending'} />
+          <MaGauge label="Above MA 50" count={currentUniverseData.aboveMa50Count} total={currentUniverseData.ma50EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa50Pct} pending={report.status === 'pending'} />
+          <MaGauge label="Above MA 200" count={currentUniverseData.aboveMa200Count} total={currentUniverseData.ma200EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa200Pct} pending={report.status === 'pending'} />
         </div>
       </div>
 
@@ -295,28 +298,43 @@ export default function MarketBreadthPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">
-              {(selectedUniverse === 'ALL_NSE'
+              {((selectedUniverse === 'ALL_NSE'
                 ? report.sectors.allNse
                 : selectedUniverse === 'NIFTY_50'
                   ? report.sectors.nifty50
                   : report.sectors.nseFno
-              ).map((sec) => (
-                <tr key={sec.sector} className="hover:bg-gray-800/40 transition">
-                  <td className="py-3 px-4 font-bold text-gray-300">#{sec.rank}</td>
-                  <td className="py-3 px-4 font-bold text-white">{sec.sector}</td>
-                  <td className={`py-3 px-4 font-extrabold ${sec.avgChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {sec.avgChangePct >= 0 ? `+${sec.avgChangePct}%` : `${sec.avgChangePct}%`}
-                  </td>
-                  <td className="py-3 px-4 text-gray-300">
-                    <span className="text-emerald-400 font-semibold">{sec.advances}</span> / <span className="text-rose-400 font-semibold">{sec.declines}</span> ({sec.totalStocks} total)
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${sec.status === 'BULLISH' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : sec.status === 'BEARISH' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}`}>
-                      {sec.status}
-                    </span>
+              )).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
+                    {report.status === 'pending'
+                      ? 'Market breadth metrics are pending precomputation for today. Click "Refresh" to compute now.'
+                      : 'No sector breadth data available.'}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                (selectedUniverse === 'ALL_NSE'
+                  ? report.sectors.allNse
+                  : selectedUniverse === 'NIFTY_50'
+                    ? report.sectors.nifty50
+                    : report.sectors.nseFno
+                ).map((sec) => (
+                  <tr key={sec.sector} className="hover:bg-gray-800/40 transition">
+                    <td className="py-3 px-4 font-bold text-gray-300">#{sec.rank}</td>
+                    <td className="py-3 px-4 font-bold text-white">{sec.sector}</td>
+                    <td className={`py-3 px-4 font-extrabold ${sec.avgChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {sec.avgChangePct >= 0 ? `+${sec.avgChangePct}%` : `${sec.avgChangePct}%`}
+                    </td>
+                    <td className="py-3 px-4 text-gray-300">
+                      <span className="text-emerald-400 font-semibold">{sec.advances}</span> / <span className="text-rose-400 font-semibold">{sec.declines}</span> ({sec.totalStocks} total)
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${sec.status === 'BULLISH' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : sec.status === 'BEARISH' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}`}>
+                        {sec.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -325,23 +343,23 @@ export default function MarketBreadthPage() {
   );
 }
 
-function MaGauge({ label, count, total, pct }: { label: string; count: number; total: number; pct: number }) {
+function MaGauge({ label, count, total, pct, pending }: { label: string; count: number; total: number; pct: number; pending?: boolean }) {
   const isHealthy = pct >= 50;
   return (
     <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-2">
       <div className="flex justify-between items-baseline">
         <span className="text-xs font-semibold text-gray-400">{label}</span>
-        <span className="text-xs text-gray-500">{count}/{total}</span>
+        <span className="text-xs text-gray-500">{pending ? '--' : `${count}/${total}`}</span>
       </div>
       <div className="flex items-baseline justify-between">
-        <span className={`text-2xl font-extrabold ${isHealthy ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {pct}%
+        <span className={`text-2xl font-extrabold ${pending ? 'text-gray-500' : isHealthy ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {pending ? '--%' : `${pct}%`}
         </span>
       </div>
       <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
         <div
-          className={`h-full transition-all duration-500 ${isHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`}
-          style={{ width: `${pct}%` }}
+          className={`h-full transition-all duration-500 ${pending ? 'bg-gray-700' : isHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`}
+          style={{ width: pending ? '0%' : `${pct}%` }}
         ></div>
       </div>
     </div>
