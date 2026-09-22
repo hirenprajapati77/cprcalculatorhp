@@ -277,4 +277,102 @@ describe('distributed-lock (Tier 1 coverage)', () => {
       assert.deepEqual(res, pendingReport);
     });
   });
+
+  describe('real contention, multi-instance concurrency, and worker crash simulation', () => {
+    afterEach(() => {
+      _setRedisForTesting(null);
+    });
+
+    it('simulates 3 competing application instances: exactly 1 wins, other 2 fail cleanly', async () => {
+      const redisStore: { [key: string]: { token: string; expiresAt: number } } = {};
+      const mockRedis = {
+        status: 'ready',
+        set: async (key: string, token: string, _ex: string, ttlSec: number, nx: string) => {
+          assert.equal(nx, 'NX');
+          const existing = redisStore[key];
+          if (existing && Date.now() < existing.expiresAt) {
+            return null; // Key already exists (contention)
+          }
+          redisStore[key] = { token, expiresAt: Date.now() + ttlSec * 1000 };
+          return 'OK';
+        },
+        eval: async (_script: string, _numKeys: number, key: string, token: string) => {
+          const existing = redisStore[key];
+          if (existing && existing.token === token) {
+            delete redisStore[key];
+            return 1;
+          }
+          return 0;
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      // 3 instances attempt to acquire lock concurrently
+      const [inst1, inst2, inst3] = await Promise.all([
+        tryAcquireDistributedLock('lock:multi:competition', 60),
+        tryAcquireDistributedLock('lock:multi:competition', 60),
+        tryAcquireDistributedLock('lock:multi:competition', 60),
+      ]);
+
+      const acquiredCount = [inst1, inst2, inst3].filter(res => res.acquired).length;
+      assert.equal(acquiredCount, 1, 'Exactly one instance must acquire the distributed lock');
+
+      const winner = [inst1, inst2, inst3].find(res => res.acquired)!;
+      assert.ok(winner.token.length > 0);
+
+      // Clean release by the winning instance
+      const released = await releaseDistributedLock('lock:multi:competition', winner.token);
+      assert.equal(released, true);
+    });
+
+    it('handles worker crash & TTL expiry: instance 2 acquires after instance 1 crashes, and prevents stale release', async () => {
+      let now = 1000000;
+      const redisStore: { [key: string]: { token: string; expiresAt: number } } = {};
+      const mockRedis = {
+        status: 'ready',
+        set: async (key: string, token: string, _ex: string, ttlSec: number, _nx: string) => {
+          const existing = redisStore[key];
+          if (existing && now < existing.expiresAt) {
+            return null;
+          }
+          redisStore[key] = { token, expiresAt: now + ttlSec * 1000 };
+          return 'OK';
+        },
+        eval: async (_script: string, _numKeys: number, key: string, token: string) => {
+          const existing = redisStore[key];
+          if (existing && existing.token === token) {
+            delete redisStore[key];
+            return 1;
+          }
+          return 0;
+        },
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      // Instance 1 acquires lock with 180s TTL
+      const inst1 = await tryAcquireDistributedLock('lock:worker:crash', 180);
+      assert.equal(inst1.acquired, true);
+
+      // Instance 2 attempts to acquire lock immediately -> fails
+      const inst2Immediate = await tryAcquireDistributedLock('lock:worker:crash', 180);
+      assert.equal(inst2Immediate.acquired, false);
+
+      // Worker 1 crashes (simulated by advancing time past 180s without worker 1 calling release)
+      now += 185 * 1000; // 185s later
+
+      // Instance 2 now attempts to acquire -> succeeds because lock has expired in Redis
+      const inst2AfterExpiry = await tryAcquireDistributedLock('lock:worker:crash', 180);
+      assert.equal(inst2AfterExpiry.acquired, true);
+      assert.notEqual(inst2AfterExpiry.token, inst1.token);
+
+      // Stale Worker 1 wakes up late and tries to release with its old token -> MUST FAIL (anti-theft)
+      const staleReleaseByInst1 = await releaseDistributedLock('lock:worker:crash', inst1.token);
+      assert.equal(staleReleaseByInst1, false, 'Stale token from crashed worker 1 must NOT release worker 2 lock');
+
+      // Worker 2's lock is still intact and can be released cleanly by worker 2
+      const validReleaseByInst2 = await releaseDistributedLock('lock:worker:crash', inst2AfterExpiry.token);
+      assert.equal(validReleaseByInst2, true, 'Valid token from worker 2 must successfully release');
+    });
+  });
 });
+
