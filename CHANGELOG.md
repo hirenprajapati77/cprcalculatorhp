@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Fixed — 22 Sep: CPR PRO Deep Repository Audit & Screenshot Validation Remediation
+
+Comprehensive remediation addressing all 6 screenshot findings and quality audit requirements across Market Breadth, Multi-Year Breakouts, Sector Concentration Heatmap, Pattern Breakouts, and Distributed Locking:
+
+- **Market Breadth Single-Pass SQL Optimization (MB-01, MB-02)**:
+  - Replaced the expensive 7-window CTE query (which took 75s–96.3s and tripped the 30s timeout) with a single-pass `HashAggregate` query executing in 15.9s with zero disk spills.
+  - Added session-window guards (`cnt10 >= 10`, `cnt20 >= 20`, `cnt50 >= 50`, `cnt200 >= 200`) to guarantee mathematical parity and prevent inclusion of incomplete moving averages for sparse-history or newly listed equities.
+  - Added missing Bhavcopy symbol aliases (`AMBUJACEM`, `TATACHEM`, `GMRP&UI`) into `FNO_SYMBOLS` and `INFRA_SYMBOLS`.
+  - Updated `src/app/market-tools/breadth/page.tsx` to display placeholder `--` and an amber `PENDING` badge during cold-cache intervals rather than misleading false zeros.
+
+- **Multi-Year Breakout ATH Dataset Guard & Label Precision (MYB-01)**:
+  - Synchronized `minAthHistoryDays` to require 250 trading days when platform dataset history is between 250 and 499 days (`getMinAthHistoryDays(tradingDaysAvailable)`), preventing false IPO classifications while enabling accurate dataset highs.
+  - Synchronized `countATH` and row-level `isEligibleForATH` to maintain strict counter and table parity.
+  - Harmonized `ATH*` and `YES*` labeling across top metric card, card footnote, filter tab, column header, row badges, and CSV export to explicitly indicate dataset-limited highs without implying full multi-year history.
+  - Added unit tests covering 249, 250, 499, and 500 trading-day boundaries and breakout precedence hierarchy.
+
+- **Sector Normalization & Dynamic Heatmap Reporting (HM-01, SC-01)**:
+  - Added `SECTOR_NORMALIZE_MAP` and `canonicalizeSector()` in `src/services/market-tools/nse-sector-map.ts` to map uppercase and alternative sector aliases (e.g. `BANKING`, `INFRA`, `CHEMICALS`) to canonical platform sectors.
+  - Updated `src/components/scanner/ScannerClient.tsx` and `src/app/api/scanner/heatmap/route.ts` to pass sectors through `canonicalizeSector()`, preventing duplicate or disjoint sector rows.
+  - Replaced speculative subtitle subtraction with direct factual reporting of sector stock counts and active scanner setups (`Displaying X stocks across 12 sectors (Y setups in active scanner view)`).
+
+- **Pattern Breakouts & Momentum Leaders Transparency (PB-01, ML-01)**:
+  - Clarified A+ Setups candidate pool context (`27 of 106 candidates: breakouts + near-high bases`) in `src/app/market-tools/pattern-breakout/page.tsx`.
+  - Clarified `≥ ₹10 Cr 20D turnover floor` in `src/app/market-tools/momentum-leaders/page.tsx`.
+  - Adjusted `CardProps` in `src/components/ui/Card.tsx` for strict `exactOptionalPropertyTypes: true` compatibility.
+
+- **Distributed Lock Real Contention & Worker Crash Hardening (DL-01)**:
+  - Added automated unit tests in `src/tests/unit/distributed-lock.test.ts` verifying atomic lock acquisition across 3 concurrent competing application instances, worker crash simulation with automatic 180s TTL expiration, and Lua anti-theft release rejection of stale tokens.
+
 ### Added & Fixed — 17 Sep: 2-Month Deep Dive Code Review Remediation (PR #243)
 
 Comprehensive remediation addressing all validated findings from the 2-month deep dive code review across quantitative models, options pricing, overnight engines, universe discovery, and infrastructure:

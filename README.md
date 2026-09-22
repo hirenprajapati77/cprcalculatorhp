@@ -57,6 +57,13 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **22 Sep — CPR PRO Deep Repository Audit & Screenshot Validation Remediation**:
+  - **Market Breadth SQL Optimization**: Replaced 7-window CTE query with single-pass `HashAggregate` (15.9s runtime vs 96.3s timeout), session-window guards (`cnt >= N`), and missing Bhavcopy aliases (`AMBUJACEM`, `TATACHEM`, `GMRP&UI`).
+  - **Multi-Year Breakout ATH Depth Guard**: Aligned `minAthHistoryDays` to 250 days for 250–499 day datasets, synchronized counter/row eligibility, and harmonized `ATH*` precision across all UI and export surfaces.
+  - **Sector Normalization & Heatmap Reporting**: Canonicalized sector aliases (`BANKING` -> `Financial Services`) and updated heatmap subtitle to report factual stock counts and active scanner setups.
+  - **Pattern Breakouts & Momentum Leaders**: Clarified A+ Setups candidate pool (`27 of 106`) and `≥ ₹10 Cr 20D turnover floor`.
+  - **Distributed Lock Hardening**: Automated test verification for 3 competing instances, worker crash simulation with 180s TTL expiration, and Lua anti-theft release rejection.
+  - Automated unit test suite passing at **1,187 / 1,189** tests (0 failures, 2 intentionally skipped offline guards).
 - **17 Sep — 2-Month Deep Dive Code Review Remediation (PR #243)**:
   - Resolved 18 architectural findings across quantitative models, option pricing, overnight discovery, universe sync, and infrastructure.
   - Aligned option DTE and expiry resolution to Thursday expiry with trading-holiday awareness.
