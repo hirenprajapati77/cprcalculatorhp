@@ -1,11 +1,11 @@
 import React from 'react';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  title?: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  headerAction?: React.ReactNode;
-  glow?: 'green' | 'red' | 'blue' | 'none';
+  title?: string | undefined;
+  subtitle?: string | undefined;
+  icon?: React.ReactNode | undefined;
+  headerAction?: React.ReactNode | undefined;
+  glow?: 'green' | 'red' | 'blue' | 'none' | undefined;
 }
 
 export const Card: React.FC<CardProps> = ({

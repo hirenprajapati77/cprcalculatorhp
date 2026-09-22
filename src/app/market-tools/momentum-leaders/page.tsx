@@ -311,12 +311,12 @@ export default function MomentumLeadersPage() {
         {/* Metric Cards */}
         {report && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80">
-              <div className="text-xs font-medium text-slate-400">Total Scanned</div>
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80" title="Stocks must meet the ₹10 Cr 20-day average turnover liquidity floor to qualify">
+              <div className="text-xs font-medium text-slate-400">Qualified / Scanned</div>
               <div className="text-2xl font-bold text-white mt-1">
                 {report.qualifiedCount} <span className="text-xs font-normal text-slate-400">/ {report.totalScanned}</span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">As of {report.date}</div>
+              <div className="text-[11px] text-slate-400 mt-1">&ge; ₹10 Cr 20D turnover floor</div>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80">

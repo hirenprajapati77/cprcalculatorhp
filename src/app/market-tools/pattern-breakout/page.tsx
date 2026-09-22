@@ -338,7 +338,12 @@ export default function PatternBreakoutPage() {
               Pattern + RVOL
             </span>
           </div>
-          <p className="text-[10px] text-gray-500">High-conviction setups</p>
+          <p
+            className="text-[10px] text-gray-500"
+            title="Includes both confirmed breakouts and tight pre-breakout consolidations within 5% of 52W high meeting Minervini/O'Neil criteria"
+          >
+            High-conviction setups ({report.countsByTier['A+']} of {report.countsByStatus.BREAKOUT + report.countsByStatus.NEAR_HIGH} candidates: breakouts + near-high bases)
+          </p>
         </div>
       </div>
 
