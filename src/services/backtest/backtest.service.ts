@@ -635,9 +635,19 @@ export class BacktestService {
                 );
 
                 const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-                // Statutory exchange & turnover friction for Index futures/derivatives (~0.002%).
-                // NOTE: This represents pure exchange/clearing turnover fees. Real-world option execution
-                // incurs additional friction (brokerage flat fees, STT on exercise, GST, stamp duty).
+                // Statutory exchange & turnover friction for Index futures/derivatives (~0.002% / 0.2 bps).
+                // FRICTION COMPARISON VS REAL TRADING COSTS:
+                // 1. Index Futures Proxy (Current Model):
+                //    - NSE exchange turnover fee: ~0.0019% (rounded to 0.00002 / 0.002%).
+                //    - Full statutory futures costs (including STT 0.02% on sell, stamp duty 0.002%, GST, SEBI fee):
+                //      total is approx ~0.025%–0.035% of turnover (~12x–17x higher than pure exchange fee).
+                // 2. Options Contracts (Retail Execution):
+                //    - STT (0.1% on sell premium) + Exchange turnover (0.05% premium) + Flat brokerage (~₹20/order) + GST.
+                //    - Total option friction typically ranges from 0.15% to 0.50%+ of option premium.
+                // 3. Practical Consideration:
+                //    - Backtests using 0.002% on index spot proxy represent idealized baseline turnover friction.
+                //    - Real-world live performance should haircut backtest net returns by an additional ~0.02%–0.03%
+                //      for futures, or model full option contracts with bid-ask spread and flat fee drag.
                 const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.00002;
                 const btstNetPnl = btstTradeResult.pnl - btstFees;
 

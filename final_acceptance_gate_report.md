@@ -29,10 +29,13 @@
 
 2. **PM2 Standalone Execution Entry Point (`ops/ecosystem.config.cjs`)**:
    - Pointed PM2 runtime `script` to `server-starter.js` (was `server.js`).
+   - Verified live in production: `ops/ecosystem.config.cjs` deployed to Oracle VM, PM2 restarted with `server-starter.js` active (`pid: 683132`, `uptime: online`, `restarts: 0`).
    - Ensures production PM2 process execution invokes `server-starter.js` crash-handlers (`uncaughtException`, `unhandledRejection`), static/BUILD_ID existence checks, and 0.0.0.0 binding.
 
 3. **Backtest Friction Accounting Policy Documentation (`backtest.service.ts`)**:
-   - Clarified that `0.00002` (0.002%) friction represents statutory exchange/turnover fees for Index futures/derivatives, and noted real option execution has higher friction.
+   - Clarified that `0.00002` (0.002% / 0.2 bps) represents statutory NSE exchange turnover fees for Index futures (~0.0019%).
+   - Documented full comparison against real trading costs: Index Futures total statutory + brokerage friction is ~0.025%–0.035% of turnover (including STT, stamp duty, GST, SEBI fee), while retail Options friction ranges from 0.15% to 0.50%+ of option premium.
+   - Recommended appropriate haircuts for live strategy execution.
 
 4. **Lot Size Test Reliability (`option-suggestion.test.ts`)**:
    - Switched `FALLBACK_LOT_SIZES` test to assert the exported table directly, eliminating unmocked network fetch hangs.
