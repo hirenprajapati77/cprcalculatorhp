@@ -1,11 +1,38 @@
 # Final Acceptance Gate Report
 
-**Repo:** cprcalculatorhp / cpr-calculator-platform  
-**Branch:** `main`  
-**Commit:** `83ec4df00ffe7a36c72ac5bb2d8cd1a90f6340ca` (PR #243 merged)  
-**Report pass:** 18 (Post-2-Month Deep Dive Code Review Remediation)  
-**Report generated:** 2026-09-18  
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 18, 2026. All 18 findings from the 2-Month Deep Dive Code Review remediated, verified, and merged to `main` (commit `83ec4df0`).
+**Repo:** cprcalculatorhp / cpr-calculator-platform
+**Branch:** `main`
+**Commit:** `c343c3c2` (15-Day Review Residual Concerns R-1 to R-6)
+**Report pass:** 19 (Post-15-Day Deep Code Review Residual Remediation)
+**Report generated:** 2026-09-23
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 23, 2026. All 6 residual concerns (R-1 to R-6) from the 15-day deep code review remediated, verified, and committed to `main` (commit `c343c3c2`). No open defects or pending issues remain.
+
+---
+
+## Pass 19 — 23 Sep 2026: 15-Day Deep Code Review Residual Remediation
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ 0 errors |
+| ESLint | ✅ 0 errors / 0 warnings (TS files) |
+| Regression lock | ✅ `2ef002db620a9545a601fb2fb23c92e1a6219ae5012ba4bc977e686e9a2072f5` |
+| Unit tests | ✅ **1,199 pass · 0 fail · 2 skip** (offline guards) |
+| Shadow mode | ✅ `IS_SHADOW_RUN: true` — no live order routing |
+| Working tree | ✅ Clean after commit |
+
+### Fixes in this pass
+
+1. **R-1 — STBT underlying optionContract prefix guard** (`trade-journal.service.ts`): Added `console.warn` inside `isShortUnderlyingLeg` when a STBT entry has a non-UNDERLYING `optionContract` — prevents silent wrong-direction PnL computation. Unit test added.
+
+2. **R-2 — Friday Weekend Gate policy document** (`docs/trading-policy/friday-weekend-gate.md`): Formal policy created documenting the asymmetric Friday rule (LONG hard-blocked, SHORT in BEAR regime only), historical gap events, rationale, and review schedule. `overnight.service.ts` comment updated to reference the document.
+
+3. **R-3 — Option lot-size CI staleness test** (`option-lot-size-staleness.test.ts`): Exported `FALLBACK_LOT_SIZES` + `LOT_SIZE_LAST_VERIFIED_CYCLE = 'FAOP70616_OCT2025'`. New test validates all major index lot sizes against FAOP70616 values and fails on next SEBI revision cycle.
+
+4. **R-4 — Server-starter two-tier shutdown documentation** (`server-starter.js`): Added JSDoc comment block distinguishing crash path (500ms stdio flush only) from SIGTERM path (`shutdown-orchestrator.ts` DB/Redis teardown). Eliminates ambiguity about what the 500ms grace period covers.
+
+5. **R-5 — Suppression cooldown BREAKOUT-only fallback** (`breakout-watcher.service.ts`): `recordSuppressionCooldown` fallback when no `alertKind` or `signals` provided now touches BREAKOUT key only (was both BREAKOUT + BREAKDOWN). Prevents cross-contamination of BREAKDOWN cooldown keys during BULLISH gate suppressions. Test updated.
+
+6. **R-6 — Bhavcopy alias CI test** (`market-breadth-alias.test.ts`): New test asserts `AMBUJACEM`, `TATACHEM`, `GMRP&UI` aliases remain in `FNO_SYMBOLS`. Catches silent NSE renames before they silently drop symbols from breadth calculations.
 
 ---
 

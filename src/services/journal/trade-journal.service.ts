@@ -22,16 +22,30 @@ export class TradeJournalService {
   /**
    * Checks if a trade leg represents a short cash underlying position (STBT on cash equity).
    * Tightened to require confirmed underlying-leg marker AND STBT trade direction.
+   *
+   * R-1 guard: If signalType is STBT but optionContract does NOT start with 'UNDERLYING',
+   * the PnL formula will fall through to LONG (exitCmp - entryCmp), which is WRONG for a
+   * short cash position. This warning surfaces the data inconsistency so it can be
+   * corrected at the source rather than silently producing an inverted PnL.
    */
   static isShortUnderlyingLeg(entry: {
     signalType?: string | null | undefined;
     optionContract?: string | null | undefined;
   }): boolean {
     if (!entry.optionContract || typeof entry.optionContract !== 'string') return false;
-    return (
-      TradeJournalService.isUnderlyingJournalLeg(entry.optionContract) &&
-      entry.signalType === 'STBT'
-    );
+    const isUnderlying = TradeJournalService.isUnderlyingJournalLeg(entry.optionContract);
+    if (entry.signalType === 'STBT' && !isUnderlying) {
+      // R-1: STBT record with a non-UNDERLYING optionContract. PnL will be computed
+      // as LONG (exitCmp - entryCmp), which is incorrect for a short cash leg.
+      // Check that the optionContract value starts with 'UNDERLYING' for all STBT
+      // fallback/underlying legs, or that this is an intentional options-only STBT.
+      console.warn(
+        `[TradeJournal] R-1 WARNING: STBT entry has non-UNDERLYING optionContract ` +
+          `"${entry.optionContract}" — PnL computed as LONG (exitCmp - entryCmp). ` +
+          `If this is a cash underlying short leg, set optionContract to "UNDERLYING PE".`
+      );
+    }
+    return isUnderlying && entry.signalType === 'STBT';
   }
 
   /**

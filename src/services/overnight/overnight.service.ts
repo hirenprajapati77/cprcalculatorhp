@@ -608,12 +608,15 @@ export class OvernightService {
           // Friday holds carry 60+ hours of weekend gap risk (Mon open gap-against
           // traps have caused repeated option losses: BSE Aug 10, BSE Aug 21).
           //
+          // Full policy: docs/trading-policy/friday-weekend-gate.md
+          //
           // Rule 1 — STBT/SHORT block: Friday SHORTs are blocked in CHOPPY and BULL
           //   regimes. Only a confirmed BEAR regime (Nifty close < EMA20, EMA sloping
           //   down) provides enough downtrend conviction to hold a Friday PUT overnight.
           //
           // Rule 2 — BTST/LONG hard block: Friday LONGs are blocked unconditionally
           //   to eliminate 60+ hour weekend gap-down risk (D5-2 fix).
+          //   This is intentionally asymmetric with Rule 1 — see policy doc for rationale.
           if (isFriday) {
             if (finalDir === 'SHORT' && regime.trend !== 'BEAR') {
               console.warn(

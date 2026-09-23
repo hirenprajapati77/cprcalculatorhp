@@ -57,6 +57,14 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (September 2026):**
+- **23 Sep — 15-Day Deep Code Review: Residual Concern Remediation (R-1 to R-6)**:
+  - **R-1 STBT PnL Guard**: Added structured warning in `isShortUnderlyingLeg` for STBT entries missing the `UNDERLYING` `optionContract` prefix — surfaces data inconsistency in logs rather than silently computing wrong P&L direction.
+  - **R-2 Friday Gate Policy Doc**: Created `docs/trading-policy/friday-weekend-gate.md` — formal policy for the asymmetric Friday weekend gate (LONG hard-blocked, SHORT conditionally permitted in BEAR regime).
+  - **R-3 Lot-Size CI Test**: Exported `FALLBACK_LOT_SIZES` + `LOT_SIZE_LAST_VERIFIED_CYCLE` and added `option-lot-size-staleness.test.ts` to enforce SEBI lot-size revision tracking at each May/Nov cycle.
+  - **R-4 Crash Grace Documented**: Expanded `server-starter.js` crash handler with two-tier shutdown model comment — crash path (500ms stdio flush) vs SIGTERM path (Prisma/Redis teardown via `shutdown-orchestrator.ts`).
+  - **R-5 Cooldown Direction Scope**: Tightened `recordSuppressionCooldown` fallback to BREAKOUT-only (was both BREAKOUT + BREAKDOWN) preventing cross-contamination of bearish cooldown keys during BULLISH VIX/price-gate suppressions.
+  - **R-6 Bhavcopy Alias CI Test**: Added `market-breadth-alias.test.ts` asserting `AMBUJACEM`, `TATACHEM`, and `GMRP&UI` aliases remain present in `FNO_SYMBOLS` — catches silent NSE renames before breadth calculations are affected.
+  - Test suite: **1,199 pass · 0 fail · 2 skip** · tsc → 0 errors · regression lock → `2ef002db…` unchanged.
 - **22 Sep — CPR PRO Deep Repository Audit & Screenshot Validation Remediation**:
   - **Market Breadth SQL Optimization**: Replaced 7-window CTE query with single-pass `HashAggregate` (15.9s runtime vs 96.3s timeout), session-window guards (`cnt >= N`), and missing Bhavcopy aliases (`AMBUJACEM`, `TATACHEM`, `GMRP&UI`).
   - **Multi-Year Breakout ATH Depth Guard**: Aligned `minAthHistoryDays` to 250 days for 250–499 day datasets, synchronized counter/row eligibility, and harmonized `ATH*` precision across all UI and export surfaces.

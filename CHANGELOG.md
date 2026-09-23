@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 23 Sep: 15-Day Deep Code Review — Residual Concern Remediation (R-1 to R-6)
+
+Six residual concerns identified during the 15-day deep code review (Sep 7–22) have been resolved. These address data-integrity gaps, missing policy documentation, CI coverage holes, and alerting-logic precision issues that were not covered by the prior 82 commits:
+
+- **R-1 — STBT Underlying PnL Direction Guard (`trade-journal.service.ts`)**:
+  - Added a structured `console.warn` inside `isShortUnderlyingLeg` that fires when a `signalType: 'STBT'` entry has an `optionContract` value that does not start with `'UNDERLYING'`.
+  - The PnL formula correctly falls back to LONG direction (safe), but the warning surfaces the data inconsistency in server logs so it can be corrected at the source before causing silent incorrect P&L.
+  - Added unit test: STBT + non-UNDERLYING optionContract → `false` + `R-1 WARNING` emitted.
+
+- **R-2 — Friday Weekend Gate Formal Policy (`docs/trading-policy/friday-weekend-gate.md`)**:
+  - Created formal trading policy document explaining the asymmetric Friday rule: BTST LONGs blocked unconditionally; STBT SHORTs permitted in BEAR regime only.
+  - Documents historical gap events (BSE Aug 10, Aug 21), deliberate asymmetry rationale, rule revision history, and next review schedule (March 2027).
+  - Updated `overnight.service.ts` comment to reference the policy doc with `Full policy: docs/trading-policy/friday-weekend-gate.md`.
+
+- **R-3 — Option Lot-Size CI Staleness Test (`option-lot-size-staleness.test.ts`)**:
+  - Exported `FALLBACK_LOT_SIZES` and `LOT_SIZE_LAST_VERIFIED_CYCLE = 'FAOP70616_OCT2025'` from `option-suggestion.service.ts`.
+  - New CI test asserts: all major index contracts present (NIFTY/BANKNIFTY/FINNIFTY/MIDCPNIFTY/SENSEX), all lot sizes are positive integers, index values match FAOP70616 exactly, and the cycle constant matches the test expectation.
+  - Failing this test on next SEBI revision (Nov 2026) prompts the engineer to update both the service and the cycle identifier together.
+
+- **R-4 — Server-Starter Two-Tier Shutdown Model Documentation (`server-starter.js`)**:
+  - Added detailed JSDoc comment block explaining the two-tier shutdown model: Tier 1 (crash path, 500ms stdio flush) vs Tier 2 (SIGTERM path, `shutdown-orchestrator.ts` with Prisma disconnect and lock release).
+  - Clarifies that 500ms is intentionally short for crash handling and that DB/Redis teardown must be registered as shutdown hooks, not crash handlers.
+
+- **R-5 — Suppression Cooldown BREAKOUT-Only Default (`breakout-watcher.service.ts`)**:
+  - Tightened `recordSuppressionCooldown` fallback: when a suppressed item has neither `alertKind` nor `signals`, the cooldown now touches the `BREAKOUT` key only (previously touched both BREAKOUT and BREAKDOWN).
+  - Prevents a BULLISH suppression (VIX gate or price gate) from resetting the bearish `BREAKDOWN` cooldown key for the same symbol, which could delay a legitimate subsequent STBT alert.
+  - Updated `breakout-watcher-helpers.test.ts` to assert the new BREAKOUT-only default.
+
+- **R-6 — Bhavcopy Alias Presence Test (`market-breadth-alias.test.ts`)**:
+  - New test asserts that all three known Bhavcopy alias pairs are present in `FNO_SYMBOLS`: `AMBUJACEMENT`/`AMBUJACEM`, `TATACHEMICALS`/`TATACHEM`, `GMRINFRA`/`GMRP&UI`.
+  - If NSE renames a symbol and the alias is silently dropped, the test fails with a descriptive message before any breadth calculation is affected.
+
+**Quality gates on commit `c343c3c2`**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,199 tests pass · 0 fail · 2 skipped** (offline guards).
+
 ### Added & Fixed — 22 Sep: CPR PRO Deep Repository Audit & Screenshot Validation Remediation
 
 Comprehensive remediation addressing all 6 screenshot findings and quality audit requirements across Market Breadth, Multi-Year Breakouts, Sector Concentration Heatmap, Pattern Breakouts, and Distributed Locking:

@@ -68,7 +68,30 @@ test('TradeJournalService.isShortUnderlyingLeg', async (t) => {
       false
     );
   });
+
+  // R-1: STBT with non-UNDERLYING contract must return false AND log a warning.
+  // The PnL formula falls back to LONG (exitCmp - entryCmp) — not ideal but at least
+  // the warning surfaces the data inconsistency so it can be corrected at the source.
+  await t.test('R-1: STBT with non-UNDERLYING optionContract returns false and emits warning', () => {
+    const warnings: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(String(args[0])); };
+    try {
+      const result = TradeJournalService.isShortUnderlyingLeg({
+        signalType: 'STBT',
+        optionContract: 'OCT 2026 500 PE',
+      });
+      assert.strictEqual(result, false, 'Should return false — wrong PnL direction would be used');
+      assert.ok(
+        warnings.some((w) => w.includes('R-1 WARNING') && w.includes('OCT 2026 500 PE')),
+        'Should emit an R-1 WARNING log identifying the problematic optionContract'
+      );
+    } finally {
+      console.warn = origWarn;
+    }
+  });
 });
+
 
 test('TradeJournalService.captureSnapshot direction-aware auto-close', async (t) => {
   const origFindMany = prisma.tradeJournal.findMany;

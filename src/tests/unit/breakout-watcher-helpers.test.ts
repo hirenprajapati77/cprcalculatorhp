@@ -76,13 +76,14 @@ describe('breakout-watcher helpers (Tier 2)', () => {
       ]);
       assert.deepEqual(upsertedKeys, ['INFY:BREAKDOWN']);
 
-      // 4. Object without alertKind or signals falls back safely to both keys
+      // 4. Object without alertKind or signals: R-5 fix — defaults to BREAKOUT only
+      //    (not both BREAKOUT and BREAKDOWN) to avoid cross-contaminating bearish cooldowns
       upsertedKeys.length = 0;
       await BreakoutWatcherService.recordSuppressionCooldown([
         { symbol: 'SBIN' },
       ]);
-      assert.ok(upsertedKeys.includes('SBIN:BREAKOUT'));
-      assert.ok(upsertedKeys.includes('SBIN:BREAKDOWN'));
+      assert.ok(upsertedKeys.includes('SBIN:BREAKOUT'), 'Should touch BREAKOUT key');
+      assert.ok(!upsertedKeys.includes('SBIN:BREAKDOWN'), 'R-5: must NOT touch BREAKDOWN for bare object');
 
       // 5. String with explicit kind
       upsertedKeys.length = 0;

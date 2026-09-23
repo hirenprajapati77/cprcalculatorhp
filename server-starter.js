@@ -1,9 +1,32 @@
 // C-04: Register crash handlers BEFORE any async work so they catch startup failures too
 let isTerminating = false;
+
+/**
+ * R-4: Two-tier shutdown model
+ * ─────────────────────────────────────────────────────────────────────────
+ * TIER 1 — Crash path (this file, crashExit):
+ *   Triggered by uncaughtException or unhandledRejection.
+ *   Provides a 500ms grace period to flush console buffers and stdio.
+ *   500ms is intentionally SHORT — crash handlers must not attempt DB cleanup
+ *   because in-flight transactions may be corrupt by the time we reach here.
+ *   Graceful DB/Redis/BullMQ teardown is NOT the crash handler's responsibility.
+ *
+ * TIER 2 — Graceful SIGTERM path (src/lib/shutdown-orchestrator.ts):
+ *   Triggered by pm2 stop, systemd stop, or a manual `kill -SIGTERM <pid>`.
+ *   Runs registered shutdown hooks in order: distributed lock release → Prisma
+ *   $disconnect → BullMQ worker close. Allows in-flight requests to complete
+ *   within the configured drain window before the process exits.
+ *
+ * If your change requires DB cleanup on crash, register a critical shutdown hook
+ * in shutdown-orchestrator.ts and test it with a SIGTERM, not this crash handler.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
 function crashExit(code = 1) {
   if (isTerminating) return;
   isTerminating = true;
-  // D4-3 fix: 500ms grace period allows console buffers and pending cleanup I/O to flush before exit
+  // 500ms is sufficient to flush console buffers and pending stdio writes.
+  // Do NOT increase this — crash handlers must exit quickly to allow pm2 watchdog
+  // to detect the crash and restart the process within the configured restart window.
   setTimeout(() => {
     process.exit(code);
   }, 500);
@@ -18,6 +41,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[server-starter] Unhandled promise rejection at:', promise, 'reason:', reason);
   crashExit(1);
 });
+
 
 const { createServer } = require('http');
 const next = require('next');

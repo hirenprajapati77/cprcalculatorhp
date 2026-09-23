@@ -47,7 +47,18 @@ interface ScoredCandidate extends ItmCandidate {
   };
 }
 
-const FALLBACK_LOT_SIZES: Record<string, number> = {
+/**
+ * Cycle identifier for the last SEBI/NSE lot-size revision applied to FALLBACK_LOT_SIZES.
+ * Update this string every time lot sizes are revised (typically May and November each year).
+ * The CI test `option-lot-size-staleness.test.ts` asserts this matches the comment in source
+ * so that a code edit without a corresponding test/cycle update causes a test failure.
+ *
+ * Next revision cycle expected: ~Nov 2026 (SEBI biannual F&O lot-size review).
+ */
+export const LOT_SIZE_LAST_VERIFIED_CYCLE = 'FAOP70616_OCT2025';
+
+/** @internal Exported for CI staleness test only — do not use in production logic. */
+export const FALLBACK_LOT_SIZES: Record<string, number> = {
   // Lot sizes revised per NSE circular FAOP70616 (Oct 2025 cycle):
   // NIFTY: 65, BANKNIFTY: 30, FINNIFTY: 60, MIDCPNIFTY: 120. SENSEX remains 10 (BSE).
   // Cross-check against NSE F&O lot size table

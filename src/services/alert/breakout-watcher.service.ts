@@ -397,6 +397,7 @@ export class BreakoutWatcherService {
         }
       } else {
         if (item.alertKind) {
+          // Explicit direction provided — scope to that direction only
           keys.add(breakoutAlertClaimKey(item.symbol, item.alertKind));
         } else if (item.signals && item.signals.length > 0) {
           const hasBreakout = item.signals.includes('BREAKOUT');
@@ -410,8 +411,11 @@ export class BreakoutWatcherService {
             keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKDOWN'));
           }
         } else {
+          // R-5 fix: when no alertKind or signals are available, default to BREAKOUT only.
+          // The two pipeline call sites (VIX gate, price gate) both operate on
+          // BREAKOUT-direction candidates from detectNewBreakouts — touching BREAKDOWN
+          // here would incorrectly suppress a separate bearish cooldown key.
           keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKOUT'));
-          keys.add(breakoutAlertClaimKey(item.symbol, 'BREAKDOWN'));
         }
       }
     }
