@@ -2,10 +2,10 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform
 **Branch:** `main`
-**Commit:** `c343c3c2` (15-Day Review Residual Concerns R-1 to R-6)
+**Commit:** `61449abb` (15-Day Review Residual Concerns R-1 to R-6)
 **Report pass:** 19 (Post-15-Day Deep Code Review Residual Remediation)
 **Report generated:** 2026-09-23
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 23, 2026. All 6 residual concerns (R-1 to R-6) from the 15-day deep code review remediated, verified, and committed to `main` (commit `c343c3c2`). No open defects or pending issues remain.
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 23, 2026. All 6 residual concerns (R-1 to R-6) from the 15-day deep code review remediated, verified, and committed to `main` (commit `61449abb`). No open defects or pending issues remain.
 
 ---
 

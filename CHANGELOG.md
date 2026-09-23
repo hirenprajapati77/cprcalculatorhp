@@ -39,7 +39,7 @@ Six residual concerns identified during the 15-day deep code review (Sep 7–22)
   - New test asserts that all three known Bhavcopy alias pairs are present in `FNO_SYMBOLS`: `AMBUJACEMENT`/`AMBUJACEM`, `TATACHEMICALS`/`TATACHEM`, `GMRINFRA`/`GMRP&UI`.
   - If NSE renames a symbol and the alias is silently dropped, the test fails with a descriptive message before any breadth calculation is affected.
 
-**Quality gates on commit `c343c3c2`**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,199 tests pass · 0 fail · 2 skipped** (offline guards).
+**Quality gates on commit `61449abb`**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,199 tests pass · 0 fail · 2 skipped** (offline guards).
 
 ### Added & Fixed — 22 Sep: CPR PRO Deep Repository Audit & Screenshot Validation Remediation
 
