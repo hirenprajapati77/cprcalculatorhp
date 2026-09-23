@@ -196,20 +196,22 @@ export class OptionSuggestionService {
         if (!optionSymbol.startsWith(prefix)) continue;
         const remainder = optionSymbol.substring(prefix.length);
 
-        // Monthly: 26AUG790CE → Aug 2026 (last Thursday, or previous trading day if holiday)
+        // Monthly: 26AUG790CE → Aug 2026 (last Tuesday, or previous trading day if holiday)
+        // Note: Per NSE Circulars 108/2025 and 111/2025, effective Sep 1, 2025 all NSE derivative
+        // contracts expire on Tuesday (BSE derivatives expire on Thursday).
         const monthlyMatch = remainder.match(/^(\d{2})([A-Z]{3})\d+(?:\.\d+)?(?:CE|PE)$/);
         if (monthlyMatch) {
           const yy = parseInt(monthlyMatch[1], 10) + 2000;
           const mo = monthMap[monthlyMatch[2]];
           if (mo !== undefined) {
-            // Compute the true last Thursday of the month in UTC (NSE standard for equity & index derivatives)
-            // Note: 4 = Thursday. Formula: (dayOfWeek - 4 + 7) % 7
+            // Compute the true last Tuesday of the month in UTC (NSE standard for equity & index derivatives)
+            // Note: 2 = Tuesday. Formula: (dayOfWeek - 2 + 7) % 7
             const lastDay = new Date(Date.UTC(yy, mo + 1, 0));
-            const dayOfWeek = lastDay.getUTCDay(); // 0 = Sun, 4 = Thu
-            const diffToThu = (dayOfWeek - 4 + 7) % 7;
-            lastDay.setUTCDate(lastDay.getUTCDate() - diffToThu);
+            const dayOfWeek = lastDay.getUTCDay(); // 0 = Sun, 2 = Tue
+            const diffToTue = (dayOfWeek - 2 + 7) % 7;
+            lastDay.setUTCDate(lastDay.getUTCDate() - diffToTue);
 
-            // If the last Thursday is an exchange trading holiday, roll back to the previous trading day
+            // If the last Tuesday is an exchange trading holiday, roll back to the previous trading day
             while (!isNseTradingDay(lastDay)) {
               lastDay.setUTCDate(lastDay.getUTCDate() - 1);
             }

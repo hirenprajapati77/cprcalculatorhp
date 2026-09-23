@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import { FyersAuthService } from '../../services/fyers-auth.service';
 import { OptionChainService } from '../../services/option-chain.service';
-import { OptionSuggestionService } from '../../services/option-suggestion.service';
+import { OptionSuggestionService, FALLBACK_LOT_SIZES } from '../../services/option-suggestion.service';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -403,7 +403,6 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     (OptionSuggestionService as unknown as { loadLotSizes: () => Promise<Map<string, number>> }).loadLotSizes = async () => new Map([['SBIN', 750]]);
 
     // stockEntry = 790, but spot LTP has already run to 800. stockTarget = 810, stockSl = 790.
-    // Underlying distance to target from LTP (800) is 10 points (not 20 points from stockEntry).
     // Underlying distance to SL from LTP (800) is 10 points (not 0 points from stockEntry).
     const res = await OptionSuggestionService.buildSuggestion('SBIN', 800, 'CE', 790, 790, 810);
     assert.ok(!res.error);
@@ -422,42 +421,42 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     OptionChainService.getOptionChain = originalGetOptionChain;
   });
 
-  await t.test('monthly option expiry calculates true last Thursday or rolls back on holiday (Findings #1 & #2)', () => {
+  await t.test('monthly option expiry calculates true last Tuesday or rolls back on holiday (Findings #1 & #2)', () => {
     const computeDTE = (OptionSuggestionService as any).computeDTE;
     assert.strictEqual(typeof computeDTE, 'function', 'computeDTE must be a function');
 
-    // 1. August 2026: Aug 31 is Monday. Last Thursday is Aug 27, 2026.
-    // Aug 27, 2026 is a trading day (not weekend, not holiday).
-    // From 2026-08-27 to 2026-08-27: DTE = 1 (inclusive of expiry day)
-    const dteAugExpiryDay = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-27');
+    // 1. August 2026: Aug 31 is Monday. Last Tuesday is Aug 25, 2026.
+    // Aug 25, 2026 is a trading day (not weekend, not holiday).
+    // From 2026-08-25 to 2026-08-25: DTE = 1 (inclusive of expiry day)
+    const dteAugExpiryDay = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-25');
     assert.strictEqual(dteAugExpiryDay, 1, 'Expiry day itself should have DTE = 1 business day');
 
-    // From 2026-08-26 (Wednesday before expiry) to 2026-08-27 (Thursday): DTE = 2
-    const dteAugDayBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-26');
-    assert.strictEqual(dteAugDayBefore, 2, 'Wednesday before Thursday expiry should have DTE = 2');
+    // From 2026-08-24 (Monday before Tuesday expiry) to 2026-08-25 (Tuesday): DTE = 2
+    const dteAugDayBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-24');
+    assert.strictEqual(dteAugDayBefore, 2, 'Monday before Tuesday expiry should have DTE = 2');
 
-    // From 2026-08-20 (Thursday prior week) to 2026-08-27 (Thursday):
-    // Trading days: Thu Aug 20, Fri Aug 21, Mon Aug 24, Tue Aug 25, Wed Aug 26, Thu Aug 27 = 6 trading days
-    const dteAugWeekBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-20');
-    assert.strictEqual(dteAugWeekBefore, 6, 'Aug 20 to Aug 27 should be 6 trading days');
+    // From 2026-08-18 (Tuesday prior week) to 2026-08-25 (Tuesday):
+    // Trading days: Tue Aug 18, Wed Aug 19, Thu Aug 20, Fri Aug 21, Mon Aug 24, Tue Aug 25 = 6 trading days
+    const dteAugWeekBefore = computeDTE('NSE:SBIN26AUG800CE', 'SBIN', '2026-08-18');
+    assert.strictEqual(dteAugWeekBefore, 6, 'Aug 18 to Aug 25 should be 6 trading days');
 
-    // 2. September 2026: Sep 30 is Wednesday. Last Thursday is Sep 24, 2026.
-    // Sep 24, 2026 is a trading day.
-    const dteSepExpiryDay = computeDTE('NSE:NIFTY26SEP25000CE', 'NIFTY', '2026-09-24');
-    assert.strictEqual(dteSepExpiryDay, 1, 'Sep 24 expiry day should have DTE = 1');
+    // 2. September 2026: Sep 30 is Wednesday. Last Tuesday is Sep 29, 2026.
+    // Sep 29, 2026 is a trading day.
+    const dteSepExpiryDay = computeDTE('NSE:NIFTY26SEP25000CE', 'NIFTY', '2026-09-29');
+    assert.strictEqual(dteSepExpiryDay, 1, 'Sep 29 expiry day should have DTE = 1');
 
-    // 3. March 2026: March 31 is Tuesday. Last Thursday is March 26, 2026.
-    // March 26, 2026 is listed as an NSE holiday (Shri Ram Navami)!
-    // NSE rules: if last Thursday is a holiday, expiry rolls back to previous trading day.
-    // March 25, 2026 is Wednesday (trading day).
-    // So expiryDate should roll back to March 25, 2026!
-    // On 2026-03-25 (the effective expiry day), DTE should be 1.
-    const dteMar25 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-25');
-    assert.strictEqual(dteMar25, 1, 'March 2026 expiry should roll back to Wed March 25 because Thu March 26 is Ram Navami');
+    // 3. March 2026: March 31 is Tuesday!
+    // March 31, 2026 is listed as an NSE holiday (Shri Mahavir Jayanti)!
+    // NSE rules: if last Tuesday is a holiday, expiry rolls back to previous trading day.
+    // March 30, 2026 is Monday (trading day).
+    // So expiryDate should roll back to Monday March 30, 2026!
+    // On 2026-03-30 (the effective expiry day), DTE should be 1.
+    const dteMar30 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-30');
+    assert.strictEqual(dteMar30, 1, 'March 2026 expiry should roll back to Mon March 30 because Tue March 31 is Mahavir Jayanti');
 
-    // On 2026-03-26 (the holiday itself, after rolled-back expiry): cursor (March 26) > expiryDate (March 25), DTE = 0
-    const dteMar26 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-26');
-    assert.strictEqual(dteMar26, 0, 'Holiday after rolled-back expiry should yield DTE = 0');
+    // On 2026-03-31 (the holiday itself, after rolled-back expiry): cursor (March 31) > expiryDate (March 30), DTE = 0
+    const dteMar31 = computeDTE('NSE:SBIN26MAR800CE', 'SBIN', '2026-03-31');
+    assert.strictEqual(dteMar31, 0, 'Holiday after rolled-back expiry should yield DTE = 0');
 
     // 4. Weekly contracts: 26820 (20 Aug 2026)
     const dteWeeklySameDay = computeDTE('NSE:NIFTY2682025000CE', 'NIFTY', '2026-08-20');
@@ -467,15 +466,12 @@ test('Option Suggestion — zero OI and zero volume returns NO_VIABLE_STRIKES', 
     assert.strictEqual(dteWeeklyDayBefore, 2, 'Weekly day before expiry should have DTE = 2');
   });
 
-  await t.test('FALLBACK_LOT_SIZES matches current NSE revised lot sizes (Finding #1)', async () => {
-    const loadLotSizes = (OptionSuggestionService as any).loadLotSizes;
-    const lotMap: Map<string, number> = await loadLotSizes();
-
-    assert.strictEqual(lotMap.get('NIFTY'), 65, 'NIFTY fallback lot size must be 65');
-    assert.strictEqual(lotMap.get('BANKNIFTY'), 30, 'BANKNIFTY fallback lot size must be 30');
-    assert.strictEqual(lotMap.get('FINNIFTY'), 60, 'FINNIFTY fallback lot size must be 60');
-    assert.strictEqual(lotMap.get('MIDCPNIFTY'), 120, 'MIDCPNIFTY fallback lot size must be 120');
-    assert.strictEqual(lotMap.get('SENSEX'), 10, 'SENSEX fallback lot size must remain 10');
+  await t.test('FALLBACK_LOT_SIZES matches current NSE revised lot sizes (Finding #1)', () => {
+    assert.strictEqual(FALLBACK_LOT_SIZES['NIFTY'], 65, 'NIFTY fallback lot size must be 65');
+    assert.strictEqual(FALLBACK_LOT_SIZES['BANKNIFTY'], 30, 'BANKNIFTY fallback lot size must be 30');
+    assert.strictEqual(FALLBACK_LOT_SIZES['FINNIFTY'], 60, 'FINNIFTY fallback lot size must be 60');
+    assert.strictEqual(FALLBACK_LOT_SIZES['MIDCPNIFTY'], 120, 'MIDCPNIFTY fallback lot size must be 120');
+    assert.strictEqual(FALLBACK_LOT_SIZES['SENSEX'], 10, 'SENSEX fallback lot size must remain 10');
   });
 });
 

@@ -6,7 +6,7 @@ module.exports = {
   apps: [
     {
       name: 'cpr-platform',
-      script: 'server.js',
+      script: 'server-starter.js',
       cwd: '/home/ubuntu/cpr-calculator-platform/.next/standalone',
       // Heap cap stays 384; RSS during FNO/overnight can spike ~500–620MB (native buffers).
       // 450M/550M both caused mid-job kill loops under close-window load — use 650M headroom.

@@ -635,7 +635,9 @@ export class BacktestService {
                 );
 
                 const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-                // Index BTST represents index futures/derivative contracts, which incur vastly lower transaction friction (~0.002%) than equity delivery (0.03%)
+                // Statutory exchange & turnover friction for Index futures/derivatives (~0.002%).
+                // NOTE: This represents pure exchange/clearing turnover fees. Real-world option execution
+                // incurs additional friction (brokerage flat fees, STT on exercise, GST, stamp duty).
                 const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.00002;
                 const btstNetPnl = btstTradeResult.pnl - btstFees;
 
