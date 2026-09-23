@@ -26,6 +26,8 @@ Remediated key production alignment and operational items identified during the 
 - **Lot Size Test Reliability (`option-suggestion.test.ts`)**:
   - Switched `FALLBACK_LOT_SIZES` test to assert the exported table directly, eliminating unmocked network fetch hangs.
 
+**Quality gates on commit `770deb4d`**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,199 tests pass · 0 fail · 2 skipped** (offline guards).
+
 ### Fixed — 23 Sep: 15-Day Deep Code Review — Residual Concern Remediation (R-1 to R-6)
 
 Six residual concerns identified during the 15-day deep code review (Sep 7–22) have been resolved. These address data-integrity gaps, missing policy documentation, CI coverage holes, and alerting-logic precision issues that were not covered by the prior 82 commits:
