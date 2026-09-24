@@ -61,8 +61,8 @@ Release `v2.0.0-production` marks the formal transition from a technical termina
   - **NSE Tuesday Option Expiry**: Aligned monthly expiry calculation in `computeDTE` to the true last Tuesday of the month per NSE Circulars 108/2025 and 111/2025 (effective September 1, 2025, NSE equity/index derivatives expire on Tuesday, BSE on Thursday) with automatic holiday rollbacks.
   - **PM2 Entry Point**: Configured `ops/ecosystem.config.cjs` to target `server-starter.js` (ensuring crash-handlers, static asset checks, and 0.0.0.0 binding execute in production).
   - **Backtest Friction Accounting**: Documented statutory exchange/turnover fee assumptions (`0.002%`) in `backtest.service.ts`.
-  - **Lot Size Test Reliability**: Stabilized test runner by asserting in-memory fallback tables directly.
-  - Test suite: **1,199 pass · 0 fail · 2 skip** · tsc → 0 errors · regression lock → `2ef002db…` unchanged.
+  - **Crash-Handler Automated Harness**: Added unit tests in `server-starter-crash-handler.test.ts` validating grace period and stderr flushing.
+  - Test suite: **1,202 pass · 0 fail · 2 skip** · tsc → 0 errors · regression lock → `2ef002db…` unchanged · Deployed build: `5066a42a7faa` online under PM2.
 - **23 Sep — 15-Day Deep Code Review: Residual Concern Remediation (R-1 to R-6)**:
   - **R-1 STBT PnL Guard**: Added structured warning in `isShortUnderlyingLeg` for STBT entries missing the `UNDERLYING` `optionContract` prefix — surfaces data inconsistency in logs rather than silently computing wrong P&L direction.
   - **R-2 Friday Gate Policy Doc**: Created `docs/trading-policy/friday-weekend-gate.md` — formal policy for the asymmetric Friday weekend gate (LONG hard-blocked, SHORT conditionally permitted in BEAR regime).

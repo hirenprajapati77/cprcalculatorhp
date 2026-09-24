@@ -18,7 +18,7 @@ Remediated key production alignment and operational items identified during the 
 
 - **PM2 Standalone Execution Entry Point (`ops/ecosystem.config.cjs`)**:
   - Pointed PM2 runtime `script` to `server-starter.js` (was `server.js`).
-  - Activated and verified on live production Oracle VM: PM2 process restarted with `server-starter.js` as active script path (`pid: 683132`, `status: online`).
+  - Activated and verified on live production Oracle VM: Deployed full bundle, PM2 running under `server-starter.js` (`pid: 684394`, `uptime: >15h`, `status: online`).
   - Ensures production PM2 process execution invokes `server-starter.js` crash-handlers (`uncaughtException`, `unhandledRejection`), static/BUILD_ID existence checks, and 0.0.0.0 binding.
 
 - **Backtest Friction Accounting Policy Documentation (`backtest.service.ts`)**:
@@ -28,7 +28,10 @@ Remediated key production alignment and operational items identified during the 
 - **Lot Size Test Reliability (`option-suggestion.test.ts`)**:
   - Switched `FALLBACK_LOT_SIZES` test to assert the exported table directly, eliminating unmocked network fetch hangs.
 
-**Quality gates on commit `770deb4d`**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,199 tests pass · 0 fail · 2 skipped** (offline guards).
+- **Server-Starter Crash Handler Test Harness (`server-starter-crash-handler.test.ts`)**:
+  - Added unit test suite verifying `server-starter.js` crash-handling behavior in controlled child processes (uncaughtException and unhandledRejection stderr logging, 500ms stdio flush grace period, and isTerminating cascade suppression).
+
+**Quality gates on commit `5066a42a` (`5066a42a7faa`)**: `tsc --noEmit` → 0 errors · ESLint → 0 errors · Regression lock → `2ef002db…` unchanged · **1,202 tests pass · 0 fail · 2 skipped** (offline guards).
 
 ### Fixed — 23 Sep: 15-Day Deep Code Review — Residual Concern Remediation (R-1 to R-6)
 

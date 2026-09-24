@@ -2,10 +2,10 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform
 **Branch:** `main`
-**Commit:** `770deb4d` (1-Month Code Review Remediation & Production Alignment)
-**Report pass:** 20 (Post-1-Month Deep Code Review Remediation)
-**Report generated:** 2026-09-23
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run completed on September 23, 2026. All production alignment and operational findings remediated, verified, and committed to `main`. No open defects or pending issues remain.
+**Commit:** `5066a42a` (`5066a42a7faa` — 1-Month Code Review Remediation & Production Deployment)
+**Report pass:** 20 (Post-1-Month Deep Code Review Remediation & Live Production Verification)
+**Report generated:** 2026-09-24
+**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run and production deployment completed. All production alignment and operational findings remediated, verified, committed to `main` (`5066a42a`), and actively running on the production Oracle server (`5066a42a7faa`). No open defects or pending issues remain.
 
 ---
 
@@ -16,7 +16,7 @@
 | `tsc --noEmit` | ✅ 0 errors |
 | ESLint | ✅ 0 errors / 0 warnings (TS files) |
 | Regression lock | ✅ `2ef002db620a9545a601fb2fb23c92e1a6219ae5012ba4bc977e686e9a2072f5` |
-| Unit tests | ✅ **1,199 pass · 0 fail · 2 skip** (offline guards) |
+| Unit tests | ✅ **1,202 pass · 0 fail · 2 skip** (offline guards) |
 | Shadow mode | ✅ `IS_SHADOW_RUN: true` — no live order routing |
 | Working tree | ✅ Clean after commit |
 
@@ -29,7 +29,7 @@
 
 2. **PM2 Standalone Execution Entry Point (`ops/ecosystem.config.cjs`)**:
    - Pointed PM2 runtime `script` to `server-starter.js` (was `server.js`).
-   - Verified live in production: `ops/ecosystem.config.cjs` deployed to Oracle VM, PM2 restarted with `server-starter.js` active (`pid: 683132`, `uptime: online`, `restarts: 0`).
+   - Deployed and running live in production on Oracle Cloud VM: PM2 process active under `server-starter.js` (`pid: 684394`, `uptime: >15h`, `restarts: 0`, `status: online`).
    - Ensures production PM2 process execution invokes `server-starter.js` crash-handlers (`uncaughtException`, `unhandledRejection`), static/BUILD_ID existence checks, and 0.0.0.0 binding.
 
 3. **Backtest Friction Accounting Policy Documentation (`backtest.service.ts`)**:
@@ -39,6 +39,9 @@
 
 4. **Lot Size Test Reliability (`option-suggestion.test.ts`)**:
    - Switched `FALLBACK_LOT_SIZES` test to assert the exported table directly, eliminating unmocked network fetch hangs.
+
+5. **Server-Starter Crash Handler Test Harness (`server-starter-crash-handler.test.ts`)**:
+   - Added unit test suite verifying `server-starter.js` crash-handling behavior in controlled child processes (uncaughtException and unhandledRejection stderr logging, 500ms stdio flush grace period, and isTerminating cascade suppression).
 
 ---
 
