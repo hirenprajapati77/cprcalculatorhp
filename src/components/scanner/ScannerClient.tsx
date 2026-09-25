@@ -803,7 +803,7 @@ const StockRow = React.memo(({
         <td className={cellPadding}>
           <div className="space-y-0.5 font-mono text-left">
             <div className="font-bold text-text-primary text-[13px] leading-none">{row.score}</div>
-            <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}%</div>
+            <div className={`text-[10px] font-bold leading-none ${getConfidenceStyle(row.confidence)}`}>{row.confidence}/100</div>
             {densityMode === 'detailed' && <div className="mt-1">{(() => {
               const direction = inferScannerBadgeDirection(row);
               if (row.score >= thresholds.strong) {
@@ -873,7 +873,7 @@ const StockRow = React.memo(({
                   style={{ width: `${row.confidence}%` }}
                 />
               </div>
-              <span className="text-[10px] font-bold text-text-secondary">{row.confidence}%</span>
+              <span className="text-[10px] font-bold text-text-secondary">{row.confidence}/100</span>
             </div>
           ) : (
             <span className="text-text-tertiary">—</span>
@@ -1302,13 +1302,13 @@ export default function ScannerClient() {
     { key: 'setup', label: 'Trade setup (Entry/SL/Tgt)' },
     { key: 'rr', label: 'Risk Reward Ratio' },
     { key: 'signals', label: 'Active Signals' },
-    { key: 'score', label: 'Score & Confidence' },
+    { key: 'score', label: 'Score & Confluence' },
     { key: 'direction', label: 'Direction' },
     { key: 'action', label: 'Inspection Action' },
     { key: 'signalTime', label: 'Signal Time' },
     { key: 'gap', label: 'Gap %' },
     { key: 'move', label: 'Move %' },
-    { key: 'confidence', label: 'Confidence' },
+    { key: 'confidence', label: 'Confluence Score' },
     { key: 'exit', label: 'Exit / Status' }
   ];
 
@@ -2717,8 +2717,8 @@ export default function ScannerClient() {
           </div>
           <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Avg Confidence</span>
-              <h2 className="text-2xl font-bold text-accent-amber">{btstMetrics.avgConf.toFixed(1)}%</h2>
+              <span className="text-[10px] text-text-tertiary uppercase">Avg Confluence</span>
+              <h2 className="text-2xl font-bold text-accent-amber">{btstMetrics.avgConf.toFixed(0)}/100</h2>
             </div>
             <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
               <Target size={18} />
@@ -3519,7 +3519,7 @@ export default function ScannerClient() {
                             <th className="p-2.5">Symbol</th>
                             <th className="p-2.5">Type</th>
                             <th className="p-2.5">Signal</th>
-                            <th className="p-2.5">Confidence</th>
+                            <th className="p-2.5">Confluence</th>
                             <th className="p-2.5">Classification</th>
                             <th className="p-2.5">R:R</th>
                             <th className="p-2.5">Entry</th>
@@ -3561,7 +3561,7 @@ export default function ScannerClient() {
                         {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
                         {visibleColumns.includes('score') && (
                           <th className="p-2.5 cursor-pointer hover:text-text-primary w-28" onClick={() => handleSort('score')}>
-                            <div className="flex items-center gap-1">Score & Win Rate <ArrowUpDown size={11} /></div>
+                            <div className="flex items-center gap-1">Score & Confluence <ArrowUpDown size={11} /></div>
                           </th>
                         )}
                         {visibleColumns.includes('signalTime') && <th className="p-2.5">Signal Time</th>}
@@ -3577,7 +3577,7 @@ export default function ScannerClient() {
                         )}
                         {visibleColumns.includes('confidence') && (
                           <th className="p-2.5 cursor-pointer hover:text-text-primary w-24" onClick={() => handleSort('confidence')}>
-                            <div className="flex items-center gap-1">Gap Win Rate % <ArrowUpDown size={11} /></div>
+                            <div className="flex items-center gap-1">Confluence (0-100) <ArrowUpDown size={11} /></div>
                           </th>
                         )}
                         {visibleColumns.includes('exit') && <th className="p-2.5">Exit Strategy / Status</th>}
@@ -3754,7 +3754,7 @@ export default function ScannerClient() {
                             <span className="font-bold text-text-primary">{drawerStock.score} / {scoreMax}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                             <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Win Rate {drawerStock.confidence}%</span>
+                             <span className={`text-[10px] font-bold ${getConfidenceStyle(drawerStock.confidence)}`}>Confluence {drawerStock.confidence}/100</span>
                             {getRatingBadge(drawerStock.score, drawerStock)}
                           </div>
                         </div>
@@ -4443,12 +4443,12 @@ export default function ScannerClient() {
               </div>
 
               <div className="space-y-2">
-                <h4 className="font-bold text-accent-blue">Scores and Confidence</h4>
+                <h4 className="font-bold text-accent-blue">Scores and Confluence</h4>
                 <p>
                   BTST / STBT / OVERNIGHT use the Advanced Engine score scale of <strong>0–{ADVANCED_SCORE.MAX}</strong>:
                   Strong ≥ {ADVANCED_SCORE.STRONG}, Ready ≥ {ADVANCED_SCORE.READY}, Watch ≥ {ADVANCED_SCORE.WATCH}.
                   CPR mode remains on the Simple 0–{SIMPLE_SCORE.MAX} scale (Strong ≥ {SIMPLE_SCORE.STRONG}).
-                  Confidence reflects the historical gap probability of the setup.
+                  Confluence (0–100) is a technical setup-quality heuristic combining volume confirmation, CPR width, and multi-factor alignment—it is not a statistically measured win probability.
                 </p>
               </div>
             </div>
