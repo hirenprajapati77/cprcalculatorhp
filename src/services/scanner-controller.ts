@@ -18,6 +18,44 @@ import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 // a distributed lock (e.g. Redis SET mutex NX EX 120).
 const inFlightScanPromises = new Map<string, Promise<Array<ScannerSignalResult & { score: number }>>>();
 
+export interface ScanGenerationMeta {
+  scanId: string;
+  universeName: string;
+  market: string;
+  date: string;
+  scanStartedAt: string;
+  scanStartedAtMs: number;
+  scanCompletedAt?: string;
+  scanDurationMs?: number;
+  persistStartedAt?: string;
+  persistCompletedAt?: string;
+  persistDurationMs?: number;
+  persistedChunks?: number;
+  totalChunks?: number;
+  totalStocks?: number;
+  status: 'calculating' | 'persisting' | 'completed' | 'superseded';
+  supersededBy?: string;
+}
+
+// In-process map of latest active/persisted scan generation per "universe:market:date".
+// Under single-process PM2 fork_mode, this strictly prevents older scan persist chunks from overwriting newer scans.
+const latestScanGenerations = new Map<string, ScanGenerationMeta>();
+
+/** Test helper — reset generation state between tests. */
+export function _resetScanGenerationsForTesting(): void {
+  latestScanGenerations.clear();
+}
+
+/** Test helper / observability — inspect latest generation for a universe/market/date key. */
+export function _getLatestScanGeneration(key: string): ScanGenerationMeta | undefined {
+  return latestScanGenerations.get(key);
+}
+
+/** Test helper — manually seed a generation entry for testing concurrency/superseding. */
+export function _setScanGenerationForTesting(key: string, meta: ScanGenerationMeta): void {
+  latestScanGenerations.set(key, meta);
+}
+
 /** True while a full scan is running in this process for ANY universe (cron, refresh, or manual). */
 export function isScanInProgress(): boolean {
   return inFlightScanPromises.size > 0;
@@ -55,7 +93,12 @@ export class ScannerController {
     market: 'NSE' | 'BSE'
   ): Promise<Array<ScannerSignalResult & { score: number }>> {
     const startTime = Date.now();
-    console.log(`Starting CPR Scan V2 for universe=${universeName}, market=${market}...`);
+    const today = getISTDateString();
+    const scanId = `scan_${startTime}_${Math.random().toString(36).slice(2, 7)}`;
+    const scanStartedAt = new Date(startTime).toISOString();
+    const genKey = `${universeName}:${market}:${today}`;
+
+    console.log(`[SCAN:${scanId}] Started CPR Scan V2 for universe=${universeName}, market=${market} on ${today} at ${scanStartedAt}...`);
     
     let stocks: { symbol: string }[] = [];
     if (universeName === 'WATCHLIST') {
@@ -82,7 +125,6 @@ export class ScannerController {
       );
     }
 
-    const today = getISTDateString();
     const rawResults: ScannerSignalResult[] = [];
 
     // Bulk fetch event risks for all symbols to avoid N+1 queries
@@ -157,9 +199,27 @@ export class ScannerController {
 
     // Score gate: filter out completely useless results (score < 10)
     const filtered = ranked.filter(r => r.score >= 10);
-    console.log(`[SCAN] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
+    console.log(`[SCAN:${scanId}] Scanned: ${rawResults.length} | Ranked: ${ranked.length} | Passed gate (>=10): ${filtered.length}`);
 
     const scanDurationMs = Date.now() - startTime;
+    const scanCompletedAt = new Date().toISOString();
+
+    const genMeta: ScanGenerationMeta = {
+      scanId,
+      universeName,
+      market,
+      date: today,
+      scanStartedAt,
+      scanStartedAtMs: startTime,
+      scanCompletedAt,
+      scanDurationMs,
+      totalStocks: filtered.length,
+      status: 'calculating',
+    };
+    latestScanGenerations.set(genKey, genMeta);
+    if (CacheService.isRedisConnected) {
+      void CacheService.set(`scanner_gen:${genKey}`, genMeta, 86400).catch(() => {});
+    }
 
     // Cache first so cron/UI can read results without waiting for DB upserts.
     const cacheKey = `list:${universeName}:${market}`;
@@ -171,12 +231,14 @@ export class ScannerController {
       market,
       today,
       scanDurationMs,
+      scanId,
+      scanStartedAtMs: startTime,
     }).catch((err) => {
-      console.error('[SCAN] Background persist failed:', err);
+      console.error(`[SCAN:${scanId}] Background persist failed:`, err);
     });
 
     console.log(
-      `[SCAN] Completed in ${scanDurationMs}ms (cache warm; DB persist queued for ${filtered.length} stocks).`
+      `[SCAN:${scanId}] Completed calculation in ${scanDurationMs}ms at ${scanCompletedAt} (cache warm; DB persist queued for ${filtered.length} stocks).`
     );
 
     return filtered;
@@ -189,14 +251,69 @@ export class ScannerController {
     market: string;
     today: string;
     scanDurationMs: number;
+    scanId?: string;
+    scanStartedAtMs?: number;
     retryDelayMs?: number;
   }): Promise<void> {
-    const { filtered, universeName, market, today, scanDurationMs, retryDelayMs = 3000 } = args;
+    const {
+      filtered,
+      universeName,
+      market,
+      today,
+      scanDurationMs,
+      scanId = `scan_${Date.now()}_legacy`,
+      scanStartedAtMs = Date.now(),
+      retryDelayMs = 3000,
+    } = args;
+
+    const genKey = `${universeName}:${market}:${today}`;
 
     const doPersist = async () => {
       const persistStart = Date.now();
+      const persistStartedAt = new Date(persistStart).toISOString();
+
+      const existingMeta = latestScanGenerations.get(genKey);
+      if (existingMeta && existingMeta.scanId === scanId) {
+        existingMeta.persistStartedAt = persistStartedAt;
+        existingMeta.status = 'persisting';
+      }
+
+      // Generation Guard Check 1: Before starting persistence, check if a newer generation has already superseded this one
+      const currentLatest = latestScanGenerations.get(genKey);
+      if (currentLatest && currentLatest.scanId !== scanId && currentLatest.scanStartedAtMs > scanStartedAtMs) {
+        console.warn(
+          `[SCAN:${scanId}] Persistence superseded by ${currentLatest.scanId}; DB write skipped completely.`
+        );
+        if (existingMeta && existingMeta.scanId === scanId) {
+          existingMeta.status = 'superseded';
+          existingMeta.supersededBy = currentLatest.scanId;
+        }
+        return;
+      }
+
+      console.log(`[SCAN:${scanId}] DB persistence started at ${persistStartedAt} for ${filtered.length} stocks.`);
+
       const CHUNK_SIZE = 15;
+      const totalChunks = Math.ceil(filtered.length / CHUNK_SIZE);
+      if (existingMeta && existingMeta.scanId === scanId) {
+        existingMeta.totalChunks = totalChunks;
+      }
+
       for (let chunkIdx = 0; chunkIdx < filtered.length; chunkIdx += CHUNK_SIZE) {
+        // Generation Guard Check 2: Re-check before each chunk in case a newer scan completed while chunks were writing
+        const activeLatest = latestScanGenerations.get(genKey);
+        if (activeLatest && activeLatest.scanId !== scanId && activeLatest.scanStartedAtMs > scanStartedAtMs) {
+          console.warn(
+            `[SCAN:${scanId}] Persistence superseded by ${activeLatest.scanId}; remaining chunks skipped ` +
+            `(${Math.floor(chunkIdx / CHUNK_SIZE)}/${totalChunks} chunks persisted).`
+          );
+          if (existingMeta && existingMeta.scanId === scanId) {
+            existingMeta.status = 'superseded';
+            existingMeta.supersededBy = activeLatest.scanId;
+          }
+          return;
+        }
+
         const chunk = filtered.slice(chunkIdx, chunkIdx + CHUNK_SIZE);
         await Promise.all(
           chunk.map(async (r) => {
@@ -294,12 +411,16 @@ export class ScannerController {
             });
           })
         );
+
+        if (existingMeta && existingMeta.scanId === scanId) {
+          existingMeta.persistedChunks = Math.floor(chunkIdx / CHUNK_SIZE) + 1;
+        }
       }
 
       const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
       await prisma.scanHistory.create({
         data: {
-          filtersJson: JSON.stringify({ universe: universeName, market }),
+          filtersJson: JSON.stringify({ universe: universeName, market, scanId }),
           resultCount: filtered.length,
           durationMs: scanDurationMs,
           topSymbols,
@@ -307,9 +428,16 @@ export class ScannerController {
       });
 
       const persistMs = Date.now() - persistStart;
+      const persistCompletedAt = new Date().toISOString();
+      if (existingMeta && existingMeta.scanId === scanId) {
+        existingMeta.status = 'completed';
+        existingMeta.persistCompletedAt = persistCompletedAt;
+        existingMeta.persistDurationMs = persistMs;
+      }
+
       console.log(
-        `Scanner database V2 persistence completed for ${filtered.length} stocks in ${persistMs}ms ` +
-        `(scan ${scanDurationMs}ms).`
+        `[SCAN:${scanId}] Scanner database V2 persistence completed for ${filtered.length} stocks in ${persistMs}ms ` +
+        `(scan ${scanDurationMs}ms, ${totalChunks} chunks) at ${persistCompletedAt}.`
       );
     };
 
@@ -320,7 +448,7 @@ export class ScannerController {
     } catch (attempt1Err) {
       const msg1 = attempt1Err instanceof Error ? attempt1Err.message : String(attempt1Err);
       console.warn(
-        `[SCAN] Initial DB persist failed for ${universeName}:${market}: ${msg1}. Retrying in ${retryDelayMs}ms...`
+        `[SCAN:${scanId}] Initial DB persist failed for ${universeName}:${market}: ${msg1}. Retrying in ${retryDelayMs}ms...`
       );
     }
 
@@ -336,7 +464,7 @@ export class ScannerController {
     } catch (attempt2Err) {
       const errMsg = attempt2Err instanceof Error ? attempt2Err.message : String(attempt2Err);
       console.error(
-        `[SCAN] Retry DB persist failed for ${universeName}:${market}: ${errMsg}. Writing failure marker to Redis.`
+        `[SCAN:${scanId}] Retry DB persist failed for ${universeName}:${market}: ${errMsg}. Writing failure marker to Redis.`
       );
 
       const timestamp = Date.now();
