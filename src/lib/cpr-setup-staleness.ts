@@ -147,3 +147,121 @@ export function evaluateCprSetupPriceStalenessBasic(args: {
 
   return { stale: false };
 }
+
+export type SetupTradeabilityStatus =
+  | 'READY'
+  | 'EXTENDED'
+  | 'GAP'
+  | 'VS CLOSE'
+  | 'TARGET MET'
+  | 'DO NOT TRADE';
+
+export interface SetupTradeabilityResult {
+  status: SetupTradeabilityStatus;
+  isExecutable: boolean;
+  modelRr: string;
+  executableRr: string;
+  detail?: string;
+}
+
+/**
+ * Pure evaluation of CPR Trade Setup executable tradeability.
+ * Bridges theoretical Model R:R (from pivot entry) with real-time actionable status.
+ *
+ * When price has chased past the extension cap (default 1.5%), the theoretical Model R:R
+ * is NOT currently executable without taking uncalibrated chase risk.
+ */
+export function evaluateSetupTradeability(args: {
+  entry: number;
+  ltp: number;
+  target?: number | undefined;
+  direction: 'LONG' | 'SHORT';
+  modelRr: string;
+  todayHigh?: number | undefined;
+  todayLow?: number | undefined;
+  previousClose?: number | undefined;
+  maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
+  isBreakoutOrBreakdown?: boolean | undefined;
+  alertSuppressedReason?: string | null | undefined;
+  alertSuppressedDetail?: string | null | undefined;
+}): SetupTradeabilityResult {
+  const {
+    entry,
+    ltp,
+    target = 0,
+    direction,
+    modelRr,
+    todayHigh,
+    todayLow,
+    previousClose,
+    maxExtensionPct,
+    atrPct,
+    isBreakoutOrBreakdown = true,
+    alertSuppressedReason,
+    alertSuppressedDetail,
+  } = args;
+
+  if (alertSuppressedReason) {
+    return {
+      status: 'DO NOT TRADE',
+      isExecutable: false,
+      modelRr,
+      executableRr: '—',
+      detail: alertSuppressedDetail ?? alertSuppressedReason,
+    };
+  }
+
+  const isTargetAchieved =
+    target > 0 &&
+    ((direction === 'LONG' && ltp >= target) ||
+     (direction === 'SHORT' && ltp <= target));
+
+  if (isTargetAchieved) {
+    return {
+      status: 'TARGET MET',
+      isExecutable: false,
+      modelRr,
+      executableRr: '—',
+      detail: `Target achieved (LTP ${ltp} reached target ${target})`,
+    };
+  }
+
+  if (isBreakoutOrBreakdown) {
+    const staleResult = evaluateCprSetupPriceStalenessBasic({
+      entry,
+      ltp,
+      direction,
+      todayHigh,
+      todayLow,
+      previousClose,
+      maxExtensionPct,
+      atrPct,
+    });
+
+    if (staleResult.stale) {
+      const status: SetupTradeabilityStatus =
+        staleResult.reason === 'EXTENDED'
+          ? 'EXTENDED'
+          : staleResult.reason === 'GAP_INVALIDATED'
+            ? 'GAP'
+            : 'VS CLOSE';
+
+      return {
+        status,
+        isExecutable: false,
+        modelRr,
+        executableRr: '—',
+        detail: staleResult.detail,
+      };
+    }
+  }
+
+  const executableRr = modelRr && modelRr !== '1:1.0' ? modelRr : '—';
+  return {
+    status: 'READY',
+    isExecutable: true,
+    modelRr,
+    executableRr,
+  };
+}
