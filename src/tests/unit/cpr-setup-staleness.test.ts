@@ -6,6 +6,7 @@ import {
   isBreakoutEntryGapInvalidated,
   isBreakoutEntryExtended,
   evaluateCprSetupPriceStalenessBasic,
+  evaluateSetupTradeability,
   CPR_ENTRY_EXTENSION_PCT,
 } from '../../lib/cpr-setup-staleness';
 
@@ -150,6 +151,187 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
         previousClose: 100,
       });
       assert.equal(res.stale, false);
+    });
+  });
+
+  describe('evaluateSetupTradeability (Model R:R vs Executable Tradeability)', () => {
+    it('preserves modelRr and marks READY with actionable executableRr for normal LONG setup', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 100.8,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.5',
+        todayHigh: 102,
+        todayLow: 99,
+        previousClose: 100,
+      });
+      assert.equal(res.status, 'READY');
+      assert.equal(res.isExecutable, true);
+      assert.equal(res.modelRr, '1:2.5');
+      assert.equal(res.executableRr, '1:2.5');
+    });
+
+    it('preserves modelRr and marks READY with actionable executableRr for normal SHORT setup', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 99.2,
+        target: 90,
+        direction: 'SHORT',
+        modelRr: '1:3.0',
+        todayHigh: 101,
+        todayLow: 98,
+        previousClose: 100,
+      });
+      assert.equal(res.status, 'READY');
+      assert.equal(res.isExecutable, true);
+      assert.equal(res.modelRr, '1:3.0');
+      assert.equal(res.executableRr, '1:3.0');
+    });
+
+    it('marks EXTENDED and hides executableRr (—) when LONG ltp exceeds 1.5% extension cap', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 103.0,
+        target: 120,
+        direction: 'LONG',
+        modelRr: '1:19.5',
+        todayHigh: 105,
+        todayLow: 98,
+        previousClose: 99,
+      });
+      assert.equal(res.status, 'EXTENDED');
+      assert.equal(res.isExecutable, false);
+      assert.equal(res.modelRr, '1:19.5');
+      assert.equal(res.executableRr, '—');
+    });
+
+    it('marks EXTENDED and hides executableRr (—) when SHORT ltp falls past 1.5% extension cap', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 97.0,
+        target: 80,
+        direction: 'SHORT',
+        modelRr: '1:15.0',
+        todayHigh: 102,
+        todayLow: 95,
+        previousClose: 101,
+      });
+      assert.equal(res.status, 'EXTENDED');
+      assert.equal(res.isExecutable, false);
+      assert.equal(res.modelRr, '1:15.0');
+      assert.equal(res.executableRr, '—');
+    });
+
+    it('evaluates boundary conditions around exact 1.5% cap (LONG)', () => {
+      // 1.49% past entry -> within tolerance, READY
+      const within = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 101.49,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.0',
+        todayHigh: 102,
+        todayLow: 99,
+        previousClose: 100,
+      });
+      assert.equal(within.status, 'READY');
+      assert.equal(within.isExecutable, true);
+      assert.equal(within.executableRr, '1:2.0');
+
+      // 1.50% past entry -> at/exceeds cap, EXTENDED
+      const atCap = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 101.50,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.0',
+        todayHigh: 102,
+        todayLow: 99,
+        previousClose: 100,
+      });
+      assert.equal(atCap.status, 'EXTENDED');
+      assert.equal(atCap.isExecutable, false);
+      assert.equal(atCap.executableRr, '—');
+    });
+
+    it('evaluates boundary conditions around exact 1.5% cap (SHORT)', () => {
+      // 1.49% below entry -> within tolerance, READY
+      const within = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 98.51,
+        target: 90,
+        direction: 'SHORT',
+        modelRr: '1:2.0',
+        todayHigh: 101,
+        todayLow: 98,
+        previousClose: 100,
+      });
+      assert.equal(within.status, 'READY');
+      assert.equal(within.isExecutable, true);
+      assert.equal(within.executableRr, '1:2.0');
+
+      // 1.50% below entry -> at/exceeds cap, EXTENDED
+      const atCap = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 98.50,
+        target: 90,
+        direction: 'SHORT',
+        modelRr: '1:2.0',
+        todayHigh: 101,
+        todayLow: 98,
+        previousClose: 100,
+      });
+      assert.equal(atCap.status, 'EXTENDED');
+      assert.equal(atCap.isExecutable, false);
+      assert.equal(atCap.executableRr, '—');
+    });
+
+    it('marks GAP when price gapped past entry without trading through', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 105,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.0',
+        todayHigh: 110,
+        todayLow: 102,
+      });
+      assert.equal(res.status, 'GAP');
+      assert.equal(res.isExecutable, false);
+      assert.equal(res.modelRr, '1:2.0');
+      assert.equal(res.executableRr, '—');
+    });
+
+    it('marks TARGET MET when LTP has reached target', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 110.5,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.5',
+      });
+      assert.equal(res.status, 'TARGET MET');
+      assert.equal(res.isExecutable, false);
+      assert.equal(res.modelRr, '1:2.5');
+      assert.equal(res.executableRr, '—');
+    });
+
+    it('marks DO NOT TRADE when alert is suppressed', () => {
+      const res = evaluateSetupTradeability({
+        entry: 100,
+        ltp: 100.5,
+        target: 110,
+        direction: 'LONG',
+        modelRr: '1:2.5',
+        alertSuppressedReason: 'SECTOR_HEADWIND',
+        alertSuppressedDetail: 'NIFTY IT is down 2%',
+      });
+      assert.equal(res.status, 'DO NOT TRADE');
+      assert.equal(res.isExecutable, false);
+      assert.equal(res.modelRr, '1:2.5');
+      assert.equal(res.executableRr, '—');
+      assert.equal(res.detail, 'NIFTY IT is down 2%');
     });
   });
 });

@@ -44,6 +44,7 @@ import {
 } from '@/lib/scanner-rating';
 import {
   evaluateCprSetupPriceStalenessBasic,
+  evaluateSetupTradeability,
   CPR_ENTRY_EXTENSION_PCT,
 } from '@/lib/cpr-setup-staleness';
 import { inferCprJournalDirection } from '@/lib/cpr-direction';
@@ -506,6 +507,19 @@ const StockRow = React.memo(({
       })
     : { stale: false as const };
 
+  const tradeability = evaluateSetupTradeability({
+    entry: row.entry,
+    ltp: row.ltp,
+    target: row.target,
+    direction: setupDirection,
+    modelRr: row.rr,
+    previousClose: (row as { previousClose?: number }).previousClose || row.price,
+    maxExtensionPct: CPR_ENTRY_EXTENSION_PCT,
+    isBreakoutOrBreakdown,
+    alertSuppressedReason: row.alertSuppressedReason,
+    alertSuppressedDetail: row.alertSuppressedDetail,
+  });
+
   const persistedSuppression = row.alertSuppressedReason
     ? {
         label: `⛔ DO NOT TRADE (${alertSuppressionShortLabel(row.alertSuppressedReason)})`,
@@ -682,9 +696,14 @@ const StockRow = React.memo(({
                     </div>
                   )}
                   <div className="flex items-center gap-2 pt-0.5 mt-0.5">
-                    <span className="text-text-tertiary">RR</span>
+                    <span className="text-text-tertiary">Model RR</span>
                     <span className="font-bold text-accent-blue">{row.rr}</span>
                     {row.rr2 && <span className="font-bold text-accent-blue ml-1 opacity-80">(T2: {row.rr2})</span>}
+                    {tradeability.status === 'EXTENDED' && (
+                      <span className="text-[8px] font-semibold text-accent-amber ml-1 border border-accent-amber/40 px-1 py-0.2 rounded" title="Price extended >1.5% from entry — not executable at current price">
+                        Exec: —
+                      </span>
+                    )}
                   </div>
                 </>
               ) : (
@@ -697,11 +716,17 @@ const StockRow = React.memo(({
                     </>
                   )}
                   <span className="opacity-50">|</span>
-                  <span>RR: {row.rr}</span>
+                  <span>Model RR: {row.rr}</span>
                   {row.rr2 && (
                     <>
                       <span className="opacity-50">|</span>
                       <span>{row.rr2}</span>
+                    </>
+                  )}
+                  {tradeability.status === 'EXTENDED' && (
+                    <>
+                      <span className="opacity-50">|</span>
+                      <span className="text-accent-amber font-semibold" title="Price extended >1.5% from entry — not executable at current price">Exec: —</span>
                     </>
                   )}
                 </div>
@@ -752,7 +777,20 @@ const StockRow = React.memo(({
 
       {visibleColumns.includes('rr') && (
         <td className={`${cellPadding} font-semibold text-text-primary max-md:hidden`}>
-          {row.rr !== '1:1.0' ? row.rr : '—'}
+          <div className="flex flex-col text-left">
+            <span className="font-bold text-text-primary" title="Model R:R calculated from CPR entry level">
+              {row.rr !== '1:1.0' ? row.rr : '—'}
+            </span>
+            {tradeability.status === 'EXTENDED' ? (
+              <span className="text-[8.5px] text-accent-amber font-semibold leading-none mt-0.5" title="Price extended >1.5% from entry — not executable at current price">
+                Exec: —
+              </span>
+            ) : tradeability.isExecutable && row.rr !== '1:1.0' ? (
+              <span className="text-[8.5px] text-accent-green font-medium leading-none mt-0.5" title="Setup currently actionable near entry">
+                Exec: {row.rr}
+              </span>
+            ) : null}
+          </div>
         </td>
       )}
 
@@ -1300,7 +1338,7 @@ export default function ScannerClient() {
     { key: 'distance', label: 'Distance to TC/BC' },
     { key: 'width', label: 'CPR Width %' },
     { key: 'setup', label: 'Trade setup (Entry/SL/Tgt)' },
-    { key: 'rr', label: 'Risk Reward Ratio' },
+    { key: 'rr', label: 'Model Risk Reward Ratio' },
     { key: 'signals', label: 'Active Signals' },
     { key: 'score', label: 'Score & Confluence' },
     { key: 'direction', label: 'Direction' },
@@ -3556,7 +3594,7 @@ export default function ScannerClient() {
                         {visibleColumns.includes('distance') && <th className="p-2.5 max-md:hidden">Dist TC/BC %</th>}
                         {visibleColumns.includes('width') && <th className="p-2.5 max-md:hidden">CPR Width %</th>}
                         {visibleColumns.includes('setup') && <th className="p-2.5">Trade Setup (V3)</th>}
-                        {visibleColumns.includes('rr') && <th className="p-2.5 max-md:hidden">RR</th>}
+                        {visibleColumns.includes('rr') && <th className="p-2.5 max-md:hidden" title="Theoretical CPR Model Risk Reward Ratio from Pivot Entry">Model R:R</th>}
                         {visibleColumns.includes('signals') && <th className="p-2.5">Signals</th>}
                         {visibleColumns.includes('direction') && <th className="p-2.5">Signal</th>}
                         {visibleColumns.includes('score') && (
@@ -4011,6 +4049,19 @@ export default function ScannerClient() {
                     rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2.0';
                   }
 
+                  const drawerTradeability = evaluateSetupTradeability({
+                    entry,
+                    ltp: drawerStock.ltp,
+                    target,
+                    direction,
+                    modelRr: rr,
+                    previousClose: (drawerStock as { previousClose?: number }).previousClose || drawerStock.price,
+                    maxExtensionPct: CPR_ENTRY_EXTENSION_PCT,
+                    isBreakoutOrBreakdown: true,
+                    alertSuppressedReason: drawerStock.alertSuppressedReason,
+                    alertSuppressedDetail: drawerStock.alertSuppressedDetail,
+                  });
+
                   return (
                     <div className="space-y-4 animate-fade-in">
                       <div className="bg-bg-primary/30 border border-border-primary rounded p-4 space-y-3">
@@ -4037,7 +4088,7 @@ export default function ScannerClient() {
                             <span className="font-bold text-accent-red text-sm">₹{fmt(sl)}</span>
                           </div>
                           <div>
-                            <span className="text-text-tertiary text-[10px] block uppercase">Risk Reward Ratio</span>
+                            <span className="text-text-tertiary text-[10px] block uppercase">Model R:R</span>
                             <span className="font-bold text-accent-blue text-sm">{rr}</span>
                             {drawerStock.rr2 && (
                               <span className="block font-bold text-accent-blue text-xs mt-0.5 opacity-80">
@@ -4046,7 +4097,43 @@ export default function ScannerClient() {
                             )}
                           </div>
                         </div>
+
+                        <div className="border-t border-border-primary/50 pt-2.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-text-tertiary text-[10px] uppercase font-semibold">Setup Status:</span>
+                            <span className={`font-bold text-[11px] px-1.5 py-0.5 rounded border ${
+                              drawerTradeability.status === 'READY'
+                                ? 'bg-accent-green/15 text-accent-green border-accent-green/30'
+                                : drawerTradeability.status === 'EXTENDED'
+                                  ? 'bg-accent-amber/15 text-accent-amber border-accent-amber/30'
+                                  : drawerTradeability.status === 'TARGET MET'
+                                    ? 'bg-accent-blue/15 text-accent-blue border-accent-blue/30'
+                                    : 'bg-accent-red/15 text-accent-red border-accent-red/30'
+                            }`}>
+                              {drawerTradeability.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-text-tertiary text-[10px] uppercase font-semibold">Executable R:R:</span>
+                            <span className={`font-bold text-[11px] ${
+                              drawerTradeability.isExecutable ? 'text-accent-green' : 'text-accent-amber'
+                            }`}>
+                              {drawerTradeability.executableRr}
+                            </span>
+                          </div>
+                        </div>
                       </div>
+
+                      {drawerTradeability.status === 'EXTENDED' && (
+                        <div className="bg-accent-amber/10 border border-accent-amber/30 rounded p-2.5 text-[10px] text-accent-amber leading-relaxed">
+                          ⚠️ <strong>Price Extended:</strong> Current price ₹{fmt(drawerStock.ltp)} has moved &gt;1.5% away from the model entry level (₹{fmt(entry)}). The theoretical Model R:R ({rr}) is no longer executable at the current market price without taking uncalibrated chase risk. Wait for a pullback to entry or pass.
+                        </div>
+                      )}
+                      {drawerTradeability.status === 'GAP' && (
+                        <div className="bg-accent-amber/10 border border-accent-amber/30 rounded p-2.5 text-[10px] text-accent-amber leading-relaxed">
+                          ⚠️ <strong>Gap Invalidated:</strong> Price gapped beyond the model entry level (₹{fmt(entry)}) without trading through it today.
+                        </div>
+                      )}
 
                       <div className="border border-border-primary rounded p-3 text-[10px] text-text-secondary leading-relaxed">
                         <span className="font-bold text-text-primary block uppercase mb-1">Trading Strategy Guide</span>
