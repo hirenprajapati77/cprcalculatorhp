@@ -23,6 +23,19 @@ export interface HistoricalCandle {
   volume: number;
 }
 
+export const DAILY_CANDLES_CACHE_TTL_SEC = 8 * 3600; // 8 hours (28,800s)
+
+export interface DailyHistoryBundle {
+  history: HistoricalCandle[];
+  sma20Slope: number;
+  sma50Slope: number;
+  lastCandle: HistoricalCandle;
+  previousClose: number;
+  avgVolume: number;
+  source: 'fyers' | 'yahoo';
+  regularMarketPrice?: number | undefined;
+}
+
 export interface MarketStockData {
   symbol: string;
   market: 'NSE' | 'BSE';
@@ -365,6 +378,11 @@ export class MarketService {
     this.fyersPermissionBlockedUntilMs = 0;
   }
 
+  /** Clears the Fyers rate limit cooldown (tests / manual reset). */
+  static clearFyersRateLimitCooldown(): void {
+    this.fyersRateLimitedUntilMs = 0;
+  }
+
   /** Drop in-process quote seeds (cron memory purge / tests). */
   static clearFyersQuoteCache(): void {
     this.fyersQuoteCache.clear();
@@ -547,6 +565,448 @@ export class MarketService {
   /** Public hook for other services (overnight 5m) to share the global Fyers cooldown. */
   static noteFyersHttpFailure(status: number, message?: string, code?: number): void {
     if (this.markFyersRateLimited(status, message, code)) return;
+  }
+
+  static isPositivePrice(n: unknown): n is number {
+    return typeof n === 'number' && Number.isFinite(n) && n > 0;
+  }
+
+  private static markPermissionCooldown(status: number, message: string | undefined): void {
+    const msg = typeof message === 'string' ? message.toLowerCase() : '';
+    const isPermissionError =
+      status === 403 ||
+      msg.includes('additional permission required') ||
+      msg.includes('do not have permission');
+    if (!isPermissionError) return;
+    this.fyersPermissionBlockedUntilMs = Date.now() + 10 * 60 * 1000;
+    if (this.shouldLogProviderError('fyers-permission-remediation')) {
+      console.warn(
+        `[LiveFeed] Fyers Data API permission denied (${message ?? `HTTP ${status}`}). ` +
+          `Fix: myapi.fyers.in → edit app → enable Quotes & Market Data + Historical Data ` +
+          `(Fyers often requires all permission checkboxes) → Save → Reconnect Fyers in Settings. ` +
+          `Skipping Fyers for 10m; Yahoo Fallback remains active.`
+      );
+    }
+  }
+
+  static dailyCandlesCacheKey(cleanSymbol: string, market: 'NSE' | 'BSE' = 'NSE', todayStr?: string): string {
+    const dateStr = todayStr || getISTDateString();
+    return `daily_candles_${cleanSymbol.trim().toUpperCase()}_${market}_${dateStr}`;
+  }
+
+  /**
+   * Fetches and caches daily historical candles (~22 bars for CPR/ATR + 6mo for slopes).
+   * Session cache TTL is 8 hours (28,800s). The cache key includes today's IST date string
+   * so date rollovers automatically miss and refresh.
+   * Fail-open: cache errors fall back transparently to upstream providers.
+   * Provider fallback: Fyers daily history -> daily candle cache -> Yahoo fallback.
+   */
+  static async fetchDailyHistoryBundle(
+    cleanSymbol: string,
+    market: 'NSE' | 'BSE' = 'NSE',
+    todayStr?: string
+  ): Promise<DailyHistoryBundle | null> {
+    const cleanSym = cleanSymbol.trim().toUpperCase();
+    const effectiveToday = todayStr || getISTDateString();
+    const cacheKey = this.dailyCandlesCacheKey(cleanSym, market, effectiveToday);
+
+    // 1. Try session cache
+    try {
+      const cached = await CacheService.get<DailyHistoryBundle>(cacheKey);
+      if (cached && Array.isArray(cached.history) && cached.history.length > 0) {
+        return cached;
+      }
+    } catch (err) {
+      if (this.shouldLogProviderError(`daily-cache-read:${cleanSym}`)) {
+        console.warn(`[MarketService] Daily candle cache read failed for ${cleanSym}:`, err);
+      }
+    }
+
+    // 2. Cache miss: Try Fyers daily history first (if available)
+    let bundle = await this.fetchFyersDailyHistory(cleanSym, market, effectiveToday);
+
+    // 3. Fallback: Try Yahoo daily chart if Fyers failed / blocked / unavailable
+    if (!bundle) {
+      bundle = await this.fetchYahooDailyHistory(cleanSym, market, effectiveToday);
+    }
+
+    // 4. Cache on success (8-hour session TTL, fail-open)
+    if (bundle) {
+      try {
+        await CacheService.set(cacheKey, bundle, DAILY_CANDLES_CACHE_TTL_SEC);
+      } catch (err) {
+        if (this.shouldLogProviderError(`daily-cache-write:${cleanSym}`)) {
+          console.warn(`[MarketService] Daily candle cache write failed for ${cleanSym}:`, err);
+        }
+      }
+    }
+
+    return bundle;
+  }
+
+  private static async fetchFyersDailyHistory(
+    cleanSymbol: string,
+    market: 'NSE' | 'BSE',
+    todayStr: string
+  ): Promise<DailyHistoryBundle | null> {
+    const blockedUntil = this.fyersPermissionBlockedUntilMs;
+    if (blockedUntil > Date.now()) {
+      return null;
+    }
+
+    if (this.fyersRateLimitedUntilMs > Date.now()) {
+      return null;
+    }
+
+    const token = await FyersAuthService.getAccessToken();
+    if (!token) {
+      return null;
+    }
+
+    let appId: string;
+    try {
+      appId = FyersAuthService.getCredentials().appId;
+    } catch {
+      return null;
+    }
+
+    const fyersSymbol = toFyersEquitySymbol(cleanSymbol, market);
+    const authHeaders = {
+      Authorization: `${appId}:${token}`,
+      Accept: 'application/json',
+    };
+
+    const rangeTo = todayStr;
+    const fromDate = new Date();
+    fromDate.setUTCDate(fromDate.getUTCDate() - 250);
+    const rangeFrom = getISTDateString(fromDate);
+
+    const historyUrl =
+      `https://api-t1.fyers.in/data/history?` +
+      new URLSearchParams({
+        symbol: fyersSymbol,
+        resolution: 'D',
+        date_format: '1',
+        range_from: rangeFrom,
+        range_to: rangeTo,
+        cont_flag: '1',
+      }).toString();
+
+    try {
+      const res = await this.fetchWithTimeout(
+        historyUrl,
+        {
+          cache: 'no-store',
+          headers: authHeaders,
+        },
+        env.FYERS_REQUEST_TIMEOUT_MS
+      );
+
+      if (res.status === 401) {
+        if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
+        }
+        await FyersAuthService.clearToken();
+        return null;
+      }
+
+      const data = (await res.json()) as {
+        s?: string;
+        code?: number;
+        message?: string;
+        candles?: Array<[number, number, number, number, number, number]>;
+      };
+
+      if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
+        if (this.markFyersRateLimited(res.status, data.message, data.code)) {
+          return null;
+        }
+        this.markPermissionCooldown(res.status, data.message);
+        if (this.shouldLogProviderError(`fyers-history:${fyersSymbol}:${res.status}:${data.code ?? 'na'}`)) {
+          console.warn(
+            `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
+          );
+        }
+        return null;
+      }
+
+      const history: HistoricalCandle[] = [];
+      for (const candle of data.candles) {
+        if (!Array.isArray(candle) || candle.length < 6) continue;
+        const [epoch, open, high, low, close, volume] = candle;
+        if (
+          [open, high, low, close, volume].some((n) => typeof n !== 'number' || Number.isNaN(n)) ||
+          high <= 0 ||
+          low <= 0 ||
+          close <= 0 ||
+          open <= 0 ||
+          volume < 0 ||
+          high < low ||
+          close > high ||
+          close < low
+        ) {
+          continue;
+        }
+        history.push({
+          date: getISTDateString(new Date(epoch * 1000)),
+          open,
+          high,
+          low,
+          close,
+          volume,
+        });
+      }
+
+      if (history.length === 0) {
+        if (this.shouldLogProviderError(`fyers-empty-history:${fyersSymbol}`)) {
+          console.warn(`[LiveFeed] Fyers history empty after validation for ${fyersSymbol}`);
+        }
+        return null;
+      }
+
+      const closesForSlopes = history.map((c) => c.close);
+      let sma20Slope = 0;
+      let sma50Slope = 0;
+      if (closesForSlopes.length >= 40) {
+        const sma20 = closesForSlopes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+        const sma20prev = closesForSlopes.slice(-40, -20).reduce((a, b) => a + b, 0) / 20;
+        sma20Slope = sma20 - sma20prev;
+      }
+      if (closesForSlopes.length >= 100) {
+        const sma50 = closesForSlopes.slice(-50).reduce((a, b) => a + b, 0) / 50;
+        const sma50prev = closesForSlopes.slice(-100, -50).reduce((a, b) => a + b, 0) / 50;
+        sma50Slope = sma50 - sma50prev;
+      }
+
+      const slicedHistory = history.slice(-22);
+      const last = slicedHistory[slicedHistory.length - 1];
+
+      const previousClose =
+        last.date === todayStr && slicedHistory.length >= 2
+          ? slicedHistory[slicedHistory.length - 2].close
+          : last.close;
+
+      const volumeBase =
+        last.date === todayStr && slicedHistory.length > 1 && !isTodayCandleClosed()
+          ? slicedHistory.slice(0, -1)
+          : slicedHistory;
+      const avgVolume =
+        volumeBase.length > 0
+          ? volumeBase.reduce((a, c) => a + c.volume, 0) / volumeBase.length
+          : last.volume;
+
+      return {
+        history: slicedHistory,
+        sma20Slope,
+        sma50Slope,
+        lastCandle: last,
+        previousClose,
+        avgVolume,
+        source: 'fyers',
+      };
+    } catch (err) {
+      if (this.shouldLogProviderError(`fyers-history-exception:${fyersSymbol}`)) {
+        console.warn(`[LiveFeed] Fyers history exception for ${fyersSymbol}: ${this.summarizeProviderError(err)}`);
+      }
+      return null;
+    }
+  }
+
+  private static async fetchYahooDailyHistory(
+    cleanSymbol: string,
+    market: 'NSE' | 'BSE',
+    todayStr: string
+  ): Promise<DailyHistoryBundle | null> {
+    const ticker = market === 'NSE' ? `${cleanSymbol}.NS` : `${cleanSymbol}.BO`;
+
+    try {
+      const res = await this.fetchWithTimeout(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`,
+        {
+          cache: 'no-store',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+          },
+        },
+        env.YAHOO_REQUEST_TIMEOUT_MS
+      );
+
+      if (!res.ok) {
+        throw new Error(`Yahoo Finance HTTP ${res.status} for ${ticker}`);
+      }
+
+      const json = await res.json();
+      const result = json?.chart?.result?.[0];
+
+      if (!result) {
+        throw new Error(`No chart result from Yahoo Finance for ${ticker}`);
+      }
+
+      const meta = result.meta;
+      const quote = result.indicators?.quote?.[0];
+
+      if (!quote || !quote.high || quote.high.length === 0) {
+        throw new Error(`Invalid quote data from Yahoo Finance for ${ticker}`);
+      }
+
+      const timestamps = result.timestamp as number[] | undefined;
+      const len = alignedYahooSeriesLength(timestamps, quote, ['high', 'low', 'close']);
+      if (len === 0) {
+        throw new Error(`Misaligned Yahoo quote arrays for ${ticker}`);
+      }
+
+      let idx = len - 1;
+      while (
+        idx >= 0 &&
+        (quote.high[idx] === null || quote.low[idx] === null || quote.close[idx] === null)
+      ) {
+        idx--;
+      }
+
+      if (idx < 0) {
+        throw new Error(`No valid candles from Yahoo Finance for ${ticker}`);
+      }
+
+      const prevHigh   = quote.high[idx] as number;
+      const prevLow    = quote.low[idx] as number;
+      const prevClose  = quote.close[idx] as number;
+      const prevOpen   = (quote.open?.[idx] as number) ?? prevClose;
+      const rawVol = quote.volume?.[idx];
+      const prevVolume =
+        typeof rawVol === 'number' && Number.isFinite(rawVol) && rawVol >= 0
+          ? rawVol
+          : 0;
+
+      const safeLength = Math.min(
+        quote.volume?.length ?? 0,
+        timestamps?.length ?? 0,
+        len
+      );
+
+      const volumeEntries = (quote.volume as (number | null)[])
+        .slice(0, safeLength)
+        .map((v, i) => ({
+          v,
+          date: timestamps?.[i] ? getISTDateString(new Date(timestamps[i] * 1000)) : null,
+        }))
+        .filter((e): e is { v: number; date: string | null } => e.v !== null);
+
+      const lastEntry = volumeEntries[volumeEntries.length - 1];
+      const shouldDropLast =
+        volumeEntries.length > 1 && lastEntry?.date === todayStr && !isTodayCandleClosed();
+
+      const validVolumes = shouldDropLast
+        ? volumeEntries.slice(0, -1).map(e => e.v)
+        : volumeEntries.map(e => e.v);
+      const avgVolume = validVolumes.length > 0
+        ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
+        : (prevVolume > 0 ? prevVolume : 1);
+
+      const regularMarketPrice =
+        typeof meta?.regularMarketPrice === 'number' && Number.isFinite(meta.regularMarketPrice)
+          ? meta.regularMarketPrice
+          : undefined;
+
+      const history: HistoricalCandle[] = [];
+      for (let i = 0; i < len; i++) {
+        const h = quote.high[i];
+        const l = quote.low[i];
+        const c = quote.close[i];
+        const o = quote.open?.[i] ?? c;
+        const v = quote.volume?.[i] || 0;
+
+        const isNullOhlcPlaceholder =
+          h === null &&
+          l === null &&
+          c === null &&
+          o === null &&
+          (v === 0 || v === null);
+
+        if (
+          h === null || l === null || c === null || o === null || v === null ||
+          isNaN(h) || isNaN(l) || isNaN(c) || isNaN(o) || isNaN(v) ||
+          h <= 0 || l <= 0 || c <= 0 || o <= 0 || v < 0 ||
+          h < l || c > h || c < l
+        ) {
+          if (!isNullOhlcPlaceholder) {
+            console.warn(`[MarketService] Validation failed for ${cleanSymbol} candle ${i}: H=${h}, L=${l}, C=${c}, O=${o}, V=${v}. Skipping candle.`);
+          }
+          continue;
+        }
+
+        const timestamp = result.timestamp?.[i];
+        if (
+          timestamp === null ||
+          timestamp === undefined ||
+          typeof timestamp !== 'number' ||
+          !Number.isFinite(timestamp) ||
+          timestamp <= 0
+        ) {
+          if (!isNullOhlcPlaceholder) {
+            console.warn(`[MarketService] Skipping candle ${i} for ${cleanSymbol}: missing or invalid timestamp (${timestamp}).`);
+          }
+          continue;
+        }
+
+        const dateStr = getISTDateString(new Date(timestamp * 1000));
+        history.push({
+          date: dateStr,
+          open: o,
+          high: h,
+          low: l,
+          close: c,
+          volume: v,
+        });
+      }
+
+      if (history.length === 0) {
+        throw new Error(`Zero valid historical candles for ${ticker}`);
+      }
+
+      const closesForSlopes = history.map(c => c.close);
+      let sma20Slope = 0, sma50Slope = 0;
+      if (closesForSlopes.length >= 40) {
+        const sma20 = closesForSlopes.slice(-20).reduce((a,b)=>a+b,0)/20;
+        const sma20prev = closesForSlopes.slice(-40,-20).reduce((a,b)=>a+b,0)/20;
+        sma20Slope = sma20 - sma20prev;
+      }
+      if (closesForSlopes.length >= 100) {
+        const sma50 = closesForSlopes.slice(-50).reduce((a,b)=>a+b,0)/50;
+        const sma50prev = closesForSlopes.slice(-100,-50).reduce((a,b)=>a+b,0)/50;
+        sma50Slope = sma50 - sma50prev;
+      }
+
+      const slicedHistory = history.slice(-22);
+      const lastHist = slicedHistory[slicedHistory.length - 1];
+      const previousClose =
+        lastHist?.date === todayStr && slicedHistory.length >= 2
+          ? slicedHistory[slicedHistory.length - 2].close
+          : prevClose;
+
+      return {
+        history: slicedHistory,
+        sma20Slope,
+        sma50Slope,
+        lastCandle: {
+          open: prevOpen,
+          high: prevHigh,
+          low: prevLow,
+          close: prevClose,
+          volume: prevVolume,
+          date: lastHist?.date ?? todayStr,
+        },
+        previousClose,
+        avgVolume,
+        source: 'yahoo',
+        regularMarketPrice,
+      };
+    } catch (err) {
+      if (this.shouldLogProviderError(`yahoo-daily:${ticker}`)) {
+        console.warn(`[LiveFeed] Yahoo daily history failed for ${ticker}: ${this.summarizeProviderError(err)}`);
+      }
+      return null;
+    }
   }
 
   private static shouldLogProviderError(key: string): boolean {
@@ -778,299 +1238,145 @@ export class MarketService {
       if (fyersPrimary) return fyersPrimary;
 
       try {
-        const res = await this.fetchWithTimeout(
-          // range widened from 1mo -> 6mo: sma20Slope/sma50Slope need 40/100 closes respectively,
-          // which 1mo (~22 candles) can never supply. history[] fed to ATR/CPR is truncated back
-          // to a ~1mo window further down so this does NOT change ATR/CPR-width behavior.
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=6mo`,
-          {
-            cache: 'no-store', // Disable Next.js fetch cache. CacheService handles it.
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'application/json',
+        const bundle = await this.fetchDailyHistoryBundle(cleanSymbol, market);
+        if (!bundle) {
+          throw new Error(`Failed to acquire daily candle bundle for ${cleanSymbol}`);
+        }
+
+        const prevOpen = bundle.lastCandle.open;
+        const prevHigh = bundle.lastCandle.high;
+        const prevLow = bundle.lastCandle.low;
+        const prevClose = bundle.lastCandle.close;
+        const prevVolume = bundle.lastCandle.volume;
+        const previousClose = bundle.previousClose;
+        const avgVolume = bundle.avgVolume;
+        const history = bundle.history;
+        const sma20Slope = bundle.sma20Slope;
+        const sma50Slope = bundle.sma50Slope;
+
+        // -- Fetch 15m intraday data for VWAP, candle15m, and live price --
+        let vwap = (prevHigh + prevLow + prevClose) / 3;
+        let candle15m: MarketStockData['candle15m'] = null;
+        let ltp = bundle.regularMarketPrice ?? prevClose;
+
+        try {
+          const res15m = await this.fetchWithTimeout(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=15m&range=1d`,
+            {
+              cache: 'no-store',
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json',
+              },
             },
-          },
-          env.YAHOO_REQUEST_TIMEOUT_MS
-        );
+            env.YAHOO_REQUEST_TIMEOUT_MS
+          );
+          if (res15m.ok) {
+            const json15 = await res15m.json();
+            const result15 = json15?.chart?.result?.[0];
+            const meta15 = result15?.meta;
+            if (typeof meta15?.regularMarketPrice === 'number' && Number.isFinite(meta15.regularMarketPrice)) {
+              ltp = meta15.regularMarketPrice;
+            }
+            const quotes15 = result15?.indicators?.quote?.[0];
+            const rawTs15 = result15?.timestamp as number[] | undefined;
+            const ts15 =
+              rawTs15 && rawTs15.length > 0
+                ? rawTs15
+                : Array.from(
+                    { length: Math.min(
+                      quotes15?.close?.length ?? 0,
+                      quotes15?.high?.length ?? 0,
+                      quotes15?.low?.length ?? 0
+                    ) },
+                    (_, i) => i
+                  );
+            const len15 = alignedYahooSeriesLength(ts15, quotes15, ['high', 'low', 'close']);
+            if (quotes15 && len15 > 0) {
+              let sumPriceVol = 0;
+              let sumVol = 0;
+              for (let i = 0; i < len15; i++) {
+                const h = quotes15.high[i];
+                const l = quotes15.low[i];
+                const c = quotes15.close[i];
+                const v = quotes15.volume?.[i];
+                if (
+                  typeof h === 'number' && Number.isFinite(h) &&
+                  typeof l === 'number' && Number.isFinite(l) &&
+                  typeof c === 'number' && Number.isFinite(c)
+                ) {
+                  const typ = (h + l + c) / 3;
+                  const vol = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+                  sumPriceVol += typ * vol;
+                  sumVol += vol;
+                }
+              }
+              if (sumVol > 0) {
+                vwap = sumPriceVol / sumVol;
+              }
 
-        if (!res.ok) {
-          throw new Error(`Yahoo Finance HTTP ${res.status} for ${ticker}`);
-        }
-
-        const json = await res.json();
-        const result = json?.chart?.result?.[0];
-
-        if (!result) {
-          throw new Error(`No chart result from Yahoo Finance for ${ticker}`);
-        }
-
-        const meta = result.meta;
-        const quote = result.indicators?.quote?.[0];
-
-        if (quote && quote.high && quote.high.length > 0) {
-          const timestamps = result.timestamp as number[] | undefined;
-          const len = alignedYahooSeriesLength(timestamps, quote, ['high', 'low', 'close']);
-          if (len === 0) {
-            throw new Error(`Misaligned Yahoo quote arrays for ${ticker}`);
-          }
-
-          // Find the latest valid non-null daily candle (walk backwards)
-          let idx = len - 1;
-          while (
-            idx >= 0 &&
-            (quote.high[idx] === null || quote.low[idx] === null || quote.close[idx] === null)
-          ) {
-            idx--;
-          }
-
-          if (idx >= 0) {
-            const prevHigh   = quote.high[idx] as number;
-            const prevLow    = quote.low[idx] as number;
-            const prevClose  = quote.close[idx] as number;
-            const prevOpen   = (quote.open?.[idx] as number) ?? prevClose;
-            const rawVol = quote.volume?.[idx];
-            const prevVolume =
-              typeof rawVol === 'number' && Number.isFinite(rawVol) && rawVol >= 0
-                ? rawVol
-                : 0;
-
-            // Average volume over the window, excluding today's partial candle
-            const todayStr = getISTDateString();
-
-            const safeLength = Math.min(
-              quote.volume?.length ?? 0,
-              timestamps?.length ?? 0,
-              len
-            );
-
-            const volumeEntries = (quote.volume as (number | null)[])
-              .slice(0, safeLength)
-              .map((v, i) => ({
-                v,
-                date: timestamps?.[i] ? getISTDateString(new Date(timestamps[i] * 1000)) : null,
-              }))
-              .filter((e): e is { v: number; date: string | null } => e.v !== null);
-
-            const lastEntry = volumeEntries[volumeEntries.length - 1];
-            const shouldDropLast =
-              volumeEntries.length > 1 && lastEntry?.date === todayStr && !isTodayCandleClosed();
-
-            const validVolumes = shouldDropLast
-              ? volumeEntries.slice(0, -1).map(e => e.v)
-              : volumeEntries.map(e => e.v);
-            const avgVolume = validVolumes.length > 0
-              ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
-              : (prevVolume > 0 ? prevVolume : 1);
-
-            // LTP from regularMarketPrice (most current real-time price)
-            const ltp = (meta.regularMarketPrice as number) || prevClose;
-
-            // Map history candles
-            let history: { open: number; high: number; low: number; close: number; volume: number; date: string }[] = [];
-            for (let i = 0; i < len; i++) {
-              const h = quote.high[i];
-              const l = quote.low[i];
-              const c = quote.close[i];
-              const o = quote.open?.[i] ?? c;
-              const v = quote.volume?.[i] || 0;
-
-              // Yahoo frequently returns placeholder candles (all OHLC null with zero volume)
-              // near the live edge. These are expected and should be silently skipped.
-              const isNullOhlcPlaceholder =
-                h === null &&
-                l === null &&
-                c === null &&
-                o === null &&
-                (v === 0 || v === null);
-
-              if (
-                h === null || l === null || c === null || o === null || v === null ||
-                isNaN(h) || isNaN(l) || isNaN(c) || isNaN(o) || isNaN(v) ||
-                h <= 0 || l <= 0 || c <= 0 || o <= 0 || v < 0 ||
-                h < l || c > h || c < l
+              let lastValidIdx = len15 - 1;
+              while (
+                lastValidIdx >= 0 &&
+                (quotes15.close[lastValidIdx] === null ||
+                  quotes15.close[lastValidIdx] === undefined ||
+                  !Number.isFinite(quotes15.close[lastValidIdx] as number))
               ) {
-                if (!isNullOhlcPlaceholder) {
-                  console.warn(`[MarketService] Validation failed for ${cleanSymbol} candle ${i}: H=${h}, L=${l}, C=${c}, O=${o}, V=${v}. Skipping candle.`);
-                }
-                continue;
+                lastValidIdx--;
               }
-
-              const timestamp = result.timestamp?.[i];
-              if (
-                timestamp === null ||
-                timestamp === undefined ||
-                typeof timestamp !== 'number' ||
-                !Number.isFinite(timestamp) ||
-                timestamp <= 0
-              ) {
-                if (!isNullOhlcPlaceholder) {
-                  console.warn(`[MarketService] Skipping candle ${i} for ${cleanSymbol}: missing or invalid timestamp (${timestamp}).`);
-                }
-                continue;
-              }
-
-              const dateStr = getISTDateString(new Date(timestamp * 1000));
-
-              history.push({
-                date: dateStr,
-                open: o,
-                high: h,
-                low: l,
-                close: c,
-                volume: v,
-              });
-            }
-
-            // Slopes computed from the FULL 6mo closes array (needs up to 100 candles).
-            const closesForSlopes = history.map(c => c.close);
-            let sma20Slope = 0, sma50Slope = 0;
-            // Non-overlapping prior windows: sma20prev uses days -40 to -20 (no shared bars with sma20)
-            if (closesForSlopes.length >= 40) {
-              const sma20 = closesForSlopes.slice(-20).reduce((a,b)=>a+b,0)/20;
-              const sma20prev = closesForSlopes.slice(-40,-20).reduce((a,b)=>a+b,0)/20;
-              sma20Slope = sma20 - sma20prev;
-            }
-            // Non-overlapping prior windows: sma50prev uses days -100 to -50 (no shared bars with sma50)
-            if (closesForSlopes.length >= 100) {
-              const sma50 = closesForSlopes.slice(-50).reduce((a,b)=>a+b,0)/50;
-              const sma50prev = closesForSlopes.slice(-100,-50).reduce((a,b)=>a+b,0)/50;
-              sma50Slope = sma50 - sma50prev;
-            }
-
-            // Truncate history back to a ~1mo window (last 22 trading days) before it's used
-            // by ATR / CPR calculations or returned to callers. This preserves existing
-            // ATR/CPR-width behavior exactly as before the 1mo -> 6mo range widening above.
-            history = history.slice(-22);
-
-            // Prior completed session close for day-over-day % change (F&O build/unwind).
-            // During market hours `prevClose` is today's in-progress close ≈ LTP, so
-            // priceChangePct would collapse to ~0 without a true previousClose.
-            const lastHist = history[history.length - 1];
-            const previousClose =
-              lastHist?.date === todayStr && history.length >= 2
-                ? history[history.length - 2].close
-                : prevClose;
-
-            // -- Fetch 15m intraday data for VWAP and candle15m --
-            let vwap = (prevHigh + prevLow + prevClose) / 3;
-            let candle15m = null;
-            try {
-              const res15m = await this.fetchWithTimeout(
-                `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=15m&range=1d`,
-                {
-                  cache: 'no-store',
-                  headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/json',
-                  },
-                },
-                env.YAHOO_REQUEST_TIMEOUT_MS
-              );
-              if (res15m.ok) {
-                const json15 = await res15m.json();
-                const result15 = json15?.chart?.result?.[0];
-                const quotes15 = result15?.indicators?.quote?.[0];
-                const rawTs15 = result15?.timestamp as number[] | undefined;
-                // Yahoo occasionally omits timestamps on 15m; synthesize index keys so
-                // alignment still gates on high/low/close lengths.
-                const ts15 =
-                  rawTs15 && rawTs15.length > 0
-                    ? rawTs15
-                    : Array.from(
-                        { length: Math.min(
-                          quotes15?.close?.length ?? 0,
-                          quotes15?.high?.length ?? 0,
-                          quotes15?.low?.length ?? 0
-                        ) },
-                        (_, i) => i
-                      );
-                const len15 = alignedYahooSeriesLength(ts15, quotes15, ['high', 'low', 'close']);
-                if (quotes15 && len15 > 0) {
-                  let sumPriceVol = 0;
-                  let sumVol = 0;
-                  for (let i = 0; i < len15; i++) {
-                    const h = quotes15.high[i];
-                    const l = quotes15.low[i];
-                    const c = quotes15.close[i];
-                    const v = quotes15.volume?.[i];
-                    if (
-                      typeof h === 'number' && Number.isFinite(h) &&
-                      typeof l === 'number' && Number.isFinite(l) &&
-                      typeof c === 'number' && Number.isFinite(c)
-                    ) {
-                      const typ = (h + l + c) / 3;
-                      const vol = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
-                      sumPriceVol += typ * vol;
-                      sumVol += vol;
-                    }
-                  }
-                  if (sumVol > 0) {
-                    vwap = sumPriceVol / sumVol;
-                  }
-
-                  let lastValidIdx = len15 - 1;
-                  while (
-                    lastValidIdx >= 0 &&
-                    (quotes15.close[lastValidIdx] === null ||
-                      quotes15.close[lastValidIdx] === undefined ||
-                      !Number.isFinite(quotes15.close[lastValidIdx] as number))
-                  ) {
-                    lastValidIdx--;
-                  }
-                  if (lastValidIdx >= 0) {
-                    const c15 = quotes15.close[lastValidIdx] as number;
-                    const h15 = quotes15.high[lastValidIdx];
-                    const l15 = quotes15.low[lastValidIdx];
-                    const o15 = quotes15.open?.[lastValidIdx];
-                    const v15 = quotes15.volume?.[lastValidIdx];
-                    if (
-                      typeof h15 === 'number' && Number.isFinite(h15) &&
-                      typeof l15 === 'number' && Number.isFinite(l15)
-                    ) {
-                      candle15m = {
-                        open: typeof o15 === 'number' && Number.isFinite(o15) ? o15 : c15,
-                        high: h15,
-                        low: l15,
-                        close: c15,
-                        volume: typeof v15 === 'number' && Number.isFinite(v15) && v15 >= 0 ? v15 : 0,
-                      };
-                    }
+              if (lastValidIdx >= 0) {
+                const c15 = quotes15.close[lastValidIdx] as number;
+                const h15 = quotes15.high[lastValidIdx];
+                const l15 = quotes15.low[lastValidIdx];
+                const o15 = quotes15.open?.[lastValidIdx];
+                const v15 = quotes15.volume?.[lastValidIdx];
+                if (
+                  typeof h15 === 'number' && Number.isFinite(h15) &&
+                  typeof l15 === 'number' && Number.isFinite(l15)
+                ) {
+                  candle15m = {
+                    open: typeof o15 === 'number' && Number.isFinite(o15) ? o15 : c15,
+                    high: h15,
+                    low: l15,
+                    close: c15,
+                    volume: typeof v15 === 'number' && Number.isFinite(v15) && v15 >= 0 ? v15 : 0,
+                  };
+                  if (!meta15?.regularMarketPrice) {
+                    ltp = c15;
                   }
                 }
               }
-            } catch (_err) {
-              // Fallback handled by initial vwap assignment
             }
-
-            const resultData: MarketStockData = {
-              symbol: cleanSymbol,
-              market,
-              sector,
-              open: prevOpen,
-              high: prevHigh,
-              low: prevLow,
-              close: prevClose,
-              previousClose,
-              volume: prevVolume,
-              avgVolume,
-              marketCap,
-              ltp,
-              history,
-              vwap,
-              candle15m,
-              sma20Slope,
-              sma50Slope
-            };
-            if (sma200 !== undefined) {
-              resultData.sma200 = sma200;
-            }
-            await CacheService.set(cacheKey, resultData, 60);
-            console.log(`[LiveFeed] Yahoo Fallback OK for ${ticker}`);
-            return resultData;
           }
+        } catch (_err) {
+          // Fallback handled by initial vwap/ltp assignment
         }
 
-        throw new Error(`Invalid quote data from Yahoo Finance for ${ticker}`);
+        const resultData: MarketStockData = {
+          symbol: cleanSymbol,
+          market,
+          sector,
+          open: prevOpen,
+          high: prevHigh,
+          low: prevLow,
+          close: prevClose,
+          previousClose,
+          volume: prevVolume,
+          avgVolume,
+          marketCap,
+          ltp,
+          history,
+          vwap,
+          candle15m,
+          sma20Slope,
+          sma50Slope,
+        };
+        if (sma200 !== undefined) {
+          resultData.sma200 = sma200;
+        }
+        await CacheService.set(cacheKey, resultData, 60);
+        console.log(`[LiveFeed] Yahoo Fallback OK for ${ticker}`);
+        return resultData;
 
       } catch (err) {
         if (this.shouldLogProviderError(`yahoo-fallback:${ticker}`)) {
@@ -1210,43 +1516,7 @@ export class MarketService {
       Accept: 'application/json',
     };
 
-    const markPermissionCooldown = (status: number, message: string | undefined) => {
-      const msg = typeof message === 'string' ? message.toLowerCase() : '';
-      const isPermissionError =
-        status === 403 ||
-        msg.includes('additional permission required') ||
-        msg.includes('do not have permission');
-      if (!isPermissionError) return;
-      this.fyersPermissionBlockedUntilMs = Date.now() + 10 * 60 * 1000;
-      if (this.shouldLogProviderError('fyers-permission-remediation')) {
-        console.warn(
-          `[LiveFeed] Fyers Data API permission denied (${message ?? `HTTP ${status}`}). ` +
-            `Fix: myapi.fyers.in → edit app → enable Quotes & Market Data + Historical Data ` +
-            `(Fyers often requires all permission checkboxes) → Save → Reconnect Fyers in Settings. ` +
-            `Skipping Fyers for 10m; Yahoo Fallback remains active.`
-        );
-      }
-    };
-
-    const isPositivePrice = (n: unknown): n is number =>
-      typeof n === 'number' && Number.isFinite(n) && n > 0;
-
     const todayStr = getISTDateString();
-    const rangeTo = todayStr;
-    const fromDate = new Date();
-    fromDate.setUTCDate(fromDate.getUTCDate() - 250); // ~175 trading days; buffer for holiday clusters
-    const rangeFrom = getISTDateString(fromDate);
-
-    const historyUrl =
-      `https://api-t1.fyers.in/data/history?` +
-      new URLSearchParams({
-        symbol: fyersSymbol,
-        resolution: 'D',
-        date_format: '1',
-        range_from: rangeFrom,
-        range_to: rangeTo,
-        cont_flag: '1',
-      }).toString();
 
     try {
       // ── Quotes: prefer prefetch cache, else single-symbol HTTP ──────────
@@ -1273,7 +1543,7 @@ export class MarketService {
           if (this.markFyersRateLimited(quotesRes.status, quotesJson.message, quotesJson.code)) {
             return null;
           }
-          markPermissionCooldown(quotesRes.status, quotesJson.message);
+          this.markPermissionCooldown(quotesRes.status, quotesJson.message);
           if (this.shouldLogProviderError(`fyers-quotes:${fyersSymbol}:${quotesRes.status}:${quotesJson.code ?? 'na'}`)) {
             console.warn(
               `[LiveFeed] Fyers quotes failed for ${fyersSymbol}: HTTP ${quotesRes.status} code=${quotesJson.code} msg=${quotesJson.message ?? ''}`
@@ -1287,16 +1557,16 @@ export class MarketService {
         if (!qv) {
           // Fallback: first row if symbol key mismatch (e.g. alias)
           const first = quotesJson.d[0];
-          if (first?.s === 'ok' && first.v && isPositivePrice(first.v.lp)) {
+          if (first?.s === 'ok' && first.v && MarketService.isPositivePrice(first.v.lp)) {
             qv = {
               lp: first.v.lp,
-              open_price: isPositivePrice(first.v.open_price) ? first.v.open_price : undefined,
-              high_price: isPositivePrice(first.v.high_price) ? first.v.high_price : undefined,
-              low_price: isPositivePrice(first.v.low_price) ? first.v.low_price : undefined,
-              prev_close_price: isPositivePrice(first.v.prev_close_price)
+              open_price: MarketService.isPositivePrice(first.v.open_price) ? first.v.open_price : undefined,
+              high_price: MarketService.isPositivePrice(first.v.high_price) ? first.v.high_price : undefined,
+              low_price: MarketService.isPositivePrice(first.v.low_price) ? first.v.low_price : undefined,
+              prev_close_price: MarketService.isPositivePrice(first.v.prev_close_price)
                 ? first.v.prev_close_price
                 : undefined,
-              atp: isPositivePrice(first.v.atp) ? first.v.atp : undefined,
+              atp: MarketService.isPositivePrice(first.v.atp) ? first.v.atp : undefined,
               volume:
                 typeof first.v.volume === 'number' && Number.isFinite(first.v.volume) && first.v.volume >= 0
                   ? first.v.volume
@@ -1305,7 +1575,7 @@ export class MarketService {
           }
         }
 
-        if (!qv || !isPositivePrice(qv.lp)) {
+        if (!qv || !MarketService.isPositivePrice(qv.lp)) {
           if (this.shouldLogProviderError(`fyers-quotes-invalid:${fyersSymbol}`)) {
             console.warn(`[LiveFeed] Fyers quotes invalid LTP for ${fyersSymbol}`);
           }
@@ -1317,124 +1587,36 @@ export class MarketService {
 
       const ltp = qv.lp;
 
-      // ── Daily history: ATR/CPR window + slopes ──────────────────────────
-      const res = await this.fetchWithTimeout(historyUrl, {
-        cache: 'no-store',
-        headers: authHeaders,
-      }, env.FYERS_REQUEST_TIMEOUT_MS);
-
-      if (res.status === 401) {
-        if (this.shouldLogProviderError(`fyers-401:${fyersSymbol}`)) {
-          console.warn(`[LiveFeed] Fyers 401 for ${fyersSymbol}; clearing token`);
-        }
-        await FyersAuthService.clearToken();
+      // ── Daily history: ATR/CPR window + slopes (cached 8h with session date key) ──
+      const bundle = await MarketService.fetchDailyHistoryBundle(cleanSymbol, market);
+      if (!bundle) {
         return null;
       }
 
-      const data = (await res.json()) as {
-        s?: string;
-        code?: number;
-        message?: string;
-        candles?: Array<[number, number, number, number, number, number]>;
-      };
-
-      if (!res.ok || data.s !== 'ok' || !Array.isArray(data.candles) || data.candles.length === 0) {
-        if (this.markFyersRateLimited(res.status, data.message, data.code)) {
-          return null;
-        }
-        markPermissionCooldown(res.status, data.message);
-        if (this.shouldLogProviderError(`fyers-history:${fyersSymbol}:${res.status}:${data.code ?? 'na'}`)) {
-          console.warn(
-            `[LiveFeed] Fyers history failed for ${fyersSymbol}: HTTP ${res.status} code=${data.code} msg=${data.message ?? ''}`
-          );
-        }
-        return null;
-      }
-
-      let history: HistoricalCandle[] = [];
-      for (const candle of data.candles) {
-        if (!Array.isArray(candle) || candle.length < 6) continue;
-        const [epoch, open, high, low, close, volume] = candle;
-        if (
-          [open, high, low, close, volume].some((n) => typeof n !== 'number' || Number.isNaN(n)) ||
-          high <= 0 ||
-          low <= 0 ||
-          close <= 0 ||
-          open <= 0 ||
-          volume < 0 ||
-          high < low ||
-          close > high ||
-          close < low
-        ) {
-          continue;
-        }
-        history.push({
-          date: getISTDateString(new Date(epoch * 1000)),
-          open,
-          high,
-          low,
-          close,
-          volume,
-        });
-      }
-
-      if (history.length === 0) {
-        if (this.shouldLogProviderError(`fyers-empty-history:${fyersSymbol}`)) {
-          console.warn(`[LiveFeed] Fyers history empty after validation for ${fyersSymbol}`);
-        }
-        return null;
-      }
-
-      const closesForSlopes = history.map((c) => c.close);
-      let sma20Slope = 0;
-      let sma50Slope = 0;
-      if (closesForSlopes.length >= 40) {
-        const sma20 = closesForSlopes.slice(-20).reduce((a, b) => a + b, 0) / 20;
-        const sma20prev = closesForSlopes.slice(-40, -20).reduce((a, b) => a + b, 0) / 20;
-        sma20Slope = sma20 - sma20prev;
-      }
-      if (closesForSlopes.length >= 100) {
-        const sma50 = closesForSlopes.slice(-50).reduce((a, b) => a + b, 0) / 50;
-        const sma50prev = closesForSlopes.slice(-100, -50).reduce((a, b) => a + b, 0) / 50;
-        sma50Slope = sma50 - sma50prev;
-      }
-
-      history = history.slice(-22);
-      const last = history[history.length - 1];
+      const last = bundle.lastCandle;
+      const history = bundle.history;
+      const sma20Slope = bundle.sma20Slope;
+      const sma50Slope = bundle.sma50Slope;
 
       // Prefer quote session fields when valid; else last daily bar.
-      const open = isPositivePrice(qv.open_price) ? qv.open_price : last.open;
-      const high = isPositivePrice(qv.high_price) ? qv.high_price : last.high;
-      const low = isPositivePrice(qv.low_price) ? qv.low_price : last.low;
-      const close = isPositivePrice(qv.lp) ? qv.lp : last.close;
+      const open = MarketService.isPositivePrice(qv.open_price) ? qv.open_price : last.open;
+      const high = MarketService.isPositivePrice(qv.high_price) ? qv.high_price : last.high;
+      const low = MarketService.isPositivePrice(qv.low_price) ? qv.low_price : last.low;
+      const close = MarketService.isPositivePrice(qv.lp) ? qv.lp : last.close;
       const volume =
         typeof qv.volume === 'number' && Number.isFinite(qv.volume) && qv.volume >= 0
           ? qv.volume
           : last.volume;
 
-      // Prior completed session: quote prev_close when valid, else history n-2
-      // while today's candle is forming. Off-hours (last candle != today) this
-      // falls back to last.close, which equals ltp and collapses day-return to
-      // ~0 — same as the Yahoo path. Acceptable: production scans run during
-      // market hours; only off-hours manual scans lose the extension gate, and
-      // only when the quote's prev_close_price is missing.
-      const previousClose = isPositivePrice(qv.prev_close_price)
+      // Prior completed session: quote prev_close when valid, else bundle previousClose.
+      const previousClose = MarketService.isPositivePrice(qv.prev_close_price)
         ? qv.prev_close_price
-        : last.date === todayStr && history.length >= 2
-          ? history[history.length - 2].close
-          : last.close;
+        : bundle.previousClose;
 
-      const volumeBase =
-        last.date === todayStr && history.length > 1 && !isTodayCandleClosed()
-          ? history.slice(0, -1)
-          : history;
-      const avgVolume =
-        volumeBase.length > 0
-          ? volumeBase.reduce((a, c) => a + c.volume, 0) / volumeBase.length
-          : volume;
+      const avgVolume = bundle.avgVolume > 0 ? bundle.avgVolume : volume;
 
       const typical = (high + low + close) / 3;
-      let vwap = isPositivePrice(qv.atp) ? qv.atp : typical;
+      let vwap = MarketService.isPositivePrice(qv.atp) ? qv.atp : typical;
       let candle15m: MarketStockData['candle15m'] = null;
 
       // ── 15m history: VWAP + candle15m (parity with Yahoo fallback path) ──
@@ -1480,11 +1662,11 @@ export class MarketService {
             }
           } else {
             this.markFyersRateLimited(res15.status, data15.message, data15.code);
-            markPermissionCooldown(res15.status, data15.message);
+            this.markPermissionCooldown(res15.status, data15.message);
           }
         } else {
           this.markFyersRateLimited(res15.status, undefined, undefined);
-          markPermissionCooldown(res15.status, undefined);
+          this.markPermissionCooldown(res15.status, undefined);
         }
       } catch (err15) {
         if (this.shouldLogProviderError(`fyers-15m:${fyersSymbol}`)) {
@@ -1520,7 +1702,7 @@ export class MarketService {
       await CacheService.set(cacheKey, resultData, 60);
       this.fyersPermissionBlockedUntilMs = 0;
       console.log(
-        `[LiveFeed] Fyers Primary OK for ${fyersSymbol} (ltp=${ltp}, candles=${data.candles.length}, hist=${history.length})`
+        `[LiveFeed] Fyers Primary OK for ${fyersSymbol} (ltp=${ltp}, hist=${history.length}, bundleSource=${bundle.source})`
       );
       return resultData;
     } catch (err) {
