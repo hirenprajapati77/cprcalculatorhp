@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { TradeJournalService } from '@/services/journal/trade-journal.service';
-import { computeJournalPnl } from '@/lib/pnl';
+import { computeJournalPnl, computeJournalEstimatedFriction } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
 import { publicApiError } from '@/lib/api-error';
 
@@ -97,7 +97,28 @@ export async function PATCH(request: NextRequest) {
     await TradeJournalService.classifyExecutionOutcome(id);
 
     const updated = await prisma.tradeJournal.findUnique({ where: { id } });
-    return NextResponse.json({ success: true, entry: updated });
+    if (!updated) {
+      return NextResponse.json({ success: true, entry: null });
+    }
+
+    const friction = computeJournalEstimatedFriction({
+      entryCmp: updated.entryCmp,
+      exitCmp: updated.exitCmp ?? exitCmp,
+      symbol: updated.symbol,
+      signalType: updated.signalType,
+      optionContract: updated.optionContract,
+      isShortUnderlying,
+    });
+
+    const enriched = {
+      ...updated,
+      estimatedCharges: friction.estimatedChargesPerUnit,
+      estimatedNetPnl: friction.estimatedNetPnl,
+      estimatedNetPnlPct: friction.estimatedNetPnlPct,
+      frictionModelTier: friction.tierId,
+    };
+
+    return NextResponse.json({ success: true, entry: enriched });
   } catch (err) {
     console.error('[Journal PATCH]', err);
     return NextResponse.json({ error: publicApiError(err) }, { status: 500 });

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import type { TradeJournal } from '@prisma/client';
 import { getISTTime } from '@/lib/market-hours';
-import { computeJournalPnl } from '@/lib/pnl';
+import { computeJournalPnl, computeJournalEstimatedFriction } from '@/lib/pnl';
 import { sanitizePagination } from '@/lib/pagination';
 import { OptionSuggestionService } from '@/services/option-suggestion.service';
 import { computeWinRate } from '@/lib/win-rate';
@@ -507,8 +507,38 @@ export class TradeJournalService {
       { type: null as 'CPR' | 'BTST' | 'STBT' | null, winRate: 0 }
     );
 
+    const enrichedEntries = entries.map((entry) => {
+      if (entry.exitCmp === null || entry.entryCmp <= 0) {
+        return {
+          ...entry,
+          estimatedCharges: null,
+          estimatedNetPnl: null,
+          estimatedNetPnlPct: null,
+          frictionModelTier: null,
+        };
+      }
+
+      const isShortUnderlying = TradeJournalService.isShortUnderlyingLeg(entry);
+      const friction = computeJournalEstimatedFriction({
+        entryCmp: entry.entryCmp,
+        exitCmp: entry.exitCmp,
+        symbol: entry.symbol,
+        signalType: entry.signalType,
+        optionContract: entry.optionContract,
+        isShortUnderlying,
+      });
+
+      return {
+        ...entry,
+        estimatedCharges: friction.estimatedChargesPerUnit,
+        estimatedNetPnl: friction.estimatedNetPnl,
+        estimatedNetPnlPct: friction.estimatedNetPnlPct,
+        frictionModelTier: friction.tierId,
+      };
+    });
+
     return {
-      entries,
+      entries: enrichedEntries,
       total,
       page,
       totalPages: Math.ceil(total / limit),

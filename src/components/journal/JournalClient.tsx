@@ -47,6 +47,12 @@ interface JournalEntry {
   eventRiskScoreAtSignal?: number | null;
   regimeSnapshotAtSignal?: string | null;
   slippageModelVersionAtSignal?: number | null;
+
+  // P2 Model Friction (non-destructive)
+  estimatedCharges?: number | null;
+  estimatedNetPnl?: number | null;
+  estimatedNetPnlPct?: number | null;
+  frictionModelTier?: string | null;
 }
 
 interface JournalStats {
@@ -1396,6 +1402,9 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                 <span>
                   <span className="text-slate-400 font-semibold">Shadow</span> = Simple V2 (0–100) — research only, hover for breakdown
                 </span>
+                <span>
+                  <span className="text-emerald-400 font-semibold">Net P&amp;L</span> = Modeled post-statutory &amp; broker estimate (Gross remains source of truth)
+                </span>
               </div>
               <table className="w-full text-xs whitespace-nowrap">
                 <thead>
@@ -1472,15 +1481,26 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                       </td>
                       <td className="px-3 py-3 text-right font-mono font-semibold">
                         {entry.pnlPct !== null ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]"
-                            style={{
-                              color: pnlColor(entry.pnlPct),
-                              background: entry.pnlPct >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                            }}
-                          >
-                            {entry.pnlPct >= 0 ? '▲' : '▼'} {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]"
+                              style={{
+                                color: pnlColor(entry.pnlPct),
+                                background: entry.pnlPct >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                              }}
+                              title="Gross P&L (Primary Realized Return)"
+                            >
+                              {entry.pnlPct >= 0 ? '▲' : '▼'} {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
+                            </span>
+                            {entry.estimatedNetPnlPct !== null && entry.estimatedNetPnlPct !== undefined && (
+                              <span
+                                className="text-[9px] text-slate-400 font-mono tracking-tight cursor-help"
+                                title={`Model Estimate: Est. Net ${entry.estimatedNetPnlPct >= 0 ? '+' : ''}${fmt(entry.estimatedNetPnlPct)}% (₹${fmt(entry.estimatedCharges ?? 0)}/unit statutory & broker fees)`}
+                              >
+                                Net: <span style={{ color: pnlColor(entry.estimatedNetPnlPct) }}>{entry.estimatedNetPnlPct >= 0 ? '+' : ''}{fmt(entry.estimatedNetPnlPct)}%</span>
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-slate-600">---</span>
                         )}
