@@ -115,8 +115,8 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       assert.equal(res.tierId, 'FUTURES_PROXY');
       assert.equal(res.turnover, 202000);
       assert.equal(res.grossPnl, 2000);
-      assert.equal(res.totalFriction, 60.6); // 202,000 * 0.0003
-      assert.equal(res.netPnl, 1939.4);
+      assert.ok(closeTo(res.totalFriction, 60.6)); // 202,000 * 0.0003
+      assert.ok(closeTo(res.netPnl, 1939.4));
       assert.equal(res.effectiveBps, 3.0);
     });
 
@@ -155,8 +155,8 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       assert.equal(res.tierId, 'EQUITY_SWING');
       assert.equal(res.turnover, 198000);
       assert.equal(res.grossPnl, -2000);
-      assert.equal(res.totalFriction, 59.4);
-      assert.equal(res.netPnl, -2059.4);
+      assert.ok(closeTo(res.totalFriction, 59.4));
+      assert.ok(closeTo(res.netPnl, -2059.4));
     });
   });
 

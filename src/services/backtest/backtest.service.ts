@@ -28,6 +28,11 @@ import {
   indexBtstDiscoveryAsOfUtc,
   type YahooFinanceChartResponse,
 } from '../overnight/index-intraday.util';
+import {
+  calculateIndexBtstFriction,
+  calculateStockBtstFriction,
+  calculateIntradayFriction,
+} from '@/lib/friction-calculator';
 
 const connection = {
   host: env.REDIS_HOST || 'localhost',
@@ -286,7 +291,14 @@ export class BacktestService {
                 );
 
                 const exitPriceForFees = tradeResult.exitPrice ?? entrySlipped;
-                const fees = (entrySlipped + exitPriceForFees) * tradeResult.positionSize * 0.0003;
+                const friction = calculateIntradayFriction(
+                  entrySlipped,
+                  exitPriceForFees,
+                  tradeResult.positionSize,
+                  undefined,
+                  direction
+                );
+                const fees = friction.totalFriction;
                 const netPnl = tradeResult.pnl - fees;
 
                 // M-9: Combine trade create + journal inserts in one transaction
@@ -474,8 +486,14 @@ export class BacktestService {
               );
 
               const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-              const btstFees =
-                (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.0003;
+              const btstFriction = calculateStockBtstFriction(
+                btstEntry,
+                btstExitPriceForFees,
+                btstTradeResult.positionSize,
+                undefined,
+                btstDirection
+              );
+              const btstFees = btstFriction.totalFriction;
               const btstNetPnl = btstTradeResult.pnl - btstFees;
               const btstScore = evaluation.score ?? 0;
 
@@ -635,20 +653,17 @@ export class BacktestService {
                 );
 
                 const btstExitPriceForFees = btstTradeResult.exitPrice ?? btstEntry;
-                // Statutory exchange & turnover friction for Index futures/derivatives (~0.002% / 0.2 bps).
-                // FRICTION COMPARISON VS REAL TRADING COSTS:
-                // 1. Index Futures Proxy (Current Model):
-                //    - NSE exchange turnover fee: ~0.0019% (rounded to 0.00002 / 0.002%).
-                //    - Full statutory futures costs (including STT 0.02% on sell, stamp duty 0.002%, GST, SEBI fee):
-                //      total is approx ~0.025%–0.035% of turnover (~12x–17x higher than pure exchange fee).
-                // 2. Options Contracts (Retail Execution):
-                //    - STT (0.1% on sell premium) + Exchange turnover (0.05% premium) + Flat brokerage (~₹20/order) + GST.
-                //    - Total option friction typically ranges from 0.15% to 0.50%+ of option premium.
-                // 3. Practical Consideration:
-                //    - Backtests using 0.002% on index spot proxy represent idealized baseline turnover friction.
-                //    - Real-world live performance should haircut backtest net returns by an additional ~0.02%–0.03%
-                //      for futures, or model full option contracts with bid-ask spread and flat fee drag.
-                const btstFees = (btstEntry + btstExitPriceForFees) * btstTradeResult.positionSize * 0.00002;
+                // Centralized friction calculator: uses default EXCHANGE_TURNOVER_ONLY (0.00002 / 0.2 bps)
+                // to preserve exact numerical continuity with legacy backtests, while supporting
+                // STATUTORY_FUTURES and CONSERVATIVE models via named tiers.
+                const btstFriction = calculateIndexBtstFriction(
+                  btstEntry,
+                  btstExitPriceForFees,
+                  btstTradeResult.positionSize,
+                  undefined,
+                  leg.dir
+                );
+                const btstFees = btstFriction.totalFriction;
                 const btstNetPnl = btstTradeResult.pnl - btstFees;
 
                 const btstSignalsPayload = JSON.stringify({
@@ -852,7 +867,14 @@ export class BacktestService {
               );
 
               const exitPriceForFees = tradeResult.exitPrice ?? entryPrice;
-              const fees = (entryPrice + exitPriceForFees) * tradeResult.positionSize * 0.0003;
+              const friction = calculateIntradayFriction(
+                entryPrice,
+                exitPriceForFees,
+                tradeResult.positionSize,
+                undefined,
+                direction
+              );
+              const fees = friction.totalFriction;
               const netPnl = tradeResult.pnl - fees;
 
               // M-9: Atomic trade + journal in one transaction.
