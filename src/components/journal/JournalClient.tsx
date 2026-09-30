@@ -12,6 +12,7 @@ import {
 import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
 import StockBtstComparePanel from '@/components/journal/StockBtstComparePanel';
 import { VpaBreakdownPanel, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
+import { StockDetailDrawer, type DrawerStockData } from '@/components/enterprise/StockDetailDrawer';
 import { BTST_CLOCK } from '@/lib/market-hours';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -497,6 +498,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   const [totalPages, setTotalPages]   = useState(1);
   const [loading, setLoading]         = useState(() => !_cachedEntries);
   const [error, setError]             = useState<string | null>(null);
+  const [drawerStock, setDrawerStock] = useState<DrawerStockData | null>(null);
+  const [drawerOpen, setDrawerOpen]   = useState(false);
 
   // Sync state to memory cache
   useEffect(() => {
@@ -1450,7 +1453,25 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                         </div>
                       </td>
                       <td className="px-3 py-3 font-semibold text-white font-mono">
-                        {entry.symbol}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDrawerStock({
+                              symbol: entry.symbol,
+                              ltp: entry.exitCmp ?? entry.entryCmp,
+                              direction: entry.signalType === 'STBT' ? 'SHORT' : 'LONG',
+                              score: entry.score,
+                              confidence: entry.confidence,
+                              signals: entry.signalSummary
+                                ? entry.signalSummary.split(/[,\s|]+/).filter(Boolean)
+                                : [],
+                            });
+                            setDrawerOpen(true);
+                          }}
+                          className="hover:text-accent-primary transition-colors text-left"
+                        >
+                          {entry.symbol}
+                        </button>
                       </td>
                       <td className="px-3 py-3 text-slate-400 font-mono whitespace-nowrap">
                         {entry.optionContract.startsWith('UNDERLYING') ? (
@@ -1739,6 +1760,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           </>
         )}
       </div>
+
+      {/* Stock Detail Drawer */}
+      <StockDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        stock={drawerStock}
+      />
     </div>
   );
 }

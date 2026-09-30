@@ -8,17 +8,18 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
 import { fmt } from '@/utils/format';
+import { StockDetailDrawer, type DrawerStockData } from '@/components/enterprise/StockDetailDrawer';
 
 interface WatchlistItem {
   id: string;
   symbol: string;
   pinned: boolean;
   notify: boolean;
-  score?: number;
-  ltp?: number;
-  width?: number;
-  classification?: string;
-  signals?: string[];
+  score?: number | undefined;
+  ltp?: number | undefined;
+  width?: number | undefined;
+  classification?: string | undefined;
+  signals?: string[] | undefined;
 }
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
@@ -35,7 +36,21 @@ export default function WatchlistPage() {
   const [loading, setLoading] = useState<boolean>(() => !_cachedWatchlist);
   const [searchSymbol, setSearchSymbol] = useState<string>('');
   const [isAdding, setIsAdding] = useState<boolean>(false);
+  const [drawerStock, setDrawerStock] = useState<DrawerStockData | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { showToast } = useToast();
+
+  const handleOpenDrawer = useCallback((item: WatchlistItem) => {
+    setDrawerStock({
+      symbol: item.symbol,
+      ltp: item.ltp || 0,
+      score: item.score,
+      width: item.width,
+      classification: item.classification,
+      signals: item.signals,
+    });
+    setDrawerOpen(true);
+  }, []);
 
   // Sync state to memory cache
   useEffect(() => {
@@ -257,7 +272,13 @@ export default function WatchlistPage() {
                   className="bg-bg-secondary border border-border-primary rounded-xl p-3 font-mono"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-white text-sm">{item.symbol}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDrawer(item)}
+                      className="font-bold text-white text-sm hover:text-accent-primary transition-colors text-left"
+                    >
+                      {item.symbol}
+                    </button>
                     <div className="flex items-center gap-2">
                       {item.score !== undefined && (
                         <span className={`text-xs font-bold ${
@@ -343,7 +364,15 @@ export default function WatchlistPage() {
                             <Bell size={14} className={item.notify ? 'fill-yellow-500' : ''} />
                           </button>
                         </td>
-                        <td className="p-4 font-bold text-white text-sm">{item.symbol}</td>
+                        <td className="p-4 font-bold text-white text-sm">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDrawer(item)}
+                            className="hover:text-accent-primary transition-colors text-left"
+                          >
+                            {item.symbol}
+                          </button>
+                        </td>
                         <td className="p-4 font-semibold">
                           {item.ltp ? <span className="text-white">₹{fmt(item.ltp)}</span> : <span className="text-slate-600">Pending</span>}
                         </td>
@@ -396,6 +425,27 @@ export default function WatchlistPage() {
           </div>
         </>
       )}
+
+      {/* Stock Detail Drawer */}
+      <StockDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        stock={drawerStock}
+        isStarred={true}
+        isPinned={Boolean(drawerStock && watchlist.find((w) => w.symbol === drawerStock.symbol)?.pinned)}
+        isNotified={Boolean(drawerStock && watchlist.find((w) => w.symbol === drawerStock.symbol)?.notify)}
+        onToggleWatchlist={(sym, key) => {
+          if (key === 'pinned' || key === 'notify') {
+            const current = watchlist.find((w) => w.symbol === sym);
+            if (current) {
+              handleToggleState(sym, key, !current[key]);
+            }
+          } else if (key === 'starred') {
+            handleRemoveSymbol(sym);
+            setDrawerOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }
