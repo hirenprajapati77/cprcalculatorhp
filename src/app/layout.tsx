@@ -2,8 +2,7 @@ import { env } from '@/config/env';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
+import EnterpriseShell from '@/components/enterprise/EnterpriseShell';
 import { ToastProvider } from '@/components/ui/Toast';
 
 const geistSans = Geist({
@@ -101,20 +100,9 @@ export default function RootLayout({
         <Providers>
           <ToastProvider>
             <PwaRegistration />
-            {env.EXECUTION_MODE === 'SHADOW' && (
-              <div className="w-full bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-center gap-2 text-amber-500 text-xs font-medium tracking-wide z-50 relative">
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                </span>
-                SHADOW VALIDATION MODE — NO LIVE ORDERS WILL BE ROUTED
-              </div>
-            )}
-            <Navbar />
-            <main className="flex-grow flex flex-col min-w-0 w-full max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 overflow-x-hidden">
+            <EnterpriseShell shadowMode={env.EXECUTION_MODE === 'SHADOW'}>
               {children}
-            </main>
-            <Footer />
+            </EnterpriseShell>
           </ToastProvider>
         </Providers>
       </body>
