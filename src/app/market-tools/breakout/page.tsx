@@ -10,6 +10,18 @@ import {
   BreakoutStock,
   BreakoutWindow,
 } from '@/services/market-tools/multi-year-breakout.service';
+import { StockDetailDrawer, type DrawerStockData } from '@/components/enterprise/StockDetailDrawer';
+import {
+  Zap,
+  RefreshCw,
+  Search,
+  Activity,
+  Layers,
+  Award,
+  AlertTriangle,
+  Sliders,
+} from 'lucide-react';
+import { fmt } from '@/utils/format';
 
 export default function MultiYearBreakoutPage() {
   const [report, setReport] = useState<MultiYearBreakoutReport | null>(null);
@@ -19,7 +31,12 @@ export default function MultiYearBreakoutPage() {
   const [selectedWindow, setSelectedWindow] = useState<BreakoutWindow | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('ALL');
-  // B16b: track mounted state to prevent setState on unmounted component
+  const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
+
+  // Stock Detail Drawer state
+  const [drawerStock, setDrawerStock] = useState<DrawerStockData | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -73,7 +90,6 @@ export default function MultiYearBreakoutPage() {
   const filteredStocks = useMemo(() => {
     if (!report) return [];
     return report.stocks.filter((stock) => {
-      // Window filter
       if (selectedWindow === '1Y' && stock.breakout1Y !== true) return false;
       if (selectedWindow === '2Y' && stock.breakout2Y !== true) return false;
       if (selectedWindow === '3Y' && stock.breakout3Y !== true) return false;
@@ -81,10 +97,8 @@ export default function MultiYearBreakoutPage() {
       if (selectedWindow === '10Y' && stock.breakout10Y !== true) return false;
       if (selectedWindow === 'ATH' && stock.breakoutATH !== true) return false;
 
-      // Sector filter
       if (selectedSector !== 'ALL' && stock.sector !== selectedSector) return false;
 
-      // Search query filter
       if (
         searchQuery &&
         !stock.symbol.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -97,56 +111,37 @@ export default function MultiYearBreakoutPage() {
     });
   }, [report, selectedWindow, selectedSector, searchQuery]);
 
-  if (loading && !report) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 p-8 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-gray-400 font-medium">Scanning 2,600+ symbols for Multi-Year Breakouts...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 p-8 flex items-center justify-center">
-        <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-6 max-w-md text-center space-y-4">
-          <h2 className="text-xl font-bold text-red-400">Error Loading Breakout Scanner</h2>
-          <p className="text-gray-300 text-sm">{error}</p>
-          <button
-            onClick={() => fetchBreakouts(true)}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg text-sm transition"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const handleStockClick = (stock: BreakoutStock) => {
+    setDrawerStock({
+      symbol: stock.symbol,
+      ltp: stock.close,
+      previousClose: stock.prevClose,
+      sector: stock.sector,
+      signals: [stock.strongestBreakout ? `${stock.strongestBreakout}_BREAKOUT` : 'BREAKOUT'],
+      signalSummary: stock.strongestBreakout ? `${stock.strongestBreakout} Breakout` : 'Breakout',
+    });
+    setDrawerOpen(true);
+  };
 
   const handleExportCsv = () => {
     if (!report) return;
     const headers = [
-      '#',
+      'Rank',
       'Symbol',
       'Sector',
-      'CMP (INR)',
-      'Day Change %',
+      'CMP',
+      'Change %',
       'Strongest Breakout',
       'VPA Footprint',
-      'CLV',
-      'RVOL 20D',
-      'Breakout Reference Price (INR)',
-      'Gain over Breakout %',
-      '1Y Breakout',
-      '2Y Breakout',
-      '3Y Breakout',
-      '5Y Breakout',
-      '10Y Breakout',
-      report.tradingDaysAvailable < 500 ? 'ATH* Breakout (Dataset-limited)' : 'ATH Breakout',
+      'Breakout Price',
+      'Gain Over Breakout %',
+      '1Y',
+      '2Y',
+      '3Y',
+      '5Y',
+      '10Y',
+      'ATH',
       'Volume',
-      'History Days',
     ];
     const rows = filteredStocks.map((s, idx) => [
       idx + 1,
@@ -154,203 +149,209 @@ export default function MultiYearBreakoutPage() {
       s.sector,
       s.close,
       s.changePct,
-      s.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500 ? 'ATH*' : (s.strongestBreakout ?? ''),
-      s.vpaFootprint?.label ?? 'Standard',
-      s.clv !== null ? s.clv : '',
-      s.rvol20d !== null ? s.rvol20d : '',
-      s.breakoutPrice !== null ? s.breakoutPrice : '',
-      s.breakoutGainPct !== null ? `${s.breakoutGainPct}%` : '',
-      s.breakout1Y === true ? 'YES' : s.breakout1Y === false ? 'NO' : 'N/A',
-      s.breakout2Y === true ? 'YES' : s.breakout2Y === false ? 'NO' : 'N/A',
-      s.breakout3Y === true ? 'YES' : s.breakout3Y === false ? 'NO' : 'N/A',
-      s.breakout5Y === true ? 'YES' : s.breakout5Y === false ? 'NO' : 'N/A',
-      s.breakout10Y === true ? 'YES' : s.breakout10Y === false ? 'NO' : 'N/A',
-      s.breakoutATH === true ? (report.tradingDaysAvailable < 500 ? 'YES*' : 'YES') : s.breakoutATH === false ? 'NO' : 'N/A',
+      s.strongestBreakout || '—',
+      s.vpaFootprint?.label || '—',
+      s.breakoutPrice || '—',
+      s.breakoutGainPct ?? '—',
+      s.breakout1Y ? 'YES' : 'NO',
+      s.breakout2Y ? 'YES' : 'NO',
+      s.breakout3Y ? 'YES' : 'NO',
+      s.breakout5Y ? 'YES' : 'NO',
+      s.breakout10Y ? 'YES' : 'NO',
+      s.breakoutATH ? 'YES' : 'NO',
       s.volume,
-      s.historyDays,
     ]);
     const csvContent = generateCsvContent(headers, rows);
     const dateStr = report.date || new Date().toISOString().split('T')[0];
-    downloadFile(csvContent, `multi_year_breakout_${dateStr}.csv`);
+    downloadFile(
+      csvContent,
+      `multi_year_breakouts_${selectedWindow.toLowerCase()}_${dateStr}.csv`
+    );
   };
+
+  if (loading && !report) {
+    return (
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-16 flex items-center justify-center font-mono">
+        <div className="text-center space-y-3">
+          <RefreshCw size={24} className="animate-spin text-accent-blue mx-auto" />
+          <p className="text-xs text-text-tertiary">Scanning 2,600+ symbols for Multi-Year Breakouts...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-12 flex items-center justify-center font-mono">
+        <div className="bg-accent-red/10 border border-accent-red/30 rounded-lg p-6 max-w-md text-center space-y-3">
+          <div className="flex items-center justify-center gap-2 text-accent-red font-bold text-sm">
+            <AlertTriangle size={18} />
+            Error Loading Breakout Scanner
+          </div>
+          <p className="text-xs text-text-secondary">{error}</p>
+          <button
+            type="button"
+            onClick={() => fetchBreakouts(true)}
+            className="px-3.5 py-1.5 bg-accent-red hover:bg-accent-red/90 text-white font-semibold rounded-md text-xs transition-colors"
+          >
+            Retry Scan
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!report) return null;
 
   const isSelectedWindowUnavailable =
-    selectedWindow !== 'ALL' && !report.windowAvailability[selectedWindow]?.available;
+    selectedWindow !== 'ALL' &&
+    report.windowAvailability[selectedWindow as BreakoutWindow]?.available === false;
+
+  const athCount = report.stocks.filter((s) => s.breakoutATH === true).length;
+  const fiveYearCount = report.stocks.filter((s) => s.breakout5Y === true).length;
+  const oneYearCount = report.stocks.filter((s) => s.breakout1Y === true).length;
 
   return (
-    <div className="w-full min-w-0 space-y-8">
-      {/* Header */}
+    <div className="space-y-4 font-mono select-none">
+      {/* ── Status Banner ── */}
       {isRefreshing && (
-        <div className="flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2.5 text-xs font-semibold text-blue-300 animate-pulse">
-          <span className="inline-block animate-spin">🔄</span>
-          Scanning 2,600+ NSE symbols across 1Y/2Y/3Y/5Y/10Y/ATH breakout windows... Please wait.
+        <div className="flex items-center gap-2 rounded-lg border border-accent-blue/30 bg-accent-blue/10 px-4 py-2 text-xs font-semibold text-accent-blue animate-pulse">
+          <RefreshCw size={13} className="animate-spin" />
+          <span>Rescanning multi-year high records across 2,600+ symbols... Please wait.</span>
         </div>
       )}
-      {!isRefreshing && report.status === 'pending' && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
-          <span>⏳</span>
-          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. Click Refresh to scan now.
-        </div>
-      )}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
+
+      {/* ── Workstation Header ── */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Multi-Year Breakout Scanner</h1>
-            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue">
+              <Zap size={18} />
+            </span>
+            <h1 className="text-lg font-bold text-text-primary tracking-tight">
+              Multi-Year Breakout Terminal
+            </h1>
+            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase">
               {report.date}
             </span>
           </div>
-          <p className="text-sm text-gray-400 mt-1">
-            Detecting stocks breaking out to new highs over 1Y/2Y/3Y/5Y/10Y and All-Time-High (ATH) windows across{' '}
-            {report.totalScanned} symbols.
+          <p className="text-xs text-text-tertiary mt-1">
+            Structural multi-year price breakouts (1Y, 2Y, 3Y, 5Y, 10Y, ATH) with VPA volume confirmation.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <ExportActions onExportCsv={handleExportCsv} disabled={filteredStocks.length === 0} />
+        <div className="flex items-center gap-2">
+          <ExportActions onExportCsv={handleExportCsv} />
           <button
+            type="button"
             onClick={() => fetchBreakouts(true)}
             disabled={loading || isRefreshing}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition flex items-center gap-2 shadow-sm"
+            className="px-3 py-1.5 bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 text-white font-semibold rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            <span className={loading || isRefreshing ? 'inline-block animate-spin' : ''}>🔄</span>
-            {isRefreshing ? 'Scanning...' : 'Refresh'}
+            <RefreshCw size={13} className={loading || isRefreshing ? 'animate-spin' : ''} />
+            <span>{isRefreshing ? 'Scanning...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {/* Top Cards: Summary & Depth Guard */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Card 1: 1Y Breakouts */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">1-Year Breakouts</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-emerald-400">{report.breakoutCounts['1Y']}</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-              250-Day Window
+      {/* ── Top KPI Strip ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Layers size={11} className="text-accent-blue" />
+              Total Breakouts
             </span>
+            <span className="text-[8px] bg-accent-blue/10 text-accent-blue font-bold px-1 rounded">ALL</span>
           </div>
-          <p className="text-[11px] text-gray-500">Closing above 250-day trailing high</p>
+          <div className="text-2xl font-bold text-text-primary mt-1">
+            {report.stocks.length}
+          </div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">Active Structural Breakouts</div>
         </div>
 
-        {/* Card 2: ATH Breakouts */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">All-Time-High (ATH)</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-indigo-400">{report.breakoutCounts['ATH']}</span>
-            <span
-              className="text-xs font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800"
-              title={report.tradingDaysAvailable < 500 ? `Established from available ${report.tradingDaysAvailable}-day platform dataset` : 'Complete multi-year dataset'}
-            >
-              {report.tradingDaysAvailable < 500 ? `Dataset (${report.tradingDaysAvailable}D)*` : 'Full History'}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Award size={11} className="text-accent-purple" />
+              All-Time Highs
             </span>
+            <span className="text-[8px] bg-accent-purple/10 text-accent-purple font-bold px-1 rounded">ATH</span>
           </div>
-          <p className="text-[11px] text-gray-500">
-            {report.tradingDaysAvailable < 500
-              ? `*Closing at highest level in available dataset (${report.tradingDaysAvailable} days; multi-year accumulating)`
-              : 'Closing at highest level in dataset'}
-          </p>
+          <div className="text-2xl font-bold text-accent-purple mt-1">
+            {athCount}
+          </div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">Peak Dataset Highs</div>
         </div>
 
-        {/* Card 3: 2Y–10Y Multi-Year Status */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">2Y – 10Y Windows</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-sm font-bold text-amber-400">Accumulating Data</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
-              {report.tradingDaysAvailable} / 500+ Days
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Activity size={11} className="text-accent-green" />
+              5-Year Breakouts
             </span>
+            <span className="text-[8px] bg-accent-green/10 text-accent-green font-bold px-1 rounded">5Y</span>
           </div>
-          <p className="text-[11px] text-gray-500">Strict depth guards prevent false metrics</p>
+          <div className="text-2xl font-bold text-accent-green mt-1">
+            {fiveYearCount}
+          </div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">Decade Expansion Base</div>
         </div>
 
-        {/* Card 4: Total Scanned */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Universe Scanned</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-white">{report.totalScanned}</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-700">
-              EQ Series
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Zap size={11} className="text-accent-amber" />
+              1-Year Highs
             </span>
+            <span className="text-[8px] bg-accent-amber/10 text-accent-amber font-bold px-1 rounded">1Y</span>
           </div>
-          <p className="text-[11px] text-gray-500">Total qualified breakout candidates: {report.stocks.length}</p>
+          <div className="text-2xl font-bold text-accent-amber mt-1">
+            {oneYearCount}
+          </div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">52-Week Expansion</div>
         </div>
       </div>
 
-      {/* Filter Tabs & Search Bar */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-3">
-          {/* Window Selector Tabs */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setSelectedWindow('ALL')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                selectedWindow === 'ALL'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-900 text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              All Breakouts ({report.stocks.length})
-            </button>
-            <button
-              onClick={() => setSelectedWindow('1Y')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                selectedWindow === '1Y'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-900 text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              1Y Breakout ({report.breakoutCounts['1Y']})
-            </button>
-            <button
-              onClick={() => setSelectedWindow('ATH')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                selectedWindow === 'ATH'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-900 text-gray-400 hover:text-gray-200'
-              }`}
-              title={report.tradingDaysAvailable < 500 ? `Dataset-limited ATH (${report.tradingDaysAvailable} days available)` : 'All-Time High Breakout'}
-            >
-              ATH{report.tradingDaysAvailable < 500 ? '*' : ''} Breakout ({report.breakoutCounts['ATH']})
-            </button>
-            {(['2Y', '3Y', '5Y', '10Y'] as BreakoutWindow[]).map((win) => {
-              const isAvail = report.windowAvailability[win].available;
+      {/* ── Filters & Controls Bar ── */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Breakout Window Filter Chips */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-1 flex items-center gap-1">
+              <Sliders size={11} />
+              Window:
+            </span>
+            {(['ALL', '1Y', '2Y', '3Y', '5Y', '10Y', 'ATH'] as const).map((win) => {
+              const isSelected = selectedWindow === win;
+              const isAvail =
+                win === 'ALL' ||
+                report.windowAvailability[win as BreakoutWindow]?.available !== false;
+
               return (
                 <button
                   key={win}
+                  type="button"
                   onClick={() => setSelectedWindow(win)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                    selectedWindow === win
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-gray-900 text-gray-400 hover:text-gray-200'
-                  }`}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+                    isSelected
+                      ? 'bg-accent-blue text-white shadow-sm'
+                      : 'bg-bg-tertiary text-text-secondary border border-border-primary hover:text-text-primary'
+                  } ${!isAvail ? 'opacity-60' : ''}`}
                 >
-                  {win} Breakout
-                  {!isAvail && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 font-normal">
-                      ~{report.windowAvailability[win].requiredDays}d
-                    </span>
-                  )}
+                  <span>{win}</span>
+                  {!isAvail && <span className="text-[9px] text-accent-amber font-bold">⚠️</span>}
                 </button>
               );
             })}
           </div>
 
-          {/* Search & Sector Filters */}
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search symbol / sector..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-3 py-1.5 bg-gray-900 border border-gray-800 rounded-lg text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 w-48"
-            />
+          <div className="flex items-center gap-2">
+            {/* Sector Selector */}
             <select
               value={selectedSector}
               onChange={(e) => setSelectedSector(e.target.value)}
-              className="px-3 py-1.5 bg-gray-900 border border-gray-800 rounded-lg text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+              className="bg-bg-tertiary border border-border-primary text-text-primary rounded-md px-2.5 py-1 text-xs focus:outline-none focus:border-accent-blue"
             >
               {sectors.map((sec) => (
                 <option key={sec} value={sec}>
@@ -358,157 +359,161 @@ export default function MultiYearBreakoutPage() {
                 </option>
               ))}
             </select>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input
+                type="text"
+                placeholder="Search symbol / sector..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-36 sm:w-48"
+              />
+            </div>
+
+            {/* Density Toggle */}
+            <div className="flex items-center border border-border-primary rounded overflow-hidden text-[10px]">
+              <button
+                type="button"
+                onClick={() => setDensity('compact')}
+                className={`px-2 py-0.5 transition-colors ${
+                  density === 'compact' ? 'bg-accent-blue text-white font-bold' : 'bg-bg-tertiary text-text-secondary'
+                }`}
+              >
+                Compact
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity('comfortable')}
+                className={`px-2 py-0.5 transition-colors ${
+                  density === 'comfortable' ? 'bg-accent-blue text-white font-bold' : 'bg-bg-tertiary text-text-secondary'
+                }`}
+              >
+                Detailed
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Informational Data Depth Banner for Unavailable Windows */}
+        {/* Unavailable Window Historical Depth Alert */}
         {isSelectedWindowUnavailable && (
-          <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-4 text-xs text-amber-300 flex items-start gap-3">
-            <span className="text-base">⚠️</span>
-            <div>
-              <p className="font-bold">
-                {selectedWindow} Breakout Calculation Awaiting Historical Depth
-              </p>
-              <p className="text-gray-400 mt-0.5">
-                The current database has {report.tradingDaysAvailable} trading days of Bhavcopy history. The{' '}
-                {selectedWindow} window requires {report.windowAvailability[selectedWindow as BreakoutWindow]?.requiredDays} days
-                and will automatically self-populate as daily Bhavcopy records accumulate.
-              </p>
+          <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-md p-2.5 text-xs text-accent-amber flex items-start gap-2">
+            <span className="font-bold">⚠️</span>
+            <div className="text-[11px]">
+              <span className="font-bold">{selectedWindow} Breakout Calculation Awaiting Historical Depth:</span>{' '}
+              The database has {report.tradingDaysAvailable} days of history. This window requires{' '}
+              {report.windowAvailability[selectedWindow as BreakoutWindow]?.requiredDays} days and will self-populate as daily Bhavcopy records accumulate.
             </div>
           </div>
         )}
       </div>
 
-      {/* Breakout Table */}
-      <div className="bg-gray-900/80 border border-gray-800 rounded-xl overflow-hidden">
+      {/* ── Breakout Table (Enterprise Table) ── */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-800 text-gray-400 uppercase font-semibold bg-gray-950/60">
-                <th className="py-3 px-4">#</th>
-                <th className="py-3 px-4">Symbol</th>
-                <th className="py-3 px-4">Sector</th>
-                <th className="py-3 px-4 text-right">CMP (₹)</th>
-                <th className="py-3 px-4 text-right">Day Chg</th>
-                <th className="py-3 px-4 text-center">Strongest BO</th>
-                <th className="py-3 px-4 text-center">VPA Footprint</th>
-                <th className="py-3 px-4 text-right">BO Price (₹)</th>
-                <th className="py-3 px-4 text-right">Gain over BO</th>
-                <th className="py-3 px-4 text-center">1Y</th>
-                <th className="py-3 px-4 text-center">2Y</th>
-                <th className="py-3 px-4 text-center">3Y</th>
-                <th className="py-3 px-4 text-center">5Y</th>
-                <th className="py-3 px-4 text-center">10Y</th>
-                <th
-                  className="py-3 px-4 text-center"
-                  title={report.tradingDaysAvailable < 500 ? `All-Time High within available ${report.tradingDaysAvailable}-day dataset` : 'All-Time High'}
-                >
-                  ATH{report.tradingDaysAvailable < 500 ? '*' : ''}
-                </th>
-                <th className="py-3 px-4 text-right">Volume</th>
+          <table className="w-full text-xs text-left whitespace-nowrap font-mono">
+            <thead className="sticky top-0 bg-bg-tertiary text-text-secondary text-[10px] uppercase tracking-wider border-b border-border-primary">
+              <tr>
+                <th className="py-2 px-3 font-semibold text-center">#</th>
+                <th className="sticky left-0 bg-bg-tertiary py-2 px-3 font-semibold">Stock</th>
+                <th className="py-2 px-3 font-semibold">Sector</th>
+                <th className="py-2 px-3 font-semibold text-right">CMP (₹)</th>
+                <th className="py-2 px-3 font-semibold text-right">Day Chg</th>
+                <th className="py-2 px-3 font-semibold text-center">Strongest BO</th>
+                <th className="py-2 px-3 font-semibold text-center">VPA Footprint</th>
+                <th className="py-2 px-3 font-semibold text-right">BO Price (₹)</th>
+                <th className="py-2 px-3 font-semibold text-right">Gain over BO</th>
+                <th className="py-2 px-3 font-semibold text-center">1Y</th>
+                <th className="py-2 px-3 font-semibold text-center">2Y</th>
+                <th className="py-2 px-3 font-semibold text-center">3Y</th>
+                <th className="py-2 px-3 font-semibold text-center">5Y</th>
+                <th className="py-2 px-3 font-semibold text-center">10Y</th>
+                <th className="py-2 px-3 font-semibold text-center">ATH</th>
+                <th className="py-2 px-3 font-semibold text-right">Volume</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/60">
+            <tbody className="divide-y divide-border-primary/40">
               {filteredStocks.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-gray-500">
-                    No breakout stocks match the selected filter.
+                  <td colSpan={16} className="py-12 text-center text-text-tertiary">
+                    No breakout stocks match the selected filter criteria.
                   </td>
                 </tr>
               ) : (
-                filteredStocks.map((stock, idx) => (
-                  <tr key={stock.symbol} className="hover:bg-gray-800/40 transition">
-                    <td className="py-3 px-4 text-gray-500 font-mono">{idx + 1}</td>
-                    <td className="py-3 px-4 font-bold text-white tracking-wide">{stock.symbol}</td>
-                    <td className="py-3 px-4 text-gray-400">{stock.sector}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-gray-100">
-                      ₹{stock.close.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td
-                      className={`py-3 px-4 text-right font-mono font-bold ${
-                        stock.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {stock.changePct >= 0 ? `+${stock.changePct}%` : `${stock.changePct}%`}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`px-2.5 py-0.5 rounded text-[10px] font-black tracking-wider border ${getStrongestBadgeClass(
-                          stock.strongestBreakout
-                        )}`}
-                        title={
-                          stock.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500
-                            ? `All-Time High within available ${report.tradingDaysAvailable}-day dataset (history-limited)`
-                            : undefined
-                        }
-                      >
-                        {stock.strongestBreakout === 'ATH' && report.tradingDaysAvailable < 500 ? 'ATH*' : (stock.strongestBreakout || '—')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center whitespace-nowrap">
-                      {stock.vpaFootprint ? (
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
-                            stock.vpaFootprint.badgeVariant === 'success'
-                              ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700'
-                              : stock.vpaFootprint.badgeVariant === 'info'
-                              ? 'bg-blue-950/80 text-blue-300 border-blue-700'
-                              : stock.vpaFootprint.badgeVariant === 'danger'
-                              ? 'bg-rose-950/80 text-rose-300 border-rose-700'
-                              : stock.vpaFootprint.badgeVariant === 'warning'
-                              ? 'bg-amber-950/80 text-amber-300 border-amber-700'
-                              : 'bg-gray-800 text-gray-400 border-gray-700'
-                          }`}
-                          title={stock.vpaFootprint.description}
+                filteredStocks.map((stock, idx) => {
+                  const rowPad = density === 'compact' ? 'py-1.5 px-3' : 'py-2.5 px-3';
+                  const isPositive = stock.changePct >= 0;
+
+                  return (
+                    <tr key={stock.symbol} className="hover:bg-bg-tertiary/40 transition-colors">
+                      <td className={`${rowPad} text-center text-text-tertiary font-bold`}>{idx + 1}</td>
+                      <td className={`sticky left-0 bg-bg-secondary hover:bg-bg-tertiary/40 font-bold text-text-primary ${rowPad}`}>
+                        <button
+                          type="button"
+                          onClick={() => handleStockClick(stock)}
+                          className="hover:text-accent-blue transition-colors underline decoration-border-secondary text-left font-bold"
+                          title="Open Stock Detail Drawer"
                         >
-                          {stock.vpaFootprint.label}
+                          {stock.symbol}
+                        </button>
+                      </td>
+                      <td className={`${rowPad} text-text-secondary`}>{stock.sector}</td>
+                      <td className={`${rowPad} text-right font-bold text-text-primary`}>
+                        ₹{fmt(stock.close)}
+                      </td>
+                      <td className={`${rowPad} text-right font-bold ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
+                        {isPositive ? `+${stock.changePct}%` : `${stock.changePct}%`}
+                      </td>
+                      <td className={`${rowPad} text-center`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStrongestBadgeStyle(stock.strongestBreakout)}`}>
+                          {stock.strongestBreakout || '—'}
                         </span>
-                      ) : (
-                        <span className="text-gray-600">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-gray-300">
-                      {stock.breakoutPrice
-                        ? `₹${stock.breakoutPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                        : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">
-                      {stock.breakoutGainPct !== null && stock.breakoutGainPct >= 0
-                        ? `+${stock.breakoutGainPct}%`
-                        : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakout1Y} />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakout2Y} />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakout3Y} />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakout5Y} />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge status={stock.breakout10Y} />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <WindowBadge
-                        status={stock.breakoutATH}
-                        isAth
-                        isDatasetLimited={report.tradingDaysAvailable < 500}
-                      />
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-gray-400">
-                      {stock.volume.toLocaleString('en-IN')}
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className={`${rowPad} text-center`}>
+                        {stock.vpaFootprint ? (
+                          <span
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${getVpaBadgeStyle(stock.vpaFootprint.badgeVariant)}`}
+                            title={stock.vpaFootprint.description}
+                          >
+                            {stock.vpaFootprint.label}
+                          </span>
+                        ) : (
+                          <span className="text-text-tertiary">—</span>
+                        )}
+                      </td>
+                      <td className={`${rowPad} text-right text-text-secondary`}>
+                        {stock.breakoutPrice ? `₹${fmt(stock.breakoutPrice)}` : '—'}
+                      </td>
+                      <td className={`${rowPad} text-right font-bold text-accent-green`}>
+                        {stock.breakoutGainPct !== null && stock.breakoutGainPct >= 0 ? `+${stock.breakoutGainPct}%` : '—'}
+                      </td>
+                      <td className={`${rowPad} text-center`}><WindowBadge status={stock.breakout1Y} /></td>
+                      <td className={`${rowPad} text-center`}><WindowBadge status={stock.breakout2Y} /></td>
+                      <td className={`${rowPad} text-center`}><WindowBadge status={stock.breakout3Y} /></td>
+                      <td className={`${rowPad} text-center`}><WindowBadge status={stock.breakout5Y} /></td>
+                      <td className={`${rowPad} text-center`}><WindowBadge status={stock.breakout10Y} /></td>
+                      <td className={`${rowPad} text-center`}>
+                        <WindowBadge status={stock.breakoutATH} isAth isDatasetLimited={report.tradingDaysAvailable < 500} />
+                      </td>
+                      <td className={`${rowPad} text-right text-text-tertiary`}>
+                        {stock.volume ? Number(stock.volume).toLocaleString('en-IN') : '—'}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* ── Slide-Over Stock Detail Drawer ── */}
+      <StockDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        stock={drawerStock}
+      />
     </div>
   );
 }
@@ -523,15 +528,15 @@ function WindowBadge({
   isDatasetLimited?: boolean;
 }) {
   if (status === null) {
-    return <span className="text-[10px] text-gray-600 font-mono" title="Insufficient historical data">N/A</span>;
+    return <span className="text-[10px] text-text-tertiary font-mono" title="Insufficient historical data">N/A</span>;
   }
   if (status === true) {
     return (
       <span
-        className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold border ${
+        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
           isAth
-            ? 'bg-indigo-950 text-indigo-300 border-indigo-700'
-            : 'bg-emerald-950 text-emerald-300 border-emerald-700'
+            ? 'bg-accent-purple/10 text-accent-purple border-accent-purple/20'
+            : 'bg-accent-green/10 text-accent-green border-accent-green/20'
         }`}
         title={isAth && isDatasetLimited ? 'Dataset-limited ATH (available history)' : undefined}
       >
@@ -539,21 +544,36 @@ function WindowBadge({
       </span>
     );
   }
-  return <span className="text-gray-600">—</span>;
+  return <span className="text-text-tertiary">—</span>;
 }
 
-function getStrongestBadgeClass(strongest: BreakoutStock['strongestBreakout']) {
+function getStrongestBadgeStyle(strongest: BreakoutStock['strongestBreakout']) {
   switch (strongest) {
     case 'ATH':
-      return 'bg-indigo-950 text-indigo-300 border-indigo-700';
+      return 'bg-accent-purple/10 text-accent-purple border-accent-purple/20';
     case '10Y':
     case '5Y':
     case '3Y':
     case '2Y':
-      return 'bg-purple-950 text-purple-300 border-purple-700';
+      return 'bg-accent-blue/10 text-accent-blue border-accent-blue/20';
     case '1Y':
-      return 'bg-emerald-950 text-emerald-300 border-emerald-700';
+      return 'bg-accent-green/10 text-accent-green border-accent-green/20';
     default:
-      return 'bg-gray-800 text-gray-400 border-gray-700';
+      return 'bg-bg-tertiary text-text-tertiary border-border-primary';
+  }
+}
+
+function getVpaBadgeStyle(variant: string) {
+  switch (variant) {
+    case 'success':
+      return 'bg-accent-green/10 text-accent-green border-accent-green/20';
+    case 'info':
+      return 'bg-accent-blue/10 text-accent-blue border-accent-blue/20';
+    case 'danger':
+      return 'bg-accent-red/10 text-accent-red border-accent-red/20';
+    case 'warning':
+      return 'bg-accent-amber/10 text-accent-amber border-accent-amber/20';
+    default:
+      return 'bg-bg-tertiary text-text-tertiary border-border-primary';
   }
 }
