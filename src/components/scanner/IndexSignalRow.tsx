@@ -54,7 +54,7 @@ export function IndexSignalRow({ signal }: IndexSignalRowProps) {
 
   return (
     <tr className="border-b border-border-primary/50 hover:bg-bg-tertiary/20 group font-mono text-[10px]">
-      <td className="p-2 align-middle">
+      <td className="p-2 align-middle sticky left-0 z-10 bg-surface-panel group-hover:bg-surface-hover shadow-[1px_0_0_0_var(--color-border-subtle)] transition-colors">
         <div className="flex flex-col gap-0.5">
           <span className="font-bold text-text-primary text-[11px] uppercase tracking-wide cursor-pointer hover:text-accent-blue transition-colors">
             {signal.symbol}

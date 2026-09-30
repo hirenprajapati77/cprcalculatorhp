@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Layers,
   Activity,
-  Award,
   Pin,
   Bell,
   X,
@@ -32,6 +31,8 @@ import { useToast } from '@/components/ui/Toast';
 import { LevelChart } from '@/components/chart/LevelChart';
 import { fmt, formatIST, lastRefreshLabel } from '@/utils/format';
 import { IndexSignalRow } from './IndexSignalRow';
+import { ScannerKpiStrip } from './ScannerKpiStrip';
+import { ScannerQuickPresets } from './ScannerQuickPresets';
 import { BTST_CLOCK, BTST_HHMM, BTST_WINDOW_MINUTES, isBtstDiscoveryOpen, isMarketOpen } from '@/lib/market-hours';
 import { filterIndexRowsForDisplay } from '@/lib/index-display';
 import { ADVANCED_SCORE, SIMPLE_SCORE } from '@/config/trading-constants';
@@ -424,6 +425,7 @@ const StockRow = React.memo(({
   cellPadding,
   visibleColumns,
   isSelected,
+  isKeyboardSelected,
   isStarred,
   isPinned,
   isNotified,
@@ -439,6 +441,7 @@ const StockRow = React.memo(({
   cellPadding: string;
   visibleColumns: string[];
   isSelected: boolean;
+  isKeyboardSelected?: boolean;
   isStarred: boolean;
   isPinned: boolean;
   isNotified: boolean;
@@ -460,6 +463,9 @@ const StockRow = React.memo(({
   const distBC = ((row.ltp - row.bc) / row.bc) * 100;
 
   let rowClass = isPinned ? 'bg-accent-blue/5 border-l-2 border-accent-blue' : '';
+  if (isKeyboardSelected) {
+    rowClass += ' bg-surface-selected ring-1 ring-inset ring-accent-primary';
+  }
   if (row.btstClassification) {
     rowClass += btstRowHighlightClass(row.btstClassification);
   }
@@ -589,11 +595,11 @@ const StockRow = React.memo(({
       )}
 
       {visibleColumns.includes('symbol') && (
-        <td className={cellPadding}>
+        <td className={`${cellPadding} sticky left-0 z-10 bg-surface-panel group-hover:bg-surface-hover shadow-[1px_0_0_0_var(--color-border-subtle)] transition-colors`}>
           <div className="flex flex-wrap items-center gap-1">
             <span 
               onClick={() => onOpenDrawer(row)}
-              className="font-bold text-text-primary group-hover:text-accent-blue transition-colors cursor-pointer hover:underline"
+              className="font-bold text-text-primary group-hover:text-accent-primary transition-colors cursor-pointer hover:underline"
             >
               {row.symbol}
             </span>
@@ -1271,6 +1277,7 @@ export default function ScannerClient() {
 
   // Heatmap Mobile/Click Tooltip State
   const [activeHeatmapTooltip, setActiveHeatmapTooltip] = useState<{ sector: string; signal: string } | null>(null);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
 
   // Click outside to dismiss active heatmap tooltip
   useEffect(() => {
@@ -2078,6 +2085,53 @@ export default function ScannerClient() {
     setCompareError(null);
   }, []);
 
+  // Keyboard navigation across scanner rows (↑ / ↓ / Enter / Esc)
+  useEffect(() => {
+    const handleTableKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input, textarea, or select
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.tagName === 'SELECT')
+      ) {
+        return;
+      }
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedRowIndex((prev) => {
+          const max = results.length - 1;
+          if (max < 0) return -1;
+          return prev < max ? prev + 1 : 0;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedRowIndex((prev) => {
+          const max = results.length - 1;
+          if (max < 0) return -1;
+          return prev > 0 ? prev - 1 : max;
+        });
+      } else if (e.key === 'Enter') {
+        if (selectedRowIndex >= 0 && selectedRowIndex < results.length) {
+          e.preventDefault();
+          handleOpenDrawer(results[selectedRowIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        if (drawerOpen) {
+          e.preventDefault();
+          setDrawerOpen(false);
+        } else if (selectedRowIndex !== -1) {
+          setSelectedRowIndex(-1);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleTableKeyDown);
+    return () => window.removeEventListener('keydown', handleTableKeyDown);
+  }, [results, selectedRowIndex, drawerOpen, handleOpenDrawer]);
+
   // Save stock user notes state
   const handleSaveNotes = (val: string) => {
     setStockNotes(val);
@@ -2540,58 +2594,23 @@ export default function ScannerClient() {
       
       {isOvernightMode(scannerMode) && <BtstStateBanner />}
 
-      {/* V3 KPI Top status bar */}
-      <div className="bg-bg-secondary border border-border-primary rounded-lg px-4 py-2.5 font-mono text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
-        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
-          <Layers size={13} className="text-accent-blue" />
-          <span>Universe:</span>
-          <span className="font-bold text-text-primary uppercase">
-            {universe === 'NIFTY_FNO' ? 'NSE F&O' : universe}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
-          <Activity size={13} className="text-accent-green" />
-          <span>Active Signals:</span>
-          <span className="font-bold text-text-primary">{totalActiveSignals}</span>
-        </div>
-        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
-          <Award size={13} className="text-accent-purple" />
-          <span>Avg Score:</span>
-          <span className="font-bold text-text-primary">{averageUniverseScore.toFixed(1)}</span>
-        </div>
-        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
-          <Clock size={13} className="text-accent-amber" />
-          <span>Refresh:</span>
-          <span className="font-bold text-text-primary uppercase">{isLoading || isRefreshing ? 'Scanning' : 'Idle'}</span>
-        </div>
-        <div className="flex items-center gap-1.5 border-r border-border-primary/50 last:border-none pr-2">
-          <TrendingUp size={13} className="text-accent-blue" />
-          <span>Latency:</span>
-          <span className="font-bold text-text-primary">{latency}ms</span>
-        </div>
-        {/* Live Data Badge */}
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-accent-green animate-pulse" />
-          <span className="font-bold text-accent-green uppercase tracking-wide">LIVE</span>
-        </div>
-      </div>
-
-      {/* V3 Top Tickers marquee */}
-      {topStocks.length > 0 && (
-        <div className="bg-bg-secondary/40 border border-border-primary/50 rounded-lg px-4 py-2 font-mono text-[10px] text-text-secondary flex flex-wrap items-center gap-2">
-          <Sparkles size={12} className="text-accent-purple animate-pulse" />
-          <span className="font-bold text-text-primary uppercase tracking-wider">Top Algo Matches:</span>
-          <div className="flex flex-wrap items-center gap-2">
-            {topStocks.map((s, idx) => (
-              <span key={s.symbol} className="flex items-center gap-1">
-                <span className="text-text-primary font-bold">{s.symbol}</span>
-                <span className="text-text-tertiary">({s.score} pts)</span>
-                {idx < topStocks.length - 1 && <span className="text-text-tertiary">|</span>}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Enterprise KPI & Telemetry Strip */}
+      <ScannerKpiStrip
+        scannerMode={scannerMode}
+        universe={universe}
+        totalActiveSignals={totalActiveSignals}
+        averageUniverseScore={averageUniverseScore}
+        isLoading={isLoading}
+        isRefreshing={isRefreshing}
+        latency={latency}
+        btstMetrics={btstMetrics}
+        indexMetrics={indexMetrics}
+        strongBuyCount={strongBuyCount}
+        breakoutReadyCount={breakoutReadyCount}
+        watchlistCount={watchlistCount}
+        avoidCount={avoidCount}
+        topStocks={topStocks}
+      />
 
       {/* V2 Dashboard Hero */}
       <div className="bg-bg-secondary border border-border-primary rounded-lg p-5 font-mono relative overflow-hidden select-none">
@@ -2691,6 +2710,25 @@ export default function ScannerClient() {
         </div>
       </div>
 
+      {/* Quick Filter Presets Bar */}
+      <div className="bg-surface-panel border border-border-default rounded-lg p-3">
+        <ScannerQuickPresets
+          scannerMode={scannerMode}
+          onSetScannerMode={setScannerMode}
+          minScore={minScore}
+          onSetMinScore={setMinScore}
+          narrowCprOnly={narrowCprOnly}
+          onToggleNarrowCprOnly={setNarrowCprOnly}
+          signalMode={mode}
+          onSetSignalMode={(m) => handleFilterChange('mode', m)}
+          onResetFilters={() => {
+            setMinScore('');
+            setNarrowCprOnly(false);
+            setMode('ALL');
+          }}
+        />
+      </div>
+
       {/* Persistence history runs panel */}
       {showLogsList && (
         <Card title="Scanner Run History Log" icon={<Clock size={14} className="text-accent-blue" />}>
@@ -2721,136 +2759,6 @@ export default function ScannerClient() {
             </div>
           )}
         </Card>
-      )}
-
-      {/* V3 Insights Cards */}
-      {isOvernightMode(scannerMode) ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">BTST Ready</span>
-              <h2 className="text-2xl font-bold text-accent-blue">{btstMetrics.ready}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-blue/10 border border-accent-blue/20 flex items-center justify-center text-accent-blue">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Strong BTST</span>
-              <h2 className="text-2xl font-bold text-accent-green">{btstMetrics.strong}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
-              <Award size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Avg Expected Gap %</span>
-              <h2 className="text-2xl font-bold text-accent-purple">+{btstMetrics.avgGap.toFixed(2)}%</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
-              <Activity size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Avg Confluence</span>
-              <h2 className="text-2xl font-bold text-accent-amber">{btstMetrics.avgConf.toFixed(0)}/100</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
-              <Target size={18} />
-            </div>
-          </div>
-        </div>
-      ) : scannerMode === 'INDEX' ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Index Strong</span>
-              <p className="text-[9px] opacity-70">INTRA ≥75 / BTST 100</p>
-              <h2 className="text-2xl font-bold text-accent-purple">{indexMetrics.strong}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
-              <Award size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Index Ready</span>
-              <p className="text-[9px] opacity-70">INTRA ≥60 / BTST ≥85</p>
-              <h2 className="text-2xl font-bold text-accent-green">{indexMetrics.ready}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Index Watch</span>
-              <p className="text-[9px] opacity-70">INTRA ≥40 / BTST ≥70</p>
-              <h2 className="text-2xl font-bold text-accent-amber">{indexMetrics.watch}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
-              <Activity size={18} />
-            </div>
-          </div>
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Ignore</span>
-              <p className="text-[9px] opacity-70">Below watch / inside CPR</p>
-              <h2 className="text-2xl font-bold text-accent-red">{indexMetrics.ignore}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
-              <AlertTriangle size={18} />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Strong Signal</span>
-              <p className="text-[9px] opacity-70">Score ≥ 75</p>
-              <h2 className="text-2xl font-bold text-accent-purple">{strongBuyCount}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
-              <Award size={18} />
-            </div>
-          </div>
-
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Breakout Ready</span>
-              <p className="text-[9px] opacity-70">Score 60-74</p>
-              <h2 className="text-2xl font-bold text-accent-green">{breakoutReadyCount}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-green/10 border border-accent-green/20 flex items-center justify-center text-accent-green">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Watchlist Items</span>
-              <h2 className="text-2xl font-bold text-accent-amber">{watchlistCount}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-amber/10 border border-accent-amber/20 flex items-center justify-center text-accent-amber">
-              <Star size={18} fill="currentColor" />
-            </div>
-          </div>
-
-          <div className="bg-bg-secondary/40 border border-border-primary p-4 rounded-lg flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] text-text-tertiary uppercase">Avoid / Ignore</span>
-              <p className="text-[9px] opacity-70">Score &lt; 40 or Conflict</p>
-              <h2 className="text-2xl font-bold text-accent-red">{avoidCount}</h2>
-            </div>
-            <div className="h-10 w-10 rounded-lg bg-accent-red/10 border border-accent-red/20 flex items-center justify-center text-accent-red">
-              <AlertTriangle size={18} />
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Sector Signal Heatmap Grid — stock/CPR only; INDEX has no sector universe */}
@@ -3553,8 +3461,8 @@ export default function ScannerClient() {
                     {scannerMode === 'INDEX' ? (
                       <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                         <thead>
-                          <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
-                            <th className="p-2.5">Symbol</th>
+                          <tr className="border-b border-border-default bg-surface-panel text-text-secondary text-[10px] uppercase sticky top-0 z-20 shadow-sm backdrop-blur-md">
+                            <th className="p-2.5 sticky left-0 z-30 bg-surface-panel shadow-[1px_0_0_0_var(--color-border-subtle)] font-bold text-text-primary">Symbol</th>
                             <th className="p-2.5">Type</th>
                             <th className="p-2.5">Signal</th>
                             <th className="p-2.5">Confluence</th>
@@ -3578,11 +3486,11 @@ export default function ScannerClient() {
                     ) : (
                       <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                     <thead>
-                      <tr className="border-b border-border-primary bg-bg-secondary text-text-secondary text-[10px] uppercase">
+                      <tr className="border-b border-border-default bg-surface-panel text-text-secondary text-[10px] uppercase sticky top-0 z-20 shadow-sm backdrop-blur-md">
                         {visibleColumns.includes('checkbox') && <th className="p-2.5 w-8"></th>}
                         {visibleColumns.includes('watchlist') && <th className="p-2.5 w-10"></th>}
                         {visibleColumns.includes('symbol') && (
-                          <th className="p-2.5 cursor-pointer hover:text-text-primary" onClick={() => handleSort('symbol')}>
+                          <th className="p-2.5 cursor-pointer hover:text-text-primary sticky left-0 z-30 bg-surface-panel shadow-[1px_0_0_0_var(--color-border-subtle)] font-bold text-text-primary" onClick={() => handleSort('symbol')}>
                             <div className="flex items-center gap-1">Symbol <ArrowUpDown size={11} /></div>
                           </th>
                         )}
@@ -3623,7 +3531,7 @@ export default function ScannerClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-primary/50">
-                      {results.map((row) => {
+                      {results.map((row, idx) => {
                         const isStarred = watchlist[row.symbol]?.starred;
                         const isPinned = watchlist[row.symbol]?.pinned;
                         const isNotified = watchlist[row.symbol]?.notify;
@@ -3638,6 +3546,7 @@ export default function ScannerClient() {
                             cellPadding={cellPadding}
                             visibleColumns={visibleColumns}
                             isSelected={isSelected}
+                            isKeyboardSelected={selectedRowIndex === idx}
                             isStarred={isStarred}
                             isPinned={isPinned}
                             isNotified={isNotified}
@@ -3727,38 +3636,38 @@ export default function ScannerClient() {
 
           <div className="absolute inset-y-0 right-0 max-w-full flex max-sm:bottom-0 max-sm:top-auto max-sm:h-[85vh] max-sm:w-full">
             {/* Slide in panel: desktop 520px side drawer, mobile bottom sheet sliding */}
-            <div className="w-screen sm:max-w-[520px] bg-bg-secondary border-l border-border-primary shadow-2xl flex flex-col justify-between h-full max-sm:rounded-t-xl overflow-hidden transition-transform transform translate-x-0 animate-slide-in">
+            <div className="w-screen sm:max-w-[560px] bg-surface-panel border-l border-border-default shadow-2xl flex flex-col justify-between h-full max-sm:rounded-t-xl overflow-hidden transition-all text-text-primary">
               
               {/* Drawer Header */}
-              <div className="p-4 border-b border-border-primary flex items-center justify-between bg-bg-primary">
+              <div className="p-4 border-b border-border-default flex items-center justify-between bg-surface-elevated">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-accent-blue font-bold uppercase tracking-wider flex items-center gap-1">
+                  <span className="text-[10px] text-accent-primary font-bold uppercase tracking-wider flex items-center gap-1">
                     <Target size={12} />
                     Inspect Module V3
                   </span>
                   <h3 className="text-sm font-bold text-text-primary uppercase flex items-center gap-1.5">
                     {drawerStock.symbol} Details
-                    {watchlist[drawerStock.symbol]?.starred && <Star size={11} fill="currentColor" className="text-accent-amber" />}
+                    {watchlist[drawerStock.symbol]?.starred && <Star size={11} fill="currentColor" className="text-amber-400" />}
                   </h3>
                 </div>
                 <button 
                   onClick={() => setDrawerOpen(false)}
-                  className="p-1.5 hover:bg-bg-tertiary rounded text-text-secondary hover:text-text-primary"
+                  className="p-1.5 hover:bg-surface-hover rounded text-text-secondary hover:text-text-primary transition-colors"
                 >
                   <X size={16} />
                 </button>
               </div>
 
               {/* V3 multi-tab header */}
-              <div className="flex border-b border-border-primary bg-bg-primary/50 text-[10px] uppercase font-bold overflow-x-auto">
+              <div className="flex border-b border-border-default bg-surface-app text-[10px] uppercase font-bold overflow-x-auto">
                 {(['overview', 'signals', 'tradeSetup', 'history', 'compare', 'notes', 'cprStats'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setDrawerTab(tab)}
                     className={`px-4 py-2 border-b-2 whitespace-nowrap transition-all ${
                       drawerTab === tab 
-                        ? 'border-accent-blue text-text-primary bg-bg-secondary/40' 
-                        : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/20'
+                        ? 'border-accent-primary text-text-primary bg-surface-panel' 
+                        : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover'
                     }`}
                   >
                     {tab === 'tradeSetup' ? 'Trade Setup' : tab === 'cprStats' ? 'CPR Stats' : tab}
