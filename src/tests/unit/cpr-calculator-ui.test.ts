@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { CPRInputSchema } from '@/utils/validate';
-import type { CPRClassification, CPRTrend, CPRResult } from '@/types/cpr.types';
+import type { CPRClassification, CPRResult } from '@/types/cpr.types';
 import type { DrawerStockData } from '@/components/enterprise/StockDetailDrawer';
 
 describe('Multi-Timeframe CPR Calculator Presentation & Invariants (Phase 7)', () => {
