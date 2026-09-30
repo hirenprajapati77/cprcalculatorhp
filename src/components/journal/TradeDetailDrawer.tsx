@@ -58,6 +58,19 @@ export const TradeDetailDrawer: React.FC<TradeDetailDrawerProps> = ({
   trade,
   onInspectStock,
 }) => {
+  // Keyboard Escape listener
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !trade) return null;
 
   const isClosed = trade.exitCmp !== null && trade.exitCmp !== undefined;
@@ -77,8 +90,17 @@ export const TradeDetailDrawer: React.FC<TradeDetailDrawerProps> = ({
   const signals = trade.signalSummary ? trade.signalSummary.split(',').filter(Boolean) : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs font-mono animate-fade-in select-none">
-      <div className="w-full max-w-xl bg-bg-secondary border-l border-border-primary h-full overflow-y-auto flex flex-col shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs font-mono animate-fade-in select-none"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-xl bg-bg-secondary border-l border-border-primary h-full overflow-y-auto flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Trade details for ${trade.symbol}`}
+      >
         {/* Header */}
         <div className="sticky top-0 z-10 bg-bg-secondary/95 backdrop-blur-md border-b border-border-primary p-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -127,6 +149,7 @@ export const TradeDetailDrawer: React.FC<TradeDetailDrawerProps> = ({
               type="button"
               onClick={onClose}
               className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+              aria-label="Close trade details"
             >
               <X size={18} />
             </button>

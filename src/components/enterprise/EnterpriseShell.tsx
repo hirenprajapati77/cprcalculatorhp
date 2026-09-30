@@ -119,6 +119,14 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
 
   return (
     <div className="min-h-screen flex bg-surface-app text-text-primary antialiased selection:bg-accent-primary/20 selection:text-text-primary">
+      {/* ── Skip to Main Content Link for Keyboard / Screen Readers ── */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-accent-primary focus:text-white focus:rounded focus:outline-none focus:ring-2 focus:ring-white text-xs font-mono font-bold shadow-lg"
+      >
+        Skip to main workstation content
+      </a>
+
       {/* ── Left Sidebar (Desktop) ── */}
       <Sidebar
         collapsed={collapsed}
@@ -145,7 +153,11 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
         />
 
         {/* Dynamic Enterprise Workstation Canvas */}
-        <main className="flex-1 flex flex-col min-w-0 w-full px-3 sm:px-5 lg:px-6 py-3 sm:py-5 overflow-x-hidden">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 flex flex-col min-w-0 w-full px-3 sm:px-5 lg:px-6 py-3 sm:py-5 overflow-x-hidden focus:outline-none"
+        >
           {children}
         </main>
 

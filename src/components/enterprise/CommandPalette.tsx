@@ -284,10 +284,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-xl rounded-xl bg-surface-elevated border border-border-default shadow-2xl overflow-hidden flex flex-col max-h-[75vh]"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command Palette"
       >
         {/* Search Input Bar */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle bg-surface-panel">
@@ -303,6 +309,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
             onKeyDown={handleKeyDown}
             placeholder="Type a command, tool, or theme..."
             className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none font-mono"
+            role="combobox"
+            aria-expanded="true"
+            aria-haspopup="listbox"
+            aria-autocomplete="list"
+            aria-controls="command-palette-results"
+            aria-activedescendant={filteredCommands[selectedIndex]?.id}
           />
           <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono rounded bg-surface-app border border-border-subtle text-text-muted">
             ESC to close
@@ -310,7 +322,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         </div>
 
         {/* Results List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div
+          ref={listRef}
+          id="command-palette-results"
+          role="listbox"
+          aria-label="Command suggestions"
+          className="flex-1 overflow-y-auto p-2 space-y-1"
+        >
           {filteredCommands.length === 0 ? (
             <div className="py-8 text-center text-xs text-text-muted font-mono">
               No matching commands or tools found for &quot;{query}&quot;
@@ -321,6 +339,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
               return (
                 <button
                   key={cmd.id}
+                  id={cmd.id}
+                  role="option"
+                  aria-selected={isSelected}
                   type="button"
                   onClick={cmd.action}
                   onMouseEnter={() => setSelectedIndex(idx)}

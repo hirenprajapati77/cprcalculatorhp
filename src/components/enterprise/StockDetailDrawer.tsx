@@ -436,6 +436,9 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
       {/* Slide-over Container */}
       <div className="fixed inset-y-0 right-0 max-w-full flex max-sm:bottom-0 max-sm:top-auto max-sm:h-[85vh] max-sm:w-full">
         <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Stock details for ${stock.symbol}`}
           className={`w-screen bg-surface-panel border-l border-border-default shadow-2xl flex flex-col justify-between h-full max-sm:rounded-t-xl overflow-hidden transition-all duration-300 text-text-primary ${
             isExpandedWidth ? 'sm:max-w-[780px]' : 'sm:max-w-[560px]'
           }`}
@@ -542,7 +545,11 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
           </div>
 
           {/* ── Persistent Multi-Tab Navigation Strip ── */}
-          <div className="flex border-b border-border-default bg-surface-app text-[10px] uppercase font-bold overflow-x-auto scrollbar-none z-10 sticky top-[65px]">
+          <div
+            role="tablist"
+            aria-label="Stock details sections"
+            className="flex border-b border-border-default bg-surface-app text-[10px] uppercase font-bold overflow-x-auto scrollbar-none z-10 sticky top-[65px]"
+          >
             {(
               [
                 { id: 'overview', label: 'Overview' },
@@ -556,6 +563,8 @@ export const StockDetailDrawer: React.FC<StockDetailDrawerProps> = ({
             ).map((tab) => (
               <button
                 key={tab.id}
+                role="tab"
+                aria-selected={drawerTab === tab.id}
                 type="button"
                 onClick={() => handleTabChange(tab.id)}
                 className={`px-3.5 py-2.5 border-b-2 whitespace-nowrap transition-colors flex items-center gap-1.5 ${

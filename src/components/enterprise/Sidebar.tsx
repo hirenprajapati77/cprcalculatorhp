@@ -120,6 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
+      aria-label="Main sidebar navigation"
       className={`hidden lg:flex flex-col border-r border-border-default bg-surface-panel transition-all duration-300 z-30 select-none ${
         collapsed ? 'w-16' : 'w-60'
       } ${className}`}
@@ -220,6 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           type="button"
           onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
           className="w-full flex items-center justify-center gap-2 py-1.5 px-2 rounded-md text-[10px] text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors font-mono"
           title={collapsed ? 'Expand sidebar (Ctrl+[)' : 'Collapse sidebar (Ctrl+[)'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
