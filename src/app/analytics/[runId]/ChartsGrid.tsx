@@ -1,12 +1,32 @@
 'use client';
 
 import React from 'react';
-import { formatIST } from '@/utils/format';
+import { formatIST, fmt } from '@/utils/format';
 import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts';
+import {
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  Cell,
+} from 'recharts';
+import {
+  TrendingUp,
+  Calendar,
+  Activity,
+  Layers,
+  BarChart3,
+} from 'lucide-react';
 
-export default function ChartsGrid({ runId }: { runId: string }) {
+interface ChartsGridProps {
+  runId: string;
+}
+
+export default function ChartsGrid({ runId }: ChartsGridProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['analytics', runId],
     queryFn: async () => {
@@ -19,16 +39,16 @@ export default function ChartsGrid({ runId }: { runId: string }) {
         signalBreakdown: Array<{ signal: string; wins: number; losses: number; winRate: number; avgPnl: number }>;
         tradeDistribution: Array<{ bucket: string; count: number; minPnl: number; maxPnl: number }>;
       }>;
-    }
+    },
   });
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-        {[1, 2, 3, 4, 5].map(i => (
-          <div key={i} className="border border-border bg-card rounded-xl p-4 h-80 flex flex-col">
-            <div className="h-5 w-1/3 bg-white/10 rounded animate-pulse mb-4"></div>
-            <div className="flex-1 bg-white/5 rounded animate-pulse"></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2 font-mono select-none">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 flex flex-col justify-between">
+            <div className="h-4 w-1/3 bg-bg-tertiary rounded animate-pulse" />
+            <div className="flex-1 bg-bg-tertiary/40 rounded mt-4 animate-pulse" />
           </div>
         ))}
       </div>
@@ -37,90 +57,238 @@ export default function ChartsGrid({ runId }: { runId: string }) {
 
   if (!data || data.equityCurve.length === 0) {
     return (
-      <div className="mt-8 text-center py-12 border border-border bg-card rounded-xl">
-        <p className="text-muted-foreground">No chart data available for this run.</p>
+      <div className="mt-4 text-center py-12 border border-border-primary bg-bg-secondary rounded-lg font-mono">
+        <p className="text-xs text-text-tertiary">No trade data available to generate telemetry charts for this run.</p>
       </div>
     );
   }
 
+  const tooltipStyle = {
+    backgroundColor: 'var(--color-bg-tertiary, #181d28)',
+    borderColor: 'var(--color-border-primary, #272f40)',
+    fontSize: 11,
+    borderRadius: 6,
+    color: 'var(--color-text-primary, #f0f4f8)',
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-      {/* 1. Equity Curve */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Equity Curve</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data.equityCurve}>
-            <XAxis dataKey="date" tickFormatter={(v) => formatIST(v)} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} width={70} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} 
-              labelFormatter={(v) => formatIST(v, { dateOnly: true })}
-              formatter={(value) => value != null ? [`₹${Number(value).toLocaleString('en-IN')}`, 'Cumulative PnL'] : ['—', 'Cumulative PnL']}
-            />
-            <Line type="monotone" dataKey="cumulativePnl" stroke="#22c55e" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </motion.div>
-
-      {/* 2. Monthly PnL */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Monthly PnL Heatmap</h3>
-        <div className="grid grid-cols-6 gap-2 h-full pb-8">
-          {data.monthlyPnl.map((item, idx) => (
-            <div key={idx} className="flex flex-col items-center justify-center rounded text-xs" style={{
-              backgroundColor: item.pnl > 0 ? `rgba(34, 197, 94, ${Math.min(1, Math.max(0.2, item.pnl / 10000))})` : `rgba(239, 68, 68, ${Math.min(1, Math.max(0.2, Math.abs(item.pnl) / 10000))})`
-            }}>
-              <span className="font-semibold text-white/90 mb-1">{item.month} &apos;{String(item.year).slice(2)}</span>
-              <span className="text-white/80">₹{item.pnl.toLocaleString('en-IN')}</span>
-            </div>
-          ))}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2 font-mono select-none">
+      {/* 1. Cumulative Equity Curve */}
+      <div className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 flex flex-col">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-primary/60">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <TrendingUp size={13} className="text-accent-green" />
+            Cumulative Equity Curve
+          </span>
+          <span className="text-[9px] bg-accent-green/10 text-accent-green font-bold px-1.5 py-0.5 rounded">
+            P&amp;L ACCUMULATION
+          </span>
         </div>
-      </motion.div>
+        <div className="flex-1 w-full min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data.equityCurve} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+              <defs>
+                <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                tickFormatter={(v) => formatIST(v, { dateOnly: true })}
+                stroke="#6b7280"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="#6b7280"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `₹${fmt(v)}`}
+                width={70}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(v) => formatIST(v, { dateOnly: true })}
+                formatter={(value) => [typeof value === 'number' ? `₹${fmt(value)}` : String(value ?? '—'), 'Cumulative P&L']}
+              />
+              <Area
+                type="monotone"
+                dataKey="cumulativePnl"
+                stroke="#22c55e"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#equityGradient)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-      {/* 3. Drawdown Chart */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Drawdown</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data.drawdown}>
-             <XAxis dataKey="date" tickFormatter={(v) => formatIST(v)} stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-             <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toFixed(1)}%`} width={40} />
-             <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} labelFormatter={(v) => formatIST(v, { dateOnly: true })} formatter={(value) => [`${Number(value).toFixed(2)}%`, 'Drawdown']} />
-            <Area type="monotone" dataKey="drawdownPct" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </motion.div>
+      {/* 2. Monthly P&L Calendar Grid */}
+      <div className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 flex flex-col">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-primary/60">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <Calendar size={13} className="text-accent-blue" />
+            Monthly P&amp;L Performance Grid
+          </span>
+          <span className="text-[9px] bg-bg-tertiary text-text-tertiary px-1.5 py-0.5 rounded">
+            {data.monthlyPnl.length} MONTHS
+          </span>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 flex-1 overflow-y-auto pr-1">
+          {data.monthlyPnl.map((item, idx) => {
+            const isProfit = item.pnl >= 0;
+            return (
+              <div
+                key={idx}
+                className={`flex flex-col items-center justify-center p-2 rounded-md border text-center transition-colors ${
+                  isProfit
+                    ? 'bg-accent-green/10 border-accent-green/25 text-accent-green'
+                    : 'bg-accent-red/10 border-accent-red/25 text-accent-red'
+                }`}
+              >
+                <span className="text-[10px] text-text-secondary font-semibold">
+                  {item.month} &apos;{String(item.year).slice(2)}
+                </span>
+                <span className="text-xs font-bold mt-0.5">
+                  {item.pnl >= 0 ? '+' : ''}₹{fmt(item.pnl)}
+                </span>
+                <span className="text-[9px] text-text-tertiary mt-0.5">
+                  {item.tradeCount} trades
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. Drawdown Depth Chart */}
+      <div className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 flex flex-col">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-primary/60">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <Activity size={13} className="text-accent-red" />
+            Underwater Drawdown Profile
+          </span>
+          <span className="text-[9px] bg-accent-red/10 text-accent-red font-bold px-1.5 py-0.5 rounded">
+            PEAK-TO-TROUGH
+          </span>
+        </div>
+        <div className="flex-1 w-full min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data.drawdown} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+              <defs>
+                <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.0} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.35} />
+                </linearGradient>
+              </defs>
+              <XAxis
+                dataKey="date"
+                tickFormatter={(v) => formatIST(v, { dateOnly: true })}
+                stroke="#6b7280"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="#6b7280"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v: number) => `${v.toFixed(1)}%`}
+                width={50}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(v) => formatIST(v, { dateOnly: true })}
+                formatter={(value) => [typeof value === 'number' ? `${value.toFixed(2)}%` : String(value ?? ''), 'Drawdown']}
+              />
+              <Area
+                type="monotone"
+                dataKey="drawdownPct"
+                stroke="#ef4444"
+                strokeWidth={1.5}
+                fillOpacity={1}
+                fill="url(#drawdownGradient)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       {/* 4. Win/Loss by Signal */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Win/Loss by Signal</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.signalBreakdown} layout="vertical" margin={{ left: 50 }}>
-            <XAxis type="number" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis dataKey="signal" type="category" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={100} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} />
-            <Bar dataKey="wins" name="Wins" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="losses" name="Losses" stackId="a" fill="#ef4444" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </motion.div>
+      <div className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 flex flex-col">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-primary/60">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <Layers size={13} className="text-accent-blue" />
+            Signal Breakdown (Wins vs Losses)
+          </span>
+          <div className="flex items-center gap-2 text-[10px]">
+            <span className="flex items-center gap-1 text-accent-green font-bold">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-green" /> Wins
+            </span>
+            <span className="flex items-center gap-1 text-accent-red font-bold">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent-red" /> Losses
+            </span>
+          </div>
+        </div>
+        <div className="flex-1 w-full min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.signalBreakdown} layout="vertical" margin={{ left: 10, right: 10 }}>
+              <XAxis type="number" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis
+                dataKey="signal"
+                type="category"
+                stroke="#9ca3af"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                width={110}
+              />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Bar dataKey="wins" name="Wins" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="losses" name="Losses" stackId="a" fill="#ef4444" radius={[0, 3, 3, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-      {/* 5. Trade Distribution */}
-      <motion.div className="border border-border bg-card rounded-xl p-4 h-80 lg:col-span-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-        <h3 className="font-semibold mb-4 text-muted-foreground text-sm uppercase tracking-wider">Trade Distribution (PnL)</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.tradeDistribution}>
-            <XAxis dataKey="bucket" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
-            <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} width={40} />
-            <Tooltip contentStyle={{ backgroundColor: '#1a1b1e', borderColor: '#2d2e33', fontSize: 12 }} cursor={{ fill: '#ffffff10' }} />
-            <Bar dataKey="count" name="Trade Count">
-              {data.tradeDistribution.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.minPnl >= 0 ? '#22c55e' : '#ef4444'} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </motion.div>
-
+      {/* 5. Trade P&L Distribution Histogram */}
+      <div className="border border-border-primary bg-bg-secondary rounded-lg p-4 h-80 lg:col-span-2 flex flex-col">
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-border-primary/60">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+            <BarChart3 size={13} className="text-accent-blue" />
+            Trade P&amp;L Distribution (Frequency Buckets)
+          </span>
+          <span className="text-[10px] text-text-tertiary">₹500 INTERVALS</span>
+        </div>
+        <div className="flex-1 w-full min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data.tradeDistribution} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+              <XAxis dataKey="bucket" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} width={40} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                cursor={{ fill: 'var(--color-bg-tertiary, #1f2937)', opacity: 0.4 }}
+                formatter={(value: unknown) => [String(value ?? 0), 'Trades']}
+                labelFormatter={(b: unknown) => `P&L Bracket: ₹${b}`}
+              />
+              <Bar dataKey="count" name="Trade Count">
+                {data.tradeDistribution.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.minPnl >= 0 ? '#22c55e' : '#ef4444'}
+                    fillOpacity={0.8}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 }

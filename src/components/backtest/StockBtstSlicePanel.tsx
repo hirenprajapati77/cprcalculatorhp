@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 type SliceStats = {
@@ -21,36 +22,41 @@ function SliceTable({
   const keys = Object.keys(slices).sort();
   if (keys.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">No {title.toLowerCase()} slice data.</p>
+      <div className="border border-border-primary rounded-lg p-3 bg-bg-secondary text-xs text-text-tertiary">
+        No {title.toLowerCase()} slice data available.
+      </div>
     );
   }
 
   return (
-    <div className="space-y-2">
-      <h4 className="text-sm font-semibold text-cyan-400">{title}</h4>
+    <div className="space-y-2 border border-border-primary rounded-lg p-3 bg-bg-secondary font-mono">
+      <h4 className="text-xs font-bold text-accent-blue uppercase tracking-wider">{title}</h4>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left border-collapse">
-          <thead className="text-xs text-muted-foreground border-b border-border/50">
+        <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
+          <thead className="bg-bg-tertiary text-[10px] text-text-secondary uppercase tracking-wider border-b border-border-primary">
             <tr>
-              <th className="py-2 pr-4">Slice</th>
-              <th className="py-2 pr-4">Trades</th>
-              <th className="py-2 pr-4">Win %</th>
-              <th className="py-2 pr-4">Expectancy</th>
-              <th className="py-2 pr-4">Avg P&L %</th>
+              <th className="py-1.5 px-3 font-semibold">Slice Segment</th>
+              <th className="py-1.5 px-3 font-semibold text-right">Trades</th>
+              <th className="py-1.5 px-3 font-semibold text-right">Win %</th>
+              <th className="py-1.5 px-3 font-semibold text-right">Expectancy</th>
+              <th className="py-1.5 px-3 font-semibold text-right">Avg P&amp;L %</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border-primary/40">
             {keys.map((key) => {
               const s = slices[key];
+              if (!s) return null;
               return (
-                <tr key={key} className="border-b border-border/20">
-                  <td className="py-2 pr-4 font-medium">{key}</td>
-                  <td className="py-2 pr-4">{s.count}</td>
-                  <td className="py-2 pr-4">{s.winRate.toFixed(1)}%</td>
-                  <td className={`py-2 pr-4 ${s.expectancy >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <tr key={key} className="hover:bg-bg-tertiary/40 transition-colors">
+                  <td className="py-1.5 px-3 font-semibold text-text-primary">{key}</td>
+                  <td className="py-1.5 px-3 text-right text-text-secondary">{s.count}</td>
+                  <td className={`py-1.5 px-3 text-right font-bold ${s.winRate >= 50 ? 'text-accent-green' : 'text-accent-red'}`}>
+                    {s.winRate.toFixed(1)}%
+                  </td>
+                  <td className={`py-1.5 px-3 text-right font-bold ${s.expectancy >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
                     {s.expectancy >= 0 ? '+' : ''}{s.expectancy.toFixed(2)}
                   </td>
-                  <td className={`py-2 pr-4 ${s.avgPnlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <td className={`py-1.5 px-3 text-right font-bold ${s.avgPnlPct >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
                     {s.avgPnlPct >= 0 ? '+' : ''}{s.avgPnlPct.toFixed(3)}%
                   </td>
                 </tr>
@@ -81,25 +87,27 @@ export default function StockBtstSlicePanel({ runId }: { runId: string }) {
     },
   });
 
-  if (isLoading) return <p className="text-muted-foreground">Loading stock BTST slices...</p>;
-  if (error) return <p className="text-red-400">Failed to load slice metrics.</p>;
+  if (isLoading) return <p className="text-xs text-text-tertiary font-mono">Loading stock BTST slice matrix...</p>;
+  if (error) return <p className="text-xs text-accent-red font-mono">Failed to load slice metrics.</p>;
   if (!data || data.tradeCount === 0) {
     return (
-      <p className="text-muted-foreground">
-        No BTST_STBT_DRIVEN trades in this run. Use Strategy Mode → Stock BTST/STBT when starting a backtest.
-      </p>
+      <div className="border border-border-primary rounded-lg p-6 bg-bg-secondary text-center text-xs text-text-tertiary font-mono">
+        No BTST_STBT_DRIVEN trades in this run. Use Strategy Mode → Stock BTST/STBT when configuring a backtest.
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        {data.tradeCount} stock BTST/STBT trades — spot P&L proxy split by regime, VDU band, score band, and direction.
-      </p>
-      <SliceTable title="By NIFTY Regime" slices={data.slices.byRegime} />
-      <SliceTable title="By VDU Band" slices={data.slices.byVduBand} />
-      <SliceTable title="By Score Band" slices={data.slices.byScoreBand} />
-      <SliceTable title="By Direction" slices={data.slices.byDirection} />
+    <div className="space-y-4 font-mono select-none">
+      <div className="text-xs text-text-secondary bg-bg-tertiary p-2.5 rounded-md border border-border-primary">
+        <span className="font-bold text-accent-blue">{data.tradeCount}</span> stock BTST/STBT trades — spot P&amp;L proxy split by regime, VDU volume band, 130pt score band, and direction.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SliceTable title="By NIFTY Market Regime" slices={data.slices.byRegime} />
+        <SliceTable title="By VDU Volume Band" slices={data.slices.byVduBand} />
+        <SliceTable title="By Overnight Score Band" slices={data.slices.byScoreBand} />
+        <SliceTable title="By Direction (LONG vs SHORT)" slices={data.slices.byDirection} />
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   BookOpen,
   FlaskConical,
   Columns,
+  BarChart2,
   TrendingUp,
   LayoutGrid,
   Zap,
@@ -55,6 +56,7 @@ export const SIDEBAR_SECTIONS: NavSection[] = [
   {
     title: 'ANALYTICS',
     items: [
+      { href: '/analytics', label: 'Quantitative Alpha', icon: <BarChart2 size={16} /> },
       { href: '/backtest', label: 'Backtest Terminal', icon: <FlaskConical size={16} /> },
       { href: '/compare', label: 'Pair Compare', icon: <Columns size={16} /> },
     ],
