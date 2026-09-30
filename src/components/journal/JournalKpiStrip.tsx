@@ -9,7 +9,7 @@ import {
   Scale,
   Receipt,
   Percent,
-  Info,
+  Activity,
 } from 'lucide-react';
 
 export interface JournalKpiStripProps {
@@ -83,6 +83,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
 
     return {
       closedCount,
+      openCount: Math.max(0, totalFiltered - closedCount),
       winCount,
       lossCount: closedCount - winCount,
       winRate,
@@ -93,7 +94,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
       avgNetPct,
       frictionImpact,
     };
-  }, [entries, stats]);
+  }, [entries, stats, totalFiltered]);
 
   return (
     <div className="space-y-2 font-mono select-none">
@@ -103,22 +104,42 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
             <span className="flex items-center gap-1 font-semibold">
               <Layers size={11} className="text-accent-blue" />
-              Executions
+              Total Trades
             </span>
-            <span className="text-[9px] bg-bg-tertiary px-1 rounded">{totalFiltered} total</span>
+            <span className="text-[9px] bg-bg-tertiary px-1 rounded">{metrics.closedCount} Settled</span>
           </div>
           <div className="mt-2">
             <div className="text-xl font-bold text-text-primary tracking-tight">
-              {metrics.closedCount}
-              <span className="text-xs text-text-tertiary font-normal"> / {totalFiltered}</span>
+              {totalFiltered}
             </div>
             <div className="text-[10px] text-text-secondary mt-0.5">
-              Closed Settlements
+              Filtered Records
             </div>
           </div>
         </div>
 
-        {/* 2. Win Rate */}
+        {/* 2. Open Positions */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
+            <span className="flex items-center gap-1 font-semibold">
+              <Activity size={11} className="text-accent-amber" />
+              Open Positions
+            </span>
+            <span className={`text-[9px] font-bold px-1 rounded ${metrics.openCount > 0 ? 'bg-accent-amber/10 text-accent-amber' : 'bg-bg-tertiary text-text-tertiary'}`}>
+              {metrics.openCount > 0 ? '● Active' : 'None'}
+            </span>
+          </div>
+          <div className="mt-2">
+            <div className={`text-xl font-bold tracking-tight ${metrics.openCount > 0 ? 'text-accent-amber' : 'text-text-primary'}`}>
+              {metrics.openCount}
+            </div>
+            <div className="text-[10px] text-text-secondary mt-0.5">
+              Awaiting Exit Trigger
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Win Rate */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
             <span className="flex items-center gap-1 font-semibold">
@@ -139,7 +160,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
           </div>
         </div>
 
-        {/* 3. Authoritative Gross P&L */}
+        {/* 4. Authoritative Gross P&L */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
             <span className="flex items-center gap-1 font-semibold">
@@ -150,7 +171,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
               )}
               Gross P&amp;L
             </span>
-            <span className="text-[9px] bg-bg-tertiary text-text-tertiary px-1 rounded">Authoritative</span>
+            <span className="text-[9px] bg-accent-green/10 text-accent-green font-bold px-1 rounded">FACT</span>
           </div>
           <div className="mt-2">
             <div className={`text-xl font-bold tracking-tight ${metrics.grossPnlSum >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -162,25 +183,6 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
           </div>
         </div>
 
-        {/* 4. Estimated Statutory & Broker Charges */}
-        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
-          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
-            <span className="flex items-center gap-1 font-semibold">
-              <Receipt size={11} className="text-accent-amber" />
-              Est. Charges
-            </span>
-            <span className="text-[9px] bg-accent-amber/10 text-accent-amber px-1 rounded">Friction Model</span>
-          </div>
-          <div className="mt-2">
-            <div className="text-xl font-bold text-accent-amber tracking-tight">
-              -₹{fmt(metrics.estimatedChargesSum)}
-            </div>
-            <div className="text-[10px] text-text-secondary mt-0.5">
-              STT, GST &amp; Exchange fees
-            </div>
-          </div>
-        </div>
-
         {/* 5. Modeled Estimated Net P&L */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
@@ -188,7 +190,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
               <Scale size={11} className="text-accent-blue" />
               Estimated Net
             </span>
-            <span className="text-[9px] bg-bg-tertiary text-text-tertiary px-1 rounded">Modeled</span>
+            <span className="text-[9px] bg-accent-blue/10 text-accent-blue font-bold px-1 rounded">MODEL</span>
           </div>
           <div className="mt-2">
             <div className={`text-xl font-bold tracking-tight ${metrics.estimatedNetPnlSum >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -200,21 +202,21 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
           </div>
         </div>
 
-        {/* 6. Friction Impact Spread */}
+        {/* 6. Estimated Charges & Friction Drag */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">
             <span className="flex items-center gap-1 font-semibold">
-              <Info size={11} className="text-text-tertiary" />
+              <Receipt size={11} className="text-accent-amber" />
               Friction Drag
             </span>
-            <span className="text-[9px] bg-bg-tertiary text-text-tertiary px-1 rounded">Delta</span>
+            <span className="text-[9px] bg-accent-amber/10 text-accent-amber px-1 rounded">Delta</span>
           </div>
           <div className="mt-2">
-            <div className="text-xl font-bold text-text-secondary tracking-tight">
-              ₹{fmt(metrics.frictionImpact)}
+            <div className="text-xl font-bold text-accent-amber tracking-tight">
+              -₹{fmt(metrics.frictionImpact)}
             </div>
             <div className="text-[10px] text-text-tertiary mt-0.5">
-              Gross &ndash; Net Difference
+              ₹{fmt(metrics.estimatedChargesSum)} statutory fees
             </div>
           </div>
         </div>
@@ -224,3 +226,4 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
 };
 
 export default JournalKpiStrip;
+

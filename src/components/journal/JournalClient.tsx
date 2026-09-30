@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight,
-  Activity, X,
+  Activity, X, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
 import StockBtstComparePanel from '@/components/journal/StockBtstComparePanel';
@@ -530,9 +530,15 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     qualityBucket: 'ALL',
     executionOutcome: 'ALL',
     pnlStatus: 'ALL',
+    direction: 'ALL',
+    tradeStatus: 'ALL',
     fromDate: '',
     toDate: '',
   });
+
+  // Table Sorting State
+  const [sortField, setSortField] = useState<'date' | 'type' | 'symbol' | 'entry' | 'exit' | 'pnl' | 'netPnl' | 'score'>('date');
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
 
   // Table Presentation States
   const [densityMode, setDensityMode] = useState<'compact' | 'detailed'>('compact');
@@ -678,7 +684,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   };
 
   const filteredEntries = useMemo(() => {
-    return entries.filter((e) => {
+    const list = entries.filter((e) => {
       if (filters.search) {
         const q = filters.search.toUpperCase();
         const matchSymbol = e.symbol?.toUpperCase().includes(q);
@@ -690,9 +696,79 @@ export default function JournalClient({ initialReportingData }: { initialReporti
       } else if (filters.pnlStatus === 'LOSERS') {
         if ((e.pnl ?? 0) >= 0 && (e.pnlPct ?? 0) >= 0) return false;
       }
+      if (filters.direction === 'LONG') {
+        const isLong = e.optionType === 'CE' || e.signalType === 'BTST';
+        if (!isLong) return false;
+      } else if (filters.direction === 'SHORT') {
+        const isShort = e.optionType === 'PE' || e.signalType === 'STBT';
+        if (!isShort) return false;
+      }
+      if (filters.tradeStatus === 'OPEN') {
+        if (e.exitCmp !== null && e.exitCmp !== undefined) return false;
+      } else if (filters.tradeStatus === 'CLOSED') {
+        if (e.exitCmp === null || e.exitCmp === undefined) return false;
+      }
       return true;
     });
-  }, [entries, filters.search, filters.pnlStatus]);
+
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'date':
+          comparison = new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
+          break;
+        case 'type':
+          comparison = a.signalType.localeCompare(b.signalType);
+          break;
+        case 'symbol':
+          comparison = a.symbol.localeCompare(b.symbol);
+          break;
+        case 'entry':
+          comparison = (a.entryCmp ?? 0) - (b.entryCmp ?? 0);
+          break;
+        case 'exit':
+          comparison = (a.exitCmp ?? 0) - (b.exitCmp ?? 0);
+          break;
+        case 'pnl':
+          comparison = (a.pnl ?? 0) - (b.pnl ?? 0);
+          break;
+        case 'netPnl': {
+          const aNet = a.estimatedNetPnl ?? a.pnl ?? 0;
+          const bNet = b.estimatedNetPnl ?? b.pnl ?? 0;
+          comparison = aNet - bNet;
+          break;
+        }
+        case 'score':
+          comparison = (a.score ?? 0) - (b.score ?? 0);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortAsc ? comparison : -comparison;
+    });
+
+    return list;
+  }, [entries, filters.search, filters.pnlStatus, filters.direction, filters.tradeStatus, sortField, sortAsc]);
+
+  const handleSort = (field: 'date' | 'type' | 'symbol' | 'entry' | 'exit' | 'pnl' | 'netPnl' | 'score') => {
+    if (sortField === field) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortField(field);
+      setSortAsc(field === 'symbol' || field === 'type');
+    }
+  };
+
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={11} className="opacity-30 group-hover:opacity-70 inline ml-1 transition-opacity" />;
+    }
+    return sortAsc ? (
+      <ArrowUp size={11} className="text-accent-blue inline ml-1 font-bold" />
+    ) : (
+      <ArrowDown size={11} className="text-accent-blue inline ml-1 font-bold" />
+    );
+  };
 
   // ── Manual Exit ────────────────────────────────────────────────────────────
 
@@ -1381,6 +1457,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                     qualityBucket: 'ALL',
                     executionOutcome: 'ALL',
                     pnlStatus: 'ALL',
+                    direction: 'ALL',
+                    tradeStatus: 'ALL',
                     fromDate: '',
                     toDate: '',
                   });
@@ -1459,24 +1537,99 @@ export default function JournalClient({ initialReportingData }: { initialReporti
                   <table className="w-full text-xs whitespace-nowrap font-mono">
                     <thead className="sticky top-0 z-20 bg-bg-secondary/95 backdrop-blur-md border-b border-border-primary text-text-secondary uppercase tracking-wider text-[10px]">
                       <tr>
-                        {visibleColumns.includes('date') && <th className="text-left px-3 py-2.5 font-semibold">Trade Date</th>}
-                        {visibleColumns.includes('type') && <th className="text-left px-3 py-2.5 font-semibold">Type</th>}
+                        {visibleColumns.includes('date') && (
+                          <th
+                            onClick={() => handleSort('date')}
+                            className="group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Trade Date</span>
+                              {renderSortIcon('date')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('type') && (
+                          <th
+                            onClick={() => handleSort('type')}
+                            className="group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Type</span>
+                              {renderSortIcon('type')}
+                            </div>
+                          </th>
+                        )}
                         {visibleColumns.includes('symbol') && (
-                          <th className="sticky left-0 z-10 bg-bg-secondary text-left px-3 py-2.5 font-semibold">
-                            Stock
+                          <th
+                            onClick={() => handleSort('symbol')}
+                            className="sticky left-0 z-10 bg-bg-secondary group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Stock</span>
+                              {renderSortIcon('symbol')}
+                            </div>
                           </th>
                         )}
                         {visibleColumns.includes('contract') && <th className="text-left px-3 py-2.5 font-semibold">Option</th>}
-                        {visibleColumns.includes('entry') && <th className="text-right px-3 py-2.5 font-semibold">Entry CMP</th>}
+                        {visibleColumns.includes('entry') && (
+                          <th
+                            onClick={() => handleSort('entry')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Entry CMP</span>
+                              {renderSortIcon('entry')}
+                            </div>
+                          </th>
+                        )}
                         {visibleColumns.includes('cmp916') && <th className="text-right px-3 py-2.5 font-semibold">9:16 AM</th>}
                         {visibleColumns.includes('cmp930') && <th className="text-right px-3 py-2.5 font-semibold">9:30 AM</th>}
                         {visibleColumns.includes('cmp945') && <th className="text-right px-3 py-2.5 font-semibold">9:45 AM</th>}
-                        {visibleColumns.includes('exit') && <th className="text-right px-3 py-2.5 font-semibold">Exit CMP</th>}
-                        {visibleColumns.includes('pnl') && <th className="text-right px-3 py-2.5 font-semibold">Gross P&amp;L</th>}
-                        {visibleColumns.includes('netPnl') && <th className="text-right px-3 py-2.5 font-semibold">Est. Net P&amp;L</th>}
+                        {visibleColumns.includes('exit') && (
+                          <th
+                            onClick={() => handleSort('exit')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Exit CMP</span>
+                              {renderSortIcon('exit')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('pnl') && (
+                          <th
+                            onClick={() => handleSort('pnl')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Gross P&amp;L</span>
+                              <span className="text-[8px] bg-accent-green/10 text-accent-green font-bold px-1 rounded">FACT</span>
+                              {renderSortIcon('pnl')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('netPnl') && (
+                          <th
+                            onClick={() => handleSort('netPnl')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Est. Net P&amp;L</span>
+                              <span className="text-[8px] bg-accent-blue/10 text-accent-blue font-bold px-1 rounded">MODEL</span>
+                              {renderSortIcon('netPnl')}
+                            </div>
+                          </th>
+                        )}
                         {visibleColumns.includes('score') && (
-                          <th className="text-right px-3 py-2.5 font-semibold" title="Advanced Engine overnightScore (0–130) — source of truth for journal picks, UI, and Telegram">
-                            Advanced
+                          <th
+                            onClick={() => handleSort('score')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                            title="Advanced Engine overnightScore (0–130) — source of truth for journal picks, UI, and Telegram"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Advanced</span>
+                              {renderSortIcon('score')}
+                            </div>
                           </th>
                         )}
                         {visibleColumns.includes('scoreV2') && (

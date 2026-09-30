@@ -4,6 +4,8 @@ import React from 'react';
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -14,7 +16,7 @@ import {
 } from 'recharts';
 import { fmt, formatPct } from '@/utils/format';
 import { JournalTradeData } from './TradeDetailDrawer';
-import { Activity, PieChart as PieChartIcon, BarChart3, Scale } from 'lucide-react';
+import { Activity, PieChart as PieChartIcon, BarChart3, Scale, TrendingUp } from 'lucide-react';
 
 export interface ReportingResponse {
   qualityBuckets: { groupValue: string; count: number; winRate: number; avgPnlPct: number }[];
@@ -120,8 +122,90 @@ export const JournalAnalyticsView: React.FC<JournalAnalyticsViewProps> = ({
     }));
   }, [entries]);
 
+  // 4. Cumulative Gross vs Modeled Net P&L Curve
+  const cumulativePnlData = React.useMemo(() => {
+    const settled = entries
+      .filter((e) => e.pnl !== null && e.pnl !== undefined)
+      .slice()
+      .sort((a, b) => new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime());
+
+    let cumGross = 0;
+    let cumNet = 0;
+
+    return settled.map((t, idx) => {
+      cumGross += t.pnl ?? 0;
+      const net = t.estimatedNetPnl !== null && t.estimatedNetPnl !== undefined
+        ? t.estimatedNetPnl
+        : ((t.pnl ?? 0) - (t.estimatedCharges ?? 0));
+      cumNet += net;
+
+      return {
+        step: idx + 1,
+        date: t.tradeDate,
+        symbol: t.symbol,
+        cumGross,
+        cumNet,
+        drag: cumGross - cumNet,
+      };
+    });
+  }, [entries]);
+
   return (
     <div className="space-y-5 font-mono select-none">
+      {/* Cumulative P&L Realization Curve */}
+      {cumulativePnlData.length > 0 && (
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-border-primary/60">
+            <span className="text-xs font-bold text-text-primary uppercase tracking-wider flex items-center gap-1.5">
+              <TrendingUp size={14} className="text-accent-green" />
+              Cumulative P&amp;L Realization Curve
+            </span>
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="flex items-center gap-1 text-accent-blue font-bold">
+                <span className="h-2 w-2 rounded-full bg-accent-blue" />
+                Gross P&amp;L (Authoritative Fact)
+              </span>
+              <span className="flex items-center gap-1 text-accent-green font-bold">
+                <span className="h-2 w-2 rounded-full bg-accent-green" />
+                Modeled Net P&amp;L (Post-Friction)
+              </span>
+            </div>
+          </div>
+
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={cumulativePnlData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="grossGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="netGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="step" stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={(s) => `#${s}`} />
+                <YAxis stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={(v: number) => `₹${fmt(v)}`} />
+                <Tooltip
+                  formatter={(value: unknown, name: unknown) => [
+                    typeof value === 'number' ? `₹${fmt(value)}` : String(value ?? ''),
+                    name === 'cumGross' ? 'Cumulative Gross P&L' : 'Cumulative Net P&L',
+                  ]}
+                  labelFormatter={(step: unknown) => {
+                    const row = cumulativePnlData[Number(step) - 1];
+                    return row ? `Trade #${step}: ${row.symbol} (${row.date})` : `Trade #${step}`;
+                  }}
+                  contentStyle={{ backgroundColor: 'var(--color-bg-tertiary, #1f2937)', borderColor: 'var(--color-border-secondary, #374151)', fontSize: 11 }}
+                />
+                <Area type="monotone" dataKey="cumGross" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#grossGradient)" name="cumGross" />
+                <Area type="monotone" dataKey="cumNet" stroke="#22c55e" strokeWidth={2} fillOpacity={1} fill="url(#netGradient)" name="cumNet" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Top Quad: Direction & Setup Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Setup P&L and Win Rate */}

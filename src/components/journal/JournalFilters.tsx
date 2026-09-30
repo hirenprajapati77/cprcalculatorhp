@@ -16,6 +16,8 @@ export interface JournalFiltersState {
   qualityBucket: 'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY';
   executionOutcome: string;
   pnlStatus: 'ALL' | 'WINNERS' | 'LOSERS';
+  direction: 'ALL' | 'LONG' | 'SHORT';
+  tradeStatus: 'ALL' | 'OPEN' | 'CLOSED';
   fromDate: string;
   toDate: string;
 }
@@ -38,6 +40,8 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
   onOpenColumnSettings,
 }) => {
   const signalTypes: Array<'ALL' | 'CPR' | 'BTST' | 'STBT'> = ['ALL', 'CPR', 'BTST', 'STBT'];
+  const directions: Array<'ALL' | 'LONG' | 'SHORT'> = ['ALL', 'LONG', 'SHORT'];
+  const tradeStatuses: Array<'ALL' | 'OPEN' | 'CLOSED'> = ['ALL', 'OPEN', 'CLOSED'];
   const qualityBuckets: Array<'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'> = [
     'ALL',
     'TRADEABLE',
@@ -191,6 +195,54 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
               }`}
             >
               {bucket}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-3 w-[1px] bg-border-primary" />
+
+        {/* Direction filter */}
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Dir:</span>
+          {directions.map((dir) => (
+            <button
+              key={dir}
+              type="button"
+              onClick={() => handleUpdate({ direction: dir })}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                filters.direction === dir
+                  ? dir === 'LONG'
+                    ? 'bg-accent-green text-black font-bold'
+                    : dir === 'SHORT'
+                    ? 'bg-accent-red text-white font-bold'
+                    : 'bg-accent-blue text-white'
+                  : 'bg-bg-tertiary text-text-secondary hover:text-text-primary border border-border-primary'
+              }`}
+            >
+              {dir}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-3 w-[1px] bg-border-primary" />
+
+        {/* Position Status filter (Open / Closed) */}
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Status:</span>
+          {tradeStatuses.map((st) => (
+            <button
+              key={st}
+              type="button"
+              onClick={() => handleUpdate({ tradeStatus: st })}
+              className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                filters.tradeStatus === st
+                  ? st === 'OPEN'
+                    ? 'bg-accent-amber text-black font-bold'
+                    : 'bg-accent-blue text-white'
+                  : 'bg-bg-tertiary text-text-secondary hover:text-text-primary border border-border-primary'
+              }`}
+            >
+              {st}
             </button>
           ))}
         </div>

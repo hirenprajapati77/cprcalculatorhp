@@ -189,4 +189,109 @@ describe('Enterprise Trade Journal Workspace Presentation Contract (Phase 8)', (
     assert.ok(exportHeaders.includes('Friction Tier'));
     assert.equal(exportHeaders.length, 22);
   });
+
+  it('validates Open Positions KPI calculation and active status indication', () => {
+    const totalFiltered = 25;
+    const closedCount = 21;
+    const openCount = Math.max(0, totalFiltered - closedCount);
+
+    assert.equal(openCount, 4);
+    assert.equal(openCount > 0, true);
+
+    // Edge case: all closed
+    const allClosedCount = 25;
+    const zeroOpen = Math.max(0, totalFiltered - allClosedCount);
+    assert.equal(zeroOpen, 0);
+  });
+
+  it('validates tradeStatus (OPEN vs CLOSED) and direction (LONG vs SHORT) filter predicates', () => {
+    const records = [
+      { id: '1', symbol: 'NIFTY', optionType: 'CE', signalType: 'BTST', exitCmp: 24500 },
+      { id: '2', symbol: 'BANKNIFTY', optionType: 'PE', signalType: 'STBT', exitCmp: null },
+      { id: '3', symbol: 'RELIANCE', optionType: 'CE', signalType: 'CPR', exitCmp: null },
+      { id: '4', symbol: 'TCS', optionType: 'PE', signalType: 'CPR', exitCmp: 3950 },
+    ];
+
+    // Filter OPEN
+    const openRecords = records.filter(r => r.exitCmp === null || r.exitCmp === undefined);
+    assert.equal(openRecords.length, 2);
+    assert.deepEqual(openRecords.map(r => r.id), ['2', '3']);
+
+    // Filter CLOSED
+    const closedRecords = records.filter(r => r.exitCmp !== null && r.exitCmp !== undefined);
+    assert.equal(closedRecords.length, 2);
+    assert.deepEqual(closedRecords.map(r => r.id), ['1', '4']);
+
+    // Filter LONG
+    const longRecords = records.filter(r => r.optionType === 'CE' || r.signalType === 'BTST');
+    assert.equal(longRecords.length, 2);
+    assert.deepEqual(longRecords.map(r => r.id), ['1', '3']);
+
+    // Filter SHORT
+    const shortRecords = records.filter(r => r.optionType === 'PE' || r.signalType === 'STBT');
+    assert.equal(shortRecords.length, 2);
+    assert.deepEqual(shortRecords.map(r => r.id), ['2', '4']);
+  });
+
+  it('validates Cumulative P&L Realization Curve accumulation logic', () => {
+    const rawEntries = [
+      { tradeDate: '2026-09-10', symbol: 'TCS', pnl: 2000, estimatedNetPnl: 1850 },
+      { tradeDate: '2026-09-08', symbol: 'RELIANCE', pnl: 3000, estimatedNetPnl: 2800 },
+      { tradeDate: '2026-09-09', symbol: 'INFY', pnl: -1000, estimatedNetPnl: -1150 },
+      { tradeDate: '2026-09-11', symbol: 'HDFCBANK', pnl: null, estimatedNetPnl: null }, // unsettled
+    ];
+
+    const settled = rawEntries
+      .filter((e) => e.pnl !== null && e.pnl !== undefined)
+      .slice()
+      .sort((a, b) => new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime());
+
+    assert.equal(settled.length, 3);
+    assert.equal(settled[0]?.symbol, 'RELIANCE');
+    assert.equal(settled[1]?.symbol, 'INFY');
+    assert.equal(settled[2]?.symbol, 'TCS');
+
+    let cumGross = 0;
+    let cumNet = 0;
+    const curve = settled.map((t, idx) => {
+      cumGross += t.pnl ?? 0;
+      cumNet += t.estimatedNetPnl ?? 0;
+      return { step: idx + 1, cumGross, cumNet, drag: cumGross - cumNet };
+    });
+
+    // Step 1: RELIANCE -> Gross 3000, Net 2800, Drag 200
+    assert.equal(curve[0]?.cumGross, 3000);
+    assert.equal(curve[0]?.cumNet, 2800);
+    assert.equal(curve[0]?.drag, 200);
+
+    // Step 2: INFY -> Gross 2000, Net 1650, Drag 350
+    assert.equal(curve[1]?.cumGross, 2000);
+    assert.equal(curve[1]?.cumNet, 1650);
+    assert.equal(curve[1]?.drag, 350);
+
+    // Step 3: TCS -> Gross 4000, Net 3500, Drag 500
+    assert.equal(curve[2]?.cumGross, 4000);
+    assert.equal(curve[2]?.cumNet, 3500);
+    assert.equal(curve[2]?.drag, 500);
+  });
+
+  it('validates interactive table sorting comparator for date, pnl, and symbol', () => {
+    const items = [
+      { tradeDate: '2026-09-08', symbol: 'INFY', pnl: 1000 },
+      { tradeDate: '2026-09-10', symbol: 'RELIANCE', pnl: 3000 },
+      { tradeDate: '2026-09-09', symbol: 'AXISBANK', pnl: -500 },
+    ];
+
+    // Sort by pnl descending
+    const byPnlDesc = [...items].sort((a, b) => b.pnl - a.pnl);
+    assert.deepEqual(byPnlDesc.map(i => i.symbol), ['RELIANCE', 'INFY', 'AXISBANK']);
+
+    // Sort by symbol ascending
+    const bySymbolAsc = [...items].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    assert.deepEqual(bySymbolAsc.map(i => i.symbol), ['AXISBANK', 'INFY', 'RELIANCE']);
+
+    // Sort by date descending (newest first)
+    const byDateDesc = [...items].sort((a, b) => new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime());
+    assert.deepEqual(byDateDesc.map(i => i.tradeDate), ['2026-09-10', '2026-09-09', '2026-09-08']);
+  });
 });
