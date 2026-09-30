@@ -1,21 +1,41 @@
 @import "tailwindcss";
 
-:root {
+/* ── 1. Enterprise Design Tokens & Base Theme (Professional Dark) ── */
+:root,
+[data-theme="dark-pro"] {
   --background: #06070b;
   --foreground: #f1f5f9;
 
+  /* Surfaces & Backgrounds */
   --bg-primary: #06070b;
   --bg-secondary: #0d0f18;
-  --bg-tertiary: #13172200;
+  --bg-tertiary: #161c28;
+  --surface-app: #06070b;
+  --surface-panel: #0d0f18;
+  --surface-elevated: #161c28;
+  --surface-hover: #1e2638;
+  --surface-selected: #1e3a5f;
 
+  /* Text & Typography */
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-tertiary: #64748b;
+  --text-muted: #64748b;
+  --text-disabled: #475569;
 
+  /* Borders */
   --border-primary: #1e2333;
   --border-secondary: #2a3048;
   --border-tertiary: #3a4260;
+  --border-subtle: #181d2a;
+  --border-default: #2a3048;
+  --border-strong: #3e4868;
+  --border-focus: #3b82f6;
 
+  /* Brand & Accents */
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-active: #1d4ed8;
   --accent-green: #10b981;
   --accent-red: #ef4444;
   --accent-blue: #3b82f6;
@@ -23,28 +43,267 @@
   --accent-purple: #8b5cf6;
   --accent-cyan: #06b6d4;
 
+  /* Trading Semantics */
+  --trading-bullish: #10b981;
+  --trading-bullish-subtle: rgba(16, 185, 129, 0.12);
+  --trading-bullish-border: rgba(16, 185, 129, 0.35);
+  --trading-bearish: #ef4444;
+  --trading-bearish-subtle: rgba(239, 68, 68, 0.12);
+  --trading-bearish-border: rgba(239, 68, 68, 0.35);
+  --trading-neutral: #94a3b8;
+  --trading-neutral-subtle: rgba(148, 163, 184, 0.12);
+  --trading-neutral-border: rgba(148, 163, 184, 0.30);
+  --trading-warning: #f59e0b;
+  --trading-warning-subtle: rgba(245, 158, 11, 0.12);
+  --trading-warning-border: rgba(245, 158, 11, 0.35);
+  --trading-blocked: #64748b;
+  --trading-blocked-subtle: rgba(100, 116, 139, 0.15);
+  --trading-blocked-border: rgba(100, 116, 139, 0.30);
+
+  /* Chart Tokens */
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-axis: #64748b;
+  --chart-crosshair: #94a3b8;
+  --chart-tooltip-bg: #0d0f18;
+
   --font-geist-sans: "Geist Sans", sans-serif;
   --font-geist-mono: "Geist Mono", monospace;
 }
 
+/* ── 2. Theme: OLED Black ── */
+[data-theme="dark-oled"] {
+  --background: #000000;
+  --foreground: #ffffff;
+
+  --bg-primary: #000000;
+  --bg-secondary: #080808;
+  --bg-tertiary: #121212;
+  --surface-app: #000000;
+  --surface-panel: #080808;
+  --surface-elevated: #121212;
+  --surface-hover: #1c1c1c;
+  --surface-selected: #0a2540;
+
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  --text-muted: #737373;
+  --text-disabled: #525252;
+
+  --border-primary: #1c1c1c;
+  --border-secondary: #2c2c2c;
+  --border-tertiary: #3c3c3c;
+  --border-subtle: #181818;
+  --border-default: #282828;
+  --border-strong: #404040;
+  --border-focus: #38bdf8;
+
+  --accent-primary: #38bdf8;
+  --accent-hover: #0284c7;
+  --accent-active: #0369a1;
+
+  --trading-bullish: #00e676;
+  --trading-bullish-subtle: rgba(0, 230, 118, 0.14);
+  --trading-bullish-border: rgba(0, 230, 118, 0.40);
+  --trading-bearish: #ff1744;
+  --trading-bearish-subtle: rgba(255, 23, 68, 0.14);
+  --trading-bearish-border: rgba(255, 23, 68, 0.40);
+  --trading-neutral: #a3a3a3;
+  --trading-neutral-subtle: rgba(163, 163, 163, 0.12);
+  --trading-neutral-border: rgba(163, 163, 163, 0.35);
+  --trading-warning: #ffab00;
+  --trading-warning-subtle: rgba(255, 171, 0, 0.14);
+  --trading-warning-border: rgba(255, 171, 0, 0.40);
+  --trading-blocked: #616161;
+  --trading-blocked-subtle: rgba(97, 97, 97, 0.18);
+  --trading-blocked-border: rgba(97, 97, 97, 0.35);
+
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-axis: #737373;
+  --chart-crosshair: #a3a3a3;
+  --chart-tooltip-bg: #0d0d0d;
+}
+
+/* ── 3. Theme: Professional Light ── */
+[data-theme="light-pro"],
+html.light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --surface-app: #f8fafc;
+  --surface-panel: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-selected: #e0f2fe;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-muted: #64748b;
+  --text-disabled: #94a3b8;
+
+  --border-primary: #e2e8f0;
+  --border-secondary: #cbd5e1;
+  --border-tertiary: #94a3b8;
+  --border-subtle: #f1f5f9;
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-focus: #2563eb;
+
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-green: #059669;
+  --accent-red: #dc2626;
+  --accent-blue: #2563eb;
+  --accent-amber: #d97706;
+  --accent-purple: #7c3aed;
+  --accent-cyan: #0284c7;
+
+  --trading-bullish: #059669;
+  --trading-bullish-subtle: rgba(5, 150, 105, 0.08);
+  --trading-bullish-border: rgba(5, 150, 105, 0.30);
+  --trading-bearish: #dc2626;
+  --trading-bearish-subtle: rgba(220, 38, 38, 0.08);
+  --trading-bearish-border: rgba(220, 38, 38, 0.30);
+  --trading-neutral: #64748b;
+  --trading-neutral-subtle: rgba(100, 116, 139, 0.08);
+  --trading-neutral-border: rgba(100, 116, 139, 0.25);
+  --trading-warning: #d97706;
+  --trading-warning-subtle: rgba(217, 119, 6, 0.08);
+  --trading-warning-border: rgba(217, 119, 6, 0.30);
+  --trading-blocked: #94a3b8;
+  --trading-blocked-subtle: rgba(148, 163, 184, 0.12);
+  --trading-blocked-border: rgba(148, 163, 184, 0.30);
+
+  --chart-grid: rgba(0, 0, 0, 0.06);
+  --chart-axis: #94a3b8;
+  --chart-crosshair: #64748b;
+  --chart-tooltip-bg: #ffffff;
+}
+
+/* ── 4. Theme: High Contrast ── */
+[data-theme="high-contrast"] {
+  --background: #000000;
+  --foreground: #ffffff;
+
+  --bg-primary: #000000;
+  --bg-secondary: #050505;
+  --bg-tertiary: #101010;
+  --surface-app: #000000;
+  --surface-panel: #050505;
+  --surface-elevated: #101010;
+  --surface-hover: #222222;
+  --surface-selected: #003366;
+
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-tertiary: #cccccc;
+  --text-muted: #cccccc;
+  --text-disabled: #777777;
+
+  --border-primary: #ffffff;
+  --border-secondary: #cccccc;
+  --border-tertiary: #888888;
+  --border-subtle: #888888;
+  --border-default: #ffffff;
+  --border-strong: #ffffff;
+  --border-focus: #ffff00;
+
+  --accent-primary: #00e5ff;
+  --accent-hover: #00b0ff;
+  --accent-active: #0091ea;
+
+  --trading-bullish: #00ff66;
+  --trading-bullish-subtle: rgba(0, 255, 102, 0.20);
+  --trading-bullish-border: #00ff66;
+  --trading-bearish: #ff3333;
+  --trading-bearish-subtle: rgba(255, 51, 51, 0.20);
+  --trading-bearish-border: #ff3333;
+  --trading-neutral: #ffffff;
+  --trading-neutral-subtle: rgba(255, 255, 255, 0.15);
+  --trading-neutral-border: #ffffff;
+  --trading-warning: #ffff00;
+  --trading-warning-subtle: rgba(255, 255, 0, 0.20);
+  --trading-warning-border: #ffff00;
+  --trading-blocked: #aaaaaa;
+  --trading-blocked-subtle: rgba(170, 170, 170, 0.20);
+  --trading-blocked-border: #aaaaaa;
+
+  --chart-grid: rgba(255, 255, 255, 0.15);
+  --chart-axis: #ffffff;
+  --chart-crosshair: #ffff00;
+  --chart-tooltip-bg: #000000;
+}
+
+/* ── 5. Tailwind v4 Inline Theme Bridge ── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Legacy & Surface aliases */
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);
   --color-bg-tertiary: var(--bg-tertiary);
+  --color-surface-app: var(--surface-app);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+
+  /* Typography */
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+
+  /* Borders */
   --color-border-primary: var(--border-primary);
   --color-border-secondary: var(--border-secondary);
   --color-border-tertiary: var(--border-tertiary);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+
+  /* Brand Accents */
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
   --color-accent-green: var(--accent-green);
   --color-accent-red: var(--accent-red);
   --color-accent-blue: var(--accent-blue);
   --color-accent-amber: var(--accent-amber);
   --color-accent-purple: var(--accent-purple);
   --color-accent-cyan: var(--accent-cyan);
+
+  /* Trading Semantics */
+  --color-trading-bullish: var(--trading-bullish);
+  --color-trading-bullish-subtle: var(--trading-bullish-subtle);
+  --color-trading-bullish-border: var(--trading-bullish-border);
+  --color-trading-bearish: var(--trading-bearish);
+  --color-trading-bearish-subtle: var(--trading-bearish-subtle);
+  --color-trading-bearish-border: var(--trading-bearish-border);
+  --color-trading-neutral: var(--trading-neutral);
+  --color-trading-neutral-subtle: var(--trading-neutral-subtle);
+  --color-trading-neutral-border: var(--trading-neutral-border);
+  --color-trading-warning: var(--trading-warning);
+  --color-trading-warning-subtle: var(--trading-warning-subtle);
+  --color-trading-warning-border: var(--trading-warning-border);
+  --color-trading-blocked: var(--trading-blocked);
+  --color-trading-blocked-subtle: var(--trading-blocked-subtle);
+  --color-trading-blocked-border: var(--trading-blocked-border);
+
+  /* Chart Tokens */
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+  --color-chart-crosshair: var(--chart-crosshair);
+  --color-chart-tooltip-bg: var(--chart-tooltip-bg);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Sliders, Play, Database, Cpu, Send, LogOut } from 'lucide-react';
+import { Settings, Save, Sliders, Play, Database, Cpu, Send, LogOut, Palette, Sun, Moon, Eye, Monitor, Check } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { useTheme } from '@/context/ThemeContext';
 
 function looksMaskedSecret(value: string): boolean {
   return /^\*+\d{0,4}$/.test(value) || (value.startsWith('***') && value.includes('*'));
@@ -30,6 +31,7 @@ export default function SettingsPage() {
   const [fyersDataApiOk, setFyersDataApiOk] = useState<boolean | null>(null);
   const [fyersDataApiMessage, setFyersDataApiMessage] = useState<string>('');
   const { showToast } = useToast();
+  const { theme, setTheme, options: themeOptions } = useTheme();
 
   // Load settings from server on mount (works on any device)
   useEffect(() => {
@@ -225,6 +227,53 @@ export default function SettingsPage() {
       </div>
 
       <form onSubmit={handleSaveSettings} className="space-y-6">
+        {/* Workspace Appearance & Themes */}
+        <Card title="Workspace Appearance & Themes" icon={<Palette size={14} className="text-blue-400" />}>
+          <div className="p-4 space-y-4">
+            <p className="text-[11px] text-text-secondary leading-relaxed">
+              Select an enterprise visual theme for your trading workstation. Themes use semantic design tokens and persist across sessions.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {themeOptions.map((opt) => {
+                const isSelected = opt.id === theme;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setTheme(opt.id)}
+                    className={`text-left p-3 rounded-lg border transition-all relative ${
+                      isSelected
+                        ? 'border-accent-primary bg-surface-selected ring-1 ring-accent-primary shadow-sm'
+                        : 'border-border-default bg-surface-panel hover:bg-surface-hover hover:border-border-strong'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        {opt.id === 'light-pro' && <Sun size={14} className="text-amber-400" />}
+                        {opt.id === 'dark-oled' && <Moon size={14} className="text-cyan-400" />}
+                        {opt.id === 'high-contrast' && <Eye size={14} className="text-emerald-400" />}
+                        {opt.id === 'system' && <Monitor size={14} className="text-text-muted" />}
+                        {opt.id === 'dark-pro' && <Moon size={14} className="text-blue-400" />}
+                        <span className="font-semibold text-text-primary text-xs">{opt.name}</span>
+                      </div>
+                      {isSelected ? (
+                        <Check size={14} className="text-accent-primary" />
+                      ) : opt.badge ? (
+                        <span className="text-[9px] px-1 py-0.2 rounded font-mono uppercase bg-accent-blue/15 text-accent-blue font-semibold">
+                          {opt.badge}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-[10px] text-text-muted leading-snug">
+                      {opt.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+
         <Card title="Market Telemetry Setup" icon={<Sliders size={14} className="text-blue-400" />}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
             

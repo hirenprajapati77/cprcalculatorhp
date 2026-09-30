@@ -22,6 +22,7 @@ import {
   Zap,
   Flame,
 } from 'lucide-react';
+import { ThemeSelector } from '@/components/ui/ThemeSelector';
 
 const NAV_GROUPS = [
   {
@@ -495,6 +496,9 @@ export const Navbar: React.FC = () => {
               </span>
             </div>
 
+            {/* Theme Selector */}
+            <ThemeSelector />
+
             {/* Settings shortcut (desktop) */}
             <Link
               href="/settings"
@@ -539,6 +543,10 @@ export const Navbar: React.FC = () => {
           }`}
         >
           <div className="p-4 space-y-4 pb-8">
+            <div className="flex items-center justify-between px-1 py-1 border-b border-slate-800 pb-3">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Theme</span>
+              <ThemeSelector variant="expanded" />
+            </div>
             {NAV_GROUPS.map(group => (
               <div key={group.label}>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">
