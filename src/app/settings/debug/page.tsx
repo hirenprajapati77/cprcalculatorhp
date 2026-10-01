@@ -122,7 +122,7 @@ export default function DebugPanel() {
       </div>
 
       {/* ── Top KPI Strip ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
             <span className="font-semibold flex items-center gap-1">

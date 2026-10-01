@@ -112,7 +112,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
 
       {/* ── Dynamic Setup Metrics Strip ── */}
       {isOvernight ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="bg-surface-panel border border-border-default p-3.5 rounded-lg flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[10px] text-text-muted uppercase">BTST Ready</span>
@@ -151,7 +151,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
           </div>
         </div>
       ) : scannerMode === 'INDEX' ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="bg-surface-panel border border-border-default p-3.5 rounded-lg flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[10px] text-text-muted uppercase">Index Strong</span>
@@ -194,7 +194,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="bg-surface-panel border border-border-default p-3.5 rounded-lg flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[10px] text-text-muted uppercase">Strong Signal</span>

@@ -98,7 +98,7 @@ export const JournalKpiStrip: React.FC<JournalKpiStripProps> = ({
 
   return (
     <div className="space-y-2 font-mono select-none">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {/* 1. Total Executions */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 flex flex-col justify-between hover:border-border-secondary transition-colors">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase tracking-wider">

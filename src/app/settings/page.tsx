@@ -273,7 +273,7 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             onClick={handleLogout}
@@ -375,7 +375,7 @@ export default function SettingsPage() {
               <label className="text-[11px] font-semibold text-text-secondary uppercase">
                 Default Workspace Table Density
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => handleDensityChange('compact')}

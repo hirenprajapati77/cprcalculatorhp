@@ -153,7 +153,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
           ))}
         </div>
 
-        <div className="h-3 w-[1px] bg-border-primary" />
+        <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Outcome (Winners / Losers) */}
         <div className="flex items-center gap-1">
@@ -178,7 +178,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
           ))}
         </div>
 
-        <div className="h-3 w-[1px] bg-border-primary" />
+        <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Quality Bucket filter */}
         <div className="flex items-center gap-1">
@@ -199,7 +199,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
           ))}
         </div>
 
-        <div className="h-3 w-[1px] bg-border-primary" />
+        <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Direction filter */}
         <div className="flex items-center gap-1">
@@ -224,7 +224,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
           ))}
         </div>
 
-        <div className="h-3 w-[1px] bg-border-primary" />
+        <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Position Status filter (Open / Closed) */}
         <div className="flex items-center gap-1">

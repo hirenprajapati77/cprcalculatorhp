@@ -170,7 +170,7 @@ export default function BacktestPage() {
         </div>
 
         {/* Global Runs KPI */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <div className="bg-bg-tertiary border border-border-primary px-3 py-1.5 rounded-md flex items-center gap-2">
             <Layers size={13} className="text-text-tertiary" />
             <span className="text-text-secondary text-[11px]">Total Runs:</span>

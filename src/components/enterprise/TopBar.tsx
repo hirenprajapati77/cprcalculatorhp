@@ -114,7 +114,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <header
-      className={`h-14 border-b border-border-default bg-surface-panel flex items-center justify-between px-3 sm:px-4 z-20 sticky top-0 ${className}`}
+      className={`h-14 border-b border-border-default bg-surface-panel flex items-center justify-between px-2.5 sm:px-4 z-20 sticky top-0 ${className}`}
     >
       {/* ── Left Section: Mobile Toggle & Breadcrumbs ── */}
       <div className="flex items-center gap-3 min-w-0">
@@ -217,7 +217,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* ── Right Section: Command Palette, Theme, Health & Settings ── */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Command Palette Trigger */}
         <button
           type="button"

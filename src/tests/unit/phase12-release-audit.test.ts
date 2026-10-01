@@ -177,4 +177,53 @@ describe('Phase 12: Release-Readiness & Accessibility Audit', () => {
       }
     });
   });
+
+  describe('6. Responsive Layout & 320px Viewport Hardening Audit', () => {
+    it('ScannerKpiStrip stacks to single-column on 320px-375px mobile and 2-col on small tablet', () => {
+      const scannerKpiPath = path.join(rootDir, 'src/components/scanner/ScannerKpiStrip.tsx');
+      const content = fs.readFileSync(scannerKpiPath, 'utf8');
+      assert.ok(content.includes('grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'), 'Scanner KPI must use grid-cols-1 on narrow mobile');
+    });
+
+    it('JournalKpiStrip stacks cleanly on 320px mobile', () => {
+      const journalKpiPath = path.join(rootDir, 'src/components/journal/JournalKpiStrip.tsx');
+      const content = fs.readFileSync(journalKpiPath, 'utf8');
+      assert.ok(content.includes('grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6'), 'Journal KPI must use grid-cols-1 on narrow mobile');
+    });
+
+    it('Settings and Debug consoles use responsive grids for narrow mobile viewports', () => {
+      const settingsPath = path.join(rootDir, 'src/app/settings/page.tsx');
+      const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+      assert.ok(settingsContent.includes('grid-cols-1 sm:grid-cols-2 gap-2'), 'Settings density buttons must be single-column on mobile');
+      assert.ok(settingsContent.includes('flex flex-wrap items-center gap-2'), 'Settings action buttons must wrap');
+
+      const debugPath = path.join(rootDir, 'src/app/settings/debug/page.tsx');
+      const debugContent = fs.readFileSync(debugPath, 'utf8');
+      assert.ok(debugContent.includes('grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3'), 'Debug KPI cards must stack on mobile');
+    });
+
+    it('Analytics and Backtest headers employ flex-wrap to prevent 320px container overflow', () => {
+      const analyticsPath = path.join(rootDir, 'src/app/analytics/page.tsx');
+      const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
+      assert.ok(analyticsContent.includes('flex flex-wrap items-center gap-2'), 'Analytics header links must wrap on mobile');
+
+      const backtestPath = path.join(rootDir, 'src/app/backtest/page.tsx');
+      const backtestContent = fs.readFileSync(backtestPath, 'utf8');
+      assert.ok(backtestContent.includes('flex flex-wrap items-center gap-2 text-xs'), 'Backtest runs badges must wrap on mobile');
+    });
+
+    it('TopBar, EnterpriseShell, and CommandPalette allocate padding for 320px viewports', () => {
+      const topBarPath = path.join(rootDir, 'src/components/enterprise/TopBar.tsx');
+      const topBarContent = fs.readFileSync(topBarPath, 'utf8');
+      assert.ok(topBarContent.includes('px-2.5 sm:px-4'), 'TopBar must use px-2.5 on narrow viewports');
+
+      const shellPath = path.join(rootDir, 'src/components/enterprise/EnterpriseShell.tsx');
+      const shellContent = fs.readFileSync(shellPath, 'utf8');
+      assert.ok(shellContent.includes('px-2.5 sm:px-5 lg:px-6'), 'EnterpriseShell canvas must use px-2.5 on narrow mobile');
+
+      const palettePath = path.join(rootDir, 'src/components/enterprise/CommandPalette.tsx');
+      const paletteContent = fs.readFileSync(palettePath, 'utf8');
+      assert.ok(paletteContent.includes('px-2.5 sm:px-4'), 'CommandPalette must use px-2.5 on narrow mobile');
+    });
+  });
 });

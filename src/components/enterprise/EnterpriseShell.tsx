@@ -156,7 +156,7 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 flex flex-col min-w-0 w-full px-3 sm:px-5 lg:px-6 py-3 sm:py-5 overflow-x-hidden focus:outline-none"
+          className="flex-1 flex flex-col min-w-0 w-full px-2.5 sm:px-5 lg:px-6 py-3 sm:py-5 overflow-x-hidden focus:outline-none"
         >
           {children}
         </main>
