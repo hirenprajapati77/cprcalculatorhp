@@ -2761,7 +2761,7 @@ export default function ScannerClient() {
         title="Active Scanner Board" 
         icon={<Radar size={14} className="text-accent-blue" />}
         headerAction={
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <Button
                 onClick={() => {
                   if (scannerMode === 'CPR') setScannerMode('BTST');

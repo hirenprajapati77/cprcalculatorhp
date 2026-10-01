@@ -142,7 +142,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* ── Center Section: Persistent Market Ticker ── */}
-      <div className="hidden md:flex items-center gap-4 text-xs font-mono">
+      <div className="hidden xl:flex items-center gap-4 text-xs font-mono">
         {/* Market Cash Session State */}
         <div
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${

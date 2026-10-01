@@ -346,12 +346,12 @@ export default function MultiYearBreakoutPage() {
             })}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Sector Selector */}
             <select
               value={selectedSector}
               onChange={(e) => setSelectedSector(e.target.value)}
-              className="bg-bg-tertiary border border-border-primary text-text-primary rounded-md px-2.5 py-1 text-xs focus:outline-none focus:border-accent-blue"
+              className="bg-bg-tertiary border border-border-primary text-text-primary rounded-md px-2 py-1 text-xs focus:outline-none focus:border-accent-blue max-w-[130px] sm:max-w-none"
             >
               {sectors.map((sec) => (
                 <option key={sec} value={sec}>
@@ -365,10 +365,10 @@ export default function MultiYearBreakoutPage() {
               <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
               <input
                 type="text"
-                placeholder="Search symbol / sector..."
+                placeholder="Search symbol..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-36 sm:w-48"
+                className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-28 sm:w-44"
               />
             </div>
 

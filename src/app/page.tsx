@@ -151,7 +151,7 @@ export default function DashboardPage() {
     <div className="space-y-6 font-mono pb-12 animate-fade-in text-text-primary">
       {/* ── Executive Hero & Status Strip ── */}
       <section className="bg-surface-panel border border-border-default rounded-xl p-5 md:p-6 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-accent-primary/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+        <div className="absolute top-0 right-0 w-72 h-72 max-w-full bg-accent-primary/5 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">

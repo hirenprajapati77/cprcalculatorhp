@@ -257,9 +257,9 @@ export default function WatchlistPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Quick Add Form */}
-          <form onSubmit={handleAddSymbol} className="flex items-center gap-1.5">
+          <form onSubmit={handleAddSymbol} className="flex flex-wrap items-center gap-1.5">
             <div className="relative">
               <input
                 type="text"

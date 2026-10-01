@@ -31,7 +31,7 @@ export const Card: React.FC<CardProps> = ({
       {...props}
     >
       {(title || icon || headerAction) && (
-        <div className="flex items-center justify-between border-b border-border-primary pb-3 mb-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-primary pb-3 mb-3.5">
           <div className="flex items-center gap-2">
             {icon && <span className="text-accent-blue flex items-center">{icon}</span>}
             <div>
@@ -45,7 +45,7 @@ export const Card: React.FC<CardProps> = ({
               )}
             </div>
           </div>
-          {headerAction && <div className="flex items-center">{headerAction}</div>}
+          {headerAction && <div className="flex flex-wrap items-center gap-1">{headerAction}</div>}
         </div>
       )}
       <div>{children}</div>

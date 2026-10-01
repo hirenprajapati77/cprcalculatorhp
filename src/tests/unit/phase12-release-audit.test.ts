@@ -225,5 +225,66 @@ describe('Phase 12: Release-Readiness & Accessibility Audit', () => {
       const paletteContent = fs.readFileSync(palettePath, 'utf8');
       assert.ok(paletteContent.includes('px-2.5 sm:px-4'), 'CommandPalette must use px-2.5 on narrow mobile');
     });
+
+    it('TopBar hides persistent market ticker on tablet and mobile to prevent 768px overflow', () => {
+      const topBarPath = path.join(rootDir, 'src/components/enterprise/TopBar.tsx');
+      const topBarContent = fs.readFileSync(topBarPath, 'utf8');
+      assert.ok(
+        topBarContent.includes('hidden xl:flex items-center gap-4 text-xs font-mono'),
+        'TopBar persistent ticker must only display on xl (>=1280px) viewports'
+      );
+    });
+
+    it('Multi-Year Breakout and Analytics filter bars wrap gracefully on mobile viewports', () => {
+      const breakoutPath = path.join(rootDir, 'src/app/market-tools/breakout/page.tsx');
+      const breakoutContent = fs.readFileSync(breakoutPath, 'utf8');
+      assert.ok(
+        breakoutContent.includes('flex flex-wrap items-center gap-2'),
+        'Breakout controls bar must use flex-wrap'
+      );
+
+      const analyticsPath = path.join(rootDir, 'src/app/analytics/page.tsx');
+      const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
+      assert.ok(
+        analyticsContent.includes('flex flex-wrap items-center gap-2'),
+        'Analytics signal matrix controls must use flex-wrap'
+      );
+    });
+
+    it('Settings Telegram triggers and Watchlist quick-add wrap or stack on mobile', () => {
+      const settingsPath = path.join(rootDir, 'src/app/settings/page.tsx');
+      const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+      assert.ok(
+        settingsContent.includes('flex flex-col sm:flex-row gap-2'),
+        'Settings Telegram chat ID containers must stack vertically on mobile'
+      );
+
+      const watchlistPath = path.join(rootDir, 'src/app/watchlist/page.tsx');
+      const watchlistContent = fs.readFileSync(watchlistPath, 'utf8');
+      assert.ok(
+        watchlistContent.includes('flex flex-wrap items-center gap-2'),
+        'Watchlist toolbar must use flex-wrap'
+      );
+    });
+
+    it('JournalFilters chip containers and Card header actions wrap on mobile', () => {
+      const journalFiltersPath = path.join(rootDir, 'src/components/journal/JournalFilters.tsx');
+      const journalFiltersContent = fs.readFileSync(journalFiltersPath, 'utf8');
+      assert.ok(
+        journalFiltersContent.includes('flex flex-wrap items-center gap-1.5 text-xs'),
+        'JournalFilters date pickers must wrap'
+      );
+      assert.ok(
+        journalFiltersContent.includes('flex flex-wrap items-center gap-1'),
+        'JournalFilters filter chips must wrap'
+      );
+
+      const cardPath = path.join(rootDir, 'src/components/ui/Card.tsx');
+      const cardContent = fs.readFileSync(cardPath, 'utf8');
+      assert.ok(
+        cardContent.includes('flex flex-wrap items-center justify-between gap-2'),
+        'Card header must wrap on mobile viewports'
+      );
+    });
   });
 });

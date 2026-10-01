@@ -693,7 +693,7 @@ export default function SettingsPage() {
               <label className="text-text-secondary font-semibold uppercase">
                 Direct Chat ID
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={telegramChatId}
@@ -708,7 +708,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={handleTestTelegram}
                   disabled={telegramTesting}
-                  className="bg-bg-tertiary hover:bg-border-primary text-text-primary border border-border-primary px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0"
+                  className="bg-bg-tertiary hover:bg-border-primary text-text-primary border border-border-primary px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0 w-full sm:w-auto"
                 >
                   {telegramTesting ? 'Testing...' : 'Test Alert'}
                 </Button>
@@ -720,7 +720,7 @@ export default function SettingsPage() {
               <label className="text-text-secondary font-semibold uppercase">
                 Breakout Alert Group Chat ID
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   id="telegram-group-chat-id"
@@ -737,7 +737,7 @@ export default function SettingsPage() {
                   id="test-breakout-alert-btn"
                   onClick={handleTestBreakoutAlert}
                   disabled={breakoutTesting}
-                  className="bg-accent-blue/10 hover:bg-accent-blue/20 text-accent-blue border border-accent-blue/30 px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0"
+                  className="bg-accent-blue/10 hover:bg-accent-blue/20 text-accent-blue border border-accent-blue/30 px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0 w-full sm:w-auto"
                 >
                   {breakoutTesting ? 'Sending...' : '⚡ Test Breakout Alert'}
                 </Button>

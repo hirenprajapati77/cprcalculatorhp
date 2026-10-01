@@ -295,9 +295,9 @@ export default function AnalyticsDashboardPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Confidence filter chips */}
-                <div className="flex items-center gap-1 text-[10px]">
+                <div className="flex flex-wrap items-center gap-1 text-[10px]">
                   <span className="text-text-tertiary uppercase font-semibold mr-1">Conf:</span>
                   {(['ALL', 'High', 'Medium', 'Low'] as const).map((lvl) => (
                     <button
@@ -323,7 +323,7 @@ export default function AnalyticsDashboardPage() {
                     placeholder="Search signal..."
                     value={signalSearch}
                     onChange={(e) => setSignalSearch(e.target.value)}
-                    className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-36 sm:w-48"
+                    className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-28 sm:w-44"
                   />
                 </div>
               </div>

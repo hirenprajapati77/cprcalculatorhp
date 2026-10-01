@@ -71,7 +71,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
         </div>
 
         {/* Date Inputs */}
-        <div className="flex items-center gap-1.5 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <Calendar size={13} className="text-text-tertiary" />
           <input
             type="date"
@@ -135,7 +135,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
       {/* Filter Chips Row */}
       <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border-primary/50 text-[11px]">
         {/* Signal Type filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Type:</span>
           {signalTypes.map((type) => (
             <button
@@ -156,7 +156,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
         <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Outcome (Winners / Losers) */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">P&amp;L:</span>
           {pnlStatuses.map((st) => (
             <button
@@ -181,7 +181,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
         <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Quality Bucket filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Quality:</span>
           {qualityBuckets.map((bucket) => (
             <button
@@ -202,7 +202,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
         <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Direction filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Dir:</span>
           {directions.map((dir) => (
             <button
@@ -227,7 +227,7 @@ export const JournalFilters: React.FC<JournalFiltersProps> = ({
         <div className="hidden sm:block h-3 w-[1px] bg-border-primary" />
 
         {/* Position Status filter (Open / Closed) */}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[10px] text-text-tertiary uppercase font-semibold mr-0.5">Status:</span>
           {tradeStatuses.map((st) => (
             <button
