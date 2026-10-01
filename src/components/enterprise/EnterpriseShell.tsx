@@ -173,7 +173,12 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
 
       {/* ── Mobile Navigation Drawer ── */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div
+          className="fixed inset-0 z-50 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile Navigation"
+        >
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"

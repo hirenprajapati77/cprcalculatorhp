@@ -182,7 +182,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3 self-start md:self-auto bg-surface-elevated border border-border-default rounded-lg px-4 py-2.5">
             <div className="text-right">
               <span className="text-[10px] text-text-muted block uppercase tracking-wider">Indian Standard Time</span>
-              <span className="text-sm font-bold text-text-primary font-mono">{currentTime || '09:15:00 IST'}</span>
+              <span className="text-sm font-bold text-text-primary font-mono" suppressHydrationWarning>{currentTime || '09:15:00 IST'}</span>
             </div>
             <div className="h-7 w-[1px] bg-border-default" />
             <Clock size={18} className="text-accent-primary" />

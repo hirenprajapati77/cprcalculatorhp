@@ -142,6 +142,12 @@ describe('Phase 12: Release-Readiness & Accessibility Audit', () => {
       assert.ok(tradeDrawer.includes('role="dialog"'), 'TradeDetailDrawer must have role="dialog"');
       assert.ok(tradeDrawer.includes('aria-modal="true"'), 'TradeDetailDrawer must have aria-modal="true"');
       assert.ok(tradeDrawer.includes('aria-label="Close trade details"'), 'TradeDetailDrawer close button must have aria-label');
+
+      const shellPath = path.join(rootDir, 'src/components/enterprise/EnterpriseShell.tsx');
+      const shell = fs.readFileSync(shellPath, 'utf8');
+      assert.ok(shell.includes('role="dialog"'), 'Mobile navigation drawer must have role="dialog"');
+      assert.ok(shell.includes('aria-modal="true"'), 'Mobile navigation drawer must have aria-modal="true"');
+      assert.ok(shell.includes('aria-label="Mobile Navigation"'), 'Mobile navigation drawer must have aria-label="Mobile Navigation"');
     });
   });
 

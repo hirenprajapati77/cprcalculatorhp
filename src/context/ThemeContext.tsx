@@ -52,6 +52,7 @@ interface ThemeContextType {
 
 const STORAGE_KEY = 'cpr_ui_theme';
 const DEFAULT_THEME: ThemeMode = 'dark-pro';
+const DEFAULT_RESOLVED_THEME: ResolvedTheme = 'dark-pro';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
@@ -82,22 +83,22 @@ function applyThemeToDocument(theme: ThemeMode): ResolvedTheme {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return DEFAULT_THEME;
+  const [theme, setThemeState] = useState<ThemeMode>(DEFAULT_THEME);
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(DEFAULT_RESOLVED_THEME);
+
+  // Initialize from localStorage after client mount to eliminate SSR hydration mismatches
+  useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null;
       if (stored && THEME_OPTIONS.some((o) => o.id === stored)) {
-        return stored;
+        setThemeState(stored);
+        const resolved = applyThemeToDocument(stored);
+        setResolvedTheme(resolved);
       }
     } catch {
       // LocalStorage access may fail in incognito / restricted modes
     }
-    return DEFAULT_THEME;
-  });
-
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
-    return theme === 'system' ? resolveSystemTheme() : theme;
-  });
+  }, []);
 
   // Apply theme change
   const setTheme = (newTheme: ThemeMode) => {
