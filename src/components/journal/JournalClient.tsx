@@ -879,7 +879,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
       <div className="max-w-[1440px] mx-auto px-4 py-8 space-y-6">
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-text-primary tracking-tight font-mono">
               Trade Journal
@@ -888,11 +888,11 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               Live option trade tracking &mdash; CPR &bull; BTST &bull; STBT execution workstation
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex bg-bg-secondary p-1 rounded-lg border border-border-primary mr-4 font-mono">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-bg-secondary p-1 rounded-lg border border-border-primary mr-0 sm:mr-4 font-mono overflow-x-auto max-w-full">
               <button
                 onClick={() => setActiveTab('LOG')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'LOG' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -900,7 +900,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('ANALYTICS')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'ANALYTICS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -909,7 +909,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               <button
                 id="journal-signals-tab-btn"
                 onClick={() => setActiveTab('SIGNALS')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'SIGNALS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -917,7 +917,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('COMPARE')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -925,7 +925,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('STOCK_COMPARE')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'STOCK_COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -933,23 +933,25 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
             </div>
             
-            <button
-              id="journal-refresh-btn"
-              onClick={() => fetchData(1)}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all disabled:opacity-40 font-mono"
-            >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-            <button
-              id="journal-export-btn"
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all font-mono"
-            >
-              <Download size={12} />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="journal-refresh-btn"
+                onClick={() => fetchData(1)}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all disabled:opacity-40 font-mono"
+              >
+                <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+              <button
+                id="journal-export-btn"
+                onClick={exportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all font-mono"
+              >
+                <Download size={12} />
+                Export CSV
+              </button>
+            </div>
           </div>
         </div>
 

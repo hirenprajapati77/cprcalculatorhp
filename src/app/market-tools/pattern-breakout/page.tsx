@@ -307,17 +307,17 @@ export default function PatternBreakoutPage() {
       {/* ── Workstation Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-md bg-accent-amber/10 text-accent-amber">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-amber/10 text-accent-amber shrink-0">
               <Zap size={18} />
             </span>
             <h1 className="text-lg font-bold text-text-primary tracking-tight">
               52W High Pattern Breakouts
             </h1>
-            <span className="text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/30 px-2 py-0.5 rounded font-semibold uppercase">
+            <span className="text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/30 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               O&apos;Neil &amp; Minervini Engine
             </span>
-            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase">
+            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               {report.date}
             </span>
           </div>

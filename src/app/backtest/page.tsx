@@ -153,14 +153,14 @@ export default function BacktestPage() {
       {/* ── Page Context & Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue shrink-0">
               <FlaskConical size={18} />
             </span>
             <h1 className="text-lg font-bold text-text-primary tracking-tight">
               Backtest &amp; Quantitative Simulation Terminal
             </h1>
-            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
+            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase tracking-wider shrink-0">
               Workstation
             </span>
           </div>

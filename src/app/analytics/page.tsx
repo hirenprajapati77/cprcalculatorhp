@@ -105,14 +105,14 @@ export default function AnalyticsDashboardPage() {
       {/* ── Page Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue shrink-0">
               <BarChart3 size={18} />
             </span>
             <h1 className="text-lg font-bold text-text-primary tracking-tight">
               Quantitative Research &amp; Signal Analytics Terminal
             </h1>
-            <span className="text-[10px] bg-accent-green/10 text-accent-green border border-accent-green/20 px-2 py-0.5 rounded font-semibold uppercase">
+            <span className="text-[10px] bg-accent-green/10 text-accent-green border border-accent-green/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               Alpha Engine
             </span>
           </div>
@@ -149,7 +149,7 @@ export default function AnalyticsDashboardPage() {
       </div>
 
       {/* ── Top Portfolio KPI Strip ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Baseline Sample */}
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
           <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">

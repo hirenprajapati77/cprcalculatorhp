@@ -182,14 +182,14 @@ export default function MarketBreadthPage() {
       {/* ── Workstation Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue shrink-0">
               <TrendingUp size={18} />
             </span>
             <h1 className="text-lg font-bold text-text-primary tracking-tight">
               Market Breadth &amp; Participation Terminal
             </h1>
-            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase">
+            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               {report.date}
             </span>
           </div>

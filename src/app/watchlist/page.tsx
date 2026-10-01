@@ -241,14 +241,14 @@ export default function WatchlistPage() {
       {/* ── Workstation Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-md bg-accent-amber/10 text-accent-amber">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-amber/10 text-accent-amber shrink-0">
               <Star size={18} className="fill-accent-amber" />
             </span>
             <h1 className="text-lg font-bold text-text-primary tracking-tight">
               Institutional Discovery Watchlist
             </h1>
-            <span className="text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/30 px-2 py-0.5 rounded font-semibold uppercase">
+            <span className="text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/30 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               {watchlist.length} Tracked
             </span>
           </div>
