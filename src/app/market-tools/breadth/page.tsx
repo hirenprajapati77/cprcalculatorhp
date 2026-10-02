@@ -6,6 +6,18 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ExportActions } from '@/components/market-tools/ExportActions';
 import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import { MarketBreadthReport, UniverseBreadth } from '@/services/market-tools/market-breadth.service';
+import {
+  TrendingUp,
+  RefreshCw,
+  Search,
+  Activity,
+  BarChart3,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight,
+  AlertTriangle,
+  Clock,
+} from 'lucide-react';
 
 export default function MarketBreadthPage() {
   const [report, setReport] = useState<MarketBreadthReport | null>(null);
@@ -13,7 +25,9 @@ export default function MarketBreadthPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedUniverse, setSelectedUniverse] = useState<'ALL_NSE' | 'NIFTY_50' | 'NSE_FNO'>('ALL_NSE');
-  // B16a: track mounted state to prevent setState on unmounted component
+  const [sectorSearch, setSectorSearch] = useState('');
+  const [density, setDensity] = useState<'compact' | 'comfortable'>('compact');
+
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -59,10 +73,10 @@ export default function MarketBreadthPage() {
 
   if (loading && !report) {
     return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 p-8 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-gray-400 font-medium">Computing Market Breadth from DailyOhlcv...</p>
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-16 flex items-center justify-center font-mono">
+        <div className="text-center space-y-3">
+          <RefreshCw size={24} className="animate-spin text-accent-blue mx-auto" />
+          <p className="text-xs text-text-tertiary">Computing Market Breadth metrics across 2,600+ symbols...</p>
         </div>
       </div>
     );
@@ -70,15 +84,19 @@ export default function MarketBreadthPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-950 text-gray-100 p-8 flex items-center justify-center">
-        <div className="bg-red-950/40 border border-red-800/60 rounded-xl p-6 max-w-md text-center space-y-4">
-          <h2 className="text-xl font-bold text-red-400">Error Loading Market Breadth</h2>
-          <p className="text-gray-300 text-sm">{error}</p>
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-12 flex items-center justify-center font-mono">
+        <div className="bg-accent-red/10 border border-accent-red/30 rounded-lg p-6 max-w-md text-center space-y-3">
+          <div className="flex items-center justify-center gap-2 text-accent-red font-bold text-sm">
+            <AlertTriangle size={18} />
+            Error Loading Market Breadth
+          </div>
+          <p className="text-xs text-text-secondary">{error}</p>
           <button
+            type="button"
             onClick={() => fetchBreadth(true)}
-            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg text-sm transition"
+            className="px-3.5 py-1.5 bg-accent-red hover:bg-accent-red/90 text-white font-semibold rounded-md text-xs transition-colors"
           >
-            Retry
+            Retry Breadth Calculation
           </button>
         </div>
       </div>
@@ -133,207 +151,377 @@ export default function MarketBreadthPage() {
       ? report.nifty50
       : report.nseFno;
 
+  const currentSectors =
+    selectedUniverse === 'ALL_NSE'
+      ? report.sectors.allNse
+      : selectedUniverse === 'NIFTY_50'
+      ? report.sectors.nifty50
+      : report.sectors.nseFno;
+
+  const filteredSectors = currentSectors.filter((sec) => {
+    if (!sectorSearch) return true;
+    return sec.sector.toLowerCase().includes(sectorSearch.toLowerCase());
+  });
+
   return (
-    <div className="w-full min-w-0 space-y-8">
-      {/* Header */}
+    <div className="space-y-4 font-mono select-none">
+      {/* ── Status Banner (if pending or refreshing) ── */}
       {isRefreshing && (
-        <div className="flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2.5 text-xs font-semibold text-blue-300 animate-pulse">
-          <span className="inline-block animate-spin">🔄</span>
-          Computing Market Breadth metrics across 2,600+ symbols... Please wait.
+        <div className="flex items-center gap-2 rounded-lg border border-accent-blue/30 bg-accent-blue/10 px-4 py-2 text-xs font-semibold text-accent-blue animate-pulse">
+          <RefreshCw size={13} className="animate-spin" />
+          <span>Refreshing Market Breadth metrics across 2,600+ symbols... Please wait.</span>
         </div>
       )}
       {!isRefreshing && report.status === 'pending' && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-300">
-          <span>⏳</span>
-          Not yet computed for today — the 19:15 IST precompute job hasn&apos;t run yet, or the cache is cold after a restart. Click Refresh to scan now.
+        <div className="flex items-center gap-2 rounded-lg border border-accent-amber/30 bg-accent-amber/10 px-4 py-2 text-xs font-semibold text-accent-amber">
+          <Clock size={13} />
+          <span>Awaiting daily 19:15 IST precompute job or cold cache warmup. Click &quot;Refresh&quot; to compute on-demand.</span>
         </div>
       )}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-800 pb-6">
+
+      {/* ── Workstation Header ── */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-white">Market Breadth Scanner</h1>
-            <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-900/60 text-blue-300 border border-blue-700/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue shrink-0">
+              <TrendingUp size={18} />
+            </span>
+            <h1 className="text-lg font-bold text-text-primary tracking-tight">
+              Market Breadth &amp; Participation Terminal
+            </h1>
+            <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               {report.date}
             </span>
           </div>
-          <p className="text-sm text-gray-400 mt-1">
-            Read-only market breadth computed from {report.tradingDaysAvailable} historical trading days ({report.allNse.totalCount} symbols)
+          <p className="text-xs text-text-tertiary mt-1">
+            Empirical participation metrics computed across {report.tradingDaysAvailable} historical trading days ({report.allNse.totalCount} symbols).
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <ExportActions onExportCsv={handleExportCsv} />
           <button
+            type="button"
             onClick={() => fetchBreadth(true)}
             disabled={loading || isRefreshing}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition flex items-center gap-2 shadow-sm"
+            className="px-3 py-1.5 bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 text-white font-semibold rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
           >
-            <span className={loading || isRefreshing ? 'inline-block animate-spin' : ''}>🔄</span>
-            {isRefreshing ? 'Scanning...' : 'Refresh'}
+            <RefreshCw size={13} className={loading || isRefreshing ? 'animate-spin' : ''} />
+            <span>{isRefreshing ? 'Scanning...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
 
-      {/* Top Cards: Market Score & Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Card 1: Overall Score */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Market Regime Score</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-black text-white">
-              {report.status === 'pending' ? '--' : (report.overallScore > 0 ? `+${report.overallScore}` : report.overallScore)}
-              <span className="text-lg text-gray-500 font-normal">/10</span>
+      {/* ── Top KPI Strip ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Market Regime Score */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Activity size={11} className="text-accent-blue" />
+              Regime Score
             </span>
-            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${report.status === 'pending' ? 'bg-amber-950/60 text-amber-400 border-amber-800' : getRegimeBadgeClass(report.marketRegime)}`}>
+            <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${
+              report.status === 'pending'
+                ? 'bg-bg-tertiary text-text-tertiary'
+                : getRegimeBadgeStyle(report.marketRegime)
+            }`}>
               {report.status === 'pending' ? 'PENDING' : report.marketRegime.replace('_', ' ')}
             </span>
           </div>
-          <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-bold text-text-primary">
+              {report.status === 'pending' ? '--' : (report.overallScore > 0 ? `+${report.overallScore}` : report.overallScore)}
+              <span className="text-xs text-text-tertiary font-normal"> / 10</span>
+            </span>
+            <span className="text-[10px] text-text-tertiary">
+              Scale -10 to +10
+            </span>
+          </div>
+          <div className="w-full bg-bg-tertiary h-1.5 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-500 ${report.status === 'pending' ? 'bg-gray-700' : getRegimeBarClass(report.marketRegime)}`}
+              className={`h-full transition-all duration-500 ${
+                report.status === 'pending' ? 'bg-bg-tertiary' : getRegimeBarStyle(report.marketRegime)
+              }`}
               style={{ width: report.status === 'pending' ? '0%' : `${Math.min(100, Math.max(0, ((report.overallScore + 10) / 20) * 100))}%` }}
-            ></div>
+            />
           </div>
         </div>
 
         {/* Card 2: Advance / Decline Ratio */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Advance / Decline</span>
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : currentUniverseData.advances}</span>
-            <span className="text-sm font-semibold text-gray-400">A/D: {report.status === 'pending' ? '--' : currentUniverseData.adRatio}</span>
-            <span className="text-2xl font-bold text-rose-400">{report.status === 'pending' ? '--' : currentUniverseData.declines}</span>
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Layers size={11} className="text-accent-green" />
+              Advance / Decline
+            </span>
+            <span className="text-[9px] bg-bg-tertiary text-text-secondary px-1.5 py-0.5 rounded font-bold">
+              Ratio: {report.status === 'pending' ? '--' : currentUniverseData.adRatio}
+            </span>
           </div>
-          <div className="w-full bg-rose-950/60 h-2 rounded-full overflow-hidden flex">
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-bold text-accent-green">
+              {report.status === 'pending' ? '--' : currentUniverseData.advances}
+            </span>
+            <span className="text-xs text-text-tertiary font-normal">Adv vs Dec</span>
+            <span className="text-2xl font-bold text-accent-red">
+              {report.status === 'pending' ? '--' : currentUniverseData.declines}
+            </span>
+          </div>
+          <div className="w-full bg-accent-red/20 h-1.5 rounded-full overflow-hidden flex">
             <div
-              className="bg-emerald-500 h-full transition-all duration-500"
-              style={{ width: report.status === 'pending' ? '0%' : `${(currentUniverseData.advances / (currentUniverseData.advances + currentUniverseData.declines || 1)) * 100}%` }}
-            ></div>
+              className="bg-accent-green h-full transition-all duration-500"
+              style={{
+                width: report.status === 'pending'
+                  ? '0%'
+                  : `${(currentUniverseData.advances / (currentUniverseData.advances + currentUniverseData.declines || 1)) * 100}%`,
+              }}
+            />
           </div>
         </div>
 
-        {/* Card 3: 52-Week Highs / Lows */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">52-Week Highs vs Lows</span>
+        {/* Card 3: 52-Week Highs vs Lows */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <BarChart3 size={11} className="text-accent-blue" />
+              52W Highs vs Lows
+            </span>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+              report.status === 'pending'
+                ? 'bg-bg-tertiary text-text-tertiary'
+                : currentUniverseData.netNewHighs >= 0
+                ? 'bg-accent-green/10 text-accent-green'
+                : 'bg-accent-red/10 text-accent-red'
+            }`}>
+              Net: {report.status === 'pending' ? '--' : currentUniverseData.netNewHighs >= 0 ? `+${currentUniverseData.netNewHighs}` : currentUniverseData.netNewHighs}
+            </span>
+          </div>
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : currentUniverseData.new52wHighCount}</span>
-              <span className="text-xs text-gray-500 block">Highs</span>
-            </div>
-            <div className="text-center">
-              <span className={`text-sm font-black px-2 py-0.5 rounded ${report.status === 'pending' ? 'bg-gray-800 text-gray-400 border border-gray-700' : currentUniverseData.netNewHighs >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
-                {report.status === 'pending' ? '--' : currentUniverseData.netNewHighs >= 0 ? `+${currentUniverseData.netNewHighs}` : currentUniverseData.netNewHighs}
+              <span className="text-2xl font-bold text-accent-green">
+                {report.status === 'pending' ? '--' : currentUniverseData.new52wHighCount}
               </span>
+              <span className="text-[10px] text-text-tertiary block">52W Highs</span>
             </div>
             <div className="text-right">
-              <span className="text-xl font-bold text-rose-400">{report.status === 'pending' ? '--' : currentUniverseData.new52wLowCount}</span>
-              <span className="text-xs text-gray-500 block">Lows</span>
+              <span className="text-2xl font-bold text-accent-red">
+                {report.status === 'pending' ? '--' : currentUniverseData.new52wLowCount}
+              </span>
+              <span className="text-[10px] text-text-tertiary block">52W Lows</span>
             </div>
           </div>
         </div>
 
         {/* Card 4: Extreme Moves (+4% / -4%) */}
-        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Extreme Moves (&ge; 4%)</span>
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-text-tertiary uppercase">
+            <span className="font-semibold flex items-center gap-1">
+              <Activity size={11} className="text-accent-amber" />
+              Extreme Moves (&ge; 4%)
+            </span>
+            <span className="text-[9px] bg-bg-tertiary text-text-tertiary px-1.5 py-0.5 rounded">
+              VOLATILITY
+            </span>
+          </div>
           <div className="flex items-baseline justify-between">
-            <div>
-              <span className="text-xl font-bold text-emerald-400">{report.status === 'pending' ? '--' : `+${currentUniverseData.up4PctCount}`}</span>
-              <span className="text-xs text-gray-500 block">Up &ge; 4%</span>
+            <div className="flex items-center gap-1">
+              <ArrowUpRight size={14} className="text-accent-green" />
+              <div>
+                <span className="text-2xl font-bold text-accent-green">
+                  {report.status === 'pending' ? '--' : `+${currentUniverseData.up4PctCount}`}
+                </span>
+                <span className="text-[10px] text-text-tertiary block">Up &ge; 4%</span>
+              </div>
             </div>
-            <div>
-              <span className="text-xl font-bold text-rose-400">{report.status === 'pending' ? '--' : `-${currentUniverseData.down4PctCount}`}</span>
-              <span className="text-xs text-gray-500 block text-right">Down &ge; 4%</span>
+            <div className="flex items-center gap-1 text-right">
+              <div>
+                <span className="text-2xl font-bold text-accent-red">
+                  {report.status === 'pending' ? '--' : `-${currentUniverseData.down4PctCount}`}
+                </span>
+                <span className="text-[10px] text-text-tertiary block">Down &ge; 4%</span>
+              </div>
+              <ArrowDownRight size={14} className="text-accent-red" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Universe Selector Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
+      {/* ── Universe Tabs ── */}
+      <div className="flex items-center gap-1 border-b border-border-primary pb-2">
         <button
+          type="button"
           onClick={() => setSelectedUniverse('ALL_NSE')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition ${selectedUniverse === 'ALL_NSE' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-gray-200'}`}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            selectedUniverse === 'ALL_NSE'
+              ? 'bg-accent-blue text-white shadow-sm'
+              : 'bg-bg-secondary text-text-secondary hover:text-text-primary border border-border-primary'
+          }`}
         >
           ALL NSE ({report.allNse.totalCount})
         </button>
         <button
+          type="button"
           onClick={() => setSelectedUniverse('NIFTY_50')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition ${selectedUniverse === 'NIFTY_50' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-gray-200'}`}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            selectedUniverse === 'NIFTY_50'
+              ? 'bg-accent-blue text-white shadow-sm'
+              : 'bg-bg-secondary text-text-secondary hover:text-text-primary border border-border-primary'
+          }`}
         >
-          Nifty 50 ({report.nifty50.totalCount})
+          NIFTY 50 ({report.nifty50.totalCount})
         </button>
         <button
+          type="button"
           onClick={() => setSelectedUniverse('NSE_FNO')}
-          className={`px-4 py-2 rounded-lg text-xs font-bold transition ${selectedUniverse === 'NSE_FNO' ? 'bg-blue-600 text-white' : 'bg-gray-900 text-gray-400 hover:text-gray-200'}`}
+          className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+            selectedUniverse === 'NSE_FNO'
+              ? 'bg-accent-blue text-white shadow-sm'
+              : 'bg-bg-secondary text-text-secondary hover:text-text-primary border border-border-primary'
+          }`}
         >
-          F&amp;O Universe ({report.nseFno.totalCount})
+          NSE F&amp;O ({report.nseFno.totalCount})
         </button>
       </div>
 
-      {/* Moving Average Breadth Section */}
-      <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-6 space-y-6">
-        <h2 className="text-base font-bold text-white uppercase tracking-wider">Moving Average Breadth (% Above MA)</h2>
+      {/* ── Moving Average Breadth Gauges ── */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-border-primary">
+          <span className="text-xs font-bold text-text-primary uppercase tracking-wider">
+            Moving Average Participation (% Above MA)
+          </span>
+          <span className="text-[10px] text-text-tertiary">Longitudinal Trend</span>
+        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <MaGauge label="Above MA 10" count={currentUniverseData.aboveMa10Count} total={currentUniverseData.ma10EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa10Pct} pending={report.status === 'pending'} />
-          <MaGauge label="Above MA 20" count={currentUniverseData.aboveMa20Count} total={currentUniverseData.ma20EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa20Pct} pending={report.status === 'pending'} />
-          <MaGauge label="Above MA 50" count={currentUniverseData.aboveMa50Count} total={currentUniverseData.ma50EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa50Pct} pending={report.status === 'pending'} />
-          <MaGauge label="Above MA 200" count={currentUniverseData.aboveMa200Count} total={currentUniverseData.ma200EligibleCount || currentUniverseData.totalCount} pct={currentUniverseData.aboveMa200Pct} pending={report.status === 'pending'} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MaGauge
+            label="Above MA 10"
+            count={currentUniverseData.aboveMa10Count}
+            total={currentUniverseData.ma10EligibleCount || currentUniverseData.totalCount}
+            pct={currentUniverseData.aboveMa10Pct}
+            pending={report.status === 'pending'}
+          />
+          <MaGauge
+            label="Above MA 20"
+            count={currentUniverseData.aboveMa20Count}
+            total={currentUniverseData.ma20EligibleCount || currentUniverseData.totalCount}
+            pct={currentUniverseData.aboveMa20Pct}
+            pending={report.status === 'pending'}
+          />
+          <MaGauge
+            label="Above MA 50"
+            count={currentUniverseData.aboveMa50Count}
+            total={currentUniverseData.ma50EligibleCount || currentUniverseData.totalCount}
+            pct={currentUniverseData.aboveMa50Pct}
+            pending={report.status === 'pending'}
+          />
+          <MaGauge
+            label="Above MA 200"
+            count={currentUniverseData.aboveMa200Count}
+            total={currentUniverseData.ma200EligibleCount || currentUniverseData.totalCount}
+            pct={currentUniverseData.aboveMa200Pct}
+            pending={report.status === 'pending'}
+          />
         </div>
       </div>
 
-      {/* Sector Strength Table */}
-      <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-6 space-y-4">
-        <h2 className="text-base font-bold text-white uppercase tracking-wider">Sector Strength &amp; Ranking</h2>
+      {/* ── Sector Strength & Ranking Table ── */}
+      <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-border-primary">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-text-primary uppercase tracking-wider">
+              Sector Strength &amp; Relative Ranking
+            </span>
+            <span className="text-[10px] bg-bg-tertiary text-text-tertiary px-1.5 py-0.5 rounded">
+              {filteredSectors.length} Sectors
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input
+                type="text"
+                placeholder="Search sector..."
+                value={sectorSearch}
+                onChange={(e) => setSectorSearch(e.target.value)}
+                className="bg-bg-tertiary border border-border-primary rounded px-2.5 py-1 pl-7 text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-blue w-36 sm:w-48"
+              />
+            </div>
+
+            <div className="flex items-center border border-border-primary rounded overflow-hidden text-[10px]">
+              <button
+                type="button"
+                onClick={() => setDensity('compact')}
+                className={`px-2 py-0.5 transition-colors ${
+                  density === 'compact' ? 'bg-accent-blue text-white font-bold' : 'bg-bg-tertiary text-text-secondary'
+                }`}
+              >
+                Compact
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity('comfortable')}
+                className={`px-2 py-0.5 transition-colors ${
+                  density === 'comfortable' ? 'bg-accent-blue text-white font-bold' : 'bg-bg-tertiary text-text-secondary'
+                }`}
+              >
+                Detailed
+              </button>
+            </div>
+          </div>
+        </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-gray-800 text-gray-400 uppercase font-semibold">
-                <th className="pb-3 px-4">Rank</th>
-                <th className="pb-3 px-4">Sector</th>
-                <th className="pb-3 px-4">Avg Change</th>
-                <th className="pb-3 px-4">Advances / Declines</th>
-                <th className="pb-3 px-4">Status</th>
+          <table className="w-full text-xs text-left whitespace-nowrap font-mono">
+            <thead className="bg-bg-tertiary text-text-secondary text-[10px] uppercase tracking-wider border-b border-border-primary">
+              <tr>
+                <th className="py-2 px-3 font-semibold">Rank</th>
+                <th className="py-2 px-3 font-semibold">Sector</th>
+                <th className="py-2 px-3 font-semibold text-right">Avg Change %</th>
+                <th className="py-2 px-3 font-semibold text-right">Advances / Declines</th>
+                <th className="py-2 px-3 font-semibold text-center">Market Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/60">
-              {((selectedUniverse === 'ALL_NSE'
-                ? report.sectors.allNse
-                : selectedUniverse === 'NIFTY_50'
-                  ? report.sectors.nifty50
-                  : report.sectors.nseFno
-              )).length === 0 ? (
+            <tbody className="divide-y divide-border-primary/40">
+              {filteredSectors.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
+                  <td colSpan={5} className="py-8 text-center text-text-tertiary">
                     {report.status === 'pending'
                       ? 'Market breadth metrics are pending precomputation for today. Click "Refresh" to compute now.'
-                      : 'No sector breadth data available.'}
+                      : 'No sector records match your filter criteria.'}
                   </td>
                 </tr>
               ) : (
-                (selectedUniverse === 'ALL_NSE'
-                  ? report.sectors.allNse
-                  : selectedUniverse === 'NIFTY_50'
-                    ? report.sectors.nifty50
-                    : report.sectors.nseFno
-                ).map((sec) => (
-                  <tr key={sec.sector} className="hover:bg-gray-800/40 transition">
-                    <td className="py-3 px-4 font-bold text-gray-300">#{sec.rank}</td>
-                    <td className="py-3 px-4 font-bold text-white">{sec.sector}</td>
-                    <td className={`py-3 px-4 font-extrabold ${sec.avgChangePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {sec.avgChangePct >= 0 ? `+${sec.avgChangePct}%` : `${sec.avgChangePct}%`}
-                    </td>
-                    <td className="py-3 px-4 text-gray-300">
-                      <span className="text-emerald-400 font-semibold">{sec.advances}</span> / <span className="text-rose-400 font-semibold">{sec.declines}</span> ({sec.totalStocks} total)
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${sec.status === 'BULLISH' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : sec.status === 'BEARISH' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-gray-800 text-gray-300 border border-gray-700'}`}>
-                        {sec.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                filteredSectors.map((sec) => {
+                  const rowPad = density === 'compact' ? 'py-1.5 px-3' : 'py-2.5 px-3';
+                  const isPositive = sec.avgChangePct >= 0;
+                  return (
+                    <tr key={sec.sector} className="hover:bg-bg-tertiary/40 transition-colors">
+                      <td className={`${rowPad} font-bold text-text-secondary`}>#{sec.rank}</td>
+                      <td className={`${rowPad} font-bold text-text-primary`}>{sec.sector}</td>
+                      <td className={`${rowPad} text-right font-bold ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
+                        {isPositive ? `+${sec.avgChangePct}%` : `${sec.avgChangePct}%`}
+                      </td>
+                      <td className={`${rowPad} text-right text-text-secondary`}>
+                        <span className="text-accent-green font-bold">{sec.advances}</span> /{' '}
+                        <span className="text-accent-red font-bold">{sec.declines}</span>{' '}
+                        <span className="text-text-tertiary text-[10px]">({sec.totalStocks} total)</span>
+                      </td>
+                      <td className={`${rowPad} text-center`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sec.status === 'BULLISH'
+                            ? 'bg-accent-green/10 text-accent-green border border-accent-green/20'
+                            : sec.status === 'BEARISH'
+                            ? 'bg-accent-red/10 text-accent-red border border-accent-red/20'
+                            : 'bg-bg-tertiary text-text-secondary border border-border-primary'
+                        }`}>
+                          {sec.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -343,45 +531,65 @@ export default function MarketBreadthPage() {
   );
 }
 
-function MaGauge({ label, count, total, pct, pending }: { label: string; count: number; total: number; pct: number; pending?: boolean }) {
+function MaGauge({
+  label,
+  count,
+  total,
+  pct,
+  pending,
+}: {
+  label: string;
+  count: number;
+  total: number;
+  pct: number;
+  pending?: boolean;
+}) {
   const isHealthy = pct >= 50;
   return (
-    <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-2">
+    <div className="bg-bg-tertiary border border-border-primary rounded-lg p-3 space-y-1.5 font-mono">
       <div className="flex justify-between items-baseline">
-        <span className="text-xs font-semibold text-gray-400">{label}</span>
-        <span className="text-xs text-gray-500">{pending ? '--' : `${count}/${total}`}</span>
+        <span className="text-[10px] font-semibold text-text-tertiary uppercase">{label}</span>
+        <span className="text-[10px] text-text-tertiary">{pending ? '--' : `${count}/${total}`}</span>
       </div>
       <div className="flex items-baseline justify-between">
-        <span className={`text-2xl font-extrabold ${pending ? 'text-gray-500' : isHealthy ? 'text-emerald-400' : 'text-rose-400'}`}>
+        <span className={`text-xl font-bold ${pending ? 'text-text-tertiary' : isHealthy ? 'text-accent-green' : 'text-accent-red'}`}>
           {pending ? '--%' : `${pct}%`}
         </span>
       </div>
-      <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+      <div className="w-full bg-bg-secondary h-1.5 rounded-full overflow-hidden">
         <div
-          className={`h-full transition-all duration-500 ${pending ? 'bg-gray-700' : isHealthy ? 'bg-emerald-500' : 'bg-rose-500'}`}
+          className={`h-full transition-all duration-500 ${
+            pending ? 'bg-bg-tertiary' : isHealthy ? 'bg-accent-green' : 'bg-accent-red'
+          }`}
           style={{ width: pending ? '0%' : `${pct}%` }}
-        ></div>
+        />
       </div>
     </div>
   );
 }
 
-function getRegimeBadgeClass(regime: MarketBreadthReport['marketRegime']) {
+function getRegimeBadgeStyle(regime: MarketBreadthReport['marketRegime']) {
   switch (regime) {
-    case 'EXTREME_BULLISH': return 'bg-emerald-950 text-emerald-300 border-emerald-700';
-    case 'BULLISH': return 'bg-emerald-950/60 text-emerald-400 border-emerald-800';
-    case 'NEUTRAL': return 'bg-yellow-950/60 text-yellow-400 border-yellow-800';
-    case 'BEARISH': return 'bg-rose-950/60 text-rose-400 border-rose-800';
-    case 'EXTREME_BEARISH': return 'bg-rose-950 text-rose-300 border-rose-700';
+    case 'EXTREME_BULLISH':
+    case 'BULLISH':
+      return 'bg-accent-green/10 text-accent-green border border-accent-green/20';
+    case 'NEUTRAL':
+      return 'bg-accent-amber/10 text-accent-amber border border-accent-amber/20';
+    case 'BEARISH':
+    case 'EXTREME_BEARISH':
+      return 'bg-accent-red/10 text-accent-red border border-accent-red/20';
   }
 }
 
-function getRegimeBarClass(regime: MarketBreadthReport['marketRegime']) {
+function getRegimeBarStyle(regime: MarketBreadthReport['marketRegime']) {
   switch (regime) {
     case 'EXTREME_BULLISH':
-    case 'BULLISH': return 'bg-emerald-500';
-    case 'NEUTRAL': return 'bg-yellow-500';
+    case 'BULLISH':
+      return 'bg-accent-green';
+    case 'NEUTRAL':
+      return 'bg-accent-amber';
     case 'BEARISH':
-    case 'EXTREME_BEARISH': return 'bg-rose-500';
+    case 'EXTREME_BEARISH':
+      return 'bg-accent-red';
   }
 }

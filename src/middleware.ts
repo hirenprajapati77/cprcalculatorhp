@@ -45,9 +45,7 @@ export async function middleware(request: NextRequest) {
     normalizedPath === '/faq' ||
     normalizedPath === '/offline' ||
     normalizedPath === '/share' ||
-    normalizedPath.startsWith('/share/') ||
-    normalizedPath === '/market-tools' ||
-    normalizedPath.startsWith('/market-tools/');
+    normalizedPath.startsWith('/share/');
 
   if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
     const existing = request.cookies.get('app_access_token')?.value;

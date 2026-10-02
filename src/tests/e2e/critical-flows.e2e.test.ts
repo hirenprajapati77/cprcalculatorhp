@@ -94,11 +94,6 @@ describe('ISSUE-005: E2E Critical Flows & HTTP Boundary Verification', () => {
       const res = await fetch(`${server.baseUrl}/about`, { redirect: 'manual' });
       assert.strictEqual(res.status, 200, 'Expected /about to return 200');
     });
-
-    it('/market-tools/breadth renders with HTTP 200 without redirection', async () => {
-      const res = await fetch(`${server.baseUrl}/market-tools/breadth`, { redirect: 'manual' });
-      assert.strictEqual(res.status, 200, 'Expected /market-tools/breadth to return 200');
-    });
   });
 
   // Scenario 4: Protected Pages & Redirection
@@ -113,6 +108,16 @@ describe('ISSUE-005: E2E Critical Flows & HTTP Boundary Verification', () => {
       );
     });
 
+    it('redirects unauthenticated browser requests on protected /market-tools/breadth to /unlock with 307', async () => {
+      const res = await fetch(`${server.baseUrl}/market-tools/breadth`, { redirect: 'manual' });
+      assert.strictEqual(res.status, 307, 'Expected protected /market-tools/breadth to redirect with 307');
+      const location = res.headers.get('location') || '';
+      assert.ok(
+        location.includes('/unlock'),
+        `Expected redirect location to include /unlock, got '${location}'`
+      );
+    });
+
     it('allows authenticated browser requests on / without redirecting to /unlock', async () => {
       const res = await fetch(`${server.baseUrl}/`, {
         redirect: 'manual',
@@ -120,6 +125,18 @@ describe('ISSUE-005: E2E Critical Flows & HTTP Boundary Verification', () => {
       });
       const location = res.headers.get('location') || '';
       // Authenticated users pass middleware (Home() navigates to /calculate, NOT /unlock)
+      assert.ok(
+        !location.includes('/unlock'),
+        `Authenticated request must not be redirected to /unlock, got '${location}'`
+      );
+    });
+
+    it('allows authenticated browser requests on /market-tools/breadth without redirecting to /unlock', async () => {
+      const res = await fetch(`${server.baseUrl}/market-tools/breadth`, {
+        redirect: 'manual',
+        headers: { cookie: `app_access_token=${tokenHash}` },
+      });
+      const location = res.headers.get('location') || '';
       assert.ok(
         !location.includes('/unlock'),
         `Authenticated request must not be redirected to /unlock, got '${location}'`

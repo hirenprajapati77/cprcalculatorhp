@@ -1,18 +1,63 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import {
   Download, RefreshCw, ChevronLeft, ChevronRight,
-  TrendingUp, TrendingDown, Award, Activity,
+  Activity, X, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import IndexBtstComparePanel from '@/components/journal/IndexBtstComparePanel';
 import StockBtstComparePanel from '@/components/journal/StockBtstComparePanel';
 import { VpaBreakdownPanel, type VpaBreakdownView } from '@/components/vpa/VpaBreakdownPanel';
+import { StockDetailDrawer, type DrawerStockData } from '@/components/enterprise/StockDetailDrawer';
+import { JournalKpiStrip } from '@/components/journal/JournalKpiStrip';
+import { TradeDetailDrawer, type JournalTradeData } from '@/components/journal/TradeDetailDrawer';
+import { JournalFilters, type JournalFiltersState } from '@/components/journal/JournalFilters';
+import { JournalAnalyticsView } from '@/components/journal/JournalAnalyticsView';
 import { BTST_CLOCK } from '@/lib/market-hours';
+
+interface ColumnDef {
+  key: string;
+  label: string;
+  required?: boolean;
+}
+
+const COLUMN_DEFS: ColumnDef[] = [
+  { key: 'date', label: 'Trade Date' },
+  { key: 'type', label: 'Signal Type' },
+  { key: 'symbol', label: 'Symbol', required: true },
+  { key: 'contract', label: 'Option Contract' },
+  { key: 'entry', label: 'Entry CMP' },
+  { key: 'cmp916', label: '9:16 AM' },
+  { key: 'cmp930', label: '9:30 AM' },
+  { key: 'cmp945', label: '9:45 AM' },
+  { key: 'exit', label: 'Exit CMP' },
+  { key: 'pnl', label: 'Gross P&L' },
+  { key: 'netPnl', label: 'Estimated Net P&L' },
+  { key: 'score', label: 'Model Score' },
+  { key: 'scoreV2', label: 'Shadow V2' },
+  { key: 'action', label: 'Action', required: true },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = [
+  'date',
+  'type',
+  'symbol',
+  'contract',
+  'entry',
+  'cmp916',
+  'cmp930',
+  'cmp945',
+  'exit',
+  'pnl',
+  'netPnl',
+  'score',
+  'scoreV2',
+  'action',
+];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -333,37 +378,6 @@ function renderV2Breakdown(
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatWidget({
-  label, value, sub, icon, color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  return (
-    <div
-      style={{ borderColor: `${color}30`, background: `${color}08` }}
-      className="rounded-xl border p-4 flex items-start gap-3 min-w-0"
-    >
-      <div
-        style={{ background: `${color}18`, color }}
-        className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 text-sm"
-      >
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-0.5">
-          {label}
-        </p>
-        <p className="text-xl font-bold text-white leading-tight">{value}</p>
-        {sub && <p className="text-[10px] text-text-tertiary mt-0.5">{sub}</p>}
-      </div>
-    </div>
-  );
-}
-
 function SignalBadge({ type, qualityBucket }: { type: string; qualityBucket?: string | null | undefined }) {
   return (
     <span
@@ -497,6 +511,8 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   const [totalPages, setTotalPages]   = useState(1);
   const [loading, setLoading]         = useState(() => !_cachedEntries);
   const [error, setError]             = useState<string | null>(null);
+  const [drawerStock, setDrawerStock] = useState<DrawerStockData | null>(null);
+  const [drawerOpen, setDrawerOpen]   = useState(false);
 
   // Sync state to memory cache
   useEffect(() => {
@@ -507,14 +523,45 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     }
   }, [entries, stats, total]);
 
-  // Filters
-  const [fromDate, setFromDate]       = useState('');
-  const [toDate, setToDate]           = useState('');
-  const [signalType, setSignalType]   = useState<'ALL' | 'CPR' | 'BTST' | 'STBT'>('ALL');
-  const [qualityFilter, setQualityFilter] = useState<'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'>('ALL');
-  const [outcomeFilter, setOutcomeFilter] = useState<string>('ALL');
+  // Filters State
+  const [filters, setFilters] = useState<JournalFiltersState>({
+    search: '',
+    signalType: 'ALL',
+    qualityBucket: 'ALL',
+    executionOutcome: 'ALL',
+    pnlStatus: 'ALL',
+    direction: 'ALL',
+    tradeStatus: 'ALL',
+    fromDate: '',
+    toDate: '',
+  });
 
-  // Invalidate cache and show spinner when any filter changes (not on mount)
+  // Table Sorting State
+  const [sortField, setSortField] = useState<'date' | 'type' | 'symbol' | 'entry' | 'exit' | 'pnl' | 'netPnl' | 'score'>('date');
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
+
+  // Table Presentation States
+  const [densityMode, setDensityMode] = useState<'compact' | 'detailed'>('compact');
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('journal_visible_columns');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // fallback
+        }
+      }
+    }
+    return DEFAULT_VISIBLE_COLUMNS;
+  });
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+
+  // Detail Drawer States
+  const [selectedTrade, setSelectedTrade] = useState<JournalTradeData | null>(null);
+  const [tradeDrawerOpen, setTradeDrawerOpen] = useState(false);
+
+  // Invalidate cache and show spinner when server-side filter changes (not on mount)
   const isFirstMount = React.useRef(true);
   useEffect(() => {
     if (isFirstMount.current) {
@@ -523,7 +570,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     }
     _cachedEntries = null;
     setLoading(true);
-  }, [signalType, fromDate, toDate, qualityFilter, outcomeFilter]);
+  }, [filters.signalType, filters.fromDate, filters.toDate, filters.qualityBucket, filters.executionOutcome]);
 
   // Inline exit input state per row
   const [exitRow, setExitRow]         = useState<string | null>(null);
@@ -584,11 +631,11 @@ export default function JournalClient({ initialReportingData }: { initialReporti
       const params = new URLSearchParams({
         page: String(p),
         limit: '50',
-        signalType,
-        qualityBucket: qualityFilter,
-        executionOutcome: outcomeFilter,
-        ...(fromDate ? { fromDate } : {}),
-        ...(toDate   ? { toDate   } : {}),
+        signalType: filters.signalType,
+        qualityBucket: filters.qualityBucket,
+        executionOutcome: filters.executionOutcome,
+        ...(filters.fromDate ? { fromDate: filters.fromDate } : {}),
+        ...(filters.toDate   ? { toDate:   filters.toDate   } : {}),
       });
       const res  = await fetch(`/api/journal?${params}`);
       const data: JournalResponse = await res.json();
@@ -604,9 +651,124 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     } finally {
       setLoading(false);
     }
-  }, [signalType, fromDate, toDate, qualityFilter, outcomeFilter]);
+  }, [filters.signalType, filters.fromDate, filters.toDate, filters.qualityBucket, filters.executionOutcome]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
+
+  const handleToggleColumn = (key: string) => {
+    let updated: string[];
+    if (visibleColumns.includes(key)) {
+      updated = visibleColumns.filter((c) => c !== key);
+    } else {
+      updated = [...visibleColumns, key];
+    }
+    setVisibleColumns(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('journal_visible_columns', JSON.stringify(updated));
+    }
+  };
+
+  const handleInspectStock = (symbol: string) => {
+    const matching = entries.find((e) => e.symbol === symbol);
+    setDrawerStock({
+      symbol,
+      ltp: matching?.exitCmp ?? matching?.entryCmp ?? 0,
+      direction: matching?.signalType === 'STBT' ? 'SHORT' : 'LONG',
+      score: matching?.score ?? 0,
+      confidence: matching?.confidence ?? 0,
+      signals: matching?.signalSummary
+        ? matching.signalSummary.split(/[,\s|]+/).filter(Boolean)
+        : [],
+    });
+    setDrawerOpen(true);
+  };
+
+  const filteredEntries = useMemo(() => {
+    const list = entries.filter((e) => {
+      if (filters.search) {
+        const q = filters.search.toUpperCase();
+        const matchSymbol = e.symbol?.toUpperCase().includes(q);
+        const matchContract = e.optionContract?.toUpperCase().includes(q);
+        if (!matchSymbol && !matchContract) return false;
+      }
+      if (filters.pnlStatus === 'WINNERS') {
+        if ((e.pnl ?? 0) <= 0 && (e.pnlPct ?? 0) <= 0) return false;
+      } else if (filters.pnlStatus === 'LOSERS') {
+        if ((e.pnl ?? 0) >= 0 && (e.pnlPct ?? 0) >= 0) return false;
+      }
+      if (filters.direction === 'LONG') {
+        const isLong = e.optionType === 'CE' || e.signalType === 'BTST';
+        if (!isLong) return false;
+      } else if (filters.direction === 'SHORT') {
+        const isShort = e.optionType === 'PE' || e.signalType === 'STBT';
+        if (!isShort) return false;
+      }
+      if (filters.tradeStatus === 'OPEN') {
+        if (e.exitCmp !== null && e.exitCmp !== undefined) return false;
+      } else if (filters.tradeStatus === 'CLOSED') {
+        if (e.exitCmp === null || e.exitCmp === undefined) return false;
+      }
+      return true;
+    });
+
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'date':
+          comparison = new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
+          break;
+        case 'type':
+          comparison = a.signalType.localeCompare(b.signalType);
+          break;
+        case 'symbol':
+          comparison = a.symbol.localeCompare(b.symbol);
+          break;
+        case 'entry':
+          comparison = (a.entryCmp ?? 0) - (b.entryCmp ?? 0);
+          break;
+        case 'exit':
+          comparison = (a.exitCmp ?? 0) - (b.exitCmp ?? 0);
+          break;
+        case 'pnl':
+          comparison = (a.pnl ?? 0) - (b.pnl ?? 0);
+          break;
+        case 'netPnl': {
+          const aNet = a.estimatedNetPnl ?? a.pnl ?? 0;
+          const bNet = b.estimatedNetPnl ?? b.pnl ?? 0;
+          comparison = aNet - bNet;
+          break;
+        }
+        case 'score':
+          comparison = (a.score ?? 0) - (b.score ?? 0);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortAsc ? comparison : -comparison;
+    });
+
+    return list;
+  }, [entries, filters.search, filters.pnlStatus, filters.direction, filters.tradeStatus, sortField, sortAsc]);
+
+  const handleSort = (field: 'date' | 'type' | 'symbol' | 'entry' | 'exit' | 'pnl' | 'netPnl' | 'score') => {
+    if (sortField === field) {
+      setSortAsc((prev) => !prev);
+    } else {
+      setSortField(field);
+      setSortAsc(field === 'symbol' || field === 'type');
+    }
+  };
+
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={11} className="opacity-30 group-hover:opacity-70 inline ml-1 transition-opacity" />;
+    }
+    return sortAsc ? (
+      <ArrowUp size={11} className="text-accent-blue inline ml-1 font-bold" />
+    ) : (
+      <ArrowDown size={11} className="text-accent-blue inline ml-1 font-bold" />
+    );
+  };
 
   // ── Manual Exit ────────────────────────────────────────────────────────────
 
@@ -641,10 +803,13 @@ export default function JournalClient({ initialReportingData }: { initialReporti
   function exportCSV() {
     const headers = [
       'Trade Date','Type','Stock','Option','Entry CMP',
-      '9:16 AM','9:30 AM','9:45 AM','Exit CMP','P&L%','Advanced Score','Shadow Simple Score',
+      '9:16 AM','9:30 AM','9:45 AM','Exit CMP',
+      'Gross P&L (₹)','Gross P&L %',
+      'Estimated Charges (₹)','Estimated Net P&L (₹)','Estimated Net P&L %','Friction Tier',
+      'Advanced Score','Shadow Simple Score',
       'Quality Bucket', 'Execution Outcome', 'Event Risk', 'Regime Snapshot', 'Regime Parsed'
     ];
-    const rows = entries.map(e => {
+    const rows = filteredEntries.map(e => {
       let parsedRegime = '';
       if (e.regimeSnapshotAtSignal) {
         try {
@@ -664,7 +829,12 @@ export default function JournalClient({ initialReportingData }: { initialReporti
         e.cmp930  ?? '',
         e.cmp945  ?? '',
         e.exitCmp ?? '',
-        e.pnlPct  !== null ? e.pnlPct.toFixed(2) : '',
+        e.pnl !== null && e.pnl !== undefined ? e.pnl.toFixed(2) : '',
+        e.pnlPct  !== null && e.pnlPct !== undefined ? e.pnlPct.toFixed(2) : '',
+        e.estimatedCharges !== null && e.estimatedCharges !== undefined ? e.estimatedCharges.toFixed(2) : '',
+        e.estimatedNetPnl !== null && e.estimatedNetPnl !== undefined ? e.estimatedNetPnl.toFixed(2) : '',
+        e.estimatedNetPnlPct !== null && e.estimatedNetPnlPct !== undefined ? e.estimatedNetPnlPct.toFixed(2) : '',
+        e.frictionModelTier ?? 'FUTURES_PROXY',
         e.score,
         e.scoreV2 ?? '',
         e.qualityBucketAtSignal ?? '',
@@ -700,27 +870,29 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     { name: '9:45 AM',  value: computeAvgAtTime(entries, 'cmp945')  },
   ];
 
+  const paddingClass = densityMode === 'compact' ? 'py-1.5 px-2.5 text-[11px]' : 'py-3 px-3 text-xs';
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-bg-primary text-white">
-      <div className="max-w-[1400px] mx-auto px-4 py-8 space-y-6">
+    <div className="min-h-screen bg-bg-primary text-text-primary">
+      <div className="max-w-[1440px] mx-auto px-4 py-8 space-y-6">
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight font-mono">
               Trade Journal
             </h1>
-            <p className="text-slate-500 text-sm mt-0.5">
-              Live option trade tracking — CPR · BTST · STBT signals
+            <p className="text-text-secondary text-sm mt-0.5">
+              Live option trade tracking &mdash; CPR &bull; BTST &bull; STBT execution workstation
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex bg-bg-secondary p-1 rounded-lg border border-border-primary mr-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-bg-secondary p-1 rounded-lg border border-border-primary mr-0 sm:mr-4 font-mono overflow-x-auto max-w-full">
               <button
                 onClick={() => setActiveTab('LOG')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'LOG' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -728,7 +900,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('ANALYTICS')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'ANALYTICS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -737,7 +909,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               <button
                 id="journal-signals-tab-btn"
                 onClick={() => setActiveTab('SIGNALS')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'SIGNALS' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -745,7 +917,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('COMPARE')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -753,7 +925,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
               <button
                 onClick={() => setActiveTab('STOCK_COMPARE')}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
                   activeTab === 'STOCK_COMPARE' ? 'bg-bg-primary text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-bg-primary/50'
                 }`}
               >
@@ -761,35 +933,42 @@ export default function JournalClient({ initialReportingData }: { initialReporti
               </button>
             </div>
             
-            <button
-              id="journal-refresh-btn"
-              onClick={() => fetchData(1)}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all disabled:opacity-40"
-            >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-            <button
-              id="journal-export-btn"
-              onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all"
-            >
-              <Download size={12} />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="journal-refresh-btn"
+                onClick={() => fetchData(1)}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all disabled:opacity-40 font-mono"
+              >
+                <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+              <button
+                id="journal-export-btn"
+                onClick={exportCSV}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-tertiary text-xs font-medium transition-all font-mono"
+              >
+                <Download size={12} />
+                Export CSV
+              </button>
+            </div>
           </div>
         </div>
 
         {activeTab === 'ANALYTICS' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* ── Executive Visual Analytics View ── */}
+            <JournalAnalyticsView
+              entries={entries}
+              reportingData={reportingData}
+            />
 
             {/* ── No-data empty state ── */}
             {(!reportingData || (reportingData.qualityBuckets.length === 0 && reportingData.executionOutcomes.length === 0)) && (
               <div className="rounded-xl border border-border-primary bg-bg-secondary p-12 text-center">
                 <div className="text-4xl mb-3">📊</div>
-                <div className="text-slate-400 font-semibold mb-1">Not enough completed trades to generate analytics.</div>
-                <div className="text-slate-600 text-xs">Close at least 5 trades to unlock strategy insights.</div>
+                <div className="text-text-secondary font-semibold mb-1">Not enough completed trades to generate analytics.</div>
+                <div className="text-text-tertiary text-xs">Close at least 5 trades to unlock strategy insights.</div>
               </div>
             )}
 
@@ -1261,380 +1440,477 @@ export default function JournalClient({ initialReportingData }: { initialReporti
 
         {activeTab === 'LOG' && (
           <>
-            {/* ── Stat Widgets ─────────────────────────────────────────────────── */}
-        {stats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatWidget
-              label="Total Trades"
-              value={String(stats.totalAllTrades ?? stats.totalTrades)}
-              sub={`${stats.winners} winners`}
-              icon={<Activity size={16} />}
-              color="#3b82f6"
+            {/* ── Enterprise Execution KPI Strip ── */}
+            <JournalKpiStrip
+              stats={stats}
+              entries={filteredEntries}
+              totalFiltered={total}
             />
-            <StatWidget
-              label="Win Rate"
-              value={`${stats.winRate}%`}
-              sub={`${stats.totalClosedTrades ?? stats.totalTrades} closed trades`}
-              icon={<TrendingUp size={16} />}
-              color={stats.winRate >= 50 ? '#22c55e' : '#ef4444'}
-            />
-            <StatWidget
-              label="Avg P&L %"
-              value={`${stats.avgPnlPct >= 0 ? '+' : ''}${stats.avgPnlPct}%`}
-              sub="per closed trade"
-              icon={stats.avgPnlPct >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-              color={stats.avgPnlPct >= 0 ? '#22c55e' : '#ef4444'}
-            />
-            <StatWidget
-              label="Best Signal"
-              value={stats.bestSignalType ?? '---'}
-              sub={stats.bestSignalType ? `${stats.byType[stats.bestSignalType].winRate}% win rate` : 'Not enough data'}
-              icon={<Award size={16} />}
-              color={stats.bestSignalType ? SIGNAL_COLORS[stats.bestSignalType] : '#64748b'}
-            />
-          </div>
-        )}
 
-        {/* ── Filter Bar ───────────────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border border-border-primary bg-bg-secondary">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-text-secondary font-medium">From</label>
-            <input
-              id="journal-from-date"
-              type="date"
-              value={fromDate}
-              onChange={e => { setFromDate(e.target.value); setPage(1); }}
-              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-primary text-[11px] focus:outline-none focus:border-accent-blue"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-text-secondary font-medium">To</label>
-            <input
-              id="journal-to-date"
-              type="date"
-              value={toDate}
-              onChange={e => { setToDate(e.target.value); setPage(1); }}
-              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-primary text-[11px] focus:outline-none focus:border-accent-blue"
-            />
-          </div>
-          <div className="flex items-center gap-1 ml-auto">
-            {(['ALL', 'CPR', 'BTST', 'STBT'] as const).map(t => (
-              <button
-                key={t}
-                id={`journal-filter-${t.toLowerCase()}`}
-                onClick={() => { setSignalType(t); setPage(1); }}
-                style={signalType === t && t !== 'ALL' ? {
-                  color: SIGNAL_COLORS[t],
-                  background: SIGNAL_BG[t],
-                  borderColor: `${SIGNAL_COLORS[t]}40`,
-                } : {}}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                  signalType === t
-                    ? t === 'ALL'
-                      ? 'bg-white/10 text-white border-border-secondary'
-                      : 'border-current'
-                    : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-white/5'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          
-          <div className="flex items-center gap-2 border-l border-border-secondary pl-3 ml-1">
-            <select
-              value={qualityFilter}
-              onChange={e => { setQualityFilter(e.target.value as 'ALL' | 'TRADEABLE' | 'WATCHLIST' | 'LOW_QUALITY'); setPage(1); }}
-              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-secondary text-[11px] focus:outline-none focus:border-accent-blue"
-            >
-              <option value="ALL">All Qualities</option>
-              <option value="TRADEABLE">Tradeable</option>
-              <option value="WATCHLIST">Watchlist</option>
-              <option value="LOW_QUALITY">Low Quality</option>
-            </select>
-            
-            <select
-              value={outcomeFilter}
-              onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }}
-              className="h-8 px-2.5 py-1.5 rounded-lg border border-border-secondary bg-bg-primary text-text-secondary text-[11px] focus:outline-none focus:border-accent-blue w-[140px]"
-            >
-              <option value="ALL">All Outcomes</option>
-              <option value="MODEL_VALID">Model Valid</option>
-              <option value="EXECUTION_SLIPPAGE">Exec Slippage</option>
-              <option value="GAP_FAILURE">Gap Failure</option>
-              <option value="EVENT_RISK_AVOIDABLE">Event Risk</option>
-              <option value="MODEL_WEAK">Model Weak</option>
-              <option value="LOW_QUALITY_SHOULD_SKIP">Low Quality Skip</option>
-            </select>
-          </div>
-          
-          {(fromDate || toDate || signalType !== 'ALL' || qualityFilter !== 'ALL' || outcomeFilter !== 'ALL') && (
-            <button
-              onClick={() => { setFromDate(''); setToDate(''); setSignalType('ALL'); setQualityFilter('ALL'); setOutcomeFilter('ALL'); setPage(1); }}
-              className="text-xs text-slate-600 hover:text-slate-400 underline transition-colors"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
+            {/* ── Enterprise Filter Bar & Column Settings ── */}
+            <div className="relative">
+              <JournalFilters
+                filters={filters}
+                onChange={setFilters}
+                onReset={() => {
+                  setFilters({
+                    search: '',
+                    signalType: 'ALL',
+                    qualityBucket: 'ALL',
+                    executionOutcome: 'ALL',
+                    pnlStatus: 'ALL',
+                    direction: 'ALL',
+                    tradeStatus: 'ALL',
+                    fromDate: '',
+                    toDate: '',
+                  });
+                }}
+                densityMode={densityMode}
+                onToggleDensity={() => setDensityMode((m) => (m === 'compact' ? 'detailed' : 'compact'))}
+                onOpenColumnSettings={() => setShowColumnSettings((v) => !v)}
+              />
 
-        {/* ── Table ────────────────────────────────────────────────────────── */}
-        <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
-          {error && (
-            <div className="p-6 text-center text-red-400 text-sm">{error}</div>
-          )}
-          {loading && entries.length === 0 && (
-            <div className="p-10 text-center text-slate-600 text-sm animate-pulse">
-              Loading journal entries…
+              {/* Column Settings Popover */}
+              {showColumnSettings && (
+                <div className="absolute right-0 top-full mt-2 z-30 bg-bg-secondary border border-border-secondary p-3 rounded-lg shadow-2xl font-mono text-xs space-y-2 w-72">
+                  <div className="font-bold text-text-primary border-b border-border-primary pb-1 flex justify-between items-center">
+                    <span>Visible Table Columns</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowColumnSettings(false)}
+                      className="text-text-tertiary hover:text-text-primary"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
+                    {COLUMN_DEFS.map((col) => (
+                      <label
+                        key={col.key}
+                        className={`flex items-center gap-2 text-[11px] ${
+                          col.required ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer text-text-secondary hover:text-text-primary'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(col.key)}
+                          disabled={col.required}
+                          onChange={() => handleToggleColumn(col.key)}
+                          className="rounded text-accent-blue cursor-pointer"
+                        />
+                        <span>{col.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-          {!error && !loading && entries.length === 0 && (
-            <div className="p-10 text-center text-slate-600 text-sm">
-              No journal entries yet. Entries appear after the {BTST_CLOCK.journalStart}–{BTST_CLOCK.journalEnd} IST journal cron on trading days.
-            </div>
-          )}
-          {entries.length > 0 && (
-            <div className="overflow-x-auto">
-              <div className="px-4 py-2 border-b border-border-primary/60 text-[10px] text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
-                <span>
-                  <span className="text-slate-300 font-semibold">Advanced</span> = Overnight Engine score (0–130) — trade source of truth
-                </span>
-                <span>
-                  <span className="text-slate-400 font-semibold">Shadow</span> = Simple V2 (0–100) — research only, hover for breakdown
-                </span>
-                <span>
-                  <span className="text-emerald-400 font-semibold">Net P&amp;L</span> = Modeled post-statutory &amp; broker estimate (Gross remains source of truth)
-                </span>
-              </div>
-              <table className="w-full text-xs whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-border-primary text-text-secondary uppercase tracking-wider text-[10px]">
-                    <th className="text-left px-4 py-3 font-semibold">Trade Date</th>
-                    <th className="text-left px-3 py-3 font-semibold">Type</th>
-                    <th className="text-left px-3 py-3 font-semibold">Stock</th>
-                    <th className="text-left px-3 py-3 font-semibold">Option</th>
-                    <th className="text-right px-3 py-3 font-semibold">Entry CMP</th>
-                    <th className="text-right px-3 py-3 font-semibold">9:16 AM</th>
-                    <th className="text-right px-3 py-3 font-semibold">9:30 AM</th>
-                    <th className="text-right px-3 py-3 font-semibold">9:45 AM</th>
-                    <th className="text-right px-3 py-3 font-semibold">Exit CMP</th>
-                    <th className="text-right px-3 py-3 font-semibold">P&amp;L %</th>
-                    <th
-                      className="text-right px-3 py-3 font-semibold"
-                      title="Advanced Engine overnightScore (0–130) — source of truth for journal picks, UI, and Telegram"
-                    >
-                      Advanced
-                    </th>
-                    <th
-                      className="text-right px-3 py-3 font-semibold text-slate-500"
-                      title="Simple Engine V2 shadow (0–100) — research only, does not select trades"
-                    >
-                      Shadow
-                    </th>
-                    <th className="text-center px-3 py-3 font-semibold">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-primary/60">
-                  {entries.map((entry, index) => (
-                    <tr
-                      key={entry.id}
-                      className="hover:bg-white/[0.02] transition-colors"
-                    >
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
-                        {fmtDate(entry.tradeDate)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <SignalBadge type={entry.signalType} qualityBucket={entry.qualityBucketAtSignal} />
-                          <OutcomeDot outcome={entry.executionOutcome} />
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 font-semibold text-white font-mono">
-                        {entry.symbol}
-                      </td>
-                      <td className="px-3 py-3 text-slate-400 font-mono whitespace-nowrap">
-                        {entry.optionContract.startsWith('UNDERLYING') ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
-                            {entry.optionContract}
-                          </span>
-                        ) : (
-                          entry.optionContract
+
+            {/* ── Enterprise Execution Table ── */}
+            <div className="rounded-xl border border-border-primary bg-bg-secondary overflow-hidden">
+              {error && (
+                <div className="p-6 text-center text-accent-red text-sm font-mono">{error}</div>
+              )}
+              {loading && entries.length === 0 && (
+                <div className="p-10 text-center text-text-tertiary text-sm animate-pulse font-mono">
+                  Loading journal entries…
+                </div>
+              )}
+              {!error && !loading && filteredEntries.length === 0 && (
+                <div className="p-10 text-center text-text-tertiary text-sm font-mono">
+                  {entries.length === 0
+                    ? `No journal entries yet. Entries appear after the ${BTST_CLOCK.journalStart}–${BTST_CLOCK.journalEnd} IST journal cron on trading days.`
+                    : 'No entries match the current filter criteria.'}
+                </div>
+              )}
+              {filteredEntries.length > 0 && (
+                <div className="overflow-x-auto">
+                  <div className="px-4 py-2 border-b border-border-primary/60 text-[10px] text-text-tertiary flex flex-wrap gap-x-4 gap-y-1 font-mono">
+                    <span>
+                      <span className="text-text-primary font-semibold">Advanced</span> = Overnight Engine score (0–130) — trade source of truth
+                    </span>
+                    <span>
+                      <span className="text-text-secondary font-semibold">Shadow</span> = Simple V2 (0–100) — research only, hover for breakdown
+                    </span>
+                    <span>
+                      <span className="text-accent-green font-semibold">Net P&amp;L</span> = Modeled post-statutory &amp; broker estimate (Gross remains source of truth)
+                    </span>
+                  </div>
+                  <table className="w-full text-xs whitespace-nowrap font-mono">
+                    <thead className="sticky top-0 z-20 bg-bg-secondary/95 backdrop-blur-md border-b border-border-primary text-text-secondary uppercase tracking-wider text-[10px]">
+                      <tr>
+                        {visibleColumns.includes('date') && (
+                          <th
+                            onClick={() => handleSort('date')}
+                            className="group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Trade Date</span>
+                              {renderSortIcon('date')}
+                            </div>
+                          </th>
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-right text-slate-300 font-mono">
-                        ₹{fmt(entry.entryCmp)}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <SnapshotCell value={entry.cmp916} />
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <SnapshotCell value={entry.cmp930} />
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <SnapshotCell value={entry.cmp945} />
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono">
-                        {entry.exitCmp !== null
-                          ? <span className="text-slate-300">₹{fmt(entry.exitCmp)}</span>
-                          : <span className="text-slate-600">---</span>
-                        }
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono font-semibold">
-                        {entry.pnlPct !== null ? (
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]"
-                              style={{
-                                color: pnlColor(entry.pnlPct),
-                                background: entry.pnlPct >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                              }}
-                              title="Gross P&L (Primary Realized Return)"
-                            >
-                              {entry.pnlPct >= 0 ? '▲' : '▼'} {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
-                            </span>
-                            {entry.estimatedNetPnlPct !== null && entry.estimatedNetPnlPct !== undefined && (
-                              <span
-                                className="text-[9px] text-slate-400 font-mono tracking-tight cursor-help"
-                                title={`Model Estimate: Est. Net ${entry.estimatedNetPnlPct >= 0 ? '+' : ''}${fmt(entry.estimatedNetPnlPct)}% (₹${fmt(entry.estimatedCharges ?? 0)}/unit statutory & broker fees)`}
-                              >
-                                Net: <span style={{ color: pnlColor(entry.estimatedNetPnlPct) }}>{entry.estimatedNetPnlPct >= 0 ? '+' : ''}{fmt(entry.estimatedNetPnlPct)}%</span>
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-600">---</span>
+                        {visibleColumns.includes('type') && (
+                          <th
+                            onClick={() => handleSort('type')}
+                            className="group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Type</span>
+                              {renderSortIcon('type')}
+                            </div>
+                          </th>
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-200 font-semibold">
-                        <div className="inline-flex items-center gap-2" title="Advanced Engine (0–130)">
-                          <ScoreBar value={entry.score} max={130} className="bg-indigo-400" />
-                          <span>{entry.score}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-500 relative">
-                        {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
-                          <div className="inline-block relative group">
-                            <div className="inline-flex items-center gap-2">
-                              <ScoreBar value={entry.scoreV2} max={100} className="bg-slate-400" />
-                              <span
+                        {visibleColumns.includes('symbol') && (
+                          <th
+                            onClick={() => handleSort('symbol')}
+                            className="sticky left-0 z-10 bg-bg-secondary group text-left px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>Stock</span>
+                              {renderSortIcon('symbol')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('contract') && <th className="text-left px-3 py-2.5 font-semibold">Option</th>}
+                        {visibleColumns.includes('entry') && (
+                          <th
+                            onClick={() => handleSort('entry')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Entry CMP</span>
+                              {renderSortIcon('entry')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('cmp916') && <th className="text-right px-3 py-2.5 font-semibold">9:16 AM</th>}
+                        {visibleColumns.includes('cmp930') && <th className="text-right px-3 py-2.5 font-semibold">9:30 AM</th>}
+                        {visibleColumns.includes('cmp945') && <th className="text-right px-3 py-2.5 font-semibold">9:45 AM</th>}
+                        {visibleColumns.includes('exit') && (
+                          <th
+                            onClick={() => handleSort('exit')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Exit CMP</span>
+                              {renderSortIcon('exit')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('pnl') && (
+                          <th
+                            onClick={() => handleSort('pnl')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Gross P&amp;L</span>
+                              <span className="text-[8px] bg-accent-green/10 text-accent-green font-bold px-1 rounded">FACT</span>
+                              {renderSortIcon('pnl')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('netPnl') && (
+                          <th
+                            onClick={() => handleSort('netPnl')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Est. Net P&amp;L</span>
+                              <span className="text-[8px] bg-accent-blue/10 text-accent-blue font-bold px-1 rounded">MODEL</span>
+                              {renderSortIcon('netPnl')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('score') && (
+                          <th
+                            onClick={() => handleSort('score')}
+                            className="group text-right px-3 py-2.5 font-semibold cursor-pointer hover:text-text-primary transition-colors select-none"
+                            title="Advanced Engine overnightScore (0–130) — source of truth for journal picks, UI, and Telegram"
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Advanced</span>
+                              {renderSortIcon('score')}
+                            </div>
+                          </th>
+                        )}
+                        {visibleColumns.includes('scoreV2') && (
+                          <th className="text-right px-3 py-2.5 font-semibold text-text-tertiary" title="Simple Engine V2 shadow (0–100) — research only, does not select trades">
+                            Shadow
+                          </th>
+                        )}
+                        {visibleColumns.includes('action') && <th className="text-center px-3 py-2.5 font-semibold">Action</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-primary/60">
+                      {filteredEntries.map((entry, index) => (
+                        <tr
+                          key={entry.id}
+                          onClick={() => {
+                            setSelectedTrade(entry);
+                            setTradeDrawerOpen(true);
+                          }}
+                          className="group hover:bg-bg-tertiary/40 cursor-pointer transition-colors"
+                        >
+                          {visibleColumns.includes('date') && (
+                            <td className={`px-3 text-text-secondary whitespace-nowrap ${paddingClass}`}>
+                              {fmtDate(entry.tradeDate)}
+                            </td>
+                          )}
+                          {visibleColumns.includes('type') && (
+                            <td className={`px-3 ${paddingClass}`}>
+                              <div className="flex items-center gap-1.5">
+                                <SignalBadge type={entry.signalType} qualityBucket={entry.qualityBucketAtSignal} />
+                                <OutcomeDot outcome={entry.executionOutcome} />
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.includes('symbol') && (
+                            <td className={`sticky left-0 z-10 bg-bg-secondary group-hover:bg-bg-tertiary/40 font-semibold text-text-primary ${paddingClass}`}>
+                              <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActiveTooltipRow(prev => prev === entry.id ? null : entry.id);
+                                  handleInspectStock(entry.symbol);
                                 }}
-                                className="cursor-help border-b border-dashed border-border-secondary/60 select-none hover:text-slate-300 transition-colors"
-                                title="Simple V2 shadow — research only"
+                                className="hover:text-accent-blue transition-colors text-left"
+                                title="Open Stock Quantitative Detail Drawer"
                               >
-                                {entry.scoreV2}
-                              </span>
-                            </div>
-
-                            {/* Premium Tooltip Overlay */}
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              className={`absolute z-50 right-0 w-64 p-3 bg-bg-secondary border border-border-secondary/80 rounded-xl shadow-2xl text-left whitespace-normal pointer-events-auto transition-all ${
-                                index < 3 ? 'top-full mt-2' : 'bottom-full mb-2'
-                              } ${
-                                activeTooltipRow === entry.id ? 'block opacity-100 translate-y-0' : 'hidden md:group-hover:block md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border-primary">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shadow Breakdown</span>
-                                <span className="text-[9px] text-slate-600 font-mono">Simple V2 · research</span>
-                              </div>
-                              <div className="font-sans text-[11px] text-slate-300">
-                                {renderV2Breakdown(
-                                  entry.v2Breakdown as V2Breakdown | null,
-                                  entry.scoreV2,
-                                  expandedV2Row === entry.id,
-                                  () => setExpandedV2Row(prev => prev === entry.id ? '' : entry.id),
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-slate-600">---</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {entry.exitCmp !== null ? (
-                          <span className="text-slate-600 text-[10px]">Closed</span>
-                        ) : exitRow === entry.id ? (
-                          <div className="flex flex-col items-center gap-1">
-                            <div className="flex items-center gap-1">
-                              <input
-                                id={`journal-exit-input-${entry.id}`}
-                                type="number"
-                                step="0.05"
-                                min="0"
-                                placeholder="₹ price"
-                                value={exitValue}
-                                onChange={e => { setExitValue(e.target.value); setExitError(null); }}
-                                className="w-20 h-6 px-1.5 rounded border border-border-secondary bg-bg-primary text-slate-300 text-[10px] focus:outline-none focus:border-blue-500/50"
-                                autoFocus
-                              />
-                              <button
-                                id={`journal-exit-confirm-${entry.id}`}
-                                onClick={() => submitExit(entry.id)}
-                                disabled={exitLoading}
-                                className="h-6 px-2 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 text-white text-[10px] font-semibold transition-colors disabled:opacity-40"
-                              >
-                                {exitLoading ? '…' : '✓'}
+                                {entry.symbol}
                               </button>
-                              <button
-                                onClick={() => { setExitRow(null); setExitValue(''); setExitError(null); }}
-                                className="h-6 px-1.5 rounded border border-border-secondary text-slate-500 hover:text-white text-[10px] transition-colors"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                            {exitError && (
-                              <p className="text-red-400 text-[9px]">{exitError}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <button
-                            id={`journal-exit-btn-${entry.id}`}
-                            onClick={() => { setExitRow(entry.id); setExitValue(''); setExitError(null); }}
-                            className="px-2 py-1 rounded border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-secondary text-[10px] font-medium transition-all"
-                          >
-                            Set Exit
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('contract') && (
+                            <td className={`px-3 text-text-secondary whitespace-nowrap ${paddingClass}`}>
+                              {entry.optionContract.startsWith('UNDERLYING') ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary border border-border-secondary">
+                                  {entry.optionContract}
+                                </span>
+                              ) : (
+                                entry.optionContract
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('entry') && (
+                            <td className={`px-3 text-right text-text-primary ${paddingClass}`}>
+                              ₹{fmt(entry.entryCmp)}
+                            </td>
+                          )}
+                          {visibleColumns.includes('cmp916') && (
+                            <td className={`px-3 text-right ${paddingClass}`}>
+                              <SnapshotCell value={entry.cmp916} />
+                            </td>
+                          )}
+                          {visibleColumns.includes('cmp930') && (
+                            <td className={`px-3 text-right ${paddingClass}`}>
+                              <SnapshotCell value={entry.cmp930} />
+                            </td>
+                          )}
+                          {visibleColumns.includes('cmp945') && (
+                            <td className={`px-3 text-right ${paddingClass}`}>
+                              <SnapshotCell value={entry.cmp945} />
+                            </td>
+                          )}
+                          {visibleColumns.includes('exit') && (
+                            <td className={`px-3 text-right ${paddingClass}`}>
+                              {entry.exitCmp !== null ? (
+                                <span className="text-text-primary">₹{fmt(entry.exitCmp)}</span>
+                              ) : (
+                                <span className="text-text-tertiary">---</span>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('pnl') && (
+                            <td className={`px-3 text-right font-semibold ${paddingClass}`}>
+                              {entry.pnlPct !== null && entry.pnlPct !== undefined ? (
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px]"
+                                    style={{
+                                      color: pnlColor(entry.pnlPct),
+                                      background: entry.pnlPct >= 0 ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                    }}
+                                    title="Gross P&L (Authoritative Exchange Settlement)"
+                                  >
+                                    {entry.pnlPct >= 0 ? '▲' : '▼'} {entry.pnlPct >= 0 ? '+' : ''}{fmt(entry.pnlPct)}%
+                                  </span>
+                                  {entry.pnl !== null && entry.pnl !== undefined && (
+                                    <span className="text-[10px] text-text-tertiary font-mono">
+                                      {entry.pnl >= 0 ? '+' : ''}₹{fmt(entry.pnl)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-text-tertiary">---</span>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('netPnl') && (
+                            <td className={`px-3 text-right ${paddingClass}`}>
+                              {entry.estimatedNetPnlPct !== null && entry.estimatedNetPnlPct !== undefined ? (
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <span
+                                    className="text-[11px] font-semibold"
+                                    style={{ color: pnlColor(entry.estimatedNetPnlPct) }}
+                                    title={`Model Estimate: Est. Net ${entry.estimatedNetPnlPct >= 0 ? '+' : ''}${fmt(entry.estimatedNetPnlPct)}% (₹${fmt(entry.estimatedCharges ?? 0)} fees)`}
+                                  >
+                                    {entry.estimatedNetPnlPct >= 0 ? '+' : ''}{fmt(entry.estimatedNetPnlPct)}%
+                                  </span>
+                                  <span className="text-[9px] text-accent-amber font-mono">
+                                    -₹{fmt(entry.estimatedCharges ?? 0)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-text-tertiary">---</span>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('score') && (
+                            <td className={`px-3 text-right text-text-primary font-semibold ${paddingClass}`}>
+                              <div className="inline-flex items-center gap-2" title="Advanced Engine (0–130)">
+                                <ScoreBar value={entry.score} max={130} className="bg-indigo-400" />
+                                <span>{entry.score}</span>
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.includes('scoreV2') && (
+                            <td className={`px-3 text-right text-text-tertiary relative ${paddingClass}`}>
+                              {entry.scoreV2 !== null && entry.scoreV2 !== undefined ? (
+                                <div className="inline-block relative group/shadow">
+                                  <div className="inline-flex items-center gap-2">
+                                    <ScoreBar value={entry.scoreV2} max={100} className="bg-slate-400" />
+                                    <span
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveTooltipRow((prev) => (prev === entry.id ? null : entry.id));
+                                      }}
+                                      className="cursor-help border-b border-dashed border-border-secondary/60 select-none hover:text-text-primary transition-colors"
+                                      title="Simple V2 shadow — research only"
+                                    >
+                                      {entry.scoreV2}
+                                    </span>
+                                  </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border-primary">
-              <span className="text-xs text-text-secondary">
-                {total} entries · Page {page} of {totalPages}
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  id="journal-prev-page"
-                  onClick={() => { const p = page - 1; setPage(p); fetchData(p); }}
-                  disabled={page <= 1}
-                  className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-slate-500 hover:text-white hover:border-border-secondary disabled:opacity-30 transition-all"
-                >
-                  <ChevronLeft size={12} />
-                </button>
-                <button
-                  id="journal-next-page"
-                  onClick={() => { const p = page + 1; setPage(p); fetchData(p); }}
-                  disabled={page >= totalPages}
-                  className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-slate-500 hover:text-white hover:border-border-secondary disabled:opacity-30 transition-all"
-                >
-                  <ChevronRight size={12} />
-                </button>
-              </div>
+                                  {/* Tooltip Overlay */}
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={`absolute z-50 right-0 w-64 p-3 bg-bg-secondary border border-border-secondary/80 rounded-xl shadow-2xl text-left whitespace-normal pointer-events-auto transition-all ${
+                                      index < 3 ? 'top-full mt-2' : 'bottom-full mb-2'
+                                    } ${
+                                      activeTooltipRow === entry.id
+                                        ? 'block opacity-100 translate-y-0'
+                                        : 'hidden md:group-hover/shadow:block md:opacity-0 md:translate-y-1 md:group-hover/shadow:opacity-100 md:group-hover/shadow:translate-y-0'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border-primary">
+                                      <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Shadow Breakdown</span>
+                                      <span className="text-[9px] text-text-tertiary font-mono">Simple V2 · research</span>
+                                    </div>
+                                    <div className="font-sans text-[11px] text-text-secondary">
+                                      {renderV2Breakdown(
+                                        entry.v2Breakdown as V2Breakdown | null,
+                                        entry.scoreV2,
+                                        expandedV2Row === entry.id,
+                                        () => setExpandedV2Row((prev) => (prev === entry.id ? '' : entry.id)),
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-text-tertiary">---</span>
+                              )}
+                            </td>
+                          )}
+                          {visibleColumns.includes('action') && (
+                            <td className={`px-3 text-center ${paddingClass}`}>
+                              {entry.exitCmp !== null ? (
+                                <span className="text-text-tertiary text-[10px]">Closed</span>
+                              ) : exitRow === entry.id ? (
+                                <div
+                                  className="flex flex-col items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      id={`journal-exit-input-${entry.id}`}
+                                      type="number"
+                                      step="0.05"
+                                      min="0"
+                                      placeholder="₹ price"
+                                      value={exitValue}
+                                      onChange={(e) => { setExitValue(e.target.value); setExitError(null); }}
+                                      className="w-20 h-6 px-1.5 rounded border border-border-secondary bg-bg-primary text-text-primary text-[10px] focus:outline-none focus:border-accent-blue"
+                                      autoFocus
+                                    />
+                                    <button
+                                      id={`journal-exit-confirm-${entry.id}`}
+                                      onClick={() => submitExit(entry.id)}
+                                      disabled={exitLoading}
+                                      className="h-6 px-2 rounded bg-accent-green hover:bg-accent-green/90 text-black text-[10px] font-bold transition-colors disabled:opacity-40"
+                                    >
+                                      {exitLoading ? '…' : '✓'}
+                                    </button>
+                                    <button
+                                      onClick={() => { setExitRow(null); setExitValue(''); setExitError(null); }}
+                                      className="h-6 px-1.5 rounded border border-border-secondary text-text-tertiary hover:text-text-primary text-[10px] transition-colors"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                  {exitError && (
+                                    <p className="text-accent-red text-[9px]">{exitError}</p>
+                                  )}
+                                </div>
+                              ) : (
+                                <button
+                                  id={`journal-exit-btn-${entry.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExitRow(entry.id);
+                                    setExitValue('');
+                                    setExitError(null);
+                                  }}
+                                  className="px-2 py-1 rounded border border-border-secondary text-text-secondary hover:text-text-primary hover:border-border-primary text-[10px] font-medium transition-all"
+                                >
+                                  Set Exit
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border-primary font-mono">
+                  <span className="text-xs text-text-secondary">
+                    {total} entries · Page {page} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      id="journal-prev-page"
+                      onClick={() => { const p = page - 1; setPage(p); fetchData(p); }}
+                      disabled={page <= 1}
+                      className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-30 transition-all"
+                    >
+                      <ChevronLeft size={12} />
+                    </button>
+                    <button
+                      id="journal-next-page"
+                      onClick={() => { const p = page + 1; setPage(p); fetchData(p); }}
+                      disabled={page >= totalPages}
+                      className="h-7 w-7 flex items-center justify-center rounded border border-border-secondary text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-30 transition-all"
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
         {/* ── Analysis Charts ──────────────────────────────────────────────── */}
         {stats && entries.length > 0 && (
@@ -1739,6 +2015,21 @@ export default function JournalClient({ initialReportingData }: { initialReporti
           </>
         )}
       </div>
+
+      {/* Trade Detail Drawer */}
+      <TradeDetailDrawer
+        isOpen={tradeDrawerOpen}
+        onClose={() => setTradeDrawerOpen(false)}
+        trade={selectedTrade}
+        onInspectStock={handleInspectStock}
+      />
+
+      {/* Stock Detail Drawer */}
+      <StockDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        stock={drawerStock}
+      />
     </div>
   );
 }

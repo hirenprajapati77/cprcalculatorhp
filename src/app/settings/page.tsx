@@ -1,10 +1,31 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Sliders, Play, Database, Cpu, Send, LogOut } from 'lucide-react';
+import {
+  Settings,
+  Save,
+  Sliders,
+  Play,
+  Database,
+  Cpu,
+  Send,
+  LogOut,
+  Palette,
+  Sun,
+  Moon,
+  Eye,
+  Monitor,
+  Check,
+  Keyboard,
+  ShieldCheck,
+  AlertCircle,
+  Table,
+  CheckCircle2,
+  RefreshCw,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
+import { useTheme } from '@/context/ThemeContext';
 
 function looksMaskedSecret(value: string): boolean {
   return /^\*+\d{0,4}$/.test(value) || (value.startsWith('***') && value.includes('*'));
@@ -29,9 +50,36 @@ export default function SettingsPage() {
   const [fyersLoading, setFyersLoading] = useState<boolean>(true);
   const [fyersDataApiOk, setFyersDataApiOk] = useState<boolean | null>(null);
   const [fyersDataApiMessage, setFyersDataApiMessage] = useState<string>('');
-  const { showToast } = useToast();
 
-  // Load settings from server on mount (works on any device)
+  // Workstation Preferences state
+  const [defaultDensity, setDefaultDensity] = useState<'compact' | 'comfortable'>('compact');
+
+  const { showToast } = useToast();
+  const { theme, setTheme, options: themeOptions } = useTheme();
+
+  // Load workstation density from localStorage
+  useEffect(() => {
+    try {
+      const savedDensity = localStorage.getItem('cpr_table_density') as 'compact' | 'comfortable' | null;
+      if (savedDensity === 'compact' || savedDensity === 'comfortable') {
+        setDefaultDensity(savedDensity);
+      }
+    } catch {
+      // LocalStorage unavailable
+    }
+  }, []);
+
+  const handleDensityChange = (density: 'compact' | 'comfortable') => {
+    setDefaultDensity(density);
+    try {
+      localStorage.setItem('cpr_table_density', density);
+      showToast(`Default workspace density updated to ${density}`, 'info');
+    } catch {
+      // LocalStorage unavailable
+    }
+  };
+
+  // Load settings from server on mount
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -112,7 +160,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/alerts/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true, chatId: telegramChatId, token: telegramToken })
+        body: JSON.stringify({ test: true, chatId: telegramChatId, token: telegramToken }),
       });
       if (res.ok) {
         showToast('Test alert sent to Telegram!', 'success');
@@ -132,7 +180,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/alerts/telegram/test-breakout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true, groupChatId: telegramGroupChatId, token: telegramToken })
+        body: JSON.stringify({ test: true, groupChatId: telegramGroupChatId, token: telegramToken }),
       });
       if (res.ok) {
         showToast('Test breakout alert sent to Telegram group!', 'success');
@@ -204,120 +252,307 @@ export default function SettingsPage() {
     }
   };
 
-
   return (
-    <div className="space-y-6 px-4 py-6 font-mono text-xs text-slate-300">
-      {/* Title Header */}
-      <div className="bg-bg-secondary border border-border-primary rounded-xl p-6 shadow-2xl relative overflow-hidden select-none">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <Settings size={120} className="text-slate-500 rotate-12" />
+    <div className="space-y-4 font-mono select-none text-xs">
+      {/* ── Workstation Header ── */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-bg-secondary border border-border-primary rounded-lg p-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-1.5 rounded-md bg-accent-blue/10 text-accent-blue shrink-0">
+              <Settings size={18} />
+            </span>
+            <h1 className="text-lg font-bold text-text-primary tracking-tight">
+              Settings &amp; Workstation Preferences
+            </h1>
+            <span className="text-[10px] bg-accent-green/10 text-accent-green border border-accent-green/30 px-2 py-0.5 rounded font-semibold uppercase flex items-center gap-1 shrink-0">
+              <ShieldCheck size={11} /> System Online
+            </span>
+          </div>
+          <p className="text-xs text-text-tertiary mt-1">
+            Configure scan thresholds, customize visual themes, set workspace density, manage broker integration, and control alert triggers.
+          </p>
         </div>
-        <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
-          <Settings size={13} className="text-blue-400 animate-spin-slow" />
-          Quant Engine Control Panel
-        </span>
-        <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white uppercase mt-1">
-          Settings & Configurations
-        </h1>
-        <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed mt-2">
-          Configure scanning thresholds, set default filter universe limits, adjust auto-refresh telemetry intervals, and toggle data-source feeds.
-        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="bg-bg-tertiary hover:bg-accent-red/20 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5"
+          >
+            <LogOut size={13} />
+            <span>{loggingOut ? 'Logging out...' : 'Log out'}</span>
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSaveSettings}
+            disabled={saving}
+            className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-4 py-1.5 rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+            <span>{saving ? 'Saving...' : 'Save Configuration'}</span>
+          </Button>
+        </div>
       </div>
 
-      <form onSubmit={handleSaveSettings} className="space-y-6">
-        <Card title="Market Telemetry Setup" icon={<Sliders size={14} className="text-blue-400" />}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-            
+      <form onSubmit={handleSaveSettings} className="space-y-4">
+        {/* ── Section 1: Workspace Appearance & 5 Themes ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-blue/10 text-accent-blue">
+                <Palette size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Workstation Visual Themes
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">
+              Active: <strong className="text-text-primary uppercase">{theme}</strong>
+            </span>
+          </div>
+
+          <p className="text-xs text-text-tertiary">
+            Institutional color palettes built with semantic CSS tokens. Instantly updates the entire terminal and persists across sessions.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+            {themeOptions.map((opt) => {
+              const isSelected = opt.id === theme;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTheme(opt.id)}
+                  className={`text-left p-3 rounded-lg border transition-all relative ${
+                    isSelected
+                      ? 'border-accent-blue bg-accent-blue/10 ring-1 ring-accent-blue shadow-sm'
+                      : 'border-border-primary bg-bg-tertiary hover:bg-bg-secondary hover:border-border-secondary'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      {opt.id === 'light-pro' && <Sun size={14} className="text-accent-amber" />}
+                      {opt.id === 'dark-oled' && <Moon size={14} className="text-accent-blue" />}
+                      {opt.id === 'high-contrast' && <Eye size={14} className="text-accent-green" />}
+                      {opt.id === 'system' && <Monitor size={14} className="text-text-tertiary" />}
+                      {opt.id === 'dark-pro' && <Moon size={14} className="text-accent-purple" />}
+                      <span className="font-bold text-text-primary text-xs">{opt.name}</span>
+                    </div>
+                    {isSelected ? (
+                      <Check size={14} className="text-accent-blue" />
+                    ) : opt.badge ? (
+                      <span className="text-[8px] px-1.5 py-0.2 rounded font-bold uppercase bg-accent-blue/10 text-accent-blue border border-accent-blue/20">
+                        {opt.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-[10px] text-text-tertiary leading-snug">
+                    {opt.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Section 2: Table Density & Display Preferences ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-amber/10 text-accent-amber">
+                <Table size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Workstation Density &amp; View Defaults
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">Table Presentation</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-text-secondary uppercase">
+                Default Workspace Table Density
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDensityChange('compact')}
+                  className={`p-2.5 rounded-lg border text-left transition-colors ${
+                    defaultDensity === 'compact'
+                      ? 'bg-accent-blue/10 border-accent-blue text-text-primary font-bold'
+                      : 'bg-bg-tertiary border-border-primary text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs">Compact (Dense)</span>
+                    {defaultDensity === 'compact' && <CheckCircle2 size={13} className="text-accent-blue" />}
+                  </div>
+                  <p className="text-[10px] text-text-tertiary mt-1">
+                    32px row height. Optimized for multi-monitor institutional trade desks.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDensityChange('comfortable')}
+                  className={`p-2.5 rounded-lg border text-left transition-colors ${
+                    defaultDensity === 'comfortable'
+                      ? 'bg-accent-blue/10 border-accent-blue text-text-primary font-bold'
+                      : 'bg-bg-tertiary border-border-primary text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs">Detailed (Comfortable)</span>
+                    {defaultDensity === 'comfortable' && <CheckCircle2 size={13} className="text-accent-blue" />}
+                  </div>
+                  <p className="text-[10px] text-text-tertiary mt-1">
+                    44px row height. Enhanced readability for touchscreen or laptop displays.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-text-secondary uppercase">
+                Navigation &amp; Cache Behavior
+              </label>
+              <div className="bg-bg-tertiary border border-border-primary rounded-lg p-3 space-y-2 text-text-secondary">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Quick Search Palette</span>
+                  <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border-primary text-[10px] font-mono text-text-tertiary">
+                    Ctrl + K
+                  </kbd>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Drill-Down Stock Drawer</span>
+                  <span className="text-[10px] text-accent-green font-bold">Enabled</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs">Session Memory Cache</span>
+                  <span className="text-[10px] text-accent-green font-bold">Zero-Latency Active</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section 3: Market Telemetry Setup ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-blue/10 text-accent-blue">
+                <Sliders size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Market Telemetry Setup
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">Data Ingestion Engine</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Market Data Feed Mode */}
-            <div className="space-y-2">
-              <label className="text-slate-400 font-semibold uppercase flex items-center gap-1">
-                <Database size={13} />
+            <div className="space-y-1.5">
+              <label className="text-text-secondary font-semibold uppercase flex items-center gap-1">
+                <Database size={12} className="text-accent-blue" />
                 Market Feed Mode
               </label>
               <select
                 value={marketMode}
                 onChange={(e) => setMarketMode(e.target.value)}
-                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
               >
                 <option value="live">Live (Yahoo Finance Real-time)</option>
                 <option value="paper">Paper (Simulated Tick Fluctuations)</option>
                 <option value="mock">Mock (Static Test Vectors)</option>
               </select>
-              <p className="text-[9px] text-slate-500 mt-1">
-                Note: In live mode, ensure your server environment has valid internet access to query finance APIs.
+              <p className="text-[10px] text-text-tertiary">
+                Requires server internet connectivity to query finance APIs.
               </p>
             </div>
 
             {/* Default Universe */}
-            <div className="space-y-2">
-              <label className="text-slate-400 font-semibold uppercase flex items-center gap-1">
-                <Cpu size={13} />
+            <div className="space-y-1.5">
+              <label className="text-text-secondary font-semibold uppercase flex items-center gap-1">
+                <Cpu size={12} className="text-accent-purple" />
                 Default Target Universe
               </label>
               <select
                 value={defaultUniverse}
                 onChange={(e) => setDefaultUniverse(e.target.value)}
-                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
               >
-                <option value="NSE_FNO">NSE F&O (~202 Stocks)</option>
+                <option value="NSE_FNO">NSE F&amp;O (~202 Stocks)</option>
                 <option value="NIFTY50">Nifty 50 Index</option>
                 <option value="NIFTY100">Nifty 100 Index</option>
                 <option value="NIFTY200">Nifty 200 Index</option>
                 <option value="ALL_NSE">All Covered Symbols</option>
               </select>
-              <p className="text-[9px] text-slate-500 mt-1">
-                Defines the preset loaded on loading the main Quant Discovery terminal.
+              <p className="text-[10px] text-text-tertiary">
+                Initial universe loaded upon navigating to the Scanner workspace.
               </p>
             </div>
 
             {/* Auto Refresh Interval */}
-            <div className="space-y-2">
-              <label className="text-slate-400 font-semibold uppercase flex items-center gap-1">
-                <Play size={13} />
-                Auto-Refresh Telemetry
+            <div className="space-y-1.5">
+              <label className="text-text-secondary font-semibold uppercase flex items-center gap-1">
+                <Play size={12} className="text-accent-green" />
+                Auto-Refresh Interval
               </label>
               <select
                 value={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.value)}
-                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
               >
-                <option value="off">Off (Manual Sync)</option>
+                <option value="off">Off (Manual Sync Only)</option>
                 <option value="5m">Every 5 Minutes</option>
                 <option value="15m">Every 15 Minutes</option>
                 <option value="30m">Every 30 Minutes</option>
               </select>
-              <p className="text-[9px] text-slate-500 mt-1">
-                Trigger interval for querying live feeds and updating cached discovery metrics.
+              <p className="text-[10px] text-text-tertiary">
+                Periodic background interval for refreshing live scanner metrics.
               </p>
             </div>
-
-            {/* Bypass BTST/STBT Time Lock — research unlock only; does not affect journal/Telegram/regime crons */}
-            <div className="space-y-2 pt-2 md:col-span-2">
-              <label className="flex items-start gap-2 cursor-pointer text-slate-400 font-semibold select-none">
-                <input
-                  type="checkbox"
-                  checked={bypassBtst}
-                  onChange={(e) => setBypassBtst(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 rounded border-border-secondary bg-bg-secondary focus:ring-accent-blue accent-accent-blue cursor-pointer"
-                />
-                <span>
-                  Bypass BTST Time Lock (research unlock)
-                  <span className="block text-[9px] font-normal text-slate-500 mt-1 leading-relaxed">
-                    Lets Scanner load BTST/STBT outside 15:10–15:25 IST (cache if present, otherwise a fresh discover).
-                    Does not change journal auto-close, Telegram alerts, or regime-gated cron jobs.
-                  </span>
-                </span>
-              </label>
-            </div>
           </div>
-        </Card>
 
-        <Card title="Discovery Filter Constraints" icon={<Sliders size={14} className="text-amber-500" />}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-            
-            {/* Price Floor Threshold */}
-            <div className="space-y-2">
-              <label className="text-slate-400 font-semibold uppercase">
+          {/* Bypass BTST/STBT Time Lock */}
+          <div className="pt-2 border-t border-border-primary/50">
+            <label className="flex items-start gap-2 cursor-pointer text-text-secondary font-semibold select-none">
+              <input
+                type="checkbox"
+                checked={bypassBtst}
+                onChange={(e) => setBypassBtst(e.target.checked)}
+                className="w-4 h-4 mt-0.5 rounded border-border-primary bg-bg-tertiary accent-accent-blue cursor-pointer"
+              />
+              <div>
+                <span className="text-text-primary">Bypass BTST Time Lock (Research Mode)</span>
+                <p className="text-[10px] font-normal text-text-tertiary mt-0.5 leading-relaxed">
+                  Permits the Scanner to evaluate BTST/STBT setups outside the standard 15:10–15:25 IST window. Does NOT alter journal execution, Telegram alerts, or regime-gated cron jobs.
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* ── Section 4: Discovery Filter Constraints ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-amber/10 text-accent-amber">
+                <Sliders size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Discovery Filter Constraints
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">Risk Floors</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-text-secondary font-semibold uppercase">
                 Price Floor Limit (₹)
               </label>
               <input
@@ -326,16 +561,15 @@ export default function SettingsPage() {
                 step="0.5"
                 value={minPrice}
                 onChange={(e) => setMinPrice(parseFloat(e.target.value) || 1)}
-                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
               />
-              <p className="text-[9px] text-slate-500 mt-1">
-                Excludes penny stocks below this floor threshold during scans.
+              <p className="text-[10px] text-text-tertiary">
+                Excludes penny counters below this price limit during scans.
               </p>
             </div>
 
-            {/* Volume Floor Threshold */}
-            <div className="space-y-2">
-              <label className="text-slate-400 font-semibold uppercase">
+            <div className="space-y-1.5">
+              <label className="text-text-secondary font-semibold uppercase">
                 Volume Floor Limit (Daily Shares)
               </label>
               <input
@@ -344,71 +578,100 @@ export default function SettingsPage() {
                 step="1000"
                 value={minVolume}
                 onChange={(e) => setMinVolume(parseInt(e.target.value) || 1000)}
-                className="bg-bg-secondary border border-border-secondary text-text-primary w-full p-2.5 rounded-lg focus:outline-none focus:border-accent-blue"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
               />
-              <p className="text-[9px] text-slate-500 mt-1">
-                Excludes illiquid counters with volume below this floor threshold.
+              <p className="text-[10px] text-text-tertiary">
+                Excludes illiquid stocks with daily volume below this threshold.
               </p>
             </div>
           </div>
-        </Card>
+        </div>
 
-        <Card title="Broker Integration" icon={<Cpu size={14} className="text-emerald-500" />}>
-          <div className="p-4 space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <span className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider mb-1">Fyers API Connection</span>
-                {fyersLoading ? (
-                  <span className="text-slate-500 animate-pulse">Checking status...</span>
-                ) : fyersConnected ? (
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    ✅ Connected (Expires: {fyersExpiry})
-                  </span>
-                ) : (
-                  <span className="text-rose-500 font-bold">
-                    🔴 Not connected
-                  </span>
-                )}
-              </div>
-              <Button
-                type="button"
-                onClick={() => {
-                  window.location.href = '/api/broker/fyers/login';
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase"
-              >
-                {fyersConnected ? 'Reconnect Fyers Account' : 'Connect Fyers Account'}
-              </Button>
+        {/* ── Section 5: Broker Integration (Fyers API) ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-green/10 text-accent-green">
+                <Cpu size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Broker Feed Integration (Fyers)
+              </h2>
             </div>
-            {fyersConnected && fyersDataApiOk === false && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200 leading-relaxed">
-                <p className="font-bold text-amber-300 mb-1">Data API permission missing</p>
-                <p>
-                  Login works, but Quotes/History returned permission denied. Live scanner will keep using Yahoo until this is fixed.
-                </p>
-                <ol className="list-decimal ml-4 mt-2 space-y-1 text-amber-100/90">
-                  <li>Open <span className="font-mono">myapi.fyers.in</span> → edit this app</li>
-                  <li>Enable <strong>Quotes &amp; Market Data</strong> and <strong>Historical Data</strong> (enable all permission checkboxes if unsure)</li>
-                  <li>Save, then click <strong>Reconnect Fyers Account</strong> above</li>
-                </ol>
-                {fyersDataApiMessage && (
-                  <p className="mt-2 text-[10px] text-amber-100/70 font-mono break-words">{fyersDataApiMessage}</p>
-                )}
-              </div>
-            )}
-            {fyersConnected && fyersDataApiOk === true && (
-              <p className="text-[10px] text-emerald-400/90">Data API probe OK — Fyers is usable as primary live feed.</p>
-            )}
-            <p className="text-[9px] text-slate-500 leading-normal">
-              Fyers API authentication token expires every 24 hours. Ensure you click to connect and authorize daily to enable real-time F&O option suggestions.
-            </p>
+            <span className="text-[10px] text-text-tertiary">Quotes &amp; Option Chains</span>
           </div>
-        </Card>
 
-        <Card title="Telegram Alerts Configuration" icon={<Send size={14} className="text-blue-500" />}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-bg-tertiary border border-border-primary rounded-lg p-3">
+            <div>
+              <span className="block text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">
+                Fyers API Session Status
+              </span>
+              {fyersLoading ? (
+                <span className="text-text-tertiary animate-pulse">Probing broker API status...</span>
+              ) : fyersConnected ? (
+                <span className="text-accent-green font-bold flex items-center gap-1">
+                  <CheckCircle2 size={13} /> Connected &amp; Authenticated (Expires: {fyersExpiry})
+                </span>
+              ) : (
+                <span className="text-accent-red font-bold flex items-center gap-1">
+                  <AlertCircle size={13} /> Disconnected — Daily OAuth Token Expired
+                </span>
+              )}
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => {
+                window.location.href = '/api/broker/fyers/login';
+              }}
+              className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-3 py-1.5 rounded-md text-xs transition-colors shrink-0"
+            >
+              {fyersConnected ? 'Reconnect Fyers Session' : 'Authenticate Fyers Account'}
+            </Button>
+          </div>
+
+          {fyersConnected && fyersDataApiOk === false && (
+            <div className="rounded-lg border border-accent-amber/30 bg-accent-amber/10 p-3 text-xs text-accent-amber space-y-1">
+              <p className="font-bold flex items-center gap-1">
+                <AlertCircle size={13} /> Data API Permission Missing
+              </p>
+              <p className="text-[11px] text-text-secondary leading-relaxed">
+                Login succeeded, but Quotes/History returned permission denied. The live scanner will use Yahoo fallback until permissions are enabled on <span className="font-mono font-bold text-text-primary">myapi.fyers.in</span>.
+              </p>
+              {fyersDataApiMessage && (
+                <p className="text-[10px] font-mono text-accent-amber/80 break-words">{fyersDataApiMessage}</p>
+              )}
+            </div>
+          )}
+
+          {fyersConnected && fyersDataApiOk === true && (
+            <p className="text-[10px] text-accent-green font-semibold">
+              ✓ Data API probe validated — Fyers Quotes &amp; Historical candle streams are active.
+            </p>
+          )}
+
+          <p className="text-[10px] text-text-tertiary">
+            Fyers API access tokens expire every 24 hours per SEBI compliance. Re-authenticate once daily to enable real-time F&amp;O option suggestions.
+          </p>
+        </div>
+
+        {/* ── Section 6: Telegram Alerts Configuration ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-blue/10 text-accent-blue">
+                <Send size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Telegram Alerts &amp; Notifications
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">Instant Push Notifications</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+              <label className="text-text-secondary font-semibold uppercase">
                 Bot Token
               </label>
               <input
@@ -418,17 +681,19 @@ export default function SettingsPage() {
                 onFocus={() => {
                   if (looksMaskedSecret(telegramToken)) setTelegramToken('');
                 }}
-                className="w-full bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                className="bg-bg-tertiary border border-border-primary text-text-primary w-full p-2 rounded-md focus:outline-none focus:border-accent-blue"
                 placeholder="123456789:ABCDefgh..."
               />
-              <p className="text-[10px] text-text-tertiary mt-1">Requires server .env update to fully apply. This just stores preference.</p>
+              <p className="text-[10px] text-text-tertiary">
+                Requires server .env update to permanently bind. Stored here as workstation preference.
+              </p>
             </div>
-            
+
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
-                Chat ID
+              <label className="text-text-secondary font-semibold uppercase">
+                Direct Chat ID
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={telegramChatId}
@@ -436,14 +701,14 @@ export default function SettingsPage() {
                   onFocus={() => {
                     if (looksMaskedSecret(telegramChatId)) setTelegramChatId('');
                   }}
-                  className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                  className="bg-bg-tertiary border border-border-primary text-text-primary flex-1 p-2 rounded-md focus:outline-none focus:border-accent-blue"
                   placeholder="-10012345678"
                 />
-                <Button 
+                <Button
                   type="button"
                   onClick={handleTestTelegram}
                   disabled={telegramTesting}
-                  className="bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-primary px-3 py-2 rounded text-xs"
+                  className="bg-bg-tertiary hover:bg-border-primary text-text-primary border border-border-primary px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0 w-full sm:w-auto"
                 >
                   {telegramTesting ? 'Testing...' : 'Test Alert'}
                 </Button>
@@ -451,11 +716,11 @@ export default function SettingsPage() {
             </div>
 
             {/* Breakout Alert Group Chat ID */}
-            <div className="md:col-span-2 space-y-1.5 border-t border-border-secondary/50 pt-4 mt-2">
-              <label className="block text-[10px] font-bold text-text-secondary uppercase tracking-wider">
+            <div className="md:col-span-2 space-y-1.5 pt-2 border-t border-border-primary/50">
+              <label className="text-text-secondary font-semibold uppercase">
                 Breakout Alert Group Chat ID
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   id="telegram-group-chat-id"
@@ -464,7 +729,7 @@ export default function SettingsPage() {
                   onFocus={() => {
                     if (looksMaskedSecret(telegramGroupChatId)) setTelegramGroupChatId('');
                   }}
-                  className="flex-1 bg-bg-secondary/40 border border-border-primary rounded focus:ring-1 focus:ring-accent-blue focus:border-accent-blue text-sm px-3 py-2 text-text-primary transition-all outline-none"
+                  className="bg-bg-tertiary border border-border-primary text-text-primary flex-1 p-2 rounded-md focus:outline-none focus:border-accent-blue"
                   placeholder="-100xxxxxxxxxx"
                 />
                 <Button
@@ -472,36 +737,94 @@ export default function SettingsPage() {
                   id="test-breakout-alert-btn"
                   onClick={handleTestBreakoutAlert}
                   disabled={breakoutTesting}
-                  className="bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 border border-blue-700/40 px-3 py-2 rounded text-xs font-bold whitespace-nowrap"
+                  className="bg-accent-blue/10 hover:bg-accent-blue/20 text-accent-blue border border-accent-blue/30 px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0 w-full sm:w-auto"
                 >
                   {breakoutTesting ? 'Sending...' : '⚡ Test Breakout Alert'}
                 </Button>
               </div>
-              <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">
-                Receives real-time alerts when CPR Scanner detects a NEW BREAKOUT signal (NARROW CPR + Volume Spike + Price &gt; TC).
-                Deduplication: alerts only on NEW occurrences, not repeated on every scan.
-                To get your group ID: add bot to group → send any message → visit
-                <code className="text-blue-400 mx-1 break-all">https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code>
-                → copy <code className="text-blue-400">&apos;chat&apos;:&apos;id&apos;</code> value (starts with -100).
-                Set <code className="text-blue-400">TELEGRAM_GROUP_CHAT_ID</code> in server .env to activate.
+              <p className="text-[10px] text-text-tertiary leading-relaxed">
+                Sends automated alerts when the CPR Scanner detects a qualified Breakout setup (Narrow CPR + Volume Spike + Price &gt; TC). Deduplication ensures only fresh breakout occurrences are broadcast.
               </p>
             </div>
           </div>
-        </Card>
+        </div>
 
-        <div className="flex justify-between items-center gap-3 p-2">
+        {/* ── Section 7: Institutional Keyboard Shortcuts Reference ── */}
+        <div className="bg-bg-secondary border border-border-primary rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-border-primary pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-accent-purple/10 text-accent-purple">
+                <Keyboard size={14} />
+              </span>
+              <h2 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                Keyboard Shortcuts Reference
+              </h2>
+            </div>
+            <span className="text-[10px] text-text-tertiary">Productivity Accelerators</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-text-secondary">
+            <div className="bg-bg-tertiary border border-border-primary rounded-md p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-text-primary">Command Palette</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border-primary text-[9px] font-mono text-text-tertiary">
+                  Ctrl + K
+                </kbd>
+              </div>
+              <p className="text-[10px] text-text-tertiary">Global quick-jump navigation</p>
+            </div>
+
+            <div className="bg-bg-tertiary border border-border-primary rounded-md p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-text-primary">Close Drawer / Modal</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border-primary text-[9px] font-mono text-text-tertiary">
+                  Esc
+                </kbd>
+              </div>
+              <p className="text-[10px] text-text-tertiary">Dismiss open drawer panel</p>
+            </div>
+
+            <div className="bg-bg-tertiary border border-border-primary rounded-md p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-text-primary">Refresh Data</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border-primary text-[9px] font-mono text-text-tertiary">
+                  R
+                </kbd>
+              </div>
+              <p className="text-[10px] text-text-tertiary">Rescan active workspace</p>
+            </div>
+
+            <div className="bg-bg-tertiary border border-border-primary rounded-md p-2.5 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-text-primary">Symbol Search</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-bg-secondary border border-border-primary text-[9px] font-mono text-text-tertiary">
+                  /
+                </kbd>
+              </div>
+              <p className="text-[10px] text-text-tertiary">Focus table search bar</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Footer Action Bar ── */}
+        <div className="flex items-center justify-between p-2">
           <Button
             type="button"
             onClick={handleLogout}
             disabled={loggingOut}
-            className="bg-bg-tertiary hover:bg-rose-950/40 text-rose-300 border border-rose-800/40 px-4 py-2.5 rounded-xl h-10 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs"
+            className="bg-bg-tertiary hover:bg-accent-red/20 text-accent-red border border-accent-red/30 px-4 py-2 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5"
           >
-            <LogOut size={14} />
-            {loggingOut ? 'Logging out…' : 'Log out'}
+            <LogOut size={13} />
+            <span>{loggingOut ? 'Logging out...' : 'Log out'}</span>
           </Button>
-          <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl h-10 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs">
-            <Save size={14} />
-            Save Configuration
+
+          <Button
+            type="submit"
+            disabled={saving}
+            className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-5 py-2 rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+            <span>{saving ? 'Saving...' : 'Save Configuration'}</span>
           </Button>
         </div>
       </form>
