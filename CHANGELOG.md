@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 02 Oct: Isolated Security-Gated /unlock & Protected Route Gating (`1bff0f42`)
+
+- **Security-Gated `/unlock` Shell Isolation (`EnterpriseShell.tsx`)**:
+  - Separated workstation shell into `AuthenticatedWorkstationShell` and isolated `/unlock` from all workstation chrome.
+  - When `pathname === '/unlock'`, only the minimal `<main id="main-content">` container is rendered, omitting `<Sidebar>`, `<TopBar>`, `<CommandPalette>`, `<Footer>`, live NIFTY/BANKNIFTY/VIX tickers, and mobile drawers.
+  - Synchronous `usePathname()` evaluation prevents any shell flash during SSR or client hydration.
+- **Edge Route Gating (`src/middleware.ts`)**:
+  - Removed `/market-tools` and `/market-tools/*` from `isPublicPage` exemptions.
+  - Anonymous visits to all protected workstation routes (`/`, `/scanner`, `/calculate`, `/journal`, `/backtest`, `/analytics`, `/watchlist`, `/settings`, `/market-tools/*`) are immediately redirected via `HTTP 307` to `/unlock` before any HTML is rendered.
+- **Dedicated Test Suite (`auth-shell-isolation.test.ts`)**:
+  - Added 22 automated unit tests validating static shell isolation, unauthenticated redirects across 12 protected routes, public route exemptions, and authenticated access.
+
+### Fixed — 01 Oct: SSR Theme Hydration Mismatch & Viewport Edge Overflows (`800ce8f5`, `e4e90cbb`, `17344c1f`, `65afeff5`)
+
+- **SSR Theme Hydration Mismatch Remediation (`ThemeContext.tsx`, `layout.tsx`)**:
+  - Eliminated React 19 hydration mismatch error #418 by statically defaulting initial theme state to `'dark-pro'` and deferring `localStorage` synchronization to `useEffect` post-mount.
+  - Added `data-theme="dark-pro"` default to `<html>` and inlined theme script into `<body>`.
+  - Added `suppressHydrationWarning` to IST clock element on Dashboard.
+- **Mobile Drawer Dialog Semantics (`EnterpriseShell.tsx`)**:
+  - Added `role="dialog"`, `aria-modal="true"`, and `aria-label="Mobile Navigation"` to the mobile navigation drawer.
+- **Tablet 768px TopBar Collision Remediation (`TopBar.tsx`)**:
+  - Changed market ticker breakpoint from `hidden md:flex` to `hidden xl:flex` (>=1280px), preventing 52px overflow collision with action buttons on portrait tablets.
+- **Viewport Edge & Control Wrapping Hardening (`page.tsx`, `Card.tsx`, `JournalFilters.tsx`, `breakout/page.tsx`, `analytics/page.tsx`)**:
+  - Constrained decorative glow blur orb to container bounds (`max-w-full w-72 h-72`), eliminating horizontal scrollbars on 320px–430px screens.
+  - Added `flex-wrap items-center gap-2` to multi-button filter bars across Market Tools, Analytics, Watchlist, Settings, and Journal workstations.
+
+### Added — 30 Sep – 01 Oct: Enterprise Workstation Transformation (Phases 1–12)
+
+Comprehensive institutional workstation redesign across all 54 platform routes:
+- **Phase 1 — Design Tokens & 5-Theme Engine (`427e4836`)**: Built semantic design system supporting Dark Pro, Dark OLED, Light Pro, High Contrast, and System themes with WCAG AAA contrast compliance (17.06:1 to 21.00:1).
+- **Phase 2 — Workstation Shell & Command Palette (`69d48897`)**: Implemented collapsible sidebar navigation, persistent TopBar with live market tickers, and global Command Palette (`Ctrl+K`).
+- **Phase 4 — CPR Market Scanner Matrix (`ea9f31ec`, `2f82030e`)**: Virtualized high-density data grid with KPI strip, quick filters, sticky columns, and sortable headers.
+- **Phase 5 — Reusable Stock Detail Drawer (`300797d8`)**: Integrated slide-out stock detail drawer across Scanner, Watchlist, and Journal.
+- **Phase 6 — Executive Workstation Dashboard (`6adedba1`)**: Institutional command center at `/` with market regime indicators, scanner telemetry, and quick links.
+- **Phase 7 — Multi-Timeframe CPR Matrix (`24728221`)**: Matrix workstation for Daily, Weekly, and Monthly CPR confluence analysis.
+- **Phase 8 — Trade Journal Workstation (`53859a6e`, `2e6a1984`)**: Trade journaling workspace with cumulative P&L equity curves, open positions KPI, and column sorting.
+- **Phase 9 — Analytics & Backtest Terminals (`ba89051d`)**: Performance analytics engine, signal matrix, and quantitative backtest execution workstation.
+- **Phase 10 — Market Tools Workstations (`56269d32`)**: Harmonized Market Breadth, Multi-Year Breakout, 52W High Patterns, and Momentum Leaders into workstation layouts.
+- **Phase 11 — Settings, Diagnostics & Watchlist (`0591a784`)**: Workstation settings, Telegram alert configuration, diagnostics desk, and real-time watchlist.
+- **Phase 12 — Release-Readiness & Accessibility Hardening (`2de0e177`)**: Comprehensive keyboard accessibility, ARIA landmarks, and 0-regression safety.
+
+### Added & Fixed — 26–29 Sep: P2 Trading Friction Engine & Scanner Lifecycle (PRs #247–#254)
+
+- **PR #254 (`d477ad6f`)**: Added non-destructive estimated charges and modeled net P&L calculations to Trade Journal.
+- **PR #253 (`262ce212`)**: Integrated centralized friction calculator into backtest engines while strictly preserving default invariants.
+- **PR #252 (`00ec07d9`)**: Centralized statutory friction constants (STT, exchange turnover, SEBI fees, GST, stamp duty) and pure calculator.
+- **PR #251 (`2e5dd3f2`)**: Locked baseline friction, fee, and PnL calculation invariants with regression test suites.
+- **PR #250 (`7c61b4f8`)**: Cached daily historical candles in Redis with session TTL to optimize scanner throughput.
+- **PR #249 (`cc947505`)**: Clarified model R:R vs executable tradeability in scanner UI.
+- **PR #248 (`d2993d9c`)**: Renamed confidence score to confluence score across UI and types.
+- **PR #247 (`5d0576a1`)**: Enforced generation-safe database persistence and added scanner lifecycle instrumentation.
+- **PR #246 (`c310c83e`)**: Bumped `adm-zip` to 0.6.1 to remediate GHSA-7q85-xj36-vmfc.
+
 ### Fixed — 23 Sep: 1-Month Code Review Remediation & Production Alignment
 
 Remediated key production alignment and operational items identified during the 1-month comprehensive review:

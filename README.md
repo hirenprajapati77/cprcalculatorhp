@@ -56,7 +56,28 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
 For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
-**Recent Updates (September 2026):**
+**Recent Updates (October 2026):**
+- **02 Oct — Security-Gated `/unlock` Shell Isolation & Protected Route Gating (`1bff0f42`)**:
+  - **Auth Shell Isolation**: Completely isolated `/unlock` from workstation chrome (Sidebar, TopBar, market tickers, Command Palette, and Footer). Anonymous users see only the security-gated login card.
+  - **Edge Route Gating**: Removed `/market-tools` from public page exemptions. Anonymous visits to any workstation page (`/`, `/scanner`, `/calculate`, `/journal`, `/backtest`, `/analytics`, `/watchlist`, `/settings`, `/market-tools/*`) are immediately redirected via `HTTP 307` to `/unlock`.
+  - **Flash Prevention**: Synchronous `usePathname()` evaluation prevents workstation shell flash during SSR or client hydration.
+  - Test suite: **1,373 pass · 0 fail · 2 skip** across 269 suites · tsc → 0 errors · regression lock → `2ef002db…` unchanged · Deployed build: `1bff0f42bfc2` online under PM2 (`PID: 905061`).
+
+- **01 Oct — SSR Theme Hydration Mismatch & Responsive Layout Hardening (`800ce8f5`, `e4e90cbb`)**:
+  - **SSR Hydration Fix**: Eliminated React 19 hydration mismatch error #418 by statically defaulting initial theme state and synchronizing with `localStorage` in `useEffect` post-mount.
+  - **Dialog Semantics**: Added `role="dialog"`, `aria-modal="true"`, and `aria-label="Mobile Navigation"` to the mobile navigation drawer.
+  - **Tablet Layout Hardening**: Adjusted market ticker breakpoint to `xl:` (>=1280px), preventing 52px header collision on 768px portrait tablets.
+  - **Edge Overflow Elimination**: Remediated horizontal scrollbars on 320px–430px viewports (140/140 automated layout audit pass).
+
+- **30 Sep – 01 Oct — Enterprise Workstation Transformation (Phases 1–12)**:
+  - Complete institutional UI overhaul across all 54 routes: 5-theme engine (Dark Pro, OLED, Light Pro, High Contrast, System), persistent TopBar with real-time market tickers, collapsible navigation, global Command Palette (`Ctrl+K`), virtualized CPR scanner matrix, multi-timeframe CPR matrix, trade journal with cumulative P&L equity curve, performance analytics engine, backtest terminal, market tools suite, and settings/diagnostics desks.
+
+- **26–29 Sep — P2 Trading Friction Engine & Scanner Lifecycle (PRs #247–#254)**:
+  - **Statutory Friction Engine**: Added centralized pure statutory fee calculator (STT, turnover charges, GST, SEBI fee, stamp duty) and non-destructive modeled net P&L enrichment in Trade Journal (`#252`, `#254`).
+  - **Invariant Safety**: Preserved default backtest friction tiers with dedicated lock test suites (`#251`, `#253`).
+  - **Scanner Hardening**: Generation-safe persistence, lifecycle instrumentation, and Redis session-TTL candle caching (`#247`, `#250`).
+
+**Earlier Updates (September 2026):**
 - **23 Sep — 1-Month Code Review Remediation & Production Alignment**:
   - **NSE Tuesday Option Expiry**: Aligned monthly expiry calculation in `computeDTE` to the true last Tuesday of the month per NSE Circulars 108/2025 and 111/2025 (effective September 1, 2025, NSE equity/index derivatives expire on Tuesday, BSE on Thursday) with automatic holiday rollbacks.
   - **PM2 Entry Point**: Configured `ops/ecosystem.config.cjs` to target `server-starter.js` (ensuring crash-handlers, static asset checks, and 0.0.0.0 binding execute in production).
