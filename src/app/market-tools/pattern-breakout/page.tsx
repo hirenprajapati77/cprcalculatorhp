@@ -582,20 +582,20 @@ export default function PatternBreakoutPage() {
           <table className="w-full text-xs text-left whitespace-nowrap font-mono">
             <thead className="sticky top-0 bg-bg-tertiary text-text-secondary text-[10px] uppercase tracking-wider border-b border-border-primary">
               <tr>
-                <th className="py-2 px-3 font-semibold text-center">#</th>
-                <th className="sticky left-0 bg-bg-tertiary py-2 px-3 font-semibold">Stock</th>
-                <th className="py-2 px-3 font-semibold">Sector</th>
-                <th className="py-2 px-3 font-semibold text-right">CMP (₹)</th>
-                <th className="py-2 px-3 font-semibold text-right">Day Chg</th>
-                <th className="py-2 px-3 font-semibold text-center">Status</th>
-                <th className="py-2 px-3 font-semibold text-right">52W High (₹)</th>
-                <th className="py-2 px-3 font-semibold text-right">Dist to 52W</th>
-                <th className="py-2 px-3 font-semibold text-center">Primary Pattern</th>
-                <th className="py-2 px-3 font-semibold text-right">RVOL 20D</th>
-                <th className="py-2 px-3 font-semibold text-center">VPA Footprint</th>
-                <th className="py-2 px-3 font-semibold text-center">Score</th>
-                <th className="py-2 px-3 font-semibold text-center">Tier</th>
-                <th className="py-2 px-3 font-semibold text-center">Action</th>
+                <th className="py-2 px-1.5 font-semibold text-center w-8">#</th>
+                <th className="py-2 px-2.5 font-semibold text-left">Stock</th>
+                <th className="py-2 px-2 font-semibold text-left">Sector</th>
+                <th className="py-2 px-2 font-semibold text-right">CMP (₹)</th>
+                <th className="py-2 px-2 font-semibold text-right">Day Chg</th>
+                <th className="py-2 px-2 font-semibold text-center">Status</th>
+                <th className="py-2 px-2 font-semibold text-right">52W High (₹)</th>
+                <th className="py-2 px-2 font-semibold text-right">Dist 52W</th>
+                <th className="py-2 px-2.5 font-semibold text-center">Primary Pattern</th>
+                <th className="py-2 px-2 font-semibold text-right">RVOL 20D</th>
+                <th className="py-2 px-2.5 font-semibold text-center">VPA Footprint</th>
+                <th className="py-2 px-2 font-semibold text-center">Score</th>
+                <th className="py-2 px-1.5 font-semibold text-center">Tier</th>
+                <th className="py-2 px-2 font-semibold text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-primary/40">
@@ -609,14 +609,14 @@ export default function PatternBreakoutPage() {
                 filteredStocks.map((stock, idx) => {
                   const isExpanded = expandedSymbol === stock.symbol;
                   const vpa = stock.vpaFootprint;
-                  const rowPad = density === 'compact' ? 'py-1.5 px-3' : 'py-2.5 px-3';
+                  const rowPad = density === 'compact' ? 'py-1.5 px-2' : 'py-2 px-2.5';
                   const isPositive = stock.changePct >= 0;
 
                   return (
                     <React.Fragment key={stock.symbol}>
                       <tr className="hover:bg-bg-tertiary/40 transition-colors">
-                        <td className={`${rowPad} text-center text-text-tertiary font-bold`}>{idx + 1}</td>
-                        <td className={`sticky left-0 bg-bg-secondary hover:bg-bg-tertiary/40 font-bold text-text-primary ${rowPad}`}>
+                        <td className={`${rowPad} text-center text-text-tertiary font-bold w-8`}>{idx + 1}</td>
+                        <td className={`font-bold text-text-primary ${rowPad}`}>
                           <button
                             type="button"
                             onClick={() => handleStockClick(stock)}
@@ -735,94 +735,98 @@ export default function PatternBreakoutPage() {
                       {/* Expandable Row Detail */}
                       {isExpanded && (
                         <tr className="bg-bg-primary/90 border-b border-border-primary">
-                          <td colSpan={14} className="p-4 space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                              {/* Pattern Details */}
-                              <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
-                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                                  Pattern Structural Breakdown
-                                </h4>
-                                {stock.patternDetails ? (
-                                  <div className="space-y-1 text-xs">
-                                    <p className="text-text-primary">
-                                      <strong>Pattern:</strong> {stock.primaryPatternLabel}
+                          <td colSpan={14} className="p-3 sm:p-4 space-y-3 whitespace-normal">
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                {/* Pattern Details */}
+                                <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2 min-w-0">
+                                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                                    Pattern Structural Breakdown
+                                  </h4>
+                                  {stock.patternDetails ? (
+                                    <div className="space-y-1.5 text-xs">
+                                      <p className="text-text-primary">
+                                        <strong>Pattern:</strong> {stock.primaryPatternLabel}
+                                      </p>
+                                      <p className="text-text-secondary break-words leading-relaxed text-[11px]">
+                                        {stock.patternDetails.description}
+                                      </p>
+                                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-text-tertiary font-mono text-[10px] pt-1 border-t border-border-primary/50">
+                                        <span>Base Depth: {stock.patternDetails.baseDepthPct}%</span>
+                                        <span>Duration: {stock.patternDetails.baseDays} days</span>
+                                        <span>Confidence: {stock.patternDetails.confidence}%</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-text-tertiary">
+                                      No classical consolidation base detected. This is a momentum price breakout into 52W High territory.
                                     </p>
-                                    <p className="text-text-secondary">{stock.patternDetails.description}</p>
-                                    <div className="flex gap-4 text-text-tertiary font-mono text-[10px] pt-1">
-                                      <span>Base Depth: {stock.patternDetails.baseDepthPct}%</span>
-                                      <span>Duration: {stock.patternDetails.baseDays} days</span>
-                                      <span>Confidence: {stock.patternDetails.confidence}%</span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-text-tertiary">
-                                    No classical consolidation base detected. This is a momentum price breakout into 52W High territory.
-                                  </p>
-                                )}
-                              </div>
+                                  )}
+                                </div>
 
-                              {/* VPA Footprint Details */}
-                              <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
-                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                                  Volume Price Analysis (VPA)
-                                </h4>
-                                {vpa ? (
-                                  <div className="space-y-1.5 text-xs">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-text-tertiary">Footprint Signal:</span>
-                                      <span className="font-bold text-text-primary">{vpa.label}</span>
-                                    </div>
-                                    <p className="text-text-secondary text-[11px]">{vpa.description}</p>
-                                    <div className="grid grid-cols-3 gap-1.5 pt-1 text-center font-mono text-[10px]">
-                                      <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary">
-                                        <div className="text-text-tertiary">CLV</div>
-                                        <div className="font-bold text-text-primary">{stock.clv !== null ? stock.clv : '—'}</div>
+                                {/* VPA Footprint Details */}
+                                <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2 min-w-0">
+                                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                                    Volume Price Analysis (VPA)
+                                  </h4>
+                                  {vpa ? (
+                                    <div className="space-y-1.5 text-xs">
+                                      <div className="flex flex-wrap items-center justify-between gap-1">
+                                        <span className="text-text-tertiary text-[11px]">Footprint Signal:</span>
+                                        <span className="font-bold text-text-primary text-[11px]">{vpa.label}</span>
                                       </div>
-                                      <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary">
-                                        <div className="text-text-tertiary">RVOL 20D</div>
-                                        <div className="font-bold text-text-primary">{stock.rvol20d !== null ? `${stock.rvol20d}x` : '—'}</div>
-                                      </div>
-                                      <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary">
-                                        <div className="text-text-tertiary">VPA Score</div>
-                                        <div className={`font-bold ${stock.scoreBreakdown.vpaModifier >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-                                          {stock.scoreBreakdown.vpaModifier > 0 ? `+${stock.scoreBreakdown.vpaModifier}` : stock.scoreBreakdown.vpaModifier} pts
+                                      <p className="text-text-secondary text-[11px] break-words leading-relaxed">{vpa.description}</p>
+                                      <div className="grid grid-cols-3 gap-1.5 pt-1 text-center font-mono text-[10px]">
+                                        <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary min-w-0">
+                                          <div className="text-text-tertiary text-[9px]">CLV</div>
+                                          <div className="font-bold text-text-primary">{stock.clv !== null ? stock.clv : '—'}</div>
+                                        </div>
+                                        <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary min-w-0">
+                                          <div className="text-text-tertiary text-[9px]">RVOL 20D</div>
+                                          <div className="font-bold text-text-primary">{stock.rvol20d !== null ? `${stock.rvol20d}x` : '—'}</div>
+                                        </div>
+                                        <div className="bg-bg-tertiary p-1.5 rounded border border-border-primary min-w-0">
+                                          <div className="text-text-tertiary text-[9px]">VPA Score</div>
+                                          <div className={`font-bold ${stock.scoreBreakdown.vpaModifier >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                                            {stock.scoreBreakdown.vpaModifier > 0 ? `+${stock.scoreBreakdown.vpaModifier}` : stock.scoreBreakdown.vpaModifier} pts
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
-                                  </div>
-                                ) : (
-                                  <p className="text-xs text-text-tertiary">No VPA footprint available for this setup.</p>
-                                )}
-                              </div>
+                                  ) : (
+                                    <p className="text-xs text-text-tertiary">No VPA footprint available for this setup.</p>
+                                  )}
+                                </div>
 
-                              {/* Score Breakdown */}
-                              <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2">
-                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
-                                  Score Breakdown (Total: {stock.scoreBreakdown.totalScore} / 100)
-                                </h4>
-                                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                  <div className="bg-bg-tertiary p-2 rounded border border-border-primary">
-                                    <div className="text-text-tertiary text-[9px]">52W Proximity</div>
-                                    <div className="text-text-primary font-bold font-mono">
-                                      {stock.scoreBreakdown.proximityScore} / 30
+                                {/* Score Breakdown */}
+                                <div className="bg-bg-secondary border border-border-primary rounded-lg p-3 space-y-2 min-w-0">
+                                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary truncate">
+                                    Score Breakdown (Total: {stock.scoreBreakdown.totalScore} / 100)
+                                  </h4>
+                                  <div className="grid grid-cols-2 gap-1.5 text-center text-xs">
+                                    <div className="bg-bg-tertiary p-1.5 sm:p-2 rounded border border-border-primary min-w-0">
+                                      <div className="text-text-tertiary text-[9px] uppercase tracking-wider truncate">52W Proximity</div>
+                                      <div className="text-text-primary font-bold font-mono text-[11px] sm:text-xs">
+                                        {stock.scoreBreakdown.proximityScore} / 30
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="bg-bg-tertiary p-2 rounded border border-border-primary">
-                                    <div className="text-text-tertiary text-[9px]">Volume RVOL</div>
-                                    <div className="text-text-primary font-bold font-mono">
-                                      {stock.scoreBreakdown.volumeScore} / 25
+                                    <div className="bg-bg-tertiary p-1.5 sm:p-2 rounded border border-border-primary min-w-0">
+                                      <div className="text-text-tertiary text-[9px] uppercase tracking-wider truncate">Volume RVOL</div>
+                                      <div className="text-text-primary font-bold font-mono text-[11px] sm:text-xs">
+                                        {stock.scoreBreakdown.volumeScore} / 25
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="bg-bg-tertiary p-2 rounded border border-border-primary">
-                                    <div className="text-text-tertiary text-[9px]">Pattern Quality</div>
-                                    <div className="text-text-primary font-bold font-mono">
-                                      {stock.scoreBreakdown.patternScore} / 25
+                                    <div className="bg-bg-tertiary p-1.5 sm:p-2 rounded border border-border-primary min-w-0">
+                                      <div className="text-text-tertiary text-[9px] uppercase tracking-wider truncate">Pattern Quality</div>
+                                      <div className="text-text-primary font-bold font-mono text-[11px] sm:text-xs">
+                                        {stock.scoreBreakdown.patternScore} / 25
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="bg-bg-tertiary p-2 rounded border border-border-primary">
-                                    <div className="text-text-tertiary text-[9px]">Momentum &amp; MA</div>
-                                    <div className="text-text-primary font-bold font-mono">
-                                      {stock.scoreBreakdown.momentumScore} / 20
+                                    <div className="bg-bg-tertiary p-1.5 sm:p-2 rounded border border-border-primary min-w-0">
+                                      <div className="text-text-tertiary text-[9px] uppercase tracking-wider truncate">Momentum &amp; MA</div>
+                                      <div className="text-text-primary font-bold font-mono text-[11px] sm:text-xs">
+                                        {stock.scoreBreakdown.momentumScore} / 20
+                                      </div>
                                     </div>
                                   </div>
                                 </div>

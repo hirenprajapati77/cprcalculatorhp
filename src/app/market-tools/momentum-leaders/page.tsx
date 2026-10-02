@@ -801,7 +801,7 @@ export default function MomentumLeadersPage() {
                       {/* Expanded Mathematical Breakdown */}
                       {isExpanded && (
                         <tr className="bg-bg-primary/90 border-b border-border-primary">
-                          <td colSpan={14} className="p-4 space-y-3">
+                          <td colSpan={14} className="p-4 space-y-3 whitespace-normal">
                             <div className="max-w-4xl mx-auto space-y-3 text-xs">
                               <div className="flex items-center gap-2 text-accent-amber font-semibold">
                                 <Info size={14} />
