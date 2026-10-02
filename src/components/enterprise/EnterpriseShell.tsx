@@ -14,7 +14,7 @@ interface EnterpriseShellProps {
   shadowMode?: boolean;
 }
 
-export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
+const AuthenticatedWorkstationShell: React.FC<EnterpriseShellProps> = ({
   children,
   shadowMode = false,
 }) => {
@@ -270,6 +270,32 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
         </div>
       )}
     </div>
+  );
+};
+
+export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
+  children,
+  shadowMode = false,
+}) => {
+  const pathname = usePathname();
+
+  // /unlock is the isolated security-gated authentication barrier.
+  // It must never render the enterprise sidebar, topbar, market ticker, command palette, or workstation navigation.
+  if (pathname === '/unlock') {
+    return (
+      <main
+        id="main-content"
+        className="min-h-screen flex flex-col items-center justify-center bg-surface-app text-text-primary antialiased selection:bg-accent-primary/20 selection:text-text-primary px-4 py-12"
+      >
+        {children}
+      </main>
+    );
+  }
+
+  return (
+    <AuthenticatedWorkstationShell shadowMode={shadowMode}>
+      {children}
+    </AuthenticatedWorkstationShell>
   );
 };
 
