@@ -19,21 +19,18 @@ const AuthenticatedWorkstationShell: React.FC<EnterpriseShellProps> = ({
   shadowMode = false,
 }) => {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    // Lazy initializer: runs synchronously on first client render only.
+    // Reads the persisted sidebar state before the first paint so there is
+    // no layout shift between the server-rendered default and the stored value.
+    try {
+      return localStorage.getItem('cpr_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Initialize sidebar collapsed state from localStorage
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('cpr_sidebar_collapsed');
-      if (stored !== null) {
-        setCollapsed(stored === 'true');
-      }
-    } catch {
-      // LocalStorage unavailable in private mode
-    }
-  }, []);
 
   // Persist sidebar collapsed state
   const handleToggleCollapse = useCallback(() => {
