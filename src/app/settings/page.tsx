@@ -276,6 +276,7 @@ export default function SettingsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
+            variant="ghost"
             onClick={handleLogout}
             disabled={loggingOut}
             className="bg-bg-tertiary hover:bg-accent-red/20 text-accent-red border border-accent-red/30 px-3 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5"
@@ -285,9 +286,10 @@ export default function SettingsPage() {
           </Button>
           <Button
             type="button"
+            variant="primary"
             onClick={handleSaveSettings}
             disabled={saving}
-            className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-4 py-1.5 rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-4 py-1.5 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
           >
             {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
             <span>{saving ? 'Saving...' : 'Save Configuration'}</span>
@@ -621,10 +623,11 @@ export default function SettingsPage() {
 
             <Button
               type="button"
+              variant="primary"
               onClick={() => {
                 window.location.href = '/api/broker/fyers/login';
               }}
-              className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-3 py-1.5 rounded-md text-xs transition-colors shrink-0"
+              className="px-3 py-1.5 rounded-md text-xs font-bold transition-colors shrink-0"
             >
               {fyersConnected ? 'Reconnect Fyers Session' : 'Authenticate Fyers Account'}
             </Button>
@@ -810,6 +813,7 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between p-2">
           <Button
             type="button"
+            variant="ghost"
             onClick={handleLogout}
             disabled={loggingOut}
             className="bg-bg-tertiary hover:bg-accent-red/20 text-accent-red border border-accent-red/30 px-4 py-2 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5"
@@ -820,8 +824,9 @@ export default function SettingsPage() {
 
           <Button
             type="submit"
+            variant="primary"
             disabled={saving}
-            className="bg-accent-blue hover:bg-accent-blue/90 text-white font-bold px-5 py-2 rounded-md text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+            className="px-5 py-2 rounded-md text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
           >
             {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
             <span>{saving ? 'Saving...' : 'Save Configuration'}</span>

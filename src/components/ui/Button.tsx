@@ -12,12 +12,16 @@ export const Button: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
+  // Auto-resolve to primary if className specifies bg-accent-blue
+  const resolvedVariant =
+    variant === 'secondary' && className.includes('bg-accent-blue') ? 'primary' : variant;
+
   const baseStyles =
     'inline-flex items-center justify-center gap-2 font-mono font-medium rounded transition-all focus:outline-none focus:ring-1 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer border border-border-secondary';
 
   const variants = {
     primary:
-      'bg-accent-blue hover:bg-accent-blue/90 border-accent-blue text-white focus:ring-accent-blue shadow-[0_0_10px_rgba(59,130,246,0.2)]',
+      'bg-accent-blue hover:bg-accent-blue/90 border-accent-blue !text-white focus:ring-accent-blue shadow-[0_0_10px_rgba(59,130,246,0.2)]',
     secondary:
       'bg-bg-secondary hover:bg-bg-tertiary border-border-secondary text-text-primary focus:ring-border-tertiary',
     danger:
@@ -34,7 +38,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`${baseStyles} ${variants[resolvedVariant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {children}
