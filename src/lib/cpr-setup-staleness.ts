@@ -9,18 +9,18 @@
  *  the CPR entry level still produced an unfillable "stale" alert (AMBER,
  *  27 Aug 2026). Tightened from 3.5 -> 1.5. Revisit after a week of live
  *  observation if this suppresses too many legitimate signals. */
-export const CPR_ENTRY_EXTENSION_PCT = 1.5;
+export const CPR_ENTRY_EXTENSION_PCT = 2.5;
 
 /** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
 export const BREAKOUT_GAP_BUFFER = 0.002;
 
 /**
  * ATR-scaled chase cap in percent. `atrPct` is percent (2.5 = 2.5%), bounded
- * 1-3 (tightened from 2-6 alongside CPR_ENTRY_EXTENSION_PCT -- see above).
+ * 1-3.5 (aligned with CPR_ENTRY_EXTENSION_PCT = 2.5% to allow normal F&O momentum).
  */
 export function atrScaledExtensionCap(atrPct?: number): number {
   if (!(atrPct && Number.isFinite(atrPct) && atrPct > 0)) return CPR_ENTRY_EXTENSION_PCT;
-  return Math.min(3.0, Math.max(1.0, atrPct * 1.5));
+  return Math.min(3.5, Math.max(1.0, atrPct * 1.5));
 }
 
 export type CprSetupStaleReason = 'GAP_INVALIDATED' | 'EXTENDED' | 'AGAINST_PRIOR_CLOSE';

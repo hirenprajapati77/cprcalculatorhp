@@ -19,13 +19,13 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
       assert.equal(atrScaledExtensionCap(NaN), CPR_ENTRY_EXTENSION_PCT);
     });
 
-    it('bounds atr-scaled cap between 1.0% and 3.0%', () => {
+    it('bounds atr-scaled cap between 1.0% and 3.5%', () => {
       // 0.5 * 1.5 = 0.75 -> bounded to min 1.0
       assert.equal(atrScaledExtensionCap(0.5), 1.0);
-      // 1.5 * 1.5 = 2.25 -> within [1.0, 3.0]
+      // 1.5 * 1.5 = 2.25 -> within [1.0, 3.5]
       assert.equal(atrScaledExtensionCap(1.5), 2.25);
-      // 3.0 * 1.5 = 4.5 -> bounded to max 3.0
-      assert.equal(atrScaledExtensionCap(3.0), 3.0);
+      // 3.0 * 1.5 = 4.5 -> bounded to max 3.5
+      assert.equal(atrScaledExtensionCap(3.0), 3.5);
     });
   });
 
@@ -86,14 +86,14 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
     });
 
     it('detects LONG entry extension past cap', () => {
-      // entry 100, ltp 102 -> 2% >= 1.5% default cap
-      assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 102, direction: 'LONG' }), true);
+      // entry 100, ltp 103 -> 3% >= 2.5% default cap
+      assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 103, direction: 'LONG' }), true);
       assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 101, direction: 'LONG' }), false);
     });
 
     it('detects SHORT entry extension past cap', () => {
-      // entry 100, ltp 98 -> -2% <= -1.5%
-      assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 98, direction: 'SHORT' }), true);
+      // entry 100, ltp 97 -> -3% <= -2.5%
+      assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 97, direction: 'SHORT' }), true);
       assert.equal(isBreakoutEntryExtended({ entry: 100, ltp: 99, direction: 'SHORT' }), false);
     });
   });
@@ -223,15 +223,15 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
       assert.equal(res.executableRr, '—');
     });
 
-    it('evaluates boundary conditions around exact 1.5% cap (LONG)', () => {
-      // 1.49% past entry -> within tolerance, READY
+    it('evaluates boundary conditions around exact 2.5% cap (LONG)', () => {
+      // 2.49% past entry -> within tolerance, READY
       const within = evaluateSetupTradeability({
         entry: 100,
-        ltp: 101.49,
+        ltp: 102.49,
         target: 110,
         direction: 'LONG',
         modelRr: '1:2.0',
-        todayHigh: 102,
+        todayHigh: 103,
         todayLow: 99,
         previousClose: 100,
       });
@@ -239,14 +239,14 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
       assert.equal(within.isExecutable, true);
       assert.equal(within.executableRr, '1:2.0');
 
-      // 1.50% past entry -> at/exceeds cap, EXTENDED
+      // 2.50% past entry -> at/exceeds cap, EXTENDED
       const atCap = evaluateSetupTradeability({
         entry: 100,
-        ltp: 101.50,
+        ltp: 102.50,
         target: 110,
         direction: 'LONG',
         modelRr: '1:2.0',
-        todayHigh: 102,
+        todayHigh: 103,
         todayLow: 99,
         previousClose: 100,
       });
@@ -255,31 +255,31 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
       assert.equal(atCap.executableRr, '—');
     });
 
-    it('evaluates boundary conditions around exact 1.5% cap (SHORT)', () => {
-      // 1.49% below entry -> within tolerance, READY
+    it('evaluates boundary conditions around exact 2.5% cap (SHORT)', () => {
+      // 2.49% below entry -> within tolerance, READY
       const within = evaluateSetupTradeability({
         entry: 100,
-        ltp: 98.51,
+        ltp: 97.51,
         target: 90,
         direction: 'SHORT',
         modelRr: '1:2.0',
         todayHigh: 101,
-        todayLow: 98,
+        todayLow: 97,
         previousClose: 100,
       });
       assert.equal(within.status, 'READY');
       assert.equal(within.isExecutable, true);
       assert.equal(within.executableRr, '1:2.0');
 
-      // 1.50% below entry -> at/exceeds cap, EXTENDED
+      // 2.50% below entry -> at/exceeds cap, EXTENDED
       const atCap = evaluateSetupTradeability({
         entry: 100,
-        ltp: 98.50,
+        ltp: 97.50,
         target: 90,
         direction: 'SHORT',
         modelRr: '1:2.0',
         todayHigh: 101,
-        todayLow: 98,
+        todayLow: 97,
         previousClose: 100,
       });
       assert.equal(atCap.status, 'EXTENDED');
