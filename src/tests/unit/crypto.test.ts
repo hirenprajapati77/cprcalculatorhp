@@ -44,9 +44,17 @@ describe('crypto utilities (Tier 1 coverage)', () => {
     it('throws error when authTag or ciphertext is tampered with', () => {
       const ciphertext = encrypt('tamper-test');
       const parts = ciphertext.split(':');
-      // Alter the encrypted text
-      const tamperedParts = [parts[0], parts[1].slice(0, -2) + '00', parts[2]];
+      // Invert the last character to guarantee it is strictly different
+      const lastChar = parts[1].slice(-1);
+      const flippedChar = lastChar === '0' ? '1' : '0';
+      const tamperedParts = [parts[0], parts[1].slice(0, -1) + flippedChar, parts[2]];
       assert.throws(() => decrypt(tamperedParts.join(':')));
+
+      // Also verify authTag tampering
+      const lastTagChar = parts[2].slice(-1);
+      const flippedTagChar = lastTagChar === '0' ? '1' : '0';
+      const tamperedTagParts = [parts[0], parts[1], parts[2].slice(0, -1) + flippedTagChar];
+      assert.throws(() => decrypt(tamperedTagParts.join(':')));
     });
   });
 
