@@ -273,8 +273,11 @@ export async function runBtstAlertJob(): Promise<BtstAlertJobResult> {
   const suppressBtst = regime.trend === 'BEAR' || regimeUnknown;
 
   const overnightSignals = await OvernightService.discover('BOTH');
+  // In confirmed BEAR regime, allow high-conviction STBT shorts down to score 75 (WATCHLIST+ tier)
+  // so valid short trades are not suppressed by prolonged market downtrends.
+  const minScore = regime.trend === 'BEAR' ? 75 : 85;
   const { longs, shorts } = selectTradableOvernightPicks(overnightSignals, {
-    minScore: 85,
+    minScore,
     take: 5,
     suppressShort: suppressStbt,
     suppressLong: suppressBtst,

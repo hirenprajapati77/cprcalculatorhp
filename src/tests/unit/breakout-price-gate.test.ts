@@ -270,15 +270,15 @@ describe('breakout price gate — against prior close', () => {
 });
 
 describe('atrScaledExtensionCap', () => {
-  it('defaults to 1.5% (CPR_ENTRY_EXTENSION_PCT) when ATR is missing', () => {
-    assert.equal(atrScaledExtensionCap(undefined), 1.5);
-    assert.equal(atrScaledExtensionCap(0), 1.5);
+  it('defaults to 2.5% (CPR_ENTRY_EXTENSION_PCT) when ATR is missing', () => {
+    assert.equal(atrScaledExtensionCap(undefined), 2.5);
+    assert.equal(atrScaledExtensionCap(0), 2.5);
   });
 
-  it('scales 1.5x ATR and clamps to 1-3% (tightened from 2-6%)', () => {
-    assert.equal(atrScaledExtensionCap(2.5), 3.0);
+  it('scales 1.5x ATR and clamps to 1-3.5% (aligned with 2.5% base cap)', () => {
+    assert.equal(atrScaledExtensionCap(2.5), 3.5);
     assert.equal(atrScaledExtensionCap(1.0), 1.5);
-    assert.equal(atrScaledExtensionCap(5.0), 3.0);
+    assert.equal(atrScaledExtensionCap(5.0), 3.5);
   });
 });
 
