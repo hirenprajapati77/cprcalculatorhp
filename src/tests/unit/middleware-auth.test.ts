@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { middleware } from '../../middleware';
+import { hashToken } from '../../lib/auth-token';
 
 describe('Middleware Authentication & Gating', () => {
 
@@ -73,7 +74,19 @@ describe('Middleware Authentication & Gating', () => {
     assert.strictEqual(res.headers.get('x-middleware-next'), '1');
   });
 
-  it('allows API requests with valid cookie', async () => {
+  it('allows API requests with valid hashed cookie', async () => {
+    const validHash = await hashToken('test-token-123');
+    const req = new NextRequest('http://localhost:3000/api/settings', {
+      headers: {
+        cookie: `app_access_token=${validHash}`
+      }
+    });
+    const res = await middleware(req);
+    assert.ok(res);
+    assert.strictEqual(res.headers.get('x-middleware-next'), '1');
+  });
+
+  it('rejects API requests with raw unhashed token in cookie', async () => {
     const req = new NextRequest('http://localhost:3000/api/settings', {
       headers: {
         cookie: 'app_access_token=test-token-123'
@@ -81,7 +94,7 @@ describe('Middleware Authentication & Gating', () => {
     });
     const res = await middleware(req);
     assert.ok(res);
-    assert.strictEqual(res.headers.get('x-middleware-next'), '1');
+    assert.strictEqual(res.status, 401);
   });
 
   it('exempts public and cron API routes from token checks', async () => {

@@ -74,3 +74,33 @@ test('DatabaseCircuitBreaker — connection error on probe re-opens with cooldow
   assert.equal(internals().state, CircuitState.OPEN);
   assert.ok(internals().nextAttemptAt > Date.now());
 });
+
+test('DatabaseCircuitBreaker — trips on Prisma connection code P1001 and pool exhaustion', async (t) => {
+  t.after(() => resetBreaker());
+  resetBreaker();
+
+  // Prisma error with code P1001
+  const prismaError = new Error("Can't reach database server at localhost:5432");
+  (prismaError as unknown as { code: string }).code = 'P1001';
+
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw prismaError;
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  // Pool exhaustion error
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('Timed out waiting for a connection from the pool');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+});

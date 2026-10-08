@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { middleware } from '../../middleware';
+import { hashToken } from '../../lib/auth-token';
 
 describe('Auth Shell Isolation & Protected Route Gating', () => {
   const rootDir = process.cwd();
@@ -123,10 +124,11 @@ describe('Auth Shell Isolation & Protected Route Gating', () => {
 
   describe('4. Authenticated Access to Workstation Routes', () => {
     it('allows access to protected routes when valid auth cookie is present', async () => {
+      const validHash = await hashToken('test-token-123');
       const req = new NextRequest('http://localhost:3000/scanner', {
         headers: {
           host: 'localhost:3000',
-          cookie: 'app_access_token=test-token-123',
+          cookie: `app_access_token=${validHash}`,
         },
       });
       const res = await middleware(req);
@@ -135,10 +137,11 @@ describe('Auth Shell Isolation & Protected Route Gating', () => {
     });
 
     it('allows access to market-tools when valid auth cookie is present', async () => {
+      const validHash = await hashToken('test-token-123');
       const req = new NextRequest('http://localhost:3000/market-tools/breadth', {
         headers: {
           host: 'localhost:3000',
-          cookie: 'app_access_token=test-token-123',
+          cookie: `app_access_token=${validHash}`,
         },
       });
       const res = await middleware(req);

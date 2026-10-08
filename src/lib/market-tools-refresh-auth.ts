@@ -36,5 +36,5 @@ export async function isAuthorizedForRefresh(request: NextRequest): Promise<bool
   if (!authCookie) return false;
 
   const expectedHash = await hashToken(expectedToken);
-  return timingSafeEqual(authCookie, expectedHash) || timingSafeEqual(authCookie, expectedToken);
+  return timingSafeEqual(authCookie, expectedHash);
 }
