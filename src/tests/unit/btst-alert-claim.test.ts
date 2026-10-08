@@ -91,6 +91,7 @@ function mockBtstRouteDeps(handlers: {
   suggestOptionForBtst?: typeof OptionSuggestionService.suggestOptionForBtst;
   overnightSignalFindMany?: () => Promise<OvernightSignal[]>;
   logSignal?: typeof TradeJournalService.logSignal;
+  getMarketRegime?: typeof RegimeService.getMarketRegime;
 }): BtstRouteMocks {
   const originalCreate = prisma.btstAlertState.create;
   const originalDelete = prisma.btstAlertState.delete;
@@ -146,11 +147,11 @@ function mockBtstRouteDeps(handlers: {
     return { count: 1 };
   }) as unknown as typeof prisma.btstAlertState.deleteMany;
 
-  RegimeService.getMarketRegime = (async () => ({
+  RegimeService.getMarketRegime = (handlers.getMarketRegime ?? (async () => ({
     trend: 'BULL',
     volatility: 'LOW',
     score: 70,
-  })) as typeof RegimeService.getMarketRegime;
+  }))) as typeof RegimeService.getMarketRegime;
 
   OvernightService.discover = (handlers.discover ?? (async () => [makeTradableSignal()])) as typeof OvernightService.discover;
   MarketService.getStockData = (async (symbol: string) => ({
@@ -624,6 +625,64 @@ test('BTST alert cron — alert-time journaling (alert ↔ journal parity)', asy
       assert.equal(entry.optionContract, 'UNDERLYING CE');
       assert.equal(entry.optionStrike, 0);
       assert.ok(entry.entryCmp > 0);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('BEAR regime uses minScore 75 allowing STBT signals with score >= 75', async () => {
+    const bearShortSignal = makeTradableSignal({
+      symbol: 'BEAR_SHORT',
+      direction: 'SHORT',
+      classification: 'STBT_READY',
+      qualityBucket: 'TRADEABLE',
+      overnightScore: 78, // Below standard 85, but >= 75 bear floor
+    });
+
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      getMarketRegime: async () => ({
+        trend: 'BEAR',
+        volatility: 'HIGH',
+        score: 30,
+      } as any),
+      discover: async () => [bearShortSignal],
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(result.sent, true, 'STBT alert should be sent in BEAR regime for score >= 75');
+      assert.deepStrictEqual(result.logged, ['BEAR_SHORT']);
+      assert.strictEqual(mocks.sendCalls.length, 1);
+    } finally {
+      mocks.restore();
+    }
+  });
+
+  await t.test('BULL regime uses minScore 85 filtering out signals with score < 85', async () => {
+    const subThresholdLongSignal = makeTradableSignal({
+      symbol: 'SUB_BULL',
+      direction: 'LONG',
+      classification: 'BTST_READY',
+      qualityBucket: 'TRADEABLE',
+      overnightScore: 78, // Below standard 85 floor
+    });
+
+    const mocks = mockBtstRouteDeps({
+      findMany: async () => [],
+      getMarketRegime: async () => ({
+        trend: 'BULL',
+        volatility: 'LOW',
+        score: 70,
+      } as any),
+      discover: async () => [subThresholdLongSignal],
+    });
+
+    try {
+      const result = await withDiscoveryClock(() => runBtstAlertJob());
+      assert.strictEqual(result.sent, false, 'Alert should NOT be sent for score < 85 in BULL regime');
+      assert.strictEqual(result.reason, 'no setups');
+      assert.strictEqual(mocks.sendCalls.length, 0);
     } finally {
       mocks.restore();
     }
