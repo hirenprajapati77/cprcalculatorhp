@@ -14,7 +14,7 @@ export interface OvernightConflictSide {
 export interface OvernightConflictResult {
   finalDir: 'LONG' | 'SHORT' | null;
   finalSig: OvernightConflictSide | null;
-  /** 'NEUTRAL_CONFLICT' when both sides score and |diff| < threshold; else 'IGNORE' pending overwrite. */
+  /** 'NEUTRAL_CONFLICT' when both sides score and |diff| < threshold; winner's cls when clear; 'IGNORE' when no signal. */
   finalCls: string;
 }
 
@@ -38,16 +38,16 @@ export function resolveOvernightConflict(
     const diff = Math.abs(longScore - shortScore);
     const finalDir: 'LONG' | 'SHORT' = longScore >= shortScore ? 'LONG' : 'SHORT';
     const finalSig = finalDir === 'LONG' ? longOk : shortOk;
-    const finalCls = diff < conflictDiffThreshold ? 'NEUTRAL_CONFLICT' : 'IGNORE';
+    const finalCls = diff < conflictDiffThreshold ? 'NEUTRAL_CONFLICT' : finalSig.cls;
     return { finalDir, finalSig, finalCls };
   }
 
   if (longOk) {
-    return { finalDir: 'LONG', finalSig: longOk, finalCls: 'IGNORE' };
+    return { finalDir: 'LONG', finalSig: longOk, finalCls: longOk.cls };
   }
 
   if (shortOk) {
-    return { finalDir: 'SHORT', finalSig: shortOk, finalCls: 'IGNORE' };
+    return { finalDir: 'SHORT', finalSig: shortOk, finalCls: shortOk.cls };
   }
 
   return { finalDir: null, finalSig: null, finalCls: 'IGNORE' };

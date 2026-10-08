@@ -8,10 +8,10 @@ import { POST as unlock } from '../../app/api/auth/unlock/route';
 import { POST as logout } from '../../app/api/auth/logout/route';
 import { cache, _setRedisForTesting } from '../../lib/redis';
 
-function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock') {
+function unlockReq(body: unknown, url = 'http://localhost:3000/api/auth/unlock', headers: Record<string, string> = {}) {
   return new NextRequest(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -129,7 +129,7 @@ describe('POST /api/auth/unlock', () => {
     }
   });
 
-  it('succeeds in production when Redis is available and working', async () => {
+  it('fails closed (503) in production when client IP cannot be determined', async () => {
     const origEnv = process.env.NODE_ENV;
     const origRedisUrl = process.env.REDIS_URL;
     try {
@@ -142,7 +142,40 @@ describe('POST /api/auth/unlock', () => {
       } as any;
       _setRedisForTesting(mockRedis);
 
+      // No x-real-ip or x-forwarded-for header provided
       const res = await unlock(unlockReq({ token: 'test-token-123' }));
+      assert.strictEqual(res.status, 503);
+      assert.strictEqual(res.headers.get('retry-after'), '60');
+      const data = await res.json();
+      assert.strictEqual(
+        data.error,
+        'Authentication service temporarily unavailable. Please try again later.'
+      );
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origRedisUrl === undefined) {
+        delete process.env.REDIS_URL;
+      } else {
+        process.env.REDIS_URL = origRedisUrl;
+      }
+      _setRedisForTesting(null);
+    }
+  });
+
+  it('succeeds in production when Redis is available and working with verified client IP', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origRedisUrl = process.env.REDIS_URL;
+    try {
+      (process.env as any).NODE_ENV = 'production';
+      process.env.REDIS_URL = 'redis://localhost:6379';
+
+      const mockRedis = {
+        status: 'ready',
+        eval: async () => 1,
+      } as any;
+      _setRedisForTesting(mockRedis);
+
+      const res = await unlock(unlockReq({ token: 'test-token-123' }, undefined, { 'x-real-ip': '192.0.2.1' }));
       assert.strictEqual(res.status, 200);
     } finally {
       (process.env as any).NODE_ENV = origEnv;

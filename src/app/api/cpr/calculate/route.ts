@@ -3,26 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CPRInputSchema } from '@/utils/validate';
 import { CalculationService } from '@/services/calculation.service';
 import { cache } from '@/lib/redis';
+import { resolveClientIp } from '@/lib/client-ip';
 
 async function checkRateLimit(request: NextRequest): Promise<boolean> {
-  let ip = request.headers.get('x-real-ip') || '127.0.0.1';
-  // Only trust x-forwarded-for if explicitly enabled via environment variable
-  // indicating we are behind a trusted proxy. Take the *last* hop to prevent
-  // rate-limit bypass via spoofed client headers.
-  if (env.TRUST_PROXY === 'true') {
-    const forwardedFor = request.headers.get('x-forwarded-for');
-    if (forwardedFor) {
-      const hops = forwardedFor.split(',').map((h) => h.trim()).filter(Boolean);
-      if (hops.length > 0) {
-        ip = hops[hops.length - 1]!;
-      }
-    }
-  }
-
-  // Fallback to socket IP if not trusting proxy, but Next.js App Router 
-  // doesn't expose the raw socket directly on NextRequest easily,
-  // so we default to a shared bucket or the server IP unless proxy is trusted.
-  // In production, TRUST_PROXY should be set to true if behind NGINX/Cloudflare.
+  const ip = resolveClientIp(request.headers, env.TRUST_PROXY === 'true') || '127.0.0.1';
 
   const limit = Number(env.RATE_LIMIT_MAX) || 60;
   const windowMs = Number(env.RATE_LIMIT_WINDOW_MS) || 60000;

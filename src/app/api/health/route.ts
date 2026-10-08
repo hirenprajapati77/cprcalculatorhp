@@ -17,8 +17,7 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
   const authHeader = req.headers.get('authorization');
   const cookie = req.cookies.get('app_access_token')?.value;
   if (authHeader && timingSafeEqual(authHeader, `Bearer ${expected}`)) return true;
-  if (cookie && timingSafeEqual(cookie, expected)) return true;
-  // Unlock sets a SHA-256 hash of the token as the cookie value.
+  // Unlock sets a SHA-256 hash of the token as the cookie value. Cookie auth is hash-only.
   if (cookie) {
     const expectedHash = await hashToken(expected);
     if (timingSafeEqual(cookie, expectedHash)) return true;
