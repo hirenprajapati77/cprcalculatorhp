@@ -9,43 +9,61 @@ function side(score: number | null, cls = 'BTST_READY') {
   return { score, cls, sl: 95, target: 110, scoreBreakdown: null };
 }
 
-describe('resolveOvernightConflict — null scores ineligible', () => {
+describe('resolveOvernightConflict — null scores ineligible & classification resolution', () => {
   it('picks higher non-null side and marks NEUTRAL_CONFLICT when diff < 10', () => {
-    const r = resolveOvernightConflict(side(80), side(71));
+    const r = resolveOvernightConflict(side(80, 'BTST_READY'), side(71, 'STBT_READY'));
     assert.equal(r.finalDir, 'LONG');
     assert.equal(r.finalCls, 'NEUTRAL_CONFLICT');
+    assert.equal(r.finalSig?.score, 80);
   });
 
-  it('does not mark conflict when diff >= 10', () => {
-    const r = resolveOvernightConflict(side(80), side(70));
+  it('preserves clear LONG winner classification when diff >= 10', () => {
+    const r = resolveOvernightConflict(side(80, 'BTST_READY'), side(70, 'STBT_READY'));
     assert.equal(r.finalDir, 'LONG');
-    assert.equal(r.finalCls, 'IGNORE'); // caller overwrites with winner cls
+    assert.equal(r.finalCls, 'BTST_READY');
+    assert.equal(r.finalSig?.score, 80);
   });
 
-  it('ignores LONG when score is null — SHORT wins', () => {
+  it('preserves clear SHORT winner classification when diff >= 10', () => {
+    const r = resolveOvernightConflict(side(65, 'BTST_READY'), side(85, 'STBT_READY'));
+    assert.equal(r.finalDir, 'SHORT');
+    assert.equal(r.finalCls, 'STBT_READY');
+    assert.equal(r.finalSig?.score, 85);
+  });
+
+  it('marks NEUTRAL_CONFLICT when SHORT leads but diff < 10', () => {
+    const r = resolveOvernightConflict(side(72, 'BTST_READY'), side(78, 'STBT_READY'));
+    assert.equal(r.finalDir, 'SHORT');
+    assert.equal(r.finalCls, 'NEUTRAL_CONFLICT');
+    assert.equal(r.finalSig?.score, 78);
+  });
+
+  it('ignores LONG when score is null — SHORT wins with its classification', () => {
     const r = resolveOvernightConflict(side(null), side(85, 'STBT_READY'));
     assert.equal(r.finalDir, 'SHORT');
     assert.equal(r.finalSig?.score, 85);
-    assert.notEqual(r.finalCls, 'NEUTRAL_CONFLICT');
+    assert.equal(r.finalCls, 'STBT_READY');
   });
 
-  it('ignores SHORT when score is null — LONG wins', () => {
-    const r = resolveOvernightConflict(side(90), side(null));
+  it('ignores SHORT when score is null — LONG wins with its classification', () => {
+    const r = resolveOvernightConflict(side(90, 'BTST_READY'), side(null));
     assert.equal(r.finalDir, 'LONG');
     assert.equal(r.finalSig?.score, 90);
+    assert.equal(r.finalCls, 'BTST_READY');
   });
 
-  it('returns null direction when both scores are null', () => {
+  it('returns null direction and IGNORE when both scores are null', () => {
     const r = resolveOvernightConflict(side(null), side(null));
     assert.equal(r.finalDir, null);
     assert.equal(r.finalSig, null);
+    assert.equal(r.finalCls, 'IGNORE');
   });
 
   it('does not coerce null to 0 (null LONG vs SHORT 5 must not create conflict)', () => {
     // Old bug: (null||0) vs 5 → diff 5 → NEUTRAL_CONFLICT with LONG "winning"
     const r = resolveOvernightConflict(side(null), side(5, 'WATCH'));
     assert.equal(r.finalDir, 'SHORT');
-    assert.notEqual(r.finalCls, 'NEUTRAL_CONFLICT');
+    assert.equal(r.finalCls, 'WATCH');
   });
 });
 
