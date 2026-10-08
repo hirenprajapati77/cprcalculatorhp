@@ -31,6 +31,12 @@ import { isVpaLiveGatesEnabled } from '@/config/vpa.config';
 import type { VpaConfirmationResult } from '@/services/vpa';
 import { safeRatio } from '@/lib/math';
 import { FyersAuthService } from '../fyers-auth.service';
+import {
+  createEmptyOvernightScanMetrics,
+  finalizeOvernightScanMetrics,
+  formatOvernightScanMetricsSummary,
+  type OvernightScanMetrics,
+} from './overnight-scan-metrics';
 
 /**
  * Concurrent Yahoo/chart fetches per batch when preloading the F&O universe.
@@ -76,6 +82,12 @@ export interface OvernightIntradayMetrics {
 }
 
 export class OvernightService {
+  private static lastScanMetrics: OvernightScanMetrics | null = null;
+
+  static getLastScanMetrics(): OvernightScanMetrics | null {
+    return this.lastScanMetrics;
+  }
+
   static getISTTime(date: Date = new Date()) {
     const { hour, minute, totalMinutes } = getISTTime(date);
     return { hour, minute, totalMinutes };
@@ -307,10 +319,10 @@ export class OvernightService {
     direction: 'LONG' | 'SHORT' | 'BOTH' = 'BOTH', 
     dateOverride?: Date,
     mockStocks?: MockOvernightStock[]
-  ): Promise<(OvernightSignal & {
+  ): Promise<((OvernightSignal & {
     scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
     vpaBreakdown?: VpaConfirmationResult | null;
-  })[]> {
+  })[] & { metrics?: OvernightScanMetrics })> {
 
     const currentTime = dateOverride || new Date();
     
@@ -329,6 +341,9 @@ export class OvernightService {
     const universeStocks = mockStocks 
       ? mockStocks.map(s => ({ symbol: s.symbol })) 
       : MarketService.getUniverse('NSE_FNO');
+    const metrics = createEmptyOvernightScanMetrics(universeStocks.length);
+    OvernightService.lastScanMetrics = metrics;
+
     const signalsToSave: Prisma.OvernightSignalCreateInput[] = [];
     const scoreBreakdownBySymbol = new Map<
       string,
@@ -400,11 +415,15 @@ export class OvernightService {
     }
 
     for (const stock of universeStocks) {
+      metrics.processed++;
       try {
         const fullStock = mockStocks
           ? mockStocks.find(s => s.symbol === stock.symbol)
           : (stockDataBySymbol.get(stock.symbol) ?? null);
-        if (!fullStock) continue;
+        if (!fullStock) {
+          metrics.droppedNoStockData++;
+          continue;
+        }
 
         const history = fullStock.history || [];
         const stockReturn5d = history.length > RS_LOOKBACK
@@ -418,6 +437,7 @@ export class OvernightService {
 
         if (history.length === 0) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Empty market history (cannot establish distinct prior day candle).`);
+          metrics.droppedNoStockData++;
           continue;
         }
 
@@ -438,6 +458,7 @@ export class OvernightService {
             console.warn(
               `[OvernightScan] ${fullStock.symbol} skipped: Today's daily candle and session OHLC unavailable.`
             );
+            metrics.droppedNoStockData++;
             continue;
           }
         }
@@ -449,11 +470,13 @@ export class OvernightService {
         // Ensure we have distinct candles for both today's candle and yesterday's (prior day) candle.
         if (isLastToday && history.length < 2) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} for today-appended database state (requires at least 2 distinct daily candles).`);
+          metrics.droppedNoStockData++;
           continue;
         }
 
         if (history.length < LIQUIDITY.MIN_HISTORY_FOR_RELIABLE_ATR) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: Insufficient history length ${history.length} < MIN_HISTORY_FOR_RELIABLE_ATR (${LIQUIDITY.MIN_HISTORY_FOR_RELIABLE_ATR}).`);
+          metrics.droppedNoStockData++;
           continue;
         }
 
@@ -478,6 +501,7 @@ export class OvernightService {
 
         if (!yesterdayCandle) {
           console.warn(`[OvernightScan] ${fullStock.symbol} skipped: cannot derive yesterdayCandle.`);
+          metrics.droppedNoStockData++;
           continue;
         }
 
@@ -514,6 +538,11 @@ export class OvernightService {
         // LOW_QUALITY later is only for weaker tiers that already passed this gate.
         const elig = EntryManagerService.evaluateEligibility(fullStock, intraday.vwap, intraday.intradayVolume, intraday.hasIntraday);
         if (!elig.eligible) {
+          if (!intraday.hasIntraday) {
+            metrics.droppedNoIntraday++;
+          } else {
+            metrics.droppedEligibility++;
+          }
           continue;
         }
 
@@ -578,85 +607,101 @@ export class OvernightService {
           console.warn(`[OvernightScan] ${fullStock.symbol}: NEUTRAL_CONFLICT. LongScore=${longSig.score}, ShortScore=${shortSig.score}, Diff=${diff}, Time=${dateStr} ${timeStr}`);
         }
 
-        if (finalDir && finalSig) {
-          // Optional VPA hard gate — off by default (VPA_LIVE_GATES=false).
-          if (isVpaLiveGatesEnabled() && finalSig.vpaBreakdown?.rejectRecommended) {
+        if (!finalDir || !finalSig || finalSig.score === null) {
+          metrics.droppedNoIntraday++;
+          continue;
+        }
+
+        // Optional VPA hard gate — off by default (VPA_LIVE_GATES=false).
+        if (isVpaLiveGatesEnabled() && finalSig.vpaBreakdown?.rejectRecommended) {
+          console.warn(
+            `[OvernightScan] ${fullStock.symbol} ${finalDir} VPA gate: ${finalSig.vpaBreakdown.rejectReason}`
+          );
+          metrics.droppedVpaGate++;
+          continue;
+        }
+
+        // Fail-closed when market regime is unreliable (Nifty data unavailable/corrupt).
+        // Mirrors btst-alert.job.ts (L271-273) and cpr-journal.job.ts (L36-39).
+        if (regime.reliable === false) {
+          console.warn(
+            `[OvernightScan] Suppressing ${fullStock.symbol} ${finalDir}: market regime is UNRELIABLE (Nifty feed unavailable).`
+          );
+          metrics.droppedRegime++;
+          continue;
+        }
+
+        // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
+        if (finalDir === 'SHORT' && regime.trend === 'BULL') {
+          metrics.droppedRegime++;
+          continue;
+        }
+        if (finalDir === 'LONG' && regime.trend === 'BEAR') {
+          metrics.droppedRegime++;
+          continue;
+        }
+
+        // ── FRIDAY WEEKEND GATE ─────────────────────────────────────────────────
+        // Friday holds carry 60+ hours of weekend gap risk (Mon open gap-against
+        // traps have caused repeated option losses: BSE Aug 10, BSE Aug 21).
+        //
+        // Full policy: docs/trading-policy/friday-weekend-gate.md
+        //
+        // Rule 1 — STBT/SHORT block: Friday SHORTs are blocked in CHOPPY and BULL
+        //   regimes. Only a confirmed BEAR regime (Nifty close < EMA20, EMA sloping
+        //   down) provides enough downtrend conviction to hold a Friday PUT overnight.
+        //
+        // Rule 2 — BTST/LONG hard block: Friday LONGs are blocked unconditionally
+        //   to eliminate 60+ hour weekend gap-down risk (D5-2 fix).
+        //   This is intentionally asymmetric with Rule 1 — see policy doc for rationale.
+        if (isFriday) {
+          if (finalDir === 'SHORT' && regime.trend !== 'BEAR') {
             console.warn(
-              `[OvernightScan] ${fullStock.symbol} ${finalDir} VPA gate: ${finalSig.vpaBreakdown.rejectReason}`
+              `[OvernightScan] FRIDAY_STBT_GATE: ${fullStock.symbol} SHORT blocked — ` +
+              `regime=${regime.trend} on Friday (weekend gap risk). Only BEAR regime permits Friday STBT.`
             );
+            metrics.droppedFridayGate++;
             continue;
           }
-
-          // Fail-closed when market regime is unreliable (Nifty data unavailable/corrupt).
-          // Mirrors btst-alert.job.ts (L271-273) and cpr-journal.job.ts (L36-39).
-          if (regime.reliable === false) {
+          if (finalDir === 'LONG') {
             console.warn(
-              `[OvernightScan] Suppressing ${fullStock.symbol} ${finalDir}: market regime is UNRELIABLE (Nifty feed unavailable).`
+              `[OvernightScan] FRIDAY_BTST_GATE: ${fullStock.symbol} LONG blocked on Friday — ` +
+              `no weekend BTST positions permitted (weekend gap risk).`
             );
+            metrics.droppedFridayGate++;
             continue;
           }
+        }
+        // ── END FRIDAY WEEKEND GATE ─────────────────────────────────────────────
 
-          // Hard block regime-misaligned overnight directions (mirrors journal/alert suppression).
-          if (finalDir === 'SHORT' && regime.trend === 'BULL') {
-            continue;
-          }
-          if (finalDir === 'LONG' && regime.trend === 'BEAR') {
-            continue;
-          }
+        // B10 fix: pass dateStr so evaluateExtension uses the correct historical
+        // date during backtests rather than falling back to getISTDateString()
+        // (live clock), which would silently disable the extension gate on all
+        // historical dates by producing a ~0% day return.
+        const ext = EntryManagerService.evaluateExtension(fullStock, finalDir, dateStr);
 
-          // ── FRIDAY WEEKEND GATE ─────────────────────────────────────────────────
-          // Friday holds carry 60+ hours of weekend gap risk (Mon open gap-against
-          // traps have caused repeated option losses: BSE Aug 10, BSE Aug 21).
-          //
-          // Full policy: docs/trading-policy/friday-weekend-gate.md
-          //
-          // Rule 1 — STBT/SHORT block: Friday SHORTs are blocked in CHOPPY and BULL
-          //   regimes. Only a confirmed BEAR regime (Nifty close < EMA20, EMA sloping
-          //   down) provides enough downtrend conviction to hold a Friday PUT overnight.
-          //
-          // Rule 2 — BTST/LONG hard block: Friday LONGs are blocked unconditionally
-          //   to eliminate 60+ hour weekend gap-down risk (D5-2 fix).
-          //   This is intentionally asymmetric with Rule 1 — see policy doc for rationale.
-          if (isFriday) {
-            if (finalDir === 'SHORT' && regime.trend !== 'BEAR') {
-              console.warn(
-                `[OvernightScan] FRIDAY_STBT_GATE: ${fullStock.symbol} SHORT blocked — ` +
-                `regime=${regime.trend} on Friday (weekend gap risk). Only BEAR regime permits Friday STBT.`
-              );
-              continue;
-            }
-            if (finalDir === 'LONG') {
-              console.warn(
-                `[OvernightScan] FRIDAY_BTST_GATE: ${fullStock.symbol} LONG blocked on Friday — ` +
-                `no weekend BTST positions permitted (weekend gap risk).`
-              );
-              continue;
-            }
-          }
-          // ── END FRIDAY WEEKEND GATE ─────────────────────────────────────────────
+        if (!ext.eligible) {
+          console.warn(`[OvernightScan] ${fullStock.symbol} ${finalDir} skipped: ${ext.reason}`);
+          metrics.droppedExtension++;
+          continue;
+        }
 
-          // B10 fix: pass dateStr so evaluateExtension uses the correct historical
-          // date during backtests rather than falling back to getISTDateString()
-          // (live clock), which would silently disable the extension gate on all
-          // historical dates by producing a ~0% day return.
-          const ext = EntryManagerService.evaluateExtension(fullStock, finalDir, dateStr);
+        const gapMetrics = GapProbabilityService.calculateGapProbability(fullStock, finalDir);
+        const conf = gapMetrics ? gapMetrics.gapConfidence : 50;
+        const expGap = gapMetrics ? gapMetrics.expectedGap : 0;
+        
+        if (finalCls !== 'NEUTRAL_CONFLICT') {
+          finalCls = finalSig.cls;
+        }
 
-          if (!ext.eligible) {
-            console.warn(`[OvernightScan] ${fullStock.symbol} ${finalDir} skipped: ${ext.reason}`);
-            continue;
-          }
+        if (finalCls === 'IGNORE' && env.SAVE_IGNORE_SIGNALS !== 'true') {
+          metrics.droppedIgnore++;
+          continue;
+        }
 
-          const gapMetrics = GapProbabilityService.calculateGapProbability(fullStock, finalDir);
-          const conf = gapMetrics ? gapMetrics.gapConfidence : 50;
-          const expGap = gapMetrics ? gapMetrics.expectedGap : 0;
-          
-          if (finalCls !== 'NEUTRAL_CONFLICT') {
-            finalCls = finalSig.cls;
-          }
-
-          if (finalCls === 'IGNORE' && env.SAVE_IGNORE_SIGNALS !== 'true') {
-            continue;
-          }
+        if (finalCls === 'NEUTRAL_CONFLICT') {
+          metrics.droppedConflict++;
+        }
 
           const quality = SignalQualityService.evaluateSignal(
             fullStock,
@@ -712,10 +757,10 @@ export class OvernightService {
             vpaBreakdownBySymbol.set(`${stock.symbol}:${finalDir}`, finalSig.vpaBreakdown);
             vpaBreakdownBySymbol.set(stock.symbol, finalSig.vpaBreakdown);
           }
+        } catch (err) {
+          metrics.errors++;
+          console.error(`Error processing Overnight scan for ${stock.symbol}:`, err);
         }
-      } catch (err) {
-        console.error(`Error processing Overnight scan for ${stock.symbol}:`, err);
-      }
     }
 
     // H3 fix: sort by unique key (symbol, then direction) BEFORE the transaction
@@ -780,6 +825,10 @@ export class OvernightService {
       if (a.classification !== 'IGNORE' && b.classification === 'IGNORE') return -1;
       return (b.overnightScore || 0) - (a.overnightScore || 0);
     });
+
+    finalizeOvernightScanMetrics(metrics, savedSignals.length);
+    console.log(formatOvernightScanMetricsSummary(dateStr, timeStr, metrics));
+    Object.assign(savedSignals, { metrics });
 
     return savedSignals;
   }

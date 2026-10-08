@@ -69,6 +69,7 @@ export async function GET(req: NextRequest) {
         scannedAt: string;
         results: OvernightFilterable[];
         insights: unknown;
+        metrics?: unknown;
       }
 
       const cached = await CacheService.get<CachedOvernightData>(OVERNIGHT_KEY);
@@ -90,6 +91,7 @@ export async function GET(req: NextRequest) {
           results: filtered,
           insights: cached.insights,
           state,
+          ...(cached.metrics ? { metrics: cached.metrics } : {}),
         });
       } else {
         const discoveryStartMin =
@@ -207,11 +209,14 @@ export async function GET(req: NextRequest) {
       const dateStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' });
       const scannedAt = `${timeStr} IST, ${dateStr}`;
 
+      const metrics = (signals as { metrics?: unknown }).metrics ?? OvernightService.getLastScanMetrics();
+
       // Store full BOTH set (unfiltered) so direction/activeOnly share one cache entry
       const cacheData = {
         scannedAt,
         results: signals,
         insights,
+        ...(metrics ? { metrics } : {}),
       };
 
       await CacheService.set(OVERNIGHT_KEY, cacheData, 32400); // 9h: covers 15:10 scan through midnight IST
@@ -224,6 +229,7 @@ export async function GET(req: NextRequest) {
         cachedResult: false,
         results: filtered,
         insights,
+        ...(metrics ? { metrics } : {}),
       });
     }
 
