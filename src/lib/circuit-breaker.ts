@@ -4,6 +4,32 @@ export enum CircuitState {
   HALF_OPEN = 'HALF_OPEN' // Probe phase
 }
 
+function isConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (
+    error.name === 'PrismaClientInitializationError' ||
+    error.name === 'PrismaClientRustPanicError'
+  ) {
+    return true;
+  }
+  const code = (error as { code?: string }).code;
+  if (code && typeof code === 'string') {
+    if (['P1000', 'P1001', 'P1002', 'P1008', 'P1017'].includes(code)) {
+      return true;
+    }
+  }
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('econnrefused') ||
+    msg.includes('econnreset') ||
+    msg.includes('etimedout') ||
+    msg.includes('connection closed') ||
+    msg.includes('connection terminated') ||
+    msg.includes('timed out waiting for a connection from the pool') ||
+    msg.includes("can't reach database server")
+  );
+}
+
 /** One process-wide circuit: any DB connection failure opens it for all callers (30s). Intentional — not per-model. */
 export class DatabaseCircuitBreaker {
   private static state: CircuitState = CircuitState.CLOSED;
@@ -36,12 +62,8 @@ export class DatabaseCircuitBreaker {
       }
       return result;
     } catch (error) {
-      // If error is related to connection/initialization
-      if (
-        error instanceof Error && 
-        (error.name === 'PrismaClientInitializationError' || 
-         error.message.includes('ECONNREFUSED'))
-      ) {
+      // If error is related to connection/initialization/timeouts
+      if (isConnectionError(error)) {
         this.state = CircuitState.OPEN;
         this.nextAttemptAt = Date.now() + this.COOLDOWN_MS;
         console.error(`Circuit breaker open: DB connection failed. Cooldown until ${new Date(this.nextAttemptAt).toISOString()}`);

@@ -59,7 +59,19 @@ export function _setRedisForTesting(client: Redis | null): void {
 }
 
 // In-memory cache fallback implementation
+export const MEMORY_CACHE_MAX_ENTRIES = 2000;
 const memoryCache = new Map<string, { value: string; expiry: number }>();
+
+function setMemoryCacheEntry(key: string, value: string, expiry: number): void {
+  // If at capacity and key is new, evict oldest entry (insertion-ordered Map iterator)
+  if (memoryCache.size >= MEMORY_CACHE_MAX_ENTRIES && !memoryCache.has(key)) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      memoryCache.delete(oldestKey);
+    }
+  }
+  memoryCache.set(key, { value, expiry });
+}
 
 /**
  * Actively sweeps expired entries from the in-memory cache to prevent unbounded growth.
@@ -112,10 +124,7 @@ export const cache = {
         console.warn('Redis SET failed, falling back to memory cache:', err);
       }
     }
-    memoryCache.set(key, {
-      value,
-      expiry: Date.now() + ttlSeconds * 1000,
-    });
+    setMemoryCacheEntry(key, value, Date.now() + ttlSeconds * 1000);
   },
 
   async setNX(key: string, value: string, ttlSeconds: number = 120): Promise<boolean> {
@@ -131,10 +140,7 @@ export const cache = {
     if (cached && cached.expiry > Date.now()) {
       return false;
     }
-    memoryCache.set(key, {
-      value,
-      expiry: Date.now() + ttlSeconds * 1000,
-    });
+    setMemoryCacheEntry(key, value, Date.now() + ttlSeconds * 1000);
     return true;
   },
 
@@ -222,11 +228,11 @@ export const cache = {
     const cached = memoryCache.get(key);
     if (!cached || now > cached.expiry) {
       const countVal = 1;
-      memoryCache.set(key, { value: String(countVal), expiry: now + ttlSeconds * 1000 });
+      setMemoryCacheEntry(key, String(countVal), now + ttlSeconds * 1000);
       return countVal;
     }
     const countVal = parseInt(cached.value, 10) + 1;
-    memoryCache.set(key, { value: String(countVal), expiry: cached.expiry });
+    setMemoryCacheEntry(key, String(countVal), cached.expiry);
     return countVal;
   }
 };

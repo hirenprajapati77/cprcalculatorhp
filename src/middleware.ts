@@ -49,7 +49,7 @@ export async function middleware(request: NextRequest) {
 
   if (!url.pathname.startsWith('/api/') && expectedToken && !isPublicPage) {
     const existing = request.cookies.get('app_access_token')?.value;
-    const isValid = existing && (timingSafeEqual(existing, expectedHash) || timingSafeEqual(existing, expectedToken));
+    const isValid = existing && timingSafeEqual(existing, expectedHash);
     if (!isValid) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = '/unlock';
@@ -94,7 +94,7 @@ export async function middleware(request: NextRequest) {
       let isAuth = false;
       if (authHeader && timingSafeEqual(authHeader, `Bearer ${expectedToken}`)) {
         isAuth = true;
-      } else if (authCookie && (timingSafeEqual(authCookie, expectedHash) || timingSafeEqual(authCookie, expectedToken))) {
+      } else if (authCookie && timingSafeEqual(authCookie, expectedHash)) {
         isAuth = true;
       }
 

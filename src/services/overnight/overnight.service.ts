@@ -705,9 +705,11 @@ export class OvernightService {
             regimeSnapshot: JSON.stringify(regime),
           });
           if (finalSig.scoreBreakdown) {
+            scoreBreakdownBySymbol.set(`${stock.symbol}:${finalDir}`, finalSig.scoreBreakdown);
             scoreBreakdownBySymbol.set(stock.symbol, finalSig.scoreBreakdown);
           }
           if (finalSig.vpaBreakdown?.enabled) {
+            vpaBreakdownBySymbol.set(`${stock.symbol}:${finalDir}`, finalSig.vpaBreakdown);
             vpaBreakdownBySymbol.set(stock.symbol, finalSig.vpaBreakdown);
           }
         }
@@ -726,37 +728,42 @@ export class OvernightService {
       return String(a.direction ?? '').localeCompare(String(b.direction ?? ''));
     });
 
-    // H-6: Batch all upserts into a single interactive transaction instead of
-    // 200 sequential await prisma.overnightSignal.upsert() calls (~1 s of DB I/O).
+    // Chunk upserts in batches of 50 to avoid long-lived transaction locks
+    // and statement timeouts on the 1GB Oracle server while retaining chunk atomicity.
+    const OVERNIGHT_UPSERT_CHUNK_SIZE = 50;
     const savedSignals: (OvernightSignal & {
       scoreBreakdown?: import('./btst-ranking.service').AdvancedScoreBreakdown | null;
       vpaBreakdown?: VpaConfirmationResult | null;
     })[] = [];
     try {
-      const results = await prisma.$transaction(
-        signalsToSave.map((sig) =>
-          prisma.overnightSignal.upsert({
-            where: {
-              symbol_signalDate_signalTime_direction: {
-                symbol: sig.symbol,
-                signalDate: sig.signalDate,
-                signalTime: sig.signalTime,
-                direction: sig.direction!
-              }
-            },
-            update: sig,
-            create: sig
-          })
-        )
-      );
-      for (const saved of results) {
-        const breakdown = scoreBreakdownBySymbol.get(saved.symbol);
-        const vpa = vpaBreakdownBySymbol.get(saved.symbol);
-        savedSignals.push({
-          ...saved,
-          ...(breakdown ? { scoreBreakdown: breakdown } : {}),
-          ...(vpa ? { vpaBreakdown: vpa } : {}),
-        });
+      for (let i = 0; i < signalsToSave.length; i += OVERNIGHT_UPSERT_CHUNK_SIZE) {
+        const chunk = signalsToSave.slice(i, i + OVERNIGHT_UPSERT_CHUNK_SIZE);
+        const results = await prisma.$transaction(
+          chunk.map((sig) =>
+            prisma.overnightSignal.upsert({
+              where: {
+                symbol_signalDate_signalTime_direction: {
+                  symbol: sig.symbol,
+                  signalDate: sig.signalDate,
+                  signalTime: sig.signalTime,
+                  direction: sig.direction!
+                }
+              },
+              update: sig,
+              create: sig
+            })
+          )
+        );
+        for (const saved of results) {
+          const key = `${saved.symbol}:${saved.direction}`;
+          const breakdown = scoreBreakdownBySymbol.get(key) ?? scoreBreakdownBySymbol.get(saved.symbol);
+          const vpa = vpaBreakdownBySymbol.get(key) ?? vpaBreakdownBySymbol.get(saved.symbol);
+          savedSignals.push({
+            ...saved,
+            ...(breakdown ? { scoreBreakdown: breakdown } : {}),
+            ...(vpa ? { vpaBreakdown: vpa } : {}),
+          });
+        }
       }
     } catch (err) {
       console.error('[Overnight] Batch upsert transaction failed — signals not saved:', err);

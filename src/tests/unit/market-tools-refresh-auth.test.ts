@@ -29,14 +29,9 @@ test('isAuthorizedForRefresh accepts the hashed cookie value (the real, only val
   assert.equal(await isAuthorizedForRefresh(req), true);
 });
 
-test('isAuthorizedForRefresh rejects a cookie holding the raw token (never actually happens in production, but should not be treated as invalid if it did)', async () => {
-  // Documents that raw-token-as-cookie is ALSO accepted for defensive
-  // compatibility (matches middleware.ts's own dual check), even though the
-  // unlock route only ever sets the hash. This is the case the original
-  // buggy code got backwards -- it compared as if the cookie WAS the raw
-  // token and nothing else, which is the opposite of reality.
+test('isAuthorizedForRefresh rejects a cookie holding the raw token (only hash accepted)', async () => {
   const req = makeRequest({ cookie: 'test-secret-token' });
-  assert.equal(await isAuthorizedForRefresh(req), true);
+  assert.equal(await isAuthorizedForRefresh(req), false);
 });
 
 test('isAuthorizedForRefresh replays the actual production bug: a real hashed session cookie must not 401', async () => {

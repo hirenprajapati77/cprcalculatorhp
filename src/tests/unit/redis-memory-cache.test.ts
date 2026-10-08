@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { cache, sweepExpiredMemoryCache } from '../../lib/redis';
+import { cache, sweepExpiredMemoryCache, MEMORY_CACHE_MAX_ENTRIES } from '../../lib/redis';
 
 describe('In-Memory Cache Fallback & Sweeper', () => {
   it('stores and retrieves cached values', async () => {
@@ -100,5 +100,26 @@ describe('In-Memory Cache Fallback & Sweeper', () => {
       },
       /Redis is unavailable/
     );
+  });
+
+  it('evicts oldest keys and caps cache size at MEMORY_CACHE_MAX_ENTRIES', async () => {
+    await cache.clear();
+    // Fill with 2000 entries
+    for (let i = 0; i < MEMORY_CACHE_MAX_ENTRIES; i++) {
+      await cache.set(`cap:test:${i}`, `val:${i}`, 300);
+    }
+    assert.equal(await cache.get('cap:test:0'), 'val:0');
+
+    // Add 2001st entry
+    await cache.set('cap:test:new', 'val:new', 300);
+
+    // Oldest entry (cap:test:0) should be evicted
+    assert.equal(await cache.get('cap:test:0'), null);
+    // New entry must exist
+    assert.equal(await cache.get('cap:test:new'), 'val:new');
+    // cap:test:1 still exists
+    assert.equal(await cache.get('cap:test:1'), 'val:1');
+
+    await cache.clear();
   });
 });
