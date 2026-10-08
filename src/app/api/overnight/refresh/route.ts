@@ -22,7 +22,13 @@ export async function POST(req: NextRequest) {
     }
 
     const signals = await OvernightService.discover(direction, dateOverride);
-    return NextResponse.json({ success: true, count: signals.length, signals });
+    const metrics = (signals as { metrics?: unknown }).metrics ?? OvernightService.getLastScanMetrics();
+    return NextResponse.json({
+      success: true,
+      count: signals.length,
+      signals,
+      ...(metrics ? { metrics } : {}),
+    });
   } catch (error: unknown) {
     console.error('[Overnight refresh]', error);
     return NextResponse.json({ error: publicApiError(error) }, { status: 500 });
