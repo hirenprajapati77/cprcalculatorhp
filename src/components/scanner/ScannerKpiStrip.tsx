@@ -29,7 +29,7 @@ interface ScannerKpiStripProps {
   breakoutReadyCount: number;
   watchlistCount: number;
   avoidCount: number;
-  topStocks: Array<{ symbol: string; score: number }>;
+  topStocks: Array<{ symbol: string; score: number; alertSuppressedReason?: string | null }>;
 }
 
 export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
@@ -92,23 +92,27 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
       </div>
 
       {/* ── Top Algos Marquee Strip ── */}
-      {topStocks.length > 0 && (
-        <div className="bg-surface-elevated border border-border-subtle rounded-lg px-3.5 py-1.5 text-[10px] text-text-secondary flex flex-wrap items-center gap-2">
-          <Sparkles size={12} className="text-accent-primary animate-pulse flex-shrink-0" />
-          <span className="font-bold text-text-primary uppercase tracking-wider text-[9px]">
-            Top Algo Setups:
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {topStocks.map((s, idx) => (
-              <span key={s.symbol} className="flex items-center gap-1">
-                <span className="text-text-primary font-bold">{s.symbol}</span>
-                <span className="text-text-muted">({s.score} pts)</span>
-                {idx < topStocks.length - 1 && <span className="text-border-strong">|</span>}
-              </span>
-            ))}
+      {(() => {
+        const actionableTop = topStocks.filter((s) => !s.alertSuppressedReason);
+        if (actionableTop.length === 0) return null;
+        return (
+          <div className="bg-surface-elevated border border-border-subtle rounded-lg px-3.5 py-1.5 text-[10px] text-text-secondary flex flex-wrap items-center gap-2">
+            <Sparkles size={12} className="text-accent-primary animate-pulse flex-shrink-0" />
+            <span className="font-bold text-text-primary uppercase tracking-wider text-[9px]">
+              Top Algo Setups:
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {actionableTop.map((s, idx) => (
+                <span key={s.symbol} className="flex items-center gap-1">
+                  <span className="text-text-primary font-bold">{s.symbol}</span>
+                  <span className="text-text-muted">({s.score} pts)</span>
+                  {idx < actionableTop.length - 1 && <span className="text-border-strong">|</span>}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Dynamic Setup Metrics Strip ── */}
       {isOvernight ? (

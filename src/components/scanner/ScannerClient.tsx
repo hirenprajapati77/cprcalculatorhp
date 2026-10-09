@@ -51,6 +51,7 @@ import { inferCprJournalDirection } from '@/lib/cpr-direction';
 import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
+import { fetchDeduped, clearDedupedFetchCache } from '@/lib/deduped-fetch';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
@@ -1355,14 +1356,14 @@ export default function ScannerClient() {
 
   // Load Watchlist, Server Settings, and Column configurations on mount
   useEffect(() => {
-    fetch('/api/watchlist')
+    fetchDeduped('/api/watchlist')
       .then(res => res.json())
       .then(data => {
         if (!data.error) setWatchlist(data);
       })
       .catch(err => console.error('Failed to load watchlist:', err));
 
-    fetch('/api/settings')
+    fetchDeduped('/api/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -1481,7 +1482,7 @@ export default function ScannerClient() {
   // Fetch History Run logs
   const fetchHistoryRuns = useCallback(async () => {
     try {
-      const res = await fetch('/api/scanner/history');
+      const res = await fetchDeduped('/api/scanner/history');
       if (res.ok) {
         const data = await res.json();
         setScanHistoryLog(data.results);
@@ -1508,7 +1509,7 @@ export default function ScannerClient() {
         const bypassVal = typeof window !== 'undefined' ? localStorage.getItem('cpr_settings_bypass_btst') === 'true' : false;
         setBtstBypassActive(bypassVal);
         // Advanced Engine via /api/btst adapter (OvernightService → UI DTO)
-        const res = await fetch(`/api/btst?universe=${universe}${bypassVal ? '&bypass=true' : ''}`);
+        const res = await fetchDeduped(`/api/btst?universe=${universe}${bypassVal ? '&bypass=true' : ''}`);
         if (!res.ok) throw new Error('Failed to retrieve live BTST/STBT signals');
         const data = await res.json();
 
@@ -1616,9 +1617,10 @@ export default function ScannerClient() {
           return { ...base, direction: direction as 'LONG' | 'SHORT' };
         });
         // Apply watchlist Pinned priority layout & dynamic column sorting client-side
+        const currentWatchlist = watchlistRef.current;
         mapped.sort((a, b) => {
-          const pinA = watchlist[a.symbol]?.pinned ? 1 : 0;
-          const pinB = watchlist[b.symbol]?.pinned ? 1 : 0;
+          const pinA = currentWatchlist[a.symbol]?.pinned ? 1 : 0;
+          const pinB = currentWatchlist[b.symbol]?.pinned ? 1 : 0;
           if (pinA !== pinB) return pinB - pinA; // pinned first
           
           let comparison = 0;
@@ -1695,7 +1697,7 @@ export default function ScannerClient() {
         queryParams.set('search', debouncedSearchQuery.trim());
       }
 
-      const res = await fetch(`/api/scanner?${queryParams.toString()}`);
+      const res = await fetchDeduped(`/api/scanner?${queryParams.toString()}`);
       if (!res.ok) throw new Error('Failed to retrieve scanning coordinates');
 
       const data = await res.json();
@@ -1769,34 +1771,31 @@ export default function ScannerClient() {
         setLastRefreshed(lastRefreshLabel(data.scannedAt));
       }
     } catch (err) {
-      if (requestId === activeRequestRef.current) {
-        // Overnight modes must not keep CPR-shaped rows if /api/btst fails —
-        // stale entry/SL/target and null expectedGap would render under BTST columns.
-        if (scannerMode !== 'CPR') {
-          setResults([]);
-          setTotal(0);
-        }
-        
-        // On failure, fall back to the local telemetry clock so we don't get stuck in the pre-session state
-        if (scannerMode === 'CPR') {
-          setExecutionWindowOpen(isMarketOpen());
-        } else if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
-          setExecutionWindowOpen(isBtstDiscoveryOpen());
-        }
-        
-        showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
+      if (requestId !== activeRequestRef.current) return;
+      if (scannerMode !== 'CPR') {
+        setResults([]);
+        setTotal(0);
       }
+      
+      // On failure, fall back to the local telemetry clock so we don't get stuck in the pre-session state
+      if (scannerMode === 'CPR') {
+        setExecutionWindowOpen(isMarketOpen());
+      } else if (scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT') {
+        setExecutionWindowOpen(isBtstDiscoveryOpen());
+      }
+      
+      showToast(err instanceof Error ? err.message : 'Scan query failed', 'error');
     } finally {
       if (requestId === activeRequestRef.current) {
         setIsLoading(false);
       }
     }
-  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, debouncedSearchQuery, showToast, scannerMode, watchlist]);
+  }, [page, limit, market, universe, mode, sortField, sortOrder, selectedSector, marketCapCategory, minPrice, maxPrice, minScore, maxScore, minWidth, maxWidth, cprRelationshipFilter, virginCprOnly, narrowCprOnly, showWatchlistOnly, debouncedSearchQuery, showToast, scannerMode]);
 
   // Fetch Top opportunities
   const fetchTopOpportunities = useCallback(async () => {
     try {
-      const res = await fetch(`/api/scanner/top?limit=4&market=${market}`);
+      const res = await fetchDeduped(`/api/scanner/top?limit=4&market=${market}`);
       if (res.ok) {
         const data = await res.json();
         setTopStocks(data.results);
@@ -1810,7 +1809,7 @@ export default function ScannerClient() {
     if (!silent) setIsLoading(true);
     const startFetchTime = Date.now();
     try {
-      const res = await fetch('/api/index-scan');
+      const res = await fetchDeduped('/api/index-scan');
       if (!res.ok) throw new Error('Failed to retrieve live INDEX signals');
       const data = await res.json();
 
@@ -1866,6 +1865,10 @@ export default function ScannerClient() {
         return;
       }
 
+      clearDedupedFetchCache('/api/scanner');
+      clearDedupedFetchCache('/api/btst');
+      clearDedupedFetchCache('/api/index-scan');
+
       const res = await fetch('/api/scanner/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1920,6 +1923,8 @@ export default function ScannerClient() {
     }
   }, [scannerMode, fetchIndexData, fetchScannerData, fetchTopOpportunities]);
 
+  const isFirstMountRef = useRef(true);
+
   useEffect(() => {
     if (refreshInterval === 'Off') {
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
@@ -1929,11 +1934,14 @@ export default function ScannerClient() {
 
     if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
 
-    // Re-read frozen/live DB results immediately when the timer is armed —
-    // does not trigger a market-wide rescan or Telegram.
-    void refreshActiveData(true).then(() => {
-      setLastRefreshedAt(Date.now());
-    });
+    // Skip immediate invocation on initial mount since primary fetch effects are already loading.
+    if (!isFirstMountRef.current) {
+      void refreshActiveData(true).then(() => {
+        setLastRefreshedAt(Date.now());
+      });
+    } else {
+      isFirstMountRef.current = false;
+    }
 
     autoRefreshRef.current = setInterval(() => {
       void refreshActiveData(true);
@@ -1991,10 +1999,12 @@ export default function ScannerClient() {
         hasFetchedRef.current = true;
         return;
       }
-      if (shouldFastPoll(scannerMode, totalMinutes) || !hasFetchedRef.current) {
+      // On initial mount, primary fetch effects already own loading.
+      // Only execute fast-poll on active window after initial mount.
+      if (hasFetchedRef.current && shouldFastPoll(scannerMode, totalMinutes)) {
         await refreshActiveData(true);
-        hasFetchedRef.current = true;
       }
+      hasFetchedRef.current = true;
     };
 
     void checkAndRefresh();

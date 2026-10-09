@@ -265,3 +265,54 @@ export function evaluateSetupTradeability(args: {
     executableRr,
   };
 }
+
+export interface ActionableScannerTopCandidate {
+  alertSuppressedReason?: string | null | undefined;
+  alertSuppressedDetail?: string | null | undefined;
+  signalSummary?: string | null | undefined;
+  entry?: number | null | undefined;
+  ltp?: number | null | undefined;
+  target?: number | null | undefined;
+  sl?: number | null | undefined;
+  direction?: 'LONG' | 'SHORT' | null | undefined;
+  signals?: string[] | null | undefined;
+}
+
+/**
+ * Filter out setups that are non-actionable / dead from Top Algo Setups ranking.
+ * Excludes:
+ * 1. Any persisted alert suppression (e.g. GAP_INVALIDATED, EXTENDED, AGAINST_PRIOR_CLOSE, etc.)
+ * 2. Dead / stale setups (e.g. STALE_SETUP in signalSummary or signals list)
+ * 3. Setups that have already achieved their target (move is completed)
+ */
+export function isActionableScannerTopResult(row: ActionableScannerTopCandidate): boolean {
+  // 1. Any persisted alert suppression (GAP_INVALIDATED, EXTENDED, AGAINST_PRIOR_CLOSE, etc.)
+  if (row.alertSuppressedReason && row.alertSuppressedReason.trim().length > 0) {
+    return false;
+  }
+
+  // 2. Dead / stale setups where move is already over or past freshness window
+  if (row.signalSummary && row.signalSummary.includes('STALE_SETUP')) {
+    return false;
+  }
+  if (row.signals && row.signals.includes('STALE_SETUP')) {
+    return false;
+  }
+
+  // 3. Target already achieved (no longer actionable)
+  const entry = row.entry ?? 0;
+  const ltp = row.ltp ?? 0;
+  const target = row.target ?? 0;
+  if (entry > 0 && target > 0 && ltp > 0) {
+    const direction = row.direction ?? (target >= entry ? 'LONG' : 'SHORT');
+    if (direction === 'LONG' && ltp >= target) {
+      return false;
+    }
+    if (direction === 'SHORT' && ltp <= target) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
