@@ -107,6 +107,7 @@ export async function PATCH(request: NextRequest) {
       symbol: updated.symbol,
       signalType: updated.signalType,
       optionContract: updated.optionContract,
+      optionStrike: updated.optionStrike,
       isShortUnderlying,
     });
 

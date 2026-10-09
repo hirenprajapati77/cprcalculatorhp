@@ -35,12 +35,65 @@ export interface JournalEstimatedFrictionResult {
   };
 }
 
+export const DEFAULT_OPTION_LOT_SIZE = 500;
+
+export interface ResolveOptionLotSizeParams {
+  symbol?: string | null | undefined;
+  optionStrike?: number | null | undefined;
+  optionContract?: string | null | undefined;
+  explicitLotSize?: number | null | undefined;
+}
+
+/**
+ * Resolves a realistic contract lot size for an option contract to prevent flat-brokerage distortion.
+ *
+ * Priority order:
+ * 1. Explicit lotSize parameter (> 0) if provided by caller.
+ * 2. Exact symbol lookup in FALLBACK_LOT_SIZES table.
+ * 3. Heuristic estimate based on option strike:
+ *    Under SEBI derivative guidelines, equity option contracts target ~₹5 Lakhs notional (500,000 / strike).
+ * 4. Safe median option lot size proxy (500 shares) — NEVER 1 share for an exchange-traded option contract.
+ */
+export function resolveOptionLotSize(params: ResolveOptionLotSizeParams): number {
+  if (params.explicitLotSize && params.explicitLotSize > 0) {
+    return params.explicitLotSize;
+  }
+
+  if (params.symbol) {
+    const cleanSym = params.symbol.replace(/^NSE:|^BSE:/, '').trim().toUpperCase();
+    const mapped = FALLBACK_LOT_SIZES[cleanSym];
+    if (mapped && mapped > 0) {
+      return mapped;
+    }
+  }
+
+  // Attempt strike extraction from explicit optionStrike or from optionContract name
+  let strike = params.optionStrike;
+  if ((!strike || strike <= 0) && params.optionContract) {
+    const strikeMatch = params.optionContract.match(/(?:^|\s|[A-Za-z])(\d{2,6})\s*(?:CE|PE)\b/i);
+    if (strikeMatch && strikeMatch[1]) {
+      const parsed = parseInt(strikeMatch[1], 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        strike = parsed;
+      }
+    }
+  }
+
+  if (strike && strike > 0) {
+    const approx = Math.round(500_000 / strike);
+    return Math.max(25, approx);
+  }
+
+  return DEFAULT_OPTION_LOT_SIZE;
+}
+
 export interface JournalEstimatedFrictionOptions {
   entryCmp: number;
   exitCmp: number;
   symbol?: string;
   signalType?: string;
   optionContract?: string;
+  optionStrike?: number;
   isShortUnderlying?: boolean;
   lotSize?: number;
 }
@@ -84,6 +137,7 @@ export function computeJournalEstimatedFriction(
     exitCmp,
     symbol,
     optionContract,
+    optionStrike,
     isShortUnderlying,
   } = params;
 
@@ -95,18 +149,21 @@ export function computeJournalEstimatedFriction(
   const isUnderlying = Boolean(optionContract && optionContract.startsWith('UNDERLYING'));
 
   let breakdown: FrictionBreakdown;
-  let lotSize = params.lotSize ?? 1;
+  let lotSize: number;
 
   if (isUnderlying) {
     // Underlying cash / futures leg (1 share/unit basis unless specified)
+    lotSize = params.lotSize ?? 1;
     const direction = isShortUnderlying ? 'SHORT' : 'LONG';
     breakdown = calculateStockBtstFriction(entryCmp, exitCmp, lotSize, 'FUTURES_PROXY', direction);
   } else {
-    // Option contract: determine lot size if available to model realistic round-trip contract friction
-    if (!params.lotSize && symbol) {
-      const cleanSym = symbol.replace(/^NSE:|^BSE:/, '').trim().toUpperCase();
-      lotSize = FALLBACK_LOT_SIZES[cleanSym] ?? 1;
-    }
+    // Option contract: determine lot size to model realistic round-trip contract friction
+    lotSize = resolveOptionLotSize({
+      symbol,
+      optionStrike,
+      optionContract,
+      explicitLotSize: params.lotSize,
+    });
     breakdown = estimateOptionPremiumFriction(entryCmp, exitCmp, lotSize);
   }
 

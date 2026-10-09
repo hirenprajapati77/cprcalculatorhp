@@ -166,19 +166,100 @@ describe('Trade Journal Estimated Friction & Net P&L (Step 4 Non-Destructive Lay
     });
   });
 
-  describe('4. Robustness & Fallback Handling', () => {
-    it('handles unknown symbols with safe default lot size', () => {
+  describe('4. Real-World Production Outliers Remediation (P2 Audit)', () => {
+    it('BLUESTARCO: resolves 325 lot size and prevents catastrophic -64.5% net collapse', () => {
+      // Production row: BLUESTARCO SEP 2026 1500 PE
+      const res = computeJournalEstimatedFriction({
+        entryCmp: 69.4,
+        exitCmp: 72.0,
+        symbol: 'BLUESTARCO',
+        optionContract: 'SEP 2026 1500 PE',
+        optionStrike: 1500,
+      });
+
+      // 1. Gross invariants intact
+      assert.equal(res.grossPnl, 2.6);
+      assert.equal(res.grossPnlPct, 3.75);
+
+      // 2. Coherent lot size
+      assert.equal(res.lotSize, 325);
+
+      // 3. Per-unit friction is ~30 paise (not ₹47.36)
+      assert.ok(closeTo(res.estimatedChargesPerUnit, 0.30, 0.05));
+      assert.ok(res.estimatedChargesTotal > 90 && res.estimatedChargesTotal < 105);
+
+      // 4. Net P&L remains clearly positive (+3.31% net, not -64.5%)
+      assert.ok(closeTo(res.estimatedNetPnl, 2.30, 0.05));
+      assert.ok(closeTo(res.estimatedNetPnlPct, 3.31, 0.1));
+      assert.ok(res.estimatedNetPnl > 0);
+      assert.ok(res.estimatedNetPnlPct > 0);
+    });
+
+    it('VBL: resolves 1275 lot size and prevents catastrophic -452% net collapse', () => {
+      // Production row: VBL SEP 2026 410 PE
+      const res = computeJournalEstimatedFriction({
+        entryCmp: 11.05,
+        exitCmp: 8.25,
+        symbol: 'VBL',
+        optionContract: 'SEP 2026 410 PE',
+        optionStrike: 410,
+      });
+
+      // 1. Gross invariants intact
+      assert.equal(res.grossPnl, -2.8);
+      assert.equal(res.grossPnlPct, -25.34);
+
+      // 2. Coherent lot size
+      assert.equal(res.lotSize, 1275);
+
+      // 3. Per-unit friction is ~6 paise (not ₹47.22)
+      assert.ok(closeTo(res.estimatedChargesPerUnit, 0.06, 0.02));
+      assert.ok(res.estimatedChargesTotal > 70 && res.estimatedChargesTotal < 80);
+
+      // 4. Net P&L reflects modest friction drag (-25.86% net, not -452%)
+      assert.ok(closeTo(res.estimatedNetPnl, -2.86, 0.05));
+      assert.ok(closeTo(res.estimatedNetPnlPct, -25.86, 0.2));
+      // Net loss is slightly worse than gross loss, but by less than 1%
+      assert.ok(res.estimatedNetPnlPct < res.grossPnlPct);
+      assert.ok(res.estimatedNetPnlPct > -27);
+    });
+  });
+
+  describe('5. Robustness & Fallback Handling', () => {
+    it('estimates realistic lot size via strike heuristic when symbol is unknown', () => {
       const res = computeJournalEstimatedFriction({
         entryCmp: 50,
         exitCmp: 60,
         symbol: 'UNKNOWN_EQUITY',
-        optionContract: '26JUL50CE',
+        optionContract: '26JUL2000CE',
+        optionStrike: 2000,
       });
 
       assert.equal(res.grossPnl, 10);
-      assert.equal(res.lotSize, 1); // Safe fallback
+      assert.equal(res.grossPnlPct, 20);
+      // Heuristic: 500,000 / 2000 = 250 lot size
+      assert.equal(res.lotSize, 250);
+      // Per unit friction should be ~₹0.20, not ₹47.20
+      assert.ok(res.estimatedChargesPerUnit < 0.5);
+      // Net return remains healthily positive (~+19.6%), not negative (-74.5%)
+      assert.ok(res.estimatedNetPnlPct > 19);
       assert.ok(Number.isFinite(res.estimatedNetPnl));
       assert.ok(Number.isFinite(res.estimatedNetPnlPct));
+    });
+
+    it('falls back to DEFAULT_OPTION_LOT_SIZE (500) when neither symbol nor strike is known', () => {
+      const res = computeJournalEstimatedFriction({
+        entryCmp: 20,
+        exitCmp: 25,
+        symbol: 'UNKNOWN_SYMBOL',
+        optionContract: 'CUSTOM_OPTION_LEG',
+      });
+
+      assert.equal(res.grossPnl, 5);
+      assert.equal(res.grossPnlPct, 25);
+      assert.equal(res.lotSize, 500); // Sane median F&O lot proxy
+      assert.ok(res.estimatedChargesPerUnit < 0.2);
+      assert.ok(res.estimatedNetPnlPct > 24);
     });
 
     it('handles custom lotSize override when supplied', () => {
