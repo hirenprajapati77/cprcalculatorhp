@@ -62,7 +62,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         if (res.ok) {
           const data = (await res.json()) as MarketStatusData;
           setMarketStatus(data);
-          setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour12: false, hour: '2-digit', minute: '2-digit' }));
+          setLastUpdated(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' }));
         }
       } catch {
         // Fallback silently if offline

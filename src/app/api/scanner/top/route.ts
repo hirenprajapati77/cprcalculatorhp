@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
+import { isActionableScannerTopResult } from '@/lib/cpr-setup-staleness';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,16 +17,25 @@ export async function GET(request: NextRequest) {
       ? { contains: ':BSE' }
       : { not: { contains: ':BSE' } };
 
-    const topOpportunities = await prisma.scannerResult.findMany({
+    // P0: Exclude dead/invalidated setups (GAP_INVALIDATED, STALE_SETUP, target met)
+    // from top algo ranking so it falls through to clean actionable setups.
+    const candidatePool = await prisma.scannerResult.findMany({
       where: {
         date: today,
         symbol: symbolCondition,
+        alertSuppressedReason: null,
+        NOT: {
+          signalSummary: { contains: 'STALE_SETUP' },
+        },
       },
       orderBy: {
         score: 'desc',
       },
-      take: limit,
+      take: Math.max(limit * 4, 30),
     });
+
+    const actionable = candidatePool.filter(isActionableScannerTopResult);
+    const topOpportunities = actionable.slice(0, limit);
 
     // Query sectors matching symbols for visual metadata
     const symbols = topOpportunities.map((o: ScannerResult) => o.symbol);
