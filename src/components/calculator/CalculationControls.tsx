@@ -40,6 +40,16 @@ export const CalculationControls: React.FC<CalculationControlsProps> = ({
 
   const currentSymbol = watch('symbol');
 
+  // Synchronize incoming defaultValues (from auto-fetch or presets) into form inputs
+  React.useEffect(() => {
+    if (defaultValues && Object.keys(defaultValues).length > 0) {
+      if (defaultValues.symbol !== undefined) setValue('symbol', defaultValues.symbol, { shouldValidate: true });
+      if (defaultValues.high !== undefined) setValue('high', defaultValues.high, { shouldValidate: true });
+      if (defaultValues.low !== undefined) setValue('low', defaultValues.low, { shouldValidate: true });
+      if (defaultValues.close !== undefined) setValue('close', defaultValues.close, { shouldValidate: true });
+    }
+  }, [defaultValues, setValue]);
+
   const onSubmit = (data: CPRInputSchemaType) => {
     onCalculate(data);
   };
@@ -52,10 +62,17 @@ export const CalculationControls: React.FC<CalculationControlsProps> = ({
   };
 
   const handleLoadSample = () => {
-    setValue('symbol', 'NIFTY', { shouldValidate: true });
-    setValue('high', 25150, { shouldValidate: true });
-    setValue('low', 24920, { shouldValidate: true });
-    setValue('close', 25080, { shouldValidate: true });
+    const sample: CPRInputSchemaType = {
+      symbol: 'NIFTY',
+      high: 25150,
+      low: 24920,
+      close: 25080,
+    };
+    setValue('symbol', sample.symbol, { shouldValidate: true });
+    setValue('high', sample.high, { shouldValidate: true });
+    setValue('low', sample.low, { shouldValidate: true });
+    setValue('close', sample.close, { shouldValidate: true });
+    onCalculate(sample);
   };
 
   const handleFormReset = () => {

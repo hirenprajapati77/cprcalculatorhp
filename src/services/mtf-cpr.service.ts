@@ -1,7 +1,10 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import { calculateCPR } from '@/lib/cpr-engine';
 import { CPRResult } from '@/types/cpr.types';
 import { getISTTime } from '@/lib/market-hours';
+import { toYahooTicker } from './stock-candle.service';
+
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 
 export interface MtfCprLevels {
   weekly: CPRResult & { width: number; classification: "NARROW" | "NORMAL" | "WIDE" };
@@ -14,7 +17,7 @@ export interface MtfCprLevels {
 
 export class MtfCprService {
   static async getLevels(symbol: string): Promise<MtfCprLevels> {
-    const yfSymbol = symbol === 'NIFTY50' || symbol === 'NIFTY' ? '^NSEI' : `${symbol}.NS`;
+    const yfSymbol = toYahooTicker(symbol);
 
     // We fetch a bit of history to ensure we get the last completed week and month
     const endDate = new Date();
@@ -28,11 +31,17 @@ export class MtfCprService {
     
     // Weekly OHLC (last completed week) - fetching ~150 days to guarantee at least 15 weekly bars for 14-period ATR
     const weekQueryOptions = { period1: new Date(endDate.getTime() - 150 * 24 * 60 * 60 * 1000).toISOString(), interval: '1wk' as const };
-    const weekHistory: YahooCandle[] = await yahooFinance.historical(yfSymbol, weekQueryOptions) as unknown as YahooCandle[];
+    const weekChart = await yahooFinance.chart(yfSymbol, weekQueryOptions);
+    const weekHistory: YahooCandle[] = (weekChart.quotes || []).filter(
+      (q) => q.high != null && q.low != null && q.close != null
+    ) as unknown as YahooCandle[];
     
     // Monthly OHLC (last completed month) - fetching ~500 days to guarantee at least 15 monthly bars for 14-period ATR
     const monthQueryOptions = { period1: new Date(endDate.getTime() - 500 * 24 * 60 * 60 * 1000).toISOString(), interval: '1mo' as const };
-    const monthHistory: YahooCandle[] = await yahooFinance.historical(yfSymbol, monthQueryOptions) as unknown as YahooCandle[];
+    const monthChart = await yahooFinance.chart(yfSymbol, monthQueryOptions);
+    const monthHistory: YahooCandle[] = (monthChart.quotes || []).filter(
+      (q) => q.high != null && q.low != null && q.close != null
+    ) as unknown as YahooCandle[];
 
     if (weekHistory.length < 2 || monthHistory.length < 2) {
       throw new Error('Not enough MTF data');
