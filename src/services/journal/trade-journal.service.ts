@@ -525,6 +525,7 @@ export class TradeJournalService {
         symbol: entry.symbol,
         signalType: entry.signalType,
         optionContract: entry.optionContract,
+        optionStrike: entry.optionStrike,
         isShortUnderlying,
       });
 
