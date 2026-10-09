@@ -84,10 +84,11 @@ export interface MultiYearBreakoutReport {
   computedAt: string;
   /**
    * 'pending' when Redis cache is cold and no report has been computed yet.
-   * Optional for backward compatibility with reports cached before this
-   * field existed -- absence should be treated as 'ready' by consumers.
+   * 'stale' when cached report trading date is older than ingested Bhavcopy.
+   * 'ready' when fresh report has been computed.
    */
-  status?: 'ready' | 'pending';
+  status?: 'ready' | 'pending' | 'stale';
+  freshness?: 'FRESH' | 'STALE' | 'PENDING';
 }
 
 let cachedReport: MultiYearBreakoutReport | null = null;
@@ -118,8 +119,17 @@ export class MultiYearBreakoutService {
             console.log(
               `[MultiYearBreakoutService] Serving STALE cached report (date: ${parsed.date}) while background precompute refreshes`
             );
+            return {
+              ...parsed,
+              status: 'stale',
+              freshness: 'STALE',
+            };
           }
-          return parsed;
+          return {
+            ...parsed,
+            status: parsed.status ?? 'ready',
+            freshness: 'FRESH',
+          };
         }
       } catch {
         // Ignore cache lookup errors
@@ -132,8 +142,17 @@ export class MultiYearBreakoutService {
           console.log(
             `[MultiYearBreakoutService] Serving STALE in-memory report (date: ${cachedReport.date}) while background precompute refreshes`
           );
+          return {
+            ...cachedReport,
+            status: 'stale',
+            freshness: 'STALE',
+          };
         }
-        return cachedReport;
+        return {
+          ...cachedReport,
+          status: cachedReport.status ?? 'ready',
+          freshness: 'FRESH',
+        };
       }
 
       // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
@@ -206,6 +225,7 @@ export class MultiYearBreakoutService {
       stocks: [],
       computedAt: new Date().toISOString(),
       status: 'pending',
+      freshness: 'PENDING',
     };
   }
 
@@ -581,6 +601,7 @@ export class MultiYearBreakoutService {
       stocks: processedStocks,
       computedAt: new Date().toISOString(),
       status: 'ready',
+      freshness: 'FRESH',
     };
 
     cachedReport = report;

@@ -18,21 +18,28 @@ export function resolveClientIp(
   headers: Headers | { get(name: string): string | null },
   trustProxy: boolean = env.TRUST_PROXY === 'true'
 ): string | null {
+  // P0-2: Never trust client-supplied headers (X-Real-IP, X-Forwarded-For)
+  // unless reverse proxy trust is explicitly enabled (TRUST_PROXY=true).
+  if (!trustProxy) {
+    return null;
+  }
+
+  // When proxy is trusted (e.g. nginx reverse proxy in production):
+  // 1. Prefer `x-real-ip` (set by nginx `$remote_addr` for the direct peer client).
+  // 2. Fall back to the LAST hop of `x-forwarded-for` (appended by nginx `$proxy_add_x_forwarded_for`).
   const realIp = headers.get('x-real-ip')?.trim();
   if (realIp) {
     return realIp;
   }
 
-  if (trustProxy) {
-    const forwardedFor = headers.get('x-forwarded-for');
-    if (forwardedFor) {
-      const hops = forwardedFor
-        .split(',')
-        .map((h) => h.trim())
-        .filter(Boolean);
-      if (hops.length > 0) {
-        return hops[hops.length - 1]!;
-      }
+  const forwardedFor = headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const hops = forwardedFor
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+    if (hops.length > 0) {
+      return hops[hops.length - 1]!;
     }
   }
 

@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
     const sortField = ALLOWED_SORT_FIELDS.has(searchParams.get('sortField') || '')
       ? (searchParams.get('sortField') as string)
       : 'score';
-    const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc';
+    const rawSortOrder = searchParams.get('sortOrder')?.toLowerCase();
+    const sortOrder: 'asc' | 'desc' = rawSortOrder === 'asc' ? 'asc' : 'desc';
 
     // V2 Advanced Filters
     const sector = searchParams.get('sector') || 'ALL';

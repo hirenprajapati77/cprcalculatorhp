@@ -30,14 +30,16 @@ export async function checkUnlockRateLimit(
     options?.isProduction ?? (process.env.NODE_ENV === 'production' || env.NODE_ENV === 'production');
   const redisConfigured =
     options?.redisConfigured ?? Boolean(env.REDIS_URL || process.env.REDIS_URL);
-  const failClosed = isProduction && redisConfigured;
+  const failClosed = isProduction;
   const redisAvailable = options?.isRedisUp ?? isRedisAvailable();
 
-  if (failClosed && !redisAvailable) {
+  // P1-8: In production, Redis-backed rate limiting is strictly required.
+  // Fail closed if Redis is missing or unavailable to prevent in-memory bypasses.
+  if (isProduction && (!redisConfigured || !redisAvailable)) {
     return { allowed: false, unavailable: true };
   }
 
-  const trustProxy = options?.trustProxy ?? (env.TRUST_PROXY === 'true');
+  const trustProxy = options?.trustProxy ?? (process.env.TRUST_PROXY === 'true' || env.TRUST_PROXY === 'true');
   const resolvedIp = resolveClientIp(request.headers, trustProxy);
 
   if (failClosed && !resolvedIp) {

@@ -7,6 +7,9 @@ export async function GET(request: NextRequest) {
   try {
     const backtestRunId =
       request.nextUrl.searchParams.get('backtestRunId') ?? undefined;
+    if (backtestRunId && !/^[a-zA-Z0-9_-]{1,64}$/.test(backtestRunId)) {
+      return NextResponse.json({ success: false, error: 'Invalid backtestRunId' }, { status: 400 });
+    }
     const result = await getStockBtstCompare(backtestRunId);
     return NextResponse.json({ success: true, ...result });
   } catch (err) {

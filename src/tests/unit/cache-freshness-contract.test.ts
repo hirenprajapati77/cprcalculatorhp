@@ -271,7 +271,8 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
       const res = await MarketBreadthService.getMarketBreadth(false);
       assert.strictEqual(res.date, '2026-09-08');
-      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.status, 'stale');
+      assert.strictEqual(res.freshness, 'STALE');
       assert.strictEqual(res.overallScore, 72);
     });
 
@@ -288,7 +289,8 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
       const res = await MultiYearBreakoutService.getBreakoutReport(false);
       assert.strictEqual(res.date, '2026-09-08');
-      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.status, 'stale');
+      assert.strictEqual(res.freshness, 'STALE');
     });
 
     it('PatternBreakoutService.getPatternBreakoutReport serves STALE report safely without blocking', async () => {
@@ -303,7 +305,8 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
       const res = await PatternBreakoutService.getPatternBreakoutReport(false);
       assert.strictEqual(res.date, '2026-09-08');
-      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.status, 'stale');
+      assert.strictEqual(res.freshness, 'STALE');
     });
 
     it('MomentumLeadersService.getMomentumLeadersReport serves STALE report safely without blocking', async () => {
@@ -320,7 +323,8 @@ describe('ISSUE-008: Cache Freshness Contract & Logical State Evaluation', () =>
 
       const res = await MomentumLeadersService.getMomentumLeadersReport(false, 'NSE_FNO');
       assert.strictEqual(res.date, '2026-09-08');
-      assert.strictEqual(res.status, 'ready');
+      assert.strictEqual(res.status, 'stale');
+      assert.strictEqual(res.freshness, 'STALE');
       assert.strictEqual(res.qualifiedCount, 15);
     });
 

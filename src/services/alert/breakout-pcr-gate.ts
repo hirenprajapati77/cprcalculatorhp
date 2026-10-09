@@ -16,7 +16,7 @@ export type BreakoutPcrGateResult = {
  */
 export function optionPcrContradictsDirection(
   type: OptionSuggestion['type'] | undefined,
-  pcr: number | undefined
+  pcr: number | null | undefined
 ): boolean {
   if (type !== 'CE' && type !== 'PE') return false;
   if (pcr == null || !Number.isFinite(pcr)) return false;

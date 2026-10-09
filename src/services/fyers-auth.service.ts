@@ -147,9 +147,6 @@ export class FyersAuthService {
         redirect_uri: finalRedirect
       };
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
       // 1. Attempt DIRECT call first.
       // OAuth auth codes are single-use. Only retry via the proxy when the
       // direct attempt never reached Fyers (network/DNS/timeout). An HTTP
@@ -165,10 +162,9 @@ export class FyersAuthService {
             'X-Fyers-AppId': appId
           },
           body: JSON.stringify(payload),
-          signal: controller.signal
+          signal: AbortSignal.timeout(10000)
         });
 
-        clearTimeout(timeoutId);
         directReachedFyers = true;
 
         if (!res.ok) {
@@ -205,7 +201,6 @@ export class FyersAuthService {
         console.warn('[FyersAuthService] Direct token exchange returned non-ok status:', JSON.stringify(data));
         return { success: false, message: data.message || 'Fyers rejected the auth code. Please retry login.' };
       } catch (directErr) {
-        clearTimeout(timeoutId);
         console.warn('[FyersAuthService] Direct token exchange failed with error:', directErr);
         if (directReachedFyers) {
           return { success: false, message: 'Fyers auth exchange failed. Please retry login.' };
@@ -220,8 +215,6 @@ export class FyersAuthService {
 
       console.warn('[FyersAuthService] WARNING: Using external proxy for token exchange. Ensure this URL is a trusted, self-controlled endpoint.');
       console.log(`[FyersAuthService] Attempting token generation via PROXY (${authProxyUrl})...`);
-      const proxyController = new AbortController();
-      const proxyTimeoutId = setTimeout(() => proxyController.abort(), 10000);
       const proxyHeaders: HeadersInit = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -237,9 +230,8 @@ export class FyersAuthService {
         method: 'POST',
         headers: proxyHeaders,
         body: JSON.stringify(payload),
-        signal: proxyController.signal
+        signal: AbortSignal.timeout(10000)
       });
-      clearTimeout(proxyTimeoutId);
 
       if (res.ok) {
         const data = await res.json();

@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const dryRun = searchParams.get('dryRun') === 'true' || env.RETENTION_DRY_RUN === 'true';
   const limitStr = searchParams.get('limit') || env.RETENTION_LIMIT?.toString() || '250';
-  const limit = Math.min(parseInt(limitStr, 10), 1000);
+  const rawLimit = parseInt(limitStr, 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 250;
 
   try {
     const startTime = Date.now();

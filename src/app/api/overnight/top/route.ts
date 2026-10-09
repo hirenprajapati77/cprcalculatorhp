@@ -6,7 +6,11 @@ import { STOCK_OVERNIGHT_INSTRUMENT_WHERE } from '@/lib/overnight-instrument-fil
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') || getISTDateString();
+    const rawDate = searchParams.get('date');
+    if (rawDate && !/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+    }
+    const date = rawDate || getISTDateString();
 
     const signals = await prisma.overnightSignal.findMany({
       where: {
@@ -17,6 +21,7 @@ export async function GET(req: NextRequest) {
         },
         ...STOCK_OVERNIGHT_INSTRUMENT_WHERE,
       },
+      take: 50,
       orderBy: [
         { signalTime: 'desc' },
         { overnightScore: 'desc' },
