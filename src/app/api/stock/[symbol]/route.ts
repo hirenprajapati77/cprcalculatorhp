@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
+import { fetchAuthoritativeCandle } from '@/services/stock-candle.service';
 
 interface Props {
   params: Promise<{ symbol: string }>;
@@ -17,21 +18,60 @@ export async function GET(request: NextRequest, { params }: Props) {
 
     const upperSymbol = symbol.toUpperCase();
 
-    // 1. Fetch historical scans for this stock (supporting both NSE and BSE suffix keying)
-    const history = await prisma.scannerResult.findMany({
-      where: {
-        OR: [
-          { symbol: upperSymbol },
-          { symbol: `${upperSymbol}:BSE` }
-        ]
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    // 1. Fetch authoritative completed daily candle (supports stocks and indices)
+    const [candle, history] = await Promise.all([
+      fetchAuthoritativeCandle(upperSymbol),
+      prisma.scannerResult.findMany({
+        where: {
+          OR: [
+            { symbol: upperSymbol },
+            { symbol: `${upperSymbol}:BSE` }
+          ]
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
     if (history.length === 0) {
+      if (candle) {
+        return NextResponse.json({
+          symbol: upperSymbol,
+          sector: upperSymbol.includes('NIFTY') ? 'Index' : 'Unassigned',
+          market: 'NSE',
+          candle: {
+            date: candle.date,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+          },
+          current: {
+            symbol: upperSymbol,
+            price: candle.close,
+            ltp: candle.close,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            width: 0,
+            score: 0,
+            classification: 'NORMAL',
+            signal: '',
+            signals: [],
+          },
+          history: [],
+          comparison: {
+            sectorAverageWidth: 0,
+            sectorAverageScore: 0,
+            stockWidthSpread: 0,
+            stockScoreSpread: 0,
+            peers: [],
+          },
+        }, { status: 200 });
+      }
+
       return NextResponse.json(
-        { error: `No historical scan results found for stock: ${upperSymbol}` },
+        { error: `No historical scan results or market data found for: ${upperSymbol}` },
         { status: 404 }
       );
     }
@@ -99,10 +139,22 @@ export async function GET(request: NextRequest, { params }: Props) {
       symbol: cleanSymbol,
       sector: sectorName,
       market: current.symbol.includes(':BSE') ? 'BSE' : 'NSE',
+      candle: candle
+        ? {
+            date: candle.date,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+          }
+        : undefined,
       current: {
         ...current,
         symbol: cleanSymbol,
         price: currentSnapshot ? currentSnapshot.price : current.ltp,
+        high: candle?.high ?? (currentSnapshot ? currentSnapshot.price : current.ltp),
+        low: candle?.low ?? (currentSnapshot ? currentSnapshot.price : current.ltp),
+        close: candle?.close ?? (currentSnapshot ? currentSnapshot.price : current.ltp),
         signal: current.signalSummary,
         signals: currentSignals,
       },

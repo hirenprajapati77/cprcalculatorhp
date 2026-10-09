@@ -52,79 +52,8 @@ export default function CalculatorClient() {
     }
   }, []);
 
-  // Fetch Stock OHLC from scanner / market service
-  const fetchStockCandle = useCallback(async (symbol: string) => {
-    if (!symbol) return;
-    setIsFetchingSymbol(true);
-    try {
-      const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.current) {
-          const fetchedHigh = Number(data.current.high || data.current.price * 1.01);
-          const fetchedLow = Number(data.current.low || data.current.price * 0.99);
-          const fetchedClose = Number(data.current.price || data.current.ltp);
-
-          setDefaultValues({
-            symbol: symbol.toUpperCase(),
-            high: Number(fetchedHigh.toFixed(2)),
-            low: Number(fetchedLow.toFixed(2)),
-            close: Number(fetchedClose.toFixed(2)),
-          });
-          setActiveSymbol(symbol.toUpperCase());
-          showToast(`Loaded market data for ${symbol.toUpperCase()}`, 'success');
-
-          // Parallel fetch MTF levels
-          fetchMTFData(symbol.toUpperCase());
-          return;
-        }
-      }
-      showToast(`No live candle available for ${symbol.toUpperCase()}, please enter OHLC manually`, 'info');
-      setActiveSymbol(symbol.toUpperCase());
-      fetchMTFData(symbol.toUpperCase());
-    } catch {
-      showToast(`Could not auto-fetch ${symbol.toUpperCase()}`, 'error');
-    } finally {
-      setIsFetchingSymbol(false);
-    }
-  }, [fetchMTFData, showToast]);
-
-  // Load last calculation from sessionStorage or query param on initial mount
-  useEffect(() => {
-    const symbolFromQuery = searchParams.get('symbol');
-    if (symbolFromQuery) {
-      const upper = symbolFromQuery.toUpperCase();
-      setActiveSymbol(upper);
-      fetchStockCandle(upper);
-      return;
-    }
-
-    const cached = sessionStorage.getItem('cpr_last_calculation');
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        parsed.createdAt = new Date(parsed.createdAt);
-        setRecord(parsed);
-        if (parsed.symbol) {
-          setActiveSymbol(parsed.symbol);
-        }
-      } catch (err) {
-        console.error('Failed to load session cached calculation:', err);
-      }
-    }
-
-    const cachedMtf = sessionStorage.getItem('cpr_last_mtf');
-    if (cachedMtf) {
-      try {
-        setMtfData(JSON.parse(cachedMtf));
-      } catch (err) {
-        console.error('Failed to load cached MTF data:', err);
-      }
-    }
-  }, [searchParams, fetchStockCandle]);
-
   // Core CPR Calculation
-  const handleCalculate = async (input: CPRInput & { symbol?: string | undefined }) => {
+  const handleCalculate = useCallback(async (input: CPRInput & { symbol?: string | undefined }) => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/cpr/calculate', {
@@ -172,12 +101,90 @@ export default function CalculatorClient() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [fetchMTFData, showToast]);
+
+  // Fetch Stock OHLC from scanner / market service
+  const fetchStockCandle = useCallback(async (symbol: string) => {
+    if (!symbol) return;
+    setIsFetchingSymbol(true);
+    try {
+      const res = await fetch(`/api/stock/${encodeURIComponent(symbol)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const candle = data.candle || data.current;
+        if (candle && candle.high != null && candle.low != null && candle.close != null) {
+          const fetchedHigh = Number(candle.high);
+          const fetchedLow = Number(candle.low);
+          const fetchedClose = Number(candle.close || candle.price || candle.ltp);
+
+          const newValues = {
+            symbol: symbol.toUpperCase(),
+            high: Number(fetchedHigh.toFixed(2)),
+            low: Number(fetchedLow.toFixed(2)),
+            close: Number(fetchedClose.toFixed(2)),
+          };
+
+          setDefaultValues(newValues);
+          setActiveSymbol(symbol.toUpperCase());
+          showToast(`Loaded market data for ${symbol.toUpperCase()}`, 'success');
+
+          // Auto-calculate CPR with the fetched authoritative candle levels
+          handleCalculate(newValues);
+
+          // Parallel fetch MTF levels
+          fetchMTFData(symbol.toUpperCase());
+          return;
+        }
+      }
+      showToast(`No live candle available for ${symbol.toUpperCase()}, please enter OHLC manually`, 'info');
+      setActiveSymbol(symbol.toUpperCase());
+      fetchMTFData(symbol.toUpperCase());
+    } catch {
+      showToast(`Could not auto-fetch ${symbol.toUpperCase()}`, 'error');
+    } finally {
+      setIsFetchingSymbol(false);
+    }
+  }, [fetchMTFData, handleCalculate, showToast]);
+
+  // Load last calculation from sessionStorage or query param on initial mount
+  useEffect(() => {
+    const symbolFromQuery = searchParams.get('symbol');
+    if (symbolFromQuery) {
+      const upper = symbolFromQuery.toUpperCase();
+      setActiveSymbol(upper);
+      fetchStockCandle(upper);
+      return;
+    }
+
+    const cached = sessionStorage.getItem('cpr_last_calculation');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        parsed.createdAt = new Date(parsed.createdAt);
+        setRecord(parsed);
+        if (parsed.symbol) {
+          setActiveSymbol(parsed.symbol);
+        }
+      } catch (err) {
+        console.error('Failed to load session cached calculation:', err);
+      }
+    }
+
+    const cachedMtf = sessionStorage.getItem('cpr_last_mtf');
+    if (cachedMtf) {
+      try {
+        setMtfData(JSON.parse(cachedMtf));
+      } catch (err) {
+        console.error('Failed to load cached MTF data:', err);
+      }
+    }
+  }, [searchParams, fetchStockCandle]);
 
   const handleReset = () => {
     setRecord(null);
     setMtfData(null);
     setActiveSymbol(null);
+    setDefaultValues({});
     sessionStorage.removeItem('cpr_last_calculation');
     sessionStorage.removeItem('cpr_last_mtf');
     showToast('Terminal reset to baseline.', 'info');
