@@ -203,13 +203,14 @@ export default function MultiYearBreakoutPage() {
 
   if (!report) return null;
 
-  const isSelectedWindowUnavailable =
+    const isSelectedWindowUnavailable =
     selectedWindow !== 'ALL' &&
     report.windowAvailability[selectedWindow as BreakoutWindow]?.available === false;
 
-  const athCount = report.stocks.filter((s) => s.breakoutATH === true).length;
+  const athCount = report.breakoutCounts?.['ATH'] ?? report.stocks.filter((s) => s.breakoutATH === true).length;
+  const isFiveYearAvail = report.windowAvailability?.['5Y']?.available !== false;
   const fiveYearCount = report.stocks.filter((s) => s.breakout5Y === true).length;
-  const oneYearCount = report.stocks.filter((s) => s.breakout1Y === true).length;
+  const oneYearCount = report.breakoutCounts?.['1Y'] ?? report.stocks.filter((s) => s.breakout1Y === true).length;
 
   return (
     <div className="space-y-4 font-mono select-none">
@@ -233,6 +234,9 @@ export default function MultiYearBreakoutPage() {
             </h1>
             <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               {report.date}
+            </span>
+            <span className="text-[10px] bg-bg-tertiary text-text-secondary border border-border-primary px-2 py-0.5 rounded font-medium shrink-0">
+              Depth: {report.tradingDaysAvailable} Trading Days (1Y &amp; ATH Active • 2Y–10Y Awaiting Depth)
             </span>
           </div>
           <p className="text-xs text-text-tertiary mt-1">
@@ -267,7 +271,9 @@ export default function MultiYearBreakoutPage() {
           <div className="text-2xl font-bold text-text-primary mt-1">
             {report.stocks.length}
           </div>
-          <div className="text-[10px] text-text-tertiary mt-0.5">Active Structural Breakouts</div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">
+            {report.totalScanned ? `${report.totalScanned.toLocaleString('en-IN')} Scanned` : 'Active Breakouts'}
+          </div>
         </div>
 
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
@@ -281,7 +287,7 @@ export default function MultiYearBreakoutPage() {
           <div className="text-2xl font-bold text-accent-purple mt-1">
             {athCount}
           </div>
-          <div className="text-[10px] text-text-tertiary mt-0.5">Peak Dataset Highs</div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">Peak Dataset Highs ({report.tradingDaysAvailable}d)</div>
         </div>
 
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
@@ -290,12 +296,25 @@ export default function MultiYearBreakoutPage() {
               <Activity size={11} className="text-accent-green" />
               5-Year Breakouts
             </span>
-            <span className="text-[8px] bg-accent-green/10 text-accent-green font-bold px-1 rounded">5Y</span>
+            <span className={`text-[8px] font-bold px-1 rounded ${isFiveYearAvail ? 'bg-accent-green/10 text-accent-green' : 'bg-accent-amber/10 text-accent-amber'}`}>
+              5Y
+            </span>
           </div>
-          <div className="text-2xl font-bold text-accent-green mt-1">
-            {fiveYearCount}
+          {isFiveYearAvail ? (
+            <div className="text-2xl font-bold text-accent-green mt-1">
+              {fiveYearCount}
+            </div>
+          ) : (
+            <div className="text-base font-bold text-text-tertiary mt-2 flex items-center gap-1.5">
+              <span>OFFLINE</span>
+              <span className="text-[9px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20 px-1 py-0.2 rounded font-normal">
+                {report.tradingDaysAvailable}/1,250d
+              </span>
+            </div>
+          )}
+          <div className="text-[10px] text-text-tertiary mt-0.5">
+            {isFiveYearAvail ? 'Decade Expansion Base' : 'Awaiting 5Y History'}
           </div>
-          <div className="text-[10px] text-text-tertiary mt-0.5">Decade Expansion Base</div>
         </div>
 
         <div className="bg-bg-secondary border border-border-primary rounded-lg p-3">
@@ -309,7 +328,7 @@ export default function MultiYearBreakoutPage() {
           <div className="text-2xl font-bold text-accent-amber mt-1">
             {oneYearCount}
           </div>
-          <div className="text-[10px] text-text-tertiary mt-0.5">52-Week Expansion</div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">52-Week Expansion (Active)</div>
         </div>
       </div>
 
@@ -324,23 +343,27 @@ export default function MultiYearBreakoutPage() {
             </span>
             {(['ALL', '1Y', '2Y', '3Y', '5Y', '10Y', 'ATH'] as const).map((win) => {
               const isSelected = selectedWindow === win;
-              const isAvail =
-                win === 'ALL' ||
-                report.windowAvailability[win as BreakoutWindow]?.available !== false;
+              const availInfo = win !== 'ALL' ? report.windowAvailability[win as BreakoutWindow] : undefined;
+              const isAvail = win === 'ALL' || availInfo?.available !== false;
 
               return (
                 <button
                   key={win}
                   type="button"
                   onClick={() => setSelectedWindow(win)}
+                  title={availInfo ? availInfo.label : undefined}
                   className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
                     isSelected
                       ? 'bg-accent-blue text-white shadow-sm'
                       : 'bg-bg-tertiary text-text-secondary border border-border-primary hover:text-text-primary'
-                  } ${!isAvail ? 'opacity-60' : ''}`}
+                  } ${!isAvail ? 'opacity-70' : ''}`}
                 >
                   <span>{win}</span>
-                  {!isAvail && <span className="text-[9px] text-accent-amber font-bold">⚠️</span>}
+                  {!isAvail && (
+                    <span className="text-[9px] bg-accent-amber/15 text-accent-amber border border-accent-amber/30 px-1 py-0.2 rounded font-medium">
+                      Offline
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -436,8 +459,40 @@ export default function MultiYearBreakoutPage() {
             <tbody className="divide-y divide-border-primary/40">
               {filteredStocks.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-text-tertiary">
-                    No breakout stocks match the selected filter criteria.
+                  <td colSpan={16} className="py-12 px-4 text-center">
+                    {isSelectedWindowUnavailable ? (
+                      <div className="max-w-md mx-auto space-y-2">
+                        <div className="flex items-center justify-center gap-1.5 text-accent-amber font-semibold text-xs">
+                          <AlertTriangle size={15} />
+                          <span>{selectedWindow} Window Offline — Insufficient Historical Depth</span>
+                        </div>
+                        <p className="text-xs text-text-tertiary">
+                          This window requires {report.windowAvailability[selectedWindow as BreakoutWindow]?.requiredDays} trading days of history. The platform currently has {report.tradingDaysAvailable} days available.
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                          Historical Bhavcopy records continue accumulating daily. Switch to the <strong>1Y</strong> or <strong>ATH</strong> window to view active breakouts.
+                        </p>
+                      </div>
+                    ) : searchQuery || selectedSector !== 'ALL' ? (
+                      <div className="space-y-1">
+                        <div className="text-xs font-semibold text-text-secondary">No matching breakouts found</div>
+                        <p className="text-[11px] text-text-tertiary">
+                          No stocks matched your search query &quot;{searchQuery}&quot; or sector filter &quot;{selectedSector}&quot;.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="max-w-lg mx-auto space-y-2">
+                        <div className="text-xs font-semibold text-text-primary">
+                          No Structural Closing Breakouts on {report.date}
+                        </div>
+                        <p className="text-xs text-text-tertiary">
+                          Scanned {report.totalScanned ? report.totalScanned.toLocaleString('en-IN') : '2,400+'} operating NSE equities across active series. 0 stocks closed at or above their prior 1-Year (250-day) or All-Time High pivots during this session.
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                          Intraday high tests that failed to close above resistance are excluded by design to prevent false breakout / wick-trap entries.
+                        </p>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
