@@ -12,6 +12,20 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  async redirects() {
+    return [
+      {
+        source: '/market-tools',
+        destination: '/market-tools/breadth',
+        permanent: true,
+      },
+      {
+        source: '/market-tools/heatmap',
+        destination: '/heatmap',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {
