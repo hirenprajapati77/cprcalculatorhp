@@ -19,7 +19,7 @@ export interface OptionSuggestion {
     spreadScore: number;
     itmDepthScore: number;
   };
-  pcr?: number;
+  pcr?: number | null;
   underlyingLtp?: number;
   formattedName?: string;
   lotSize?: number;
@@ -374,14 +374,14 @@ export class OptionSuggestionService {
    * PCR < OPTION_PCR.BEARISH_MAX → bearish bias building (PE trades favoured)
    * between the two → neutral
    */
-  private static computePCR(allOptions: OptionChainResult['optionsChain']): number {
+  private static computePCR(allOptions: OptionChainResult['optionsChain']): number | null {
     const totalPutOI = allOptions
       .filter(o => o.optionType === 'PE')
       .reduce((sum, o) => sum + (o.open_interest || 0), 0);
     const totalCallOI = allOptions
       .filter(o => o.optionType === 'CE')
       .reduce((sum, o) => sum + (o.open_interest || 0), 0);
-    return totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(4)) : 1.0;
+    return totalCallOI > 0 ? parseFloat((totalPutOI / totalCallOI).toFixed(4)) : null;
   }
 
   /**
@@ -391,7 +391,7 @@ export class OptionSuggestionService {
   private static scoreCandidate(
     candidate: ItmCandidate,
     allItmCandidates: ItmCandidate[],
-    pcr: number,
+    pcr: number | null,
     type: 'CE' | 'PE',
     preferDeeperItm: boolean = false
   ): ScoredCandidate {
@@ -405,7 +405,9 @@ export class OptionSuggestionService {
 
     // 2. PCR Context Score (max 20): does chain PCR agree with the trade direction?
     let pcrContextScore: number;
-    if (type === 'CE' && pcr > OPTION_PCR.BULLISH_MIN) {
+    if (pcr === null) {
+      pcrContextScore = 0; // Missing / zero-call-OI PCR provides no bias confirmation
+    } else if (type === 'CE' && pcr > OPTION_PCR.BULLISH_MIN) {
       pcrContextScore = 20; // bullish bias confirms CE entry
     } else if (type === 'PE' && pcr < OPTION_PCR.BEARISH_MAX) {
       pcrContextScore = 20; // bearish bias confirms PE entry
@@ -608,7 +610,13 @@ export class OptionSuggestionService {
     // 4. Compute PCR from the full chain (all strikes, both types, excluding equity row)
     const allValidOptions = chainRes.optionsChain.filter(o => o.strikePrice > 0);
     const pcr = this.computePCR(allValidOptions);
-    console.log(`[OptionSuggestion] ${cleanSym} chain PCR: ${pcr} (${pcr > OPTION_PCR.BULLISH_MIN ? 'Bullish bias' : pcr < OPTION_PCR.BEARISH_MAX ? 'Bearish bias' : 'Neutral'})`);
+    console.log(
+      `[OptionSuggestion] ${cleanSym} chain PCR: ${pcr !== null ? pcr : 'N/A'} (${
+        pcr !== null
+          ? (pcr > OPTION_PCR.BULLISH_MIN ? 'Bullish bias' : pcr < OPTION_PCR.BEARISH_MAX ? 'Bearish bias' : 'Neutral')
+          : 'Zero call OI / No bias'
+      })`
+    );
 
     // 5. Build ITM candidate pool (up to 3 strikes)
     //    CE ITM = strikes BELOW spot (sorted ascending → highest below spot = last before spot)

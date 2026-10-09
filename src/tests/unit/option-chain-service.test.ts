@@ -294,3 +294,62 @@ test('OptionChainService TTL uses F&O session end in CLOSING_AUCTION', () => {
     __resetActiveMarketProfileForTests(null);
   }
 });
+
+test('OptionChainService never caches failed rollover under _rollover key (P0-3)', async () => {
+  const originalGetAccessToken = FyersAuthService.getAccessToken;
+  const originalGetCredentials = FyersAuthService.getCredentials;
+  const originalGet = CacheService.get;
+  const originalSet = CacheService.set;
+  // @ts-expect-error test mock
+  const originalFetchWithRetry = OptionChainService.fetchWithRetry;
+
+  FyersAuthService.getAccessToken = async () => 'dummy_token';
+  FyersAuthService.getCredentials = () => ({ appId: 'dummy_id', secretId: '', redirectUrl: '' });
+  CacheService.get = async () => null;
+
+  const cacheKeysSet: string[] = [];
+  CacheService.set = async (key: string) => {
+    cacheKeysSet.push(key);
+  };
+
+  // @ts-expect-error test mock
+  OptionChainService.fetchWithRetry = async (url: string) => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const nextWeekStr = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+
+    if (url.includes('timestamp=')) {
+      return { ok: false, status: 500, json: async () => ({ s: 'error' }) };
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        s: 'ok',
+        data: {
+          expiryData: [todayStr, { date: nextWeekStr, expiry: 1234567890 }],
+          optionsChain: [{ symbol: 'TODAY_OPTION', strikePrice: 20000, optionType: 'CE', ltp: 100 }],
+        },
+      }),
+    };
+  };
+
+  try {
+    const res = await OptionChainService.getOptionChain('NIFTY', true);
+    assert.ok(!('error' in res), 'Result should return fallback chain without crashing');
+    assert.strictEqual(res.optionsChain[0].symbol, 'TODAY_OPTION');
+    assert.strictEqual(res.didRollover, false, 'didRollover should be false');
+    assert.ok(!cacheKeysSet.includes('option_chain_NIFTY_rollover'), 'Must NEVER cache failed rollover under _rollover');
+    assert.ok(cacheKeysSet.includes('option_chain_NIFTY_current'), 'Failed rollover can be cached under _current');
+  } finally {
+    FyersAuthService.getAccessToken = originalGetAccessToken;
+    FyersAuthService.getCredentials = originalGetCredentials;
+    CacheService.get = originalGet;
+    CacheService.set = originalSet;
+    // @ts-expect-error test mock
+    OptionChainService.fetchWithRetry = originalFetchWithRetry;
+  }
+});
+

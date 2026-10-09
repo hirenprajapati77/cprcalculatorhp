@@ -85,7 +85,8 @@ export interface MomentumLeadersReport {
   topLeaders: MomentumStock[];
   allStocks: MomentumStock[];
   computedAt: string;
-  status: 'ready' | 'pending';
+  status: 'ready' | 'pending' | 'stale';
+  freshness?: 'FRESH' | 'STALE' | 'PENDING';
 }
 
 export interface OhlcvCandleWithPrevClose {
@@ -286,8 +287,17 @@ export class MomentumLeadersService {
             console.log(
               `[MomentumLeadersService] Serving STALE cached report (${universe}, date: ${parsed.date}) while background precompute refreshes`
             );
+            return {
+              ...parsed,
+              status: 'stale',
+              freshness: 'STALE',
+            };
           }
-          return parsed;
+          return {
+            ...parsed,
+            status: parsed.status ?? 'ready',
+            freshness: 'FRESH',
+          };
         }
       } catch {
         // Fall back to compute on cache miss/error
@@ -302,8 +312,17 @@ export class MomentumLeadersService {
           console.log(
             `[MomentumLeadersService] Serving STALE in-memory report (${universe}, date: ${currentMemory.date}) while background precompute refreshes`
           );
+          return {
+            ...currentMemory,
+            status: 'stale',
+            freshness: 'STALE',
+          };
         }
-        return currentMemory;
+        return {
+          ...currentMemory,
+          status: currentMemory.status ?? 'ready',
+          freshness: 'FRESH',
+        };
       }
 
       // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
@@ -389,6 +408,7 @@ export class MomentumLeadersService {
       allStocks: [],
       computedAt: new Date().toISOString(),
       status: 'pending',
+      freshness: 'PENDING',
     };
   }
 
@@ -783,6 +803,7 @@ export class MomentumLeadersService {
       allStocks: finalStocks,
       computedAt: new Date().toISOString(),
       status: 'ready',
+      freshness: 'FRESH',
     };
   }
 }

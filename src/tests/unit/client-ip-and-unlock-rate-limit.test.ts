@@ -13,7 +13,7 @@ function makeRequest(headers: Record<string, string> = {}): NextRequest {
 }
 
 describe('resolveClientIp', () => {
-  it('prefers x-real-ip when present', () => {
+  it('prefers x-real-ip when trustProxy is true', () => {
     const headers = new Headers({
       'x-real-ip': '203.0.113.50',
       'x-forwarded-for': '198.51.100.1, 198.51.100.2',
@@ -22,15 +22,23 @@ describe('resolveClientIp', () => {
     assert.strictEqual(ip, '203.0.113.50');
   });
 
-  it('trims whitespace from x-real-ip', () => {
+  it('trims whitespace from x-real-ip when trustProxy is true', () => {
     const headers = new Headers({
       'x-real-ip': '  203.0.113.50  ',
     });
-    const ip = resolveClientIp(headers, false);
+    const ip = resolveClientIp(headers, true);
     assert.strictEqual(ip, '203.0.113.50');
   });
 
-  it('extracts last hop of x-forwarded-for when trustProxy is true', () => {
+  it('ignores forged x-real-ip when trustProxy is false', () => {
+    const headers = new Headers({
+      'x-real-ip': '203.0.113.50',
+    });
+    const ip = resolveClientIp(headers, false);
+    assert.strictEqual(ip, null);
+  });
+
+  it('extracts last hop of x-forwarded-for when trustProxy is true and no x-real-ip', () => {
     const headers = new Headers({
       'x-forwarded-for': '10.0.0.1, 172.16.0.2, 198.51.100.99',
     });
@@ -54,6 +62,19 @@ describe('resolveClientIp', () => {
 });
 
 describe('checkUnlockRateLimit — fail-closed IP resolution', () => {
+  it('fails closed in production when Redis is not configured (P1-8)', async () => {
+    const req = makeRequest({ 'x-real-ip': '203.0.113.4' });
+    const result = await checkUnlockRateLimit(req, {
+      isProduction: true,
+      redisConfigured: false,
+      isRedisUp: false,
+      trustProxy: true,
+    });
+
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.unavailable, true);
+  });
+
   it('fails closed in production with Redis configured when IP cannot be resolved', async () => {
     const req = makeRequest(); // no x-real-ip, no x-forwarded-for
     const result = await checkUnlockRateLimit(req, {

@@ -3,12 +3,17 @@ import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
 import { isActionableScannerTopResult } from '@/lib/cpr-setup-staleness';
+import { sanitizePagination } from '@/lib/pagination';
+
+const MAX_TOP_LIMIT = 50;
+const MAX_CANDIDATE_POOL = 100;
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '5', 10);
-    const market = searchParams.get('market') || 'NSE';
+    const { limit } = sanitizePagination(1, searchParams.get('limit'), MAX_TOP_LIMIT, 5);
+    const rawMarket = searchParams.get('market') || 'NSE';
+    const market = rawMarket === 'BSE' ? 'BSE' : 'NSE';
 
     const today = getISTDateString();
 
@@ -16,6 +21,9 @@ export async function GET(request: NextRequest) {
     const symbolCondition = market === 'BSE' 
       ? { contains: ':BSE' }
       : { not: { contains: ':BSE' } };
+
+    // Derived candidate pool take: strictly bounded between 30 and 100
+    const candidateTake = Math.min(Math.max(limit * 4, 30), MAX_CANDIDATE_POOL);
 
     // P0: Exclude dead/invalidated setups (GAP_INVALIDATED, STALE_SETUP, target met)
     // from top algo ranking so it falls through to clean actionable setups.
@@ -31,7 +39,7 @@ export async function GET(request: NextRequest) {
       orderBy: {
         score: 'desc',
       },
-      take: Math.max(limit * 4, 30),
+      take: candidateTake,
     });
 
     const actionable = candidatePool.filter(isActionableScannerTopResult);

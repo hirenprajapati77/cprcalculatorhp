@@ -165,9 +165,11 @@ describe('POST /api/auth/unlock', () => {
   it('succeeds in production when Redis is available and working with verified client IP', async () => {
     const origEnv = process.env.NODE_ENV;
     const origRedisUrl = process.env.REDIS_URL;
+    const origTrustProxy = process.env.TRUST_PROXY;
     try {
       (process.env as any).NODE_ENV = 'production';
       process.env.REDIS_URL = 'redis://localhost:6379';
+      process.env.TRUST_PROXY = 'true';
 
       const mockRedis = {
         status: 'ready',
@@ -183,6 +185,11 @@ describe('POST /api/auth/unlock', () => {
         delete process.env.REDIS_URL;
       } else {
         process.env.REDIS_URL = origRedisUrl;
+      }
+      if (origTrustProxy === undefined) {
+        delete process.env.TRUST_PROXY;
+      } else {
+        process.env.TRUST_PROXY = origTrustProxy;
       }
       _setRedisForTesting(null);
     }

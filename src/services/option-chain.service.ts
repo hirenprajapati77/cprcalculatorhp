@@ -19,6 +19,8 @@ export interface OptionChainResult {
     expiryDate: string;
   }>;
   method: 'direct' | 'proxy';
+  resolvedExpiry?: string;
+  didRollover?: boolean;
 }
 
 type FyersOptionChainOption = {
@@ -142,7 +144,7 @@ export class OptionChainService {
           const isOk = OptionChainService.isValidOptionChainResponse(data);
 
           if (isOk) {
-            data = await OptionChainService.resolveRolledOverChain(data, {
+            const rollRes = await OptionChainService.resolveRolledOverChain(data, {
               allowRollover,
               targetExpiryStr,
               cleanSym,
@@ -154,7 +156,9 @@ export class OptionChainService {
                 }
               })
             });
+            data = rollRes.data;
 
+            const resolvedExpiryStr = OptionChainService.getExpiryValue(data.data.expiryData?.[0]);
             const result: OptionChainResult = {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               optionsChain: data.data.optionsChain.map((o: any) => ({
@@ -167,12 +171,29 @@ export class OptionChainService {
                 bid: o.bid || 0,
                 ask: o.ask || 0,
               })),
-              expiryData: data.data.expiryData || [],
-              method: 'direct'
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              expiryData: (data.data.expiryData || []).map((e: any) => ({
+                expiryDate: OptionChainService.getExpiryValue(e) || '',
+              })),
+              method: 'direct',
+              ...(resolvedExpiryStr ? { resolvedExpiry: resolvedExpiryStr } : {}),
+              didRollover: rollRes.didRollover,
             };
             console.log(`[OptionChain] Direct fetch succeeded for ${cleanSym}.`);
             const ttl = OptionChainService.getCacheTtlSeconds(cleanSym);
-            await CacheService.set(cacheKey, result, ttl);
+
+            const targetCacheKey = targetExpiryStr
+              ? `option_chain_${cleanSym}_${targetExpiryStr}`
+              : (allowRollover
+                  ? (rollRes.wasRolloverNeeded && !rollRes.didRollover
+                      ? `option_chain_${cleanSym}_current` // Do NOT poison _rollover on rollover failure!
+                      : `option_chain_${cleanSym}_rollover`)
+                  : `option_chain_${cleanSym}_current`);
+
+            await CacheService.set(targetCacheKey, result, ttl);
+            if (allowRollover && !rollRes.wasRolloverNeeded) {
+              await CacheService.set(`option_chain_${cleanSym}_current`, result, ttl);
+            }
             return result;
           }
         }
@@ -210,7 +231,7 @@ export class OptionChainService {
         const isOk = OptionChainService.isValidOptionChainResponse(data);
         if (isOk) {
           const proxyBaseUrl = `${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`;
-          data = await OptionChainService.resolveRolledOverChain(data, {
+          const rollRes = await OptionChainService.resolveRolledOverChain(data, {
             allowRollover,
             targetExpiryStr,
             cleanSym,
@@ -220,10 +241,13 @@ export class OptionChainService {
                 'Authorization': `${appId}:${token}`,
                 'X-Fyers-AppId': appId,
                 'x-target-host': 'api-t1.fyers.in'
-              }
+              },
+              signal: AbortSignal.timeout(6000)
             })
           });
+          data = rollRes.data;
 
+          const resolvedExpiryStr = OptionChainService.getExpiryValue(data.data.expiryData?.[0]);
           const result: OptionChainResult = {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             optionsChain: data.data.optionsChain.map((o: any) => ({
@@ -236,12 +260,29 @@ export class OptionChainService {
               bid: o.bid || 0,
               ask: o.ask || 0,
             })),
-            expiryData: data.data.expiryData || [],
-            method: 'proxy'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expiryData: (data.data.expiryData || []).map((e: any) => ({
+              expiryDate: OptionChainService.getExpiryValue(e) || '',
+            })),
+            method: 'proxy',
+            ...(resolvedExpiryStr ? { resolvedExpiry: resolvedExpiryStr } : {}),
+            didRollover: rollRes.didRollover,
           };
           console.log(`[OptionChain] Proxy fetch succeeded for ${cleanSym}.`);
           const ttl = OptionChainService.getCacheTtlSeconds(cleanSym);
-          await CacheService.set(cacheKey, result, ttl);
+
+          const targetCacheKey = targetExpiryStr
+            ? `option_chain_${cleanSym}_${targetExpiryStr}`
+            : (allowRollover
+                ? (rollRes.wasRolloverNeeded && !rollRes.didRollover
+                    ? `option_chain_${cleanSym}_current` // Do NOT poison _rollover on rollover failure!
+                    : `option_chain_${cleanSym}_rollover`)
+                : `option_chain_${cleanSym}_current`);
+
+          await CacheService.set(targetCacheKey, result, ttl);
+          if (allowRollover && !rollRes.wasRolloverNeeded) {
+            await CacheService.set(`option_chain_${cleanSym}_current`, result, ttl);
+          }
           return result;
         }
       }
@@ -277,14 +318,11 @@ export class OptionChainService {
   private static async fetchWithRetry(url: string, options?: RequestInit, retries = 2, delay = 150): Promise<Response> {
     for (let i = 0; i < retries; i++) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
         const combinedOptions: RequestInit = {
           ...options,
-          signal: controller.signal,
+          signal: AbortSignal.timeout(4000),
         };
         const res = await fetch(url, combinedOptions);
-        clearTimeout(timeoutId);
         if (res.status === 429) {
           console.warn(`[OptionChain] Hit 429 Rate Limit for ${url}. Retrying in ${delay}ms... (Attempt ${i + 1}/${retries})`);
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -299,16 +337,7 @@ export class OptionChainService {
         delay *= 2;
       }
     }
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    try {
-      const res = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timeoutId);
-      return res;
-    } catch (e) {
-      clearTimeout(timeoutId);
-      throw e;
-    }
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(4000) });
   }
 
 
@@ -329,10 +358,10 @@ export class OptionChainService {
       requestUrl: string;
       fetchFn: (url: string) => Promise<Response>;
     }
-  ): Promise<ValidOptionChainResponse> {
+  ): Promise<{ data: ValidOptionChainResponse; didRollover: boolean; wasRolloverNeeded: boolean }> {
     const expiryData = data.data.expiryData;
     if (!expiryData || expiryData.length === 0) {
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: false };
     }
 
     if (params.targetExpiryStr) {
@@ -363,7 +392,7 @@ export class OptionChainService {
           if (resTarget.ok) {
             const dataTarget = await resTarget.json();
             if (OptionChainService.isValidOptionChainResponse(dataTarget)) {
-              return dataTarget;
+              return { data: dataTarget, didRollover: false, wasRolloverNeeded: false };
             }
           }
         }
@@ -371,12 +400,12 @@ export class OptionChainService {
     }
 
     if (!params.allowRollover || expiryData.length <= 1) {
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: false };
     }
 
     const currentExpiryStr = OptionChainService.getExpiryValue(expiryData[0]);
     if (!currentExpiryStr) {
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: false };
     }
 
     const { isExpiredOrToday, parsedExpiryDate, todayISTMidnight } =
@@ -385,7 +414,7 @@ export class OptionChainService {
     console.log(`[OptionChain] Rollover check for ${params.cleanSym} - currentExpiryStr: ${currentExpiryStr}, parsed: ${parsedExpiryDate}, today: ${todayISTMidnight}, isExpiredOrToday: ${isExpiredOrToday}`);
 
     if (!isExpiredOrToday) {
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: false };
     }
 
     const nextExpiryObj = expiryData[1];
@@ -394,7 +423,7 @@ export class OptionChainService {
 
     if (!nextExpiryTimestamp) {
       console.warn(`[OptionChain] Could not find next expiry string in expiryData:`, expiryData);
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: true };
     }
 
     console.log(`[OptionChain] Current expiry ${currentExpiryStr} is expired/today. Fetching NEXT expiry timestamp: ${nextExpiryTimestamp} (${nextExpiryStr}) for ${params.cleanSym}`);
@@ -402,18 +431,18 @@ export class OptionChainService {
 
     if (!resNext.ok) {
       console.warn(`[OptionChain] Rollover HTTP failed with status ${resNext.status}`);
-      return data;
+      return { data, didRollover: false, wasRolloverNeeded: true };
     }
 
     const dataNext = await resNext.json();
     console.log(`[OptionChain] Next expiry response status: ${dataNext.s}, message: ${dataNext.message}`);
     if (OptionChainService.isValidOptionChainResponse(dataNext)) {
       console.log(`[OptionChain] Successfully rolled over ${params.cleanSym} to ${nextExpiryStr}`);
-      return dataNext;
+      return { data: dataNext, didRollover: true, wasRolloverNeeded: true };
     }
 
     console.warn(`[OptionChain] Rollover failed. Fyers error: ${JSON.stringify(dataNext)}`);
-    return data;
+    return { data, didRollover: false, wasRolloverNeeded: true };
   }
 
   private static getExpiryValue(expiry: FyersExpiryEntry | undefined): string | null {

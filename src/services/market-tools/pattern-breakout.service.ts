@@ -92,10 +92,11 @@ export interface PatternBreakoutReport {
    * 'pending' when Redis cache is cold and no report has been computed yet
    * (e.g. fresh deploy, restart before the 19:15 IST precompute cron has
    * run). Distinguishes "not computed yet" from a genuine zero-signal day.
-   * Optional for backward compatibility with reports cached before this
-   * field existed -- absence should be treated as 'ready' by consumers.
+   * 'stale' when cached report trading date is older than ingested Bhavcopy.
+   * 'ready' when fresh report has been computed.
    */
-  status?: 'ready' | 'pending';
+  status?: 'ready' | 'pending' | 'stale';
+  freshness?: 'FRESH' | 'STALE' | 'PENDING';
 }
 
 let cachedReport: PatternBreakoutReport | null = null;
@@ -152,8 +153,17 @@ export class PatternBreakoutService {
             console.log(
               `[PatternBreakoutService] Serving STALE cached report (date: ${parsed.date}) while background precompute refreshes`
             );
+            return {
+              ...parsed,
+              status: 'stale',
+              freshness: 'STALE',
+            };
           }
-          return parsed;
+          return {
+            ...parsed,
+            status: parsed.status ?? 'ready',
+            freshness: 'FRESH',
+          };
         }
       } catch {
         // Ignore cache lookup errors
@@ -166,8 +176,17 @@ export class PatternBreakoutService {
           console.log(
             `[PatternBreakoutService] Serving STALE in-memory report (date: ${cachedReport.date}) while background precompute refreshes`
           );
+          return {
+            ...cachedReport,
+            status: 'stale',
+            freshness: 'STALE',
+          };
         }
-        return cachedReport;
+        return {
+          ...cachedReport,
+          status: cachedReport.status ?? 'ready',
+          freshness: 'FRESH',
+        };
       }
 
       // ISSUE-001 fix: if compute is currently in flight (e.g. from an authorized refresh or precompute job), await it.
@@ -232,6 +251,7 @@ export class PatternBreakoutService {
       stocks: [],
       computedAt: new Date().toISOString(),
       status: 'pending',
+      freshness: 'PENDING',
     };
   }
 
@@ -520,6 +540,7 @@ export class PatternBreakoutService {
       stocks,
       computedAt: new Date().toISOString(),
       status: 'ready',
+      freshness: 'FRESH',
     };
 
     await this.saveCache(report);

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { sanitizePagination } from '@/lib/pagination';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
-  const { searchParams } = new URL(req.url);
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const limit = parseInt(searchParams.get('limit') || '50', 10);
-  const skip = (page - 1) * limit;
-
   try {
     const { runId } = await params;
+    if (!runId || !/^[a-zA-Z0-9_-]{1,64}$/.test(runId)) {
+      return NextResponse.json({ error: 'Invalid runId' }, { status: 400 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const { page, limit } = sanitizePagination(searchParams.get('page'), searchParams.get('limit'), 200, 50);
+    const skip = (page - 1) * limit;
+
     const [trades, total] = await Promise.all([
       prisma.trade.findMany({
         where: { backtestRunId: runId },

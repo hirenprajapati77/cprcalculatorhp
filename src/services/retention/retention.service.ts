@@ -7,27 +7,42 @@ let lastDeletedCount = 0;
 
 export class RetentionService {
   /**
-   * Find BacktestRuns older than 90 days and set deletedAt.
+   * Find BacktestRuns older than 90 days and set deletedAt in bounded batches.
    */
-  static async markExpired() {
+  static async markExpired(chunkSize: number = 500): Promise<number> {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - 90);
 
-    // Using executeRaw or standard updateMany
-    // Prisma `updateMany` doesn't return the array of IDs, but returns count
-    const result = await prisma.backtestRun.updateMany({
-      where: {
-        createdAt: {
-          lt: thresholdDate
+    let totalMarked = 0;
+    while (true) {
+      const candidates = await prisma.backtestRun.findMany({
+        where: {
+          createdAt: {
+            lt: thresholdDate
+          },
+          deletedAt: null
         },
-        deletedAt: null // Only mark ones not already marked
-      },
-      data: {
-        deletedAt: new Date()
-      }
-    });
+        select: { id: true },
+        take: chunkSize
+      });
 
-    return result.count;
+      if (candidates.length === 0) break;
+
+      const ids = candidates.map((c: { id: string }) => c.id);
+      const result = await prisma.backtestRun.updateMany({
+        where: {
+          id: { in: ids }
+        },
+        data: {
+          deletedAt: new Date()
+        }
+      });
+
+      totalMarked += result.count;
+      if (candidates.length < chunkSize) break;
+    }
+
+    return totalMarked;
   }
 
   /**
