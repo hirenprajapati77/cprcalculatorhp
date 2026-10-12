@@ -295,9 +295,10 @@ export class OptionSuggestionService {
       console.warn('[OptionSuggestion] Failed to get lot sizes from cache, fetching...', e);
     }
 
-    let downloadedMap: Map<string, number> | null = null;
-    let refreshFailureReason: string | null = null;
-
+    // Refresh Policy Trade-Off:
+    // When a valid upstream map is present in Redis (24h TTL), we bypass the 5s network download
+    // to preserve CPU/memory on the 1GB VM and protect market-open latency. The map will re-fetch
+    // when the 24h Redis TTL expires, or if the cache is empty/flushed.
     if (!cachedUpstreamMap || cachedUpstreamMap.size === 0) {
       try {
         console.log('[OptionSuggestion] Downloading Fyers symbol master for lot sizes...');
