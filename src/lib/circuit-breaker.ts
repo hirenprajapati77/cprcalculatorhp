@@ -62,8 +62,13 @@ export class DatabaseCircuitBreaker {
         // Bound probe execution so a hung operation cannot wedge the circuit in HALF_OPEN forever
         let timer: NodeJS.Timeout | undefined;
         try {
+          const opPromise = operation();
+          // Attach no-op catch so if the timeout wins the race, a subsequent late rejection
+          // from opPromise does not trigger an unhandledRejection crash in server-starter.js.
+          opPromise.catch(() => {});
+
           result = await Promise.race([
-            operation(),
+            opPromise,
             new Promise<never>((_, reject) => {
               timer = setTimeout(() => {
                 reject(new Error('Circuit breaker probe timed out (ETIMEDOUT)'));
