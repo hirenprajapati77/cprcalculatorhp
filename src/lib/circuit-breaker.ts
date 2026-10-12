@@ -35,7 +35,18 @@ export class DatabaseCircuitBreaker {
   private static state: CircuitState = CircuitState.CLOSED;
   private static nextAttemptAt: number = 0;
   private static readonly COOLDOWN_MS = 30000; // 30 seconds
-  private static readonly PROBE_TIMEOUT_MS = 5000; // 5 seconds max for probe execution
+  private static readonly DEFAULT_PROBE_TIMEOUT_MS = 5000;
+  private static probeTimeoutMs: number = DatabaseCircuitBreaker.DEFAULT_PROBE_TIMEOUT_MS;
+
+  /** Test-only hook to shorten probe timeout during unit testing. */
+  static _setProbeTimeoutMsForTesting(ms: number): void {
+    this.probeTimeoutMs = ms;
+  }
+
+  /** Test-only hook to restore default probe timeout. */
+  static _resetProbeTimeoutMsForTesting(): void {
+    this.probeTimeoutMs = this.DEFAULT_PROBE_TIMEOUT_MS;
+  }
 
   static async execute<T>(operation: () => Promise<T>): Promise<T> {
     const now = Date.now();
@@ -72,7 +83,7 @@ export class DatabaseCircuitBreaker {
             new Promise<never>((_, reject) => {
               timer = setTimeout(() => {
                 reject(new Error('Circuit breaker probe timed out (ETIMEDOUT)'));
-              }, this.PROBE_TIMEOUT_MS);
+              }, this.probeTimeoutMs);
             }),
           ]);
         } finally {

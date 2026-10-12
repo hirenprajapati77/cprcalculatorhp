@@ -16,6 +16,7 @@ function resetBreaker(): void {
   const b = internals();
   b.state = CircuitState.CLOSED;
   b.nextAttemptAt = 0;
+  DatabaseCircuitBreaker._resetProbeTimeoutMsForTesting();
 }
 
 test('DatabaseCircuitBreaker — HALF_OPEN non-connection probe closes circuit', async (t) => {
@@ -108,6 +109,7 @@ test('DatabaseCircuitBreaker — trips on Prisma connection code P1001 and pool 
 test('DatabaseCircuitBreaker — hung probe times out and re-opens circuit with cooldown', async (t) => {
   t.after(() => resetBreaker());
   resetBreaker();
+  DatabaseCircuitBreaker._setProbeTimeoutMsForTesting(50); // fast ~50ms timeout for test
 
   // 1. Force into OPEN state
   internals().state = CircuitState.OPEN;
