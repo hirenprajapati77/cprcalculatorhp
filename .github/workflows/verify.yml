@@ -88,6 +88,28 @@ jobs:
           TELEGRAM_CHAT_ID: "0"
           NODE_ENV: "test"
 
+      - name: Integration suite (diagnostic — non-blocking)
+        run: |
+          set +e
+          npm run test:integration 2>&1 | tee integration-report.txt
+          echo "integration-exit-code=${PIPESTATUS[0]}" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        shell: bash
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+          REDIS_URL: "redis://localhost:6379"
+          APP_ACCESS_TOKEN: "test-token-123"
+          TELEGRAM_BOT_TOKEN: "dummy"
+          TELEGRAM_CHAT_ID: "0"
+          NODE_ENV: "test"
+
+      - name: Upload integration report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-report
+          path: integration-report.txt
+
       - name: E2E critical flows
         timeout-minutes: 5
         run: npm run test:e2e
