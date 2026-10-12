@@ -18,8 +18,17 @@ interface CachedResponseEntry {
   expiresAt: number;
 }
 
+const MAX_SETTLED_CACHE_SIZE = 100;
 const inFlightRequests = new Map<string, Promise<Response>>();
 const settledCache = new Map<string, CachedResponseEntry>();
+
+function cleanExpiredSettledCache(now: number = Date.now()): void {
+  for (const [key, entry] of settledCache.entries()) {
+    if (now >= entry.expiresAt) {
+      settledCache.delete(key);
+    }
+  }
+}
 
 export function clearDedupedFetchCache(urlPrefix?: string): void {
   if (!urlPrefix) {
@@ -79,9 +88,15 @@ export async function fetchDeduped(
     try {
       const res = await fetch(input, init);
       if (res.ok && ttlMs > 0) {
+        const now = Date.now();
+        cleanExpiredSettledCache(now);
+        if (settledCache.size >= MAX_SETTLED_CACHE_SIZE) {
+          const oldestKey = settledCache.keys().next().value;
+          if (oldestKey) settledCache.delete(oldestKey);
+        }
         settledCache.set(url, {
           response: res.clone(),
-          expiresAt: Date.now() + ttlMs,
+          expiresAt: now + ttlMs,
         });
       }
       return res;

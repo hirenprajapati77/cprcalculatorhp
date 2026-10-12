@@ -1009,11 +1009,28 @@ export class MarketService {
     }
   }
 
+  private static readonly MAX_PROVIDER_ERROR_LOG_KEYS = 500;
+
   private static shouldLogProviderError(key: string): boolean {
     const now = Date.now();
     const cooldownMs = Math.max(1000, env.PROVIDER_ERROR_LOG_COOLDOWN_MS || 300000);
     const prev = this.providerErrorLastLoggedAtMs.get(key) ?? 0;
     if (now - prev < cooldownMs) return false;
+
+    // Prune stale entries if the map grows excessively on 1GB VM
+    if (this.providerErrorLastLoggedAtMs.size >= this.MAX_PROVIDER_ERROR_LOG_KEYS) {
+      for (const [k, timestamp] of this.providerErrorLastLoggedAtMs.entries()) {
+        if (now - timestamp >= cooldownMs) {
+          this.providerErrorLastLoggedAtMs.delete(k);
+        }
+      }
+      // If still exceeding cap, drop oldest insertion (FIFO)
+      if (this.providerErrorLastLoggedAtMs.size >= this.MAX_PROVIDER_ERROR_LOG_KEYS) {
+        const oldest = this.providerErrorLastLoggedAtMs.keys().next().value;
+        if (oldest) this.providerErrorLastLoggedAtMs.delete(oldest);
+      }
+    }
+
     this.providerErrorLastLoggedAtMs.set(key, now);
     return true;
   }

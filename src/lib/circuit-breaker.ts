@@ -35,6 +35,18 @@ export class DatabaseCircuitBreaker {
   private static state: CircuitState = CircuitState.CLOSED;
   private static nextAttemptAt: number = 0;
   private static readonly COOLDOWN_MS = 30000; // 30 seconds
+  private static readonly DEFAULT_PROBE_TIMEOUT_MS = 5000;
+  private static probeTimeoutMs: number = DatabaseCircuitBreaker.DEFAULT_PROBE_TIMEOUT_MS;
+
+  /** Test-only hook to shorten probe timeout during unit testing. */
+  static _setProbeTimeoutMsForTesting(ms: number): void {
+    this.probeTimeoutMs = ms;
+  }
+
+  /** Test-only hook to restore default probe timeout. */
+  static _resetProbeTimeoutMsForTesting(): void {
+    this.probeTimeoutMs = this.DEFAULT_PROBE_TIMEOUT_MS;
+  }
 
   static async execute<T>(operation: () => Promise<T>): Promise<T> {
     const now = Date.now();
@@ -44,9 +56,11 @@ export class DatabaseCircuitBreaker {
       throw new Error('CIRCUIT_OPEN'); 
     }
 
+    let isProbe = false;
     if (this.state === CircuitState.OPEN) {
       if (now >= this.nextAttemptAt) {
         this.state = CircuitState.HALF_OPEN;
+        isProbe = true;
         console.warn('Circuit breaker half-open: attempting probe request to DB.');
       } else {
         throw new Error('CIRCUIT_OPEN'); // Fail fast
@@ -54,7 +68,31 @@ export class DatabaseCircuitBreaker {
     }
 
     try {
-      const result = await operation();
+      let result: T;
+      if (isProbe) {
+        // Bound probe execution so a hung operation cannot wedge the circuit in HALF_OPEN forever
+        let timer: NodeJS.Timeout | undefined;
+        try {
+          const opPromise = operation();
+          // Attach no-op catch so if the timeout wins the race, a subsequent late rejection
+          // from opPromise does not trigger an unhandledRejection crash in server-starter.js.
+          opPromise.catch(() => {});
+
+          result = await Promise.race([
+            opPromise,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(new Error('Circuit breaker probe timed out (ETIMEDOUT)'));
+              }, this.probeTimeoutMs);
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      } else {
+        result = await operation();
+      }
+
       // If we succeed and were half-open, close the circuit
       if (this.state === CircuitState.HALF_OPEN) {
         this.state = CircuitState.CLOSED;
