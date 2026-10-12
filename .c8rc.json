@@ -3,7 +3,8 @@
   "check-coverage": false,
   "include": [
     "src/lib/**",
-    "src/services/**"
+    "src/services/**",
+    "src/app/**"
   ],
   "exclude": [
     "src/tests/**",

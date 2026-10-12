@@ -14,6 +14,7 @@ interface TierBucket {
   minLines: number;
   minBranches: number;
   minFunctions: number;
+  enforced?: boolean;
   lines: MetricTotals;
   branches: MetricTotals;
   functions: MetricTotals;
@@ -77,6 +78,20 @@ const TIERS: TierBucket[] = [
     branches: { total: 0, covered: 0 },
     functions: { total: 0, covered: 0 },
   },
+  {
+    id: 'tier4',
+    name: 'Tier 4: API Route Handlers (Reported / Unenforced)',
+    scope: 'src/app/api/**/route.ts',
+    pathMatcher: (p) => p.includes('/src/app/api/') && p.endsWith('/route.ts'),
+    // Not yet enforced — see the route-test backlog (49/60 routes lack handler tests)
+    enforced: false,
+    minLines: 0.0,
+    minBranches: 0.0,
+    minFunctions: 0.0,
+    lines: { total: 0, covered: 0 },
+    branches: { total: 0, covered: 0 },
+    functions: { total: 0, covered: 0 },
+  },
 ];
 
 function calcPct(covered: number, total: number): number {
@@ -131,30 +146,35 @@ function main(): void {
     const branchesPct = calcPct(tier.branches.covered, tier.branches.total);
     const functionsPct = calcPct(tier.functions.covered, tier.functions.total);
 
-    const linesPass = linesPct >= tier.minLines;
-    const branchesPass = branchesPct >= tier.minBranches;
-    const functionsPass = functionsPct >= tier.minFunctions;
+    const isEnforced = tier.enforced !== false;
+    const linesPass = !isEnforced || linesPct >= tier.minLines;
+    const branchesPass = !isEnforced || branchesPct >= tier.minBranches;
+    const functionsPass = !isEnforced || functionsPct >= tier.minFunctions;
     const tierPass = linesPass && branchesPass && functionsPass;
 
-    if (!tierPass) {
+    if (!tierPass && isEnforced) {
       anyFailed = true;
       const reasons: string[] = [];
-      if (!linesPass) reasons.push(`Lines: ${linesPct}% < ${tier.minLines}%`);
-      if (!branchesPass) reasons.push(`Branches: ${branchesPct}% < ${tier.minBranches}%`);
-      if (!functionsPass) reasons.push(`Functions: ${functionsPct}% < ${tier.minFunctions}%`);
+      if (linesPct < tier.minLines) reasons.push(`Lines: ${linesPct}% < ${tier.minLines}%`);
+      if (branchesPct < tier.minBranches) reasons.push(`Branches: ${branchesPct}% < ${tier.minBranches}%`);
+      if (functionsPct < tier.minFunctions) reasons.push(`Functions: ${functionsPct}% < ${tier.minFunctions}%`);
       failures.push(`${tier.name} (${reasons.join(', ')})`);
     }
 
-    const statusLabel = tierPass ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m';
+    const statusLabel = !isEnforced
+      ? '\x1b[33mINFO\x1b[0m'
+      : tierPass
+        ? '\x1b[32mPASS\x1b[0m'
+        : '\x1b[31mFAIL\x1b[0m';
     console.log(`▶ ${tier.name} [${tier.scope}] — ${statusLabel}`);
     console.log(
-      `  • Lines:     ${linesPass ? '\x1b[32m' : '\x1b[31m'}${linesPct}%\x1b[0m (req: >= ${tier.minLines}%) [${tier.lines.covered}/${tier.lines.total}]`
+      `  • Lines:     ${!isEnforced ? '\x1b[33m' : linesPass ? '\x1b[32m' : '\x1b[31m'}${linesPct}%\x1b[0m (${isEnforced ? `req: >= ${tier.minLines}%` : 'unenforced'}) [${tier.lines.covered}/${tier.lines.total}]`
     );
     console.log(
-      `  • Branches:  ${branchesPass ? '\x1b[32m' : '\x1b[31m'}${branchesPct}%\x1b[0m (req: >= ${tier.minBranches}%) [${tier.branches.covered}/${tier.branches.total}]`
+      `  • Branches:  ${!isEnforced ? '\x1b[33m' : branchesPass ? '\x1b[32m' : '\x1b[31m'}${branchesPct}%\x1b[0m (${isEnforced ? `req: >= ${tier.minBranches}%` : 'unenforced'}) [${tier.branches.covered}/${tier.branches.total}]`
     );
     console.log(
-      `  • Functions: ${functionsPass ? '\x1b[32m' : '\x1b[31m'}${functionsPct}%\x1b[0m (req: >= ${tier.minFunctions}%) [${tier.functions.covered}/${tier.functions.total}]\n`
+      `  • Functions: ${!isEnforced ? '\x1b[33m' : functionsPass ? '\x1b[32m' : '\x1b[31m'}${functionsPct}%\x1b[0m (${isEnforced ? `req: >= ${tier.minFunctions}%` : 'unenforced'}) [${tier.functions.covered}/${tier.functions.total}]\n`
     );
   }
 
