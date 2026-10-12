@@ -244,4 +244,94 @@ describe('Market Hours Utilities', () => {
       assert.strictEqual(days.includes('2026-01-26'), false);
     });
   });
+
+  describe('NSE 2025 Holidays', () => {
+    const holidays2025 = [
+      '2025-02-26', // Mahashivratri (Wednesday)
+      '2025-03-14', // Holi (Friday)
+      '2025-03-31', // Id-Ul-Fitr (Monday)
+      '2025-04-10', // Shri Mahavir Jayanti (Thursday)
+      '2025-04-14', // Dr. Baba Saheb Ambedkar Jayanti (Monday)
+      '2025-04-18', // Good Friday (Friday)
+      '2025-05-01', // Maharashtra Day (Thursday)
+      '2025-08-15', // Independence Day (Friday)
+      '2025-08-27', // Ganesh Chaturthi (Wednesday)
+      '2025-10-02', // Mahatma Gandhi Jayanti / Dussehra (Thursday)
+      '2025-10-21', // Diwali Laxmi Pujan (Tuesday)
+      '2025-10-22', // Diwali Balipratipada (Wednesday)
+      '2025-11-05', // Prakash Gurpurb Sri Guru Nanak Dev (Wednesday)
+      '2025-12-25', // Christmas (Thursday)
+    ];
+
+    it('identifies confirmed 2025 weekday holidays as non-trading days (14 total)', () => {
+      assert.strictEqual(holidays2025.length, 14, 'Verified list must contain 14 holidays');
+      for (const ymd of holidays2025) {
+        const d = new Date(`${ymd}T10:00:00+05:30`);
+        const ist = getISTTime(d);
+        assert.strictEqual(ist.isHoliday, true, `${ymd} must be flagged as isHoliday: true`);
+        assert.strictEqual(ist.isTradingDay, false, `${ymd} must not be an NSE trading day`);
+      }
+    });
+
+    it('Case 2: normal trading days near holidays remain trading days (no false-positive over-adding)', () => {
+      const normalTradingDays = [
+        '2025-01-27', // Monday after Republic Day Sunday
+        '2025-08-14', // Thursday before Independence Day
+        '2025-10-01', // Wednesday before Gandhi Jayanti / Dussehra
+        '2025-12-24', // Wednesday before Christmas
+      ];
+
+      for (const ymd of normalTradingDays) {
+        const d = new Date(`${ymd}T10:00:00+05:30`);
+        const ist = getISTTime(d);
+        assert.strictEqual(ist.isHoliday, false, `${ymd} must NOT be flagged as isHoliday`);
+        assert.strictEqual(ist.isTradingDay, true, `${ymd} must remain an active trading day`);
+      }
+    });
+
+    it('Case 3: getRecentNseTradingDays bridges across a 2025 holiday', () => {
+      // 2025-08-15 is Friday (Independence Day holiday).
+      // Monday 2025-08-18 asOf date looking back 3 days should return:
+      // Wednesday 2025-08-13, Thursday 2025-08-14, Monday 2025-08-18
+      const monday = new Date('2025-08-18T12:00:00+05:30');
+      const days = getRecentNseTradingDays(3, monday);
+      assert.deepStrictEqual(days, [
+        '2025-08-13',
+        '2025-08-14',
+        '2025-08-18',
+      ]);
+      assert.strictEqual(days.includes('2025-08-15'), false, '2025-08-15 holiday must be skipped');
+    });
+
+    it('Case 4: handles non-leap-year February boundary correctly (2025-02-28 -> 2025-03-01)', () => {
+      // 2025 is not a leap year. Feb 28 is Friday (trading day).
+      // March 1 is Saturday (weekend), March 2 is Sunday (weekend), March 3 is Monday (trading day).
+      const feb28 = new Date('2025-02-28T12:00:00+05:30');
+      const march3 = new Date('2025-03-03T12:00:00+05:30');
+      assert.strictEqual(getISTTime(feb28).isTradingDay, true, '2025-02-28 must be a trading day');
+      assert.strictEqual(getISTTime(march3).isTradingDay, true, '2025-03-03 must be a trading day');
+
+      const recentFromMarch3 = getRecentNseTradingDays(2, march3);
+      assert.deepStrictEqual(recentFromMarch3, ['2025-02-28', '2025-03-03']);
+    });
+
+    it('Case 5: fallback behavior for undefined future year preserves trading days on weekdays', () => {
+      // For a year not in table (e.g. 2031-06-11 Wednesday), getISTTime should report isHoliday: false and isTradingDay: true
+      const futureWeekday = new Date('2031-06-11T12:00:00+05:30');
+      const ist = getISTTime(futureWeekday);
+      assert.strictEqual(ist.isHoliday, false, 'Undefined year must not flag random holiday');
+      assert.strictEqual(ist.isTradingDay, true, 'Undefined year weekday degrades to trading day');
+    });
+
+    it('regression guard: 2025 holiday list contains NO weekend dates via getISTTime', () => {
+      for (const ymd of holidays2025) {
+        const { isWeekend, weekday } = getISTTime(new Date(`${ymd}T12:00:00+05:30`));
+        assert.strictEqual(
+          isWeekend,
+          false,
+          `${ymd} (${weekday}) is a weekend and must not be in the holiday table`
+        );
+      }
+    });
+  });
 });
