@@ -295,6 +295,9 @@ export class OptionSuggestionService {
       console.warn('[OptionSuggestion] Failed to get lot sizes from cache, fetching...', e);
     }
 
+    let downloadedMap: Map<string, number> | null = null;
+    let refreshFailureReason: string | null = null;
+
     // Refresh Policy Trade-Off:
     // When a valid upstream map is present in Redis (24h TTL), we bypass the 5s network download
     // to preserve CPU/memory on the 1GB VM and protect market-open latency. The map will re-fetch
