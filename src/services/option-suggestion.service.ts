@@ -306,61 +306,61 @@ export class OptionSuggestionService {
         const csvTimeout = setTimeout(() => csvController.abort(), 5000);
         try {
           let res: Response | undefined;
-        try {
-          res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
-        } finally {
-          clearTimeout(csvTimeout);
-        }
-        if (res && res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n');
-          const parsedMap = new Map<string, number>();
-          for (const line of lines) {
-            const parts = line.split(',');
-            if (parts.length > 10) {
-              const symbol = parts[9]?.trim();
-              const lotSize = parseInt(parts[3]?.trim(), 10);
-              if (symbol && !isNaN(lotSize) && lotSize > 0) {
-                parsedMap.set(symbol, lotSize);
-                const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
-                if (match) {
-                  parsedMap.set(match[1], lotSize);
-                }
-                const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
-                if (futMatch) {
-                  parsedMap.set(futMatch[1], lotSize);
+          try {
+            res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
+          } finally {
+            clearTimeout(csvTimeout);
+          }
+          if (res && res.ok) {
+            const text = await res.text();
+            const lines = text.split('\n');
+            const parsedMap = new Map<string, number>();
+            for (const line of lines) {
+              const parts = line.split(',');
+              if (parts.length > 10) {
+                const symbol = parts[9]?.trim();
+                const lotSize = parseInt(parts[3]?.trim(), 10);
+                if (symbol && !isNaN(lotSize) && lotSize > 0) {
+                  parsedMap.set(symbol, lotSize);
+                  const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
+                  if (match) {
+                    parsedMap.set(match[1], lotSize);
+                  }
+                  const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
+                  if (futMatch) {
+                    parsedMap.set(futMatch[1], lotSize);
+                  }
                 }
               }
             }
-          }
-          if (parsedMap.size > 0) {
-            // Cache ONLY upstream data (unpolluted by hardcoded fallbacks)
-            const cacheObj = Object.fromEntries(parsedMap);
-            await CacheService.set(cacheKey, cacheObj, 86400);
-            console.log(`[OptionSuggestion] Cached ${parsedMap.size} symbols lot sizes.`);
-            downloadedMap = parsedMap;
+            if (parsedMap.size > 0) {
+              // Cache ONLY upstream data (unpolluted by hardcoded fallbacks)
+              const cacheObj = Object.fromEntries(parsedMap);
+              await CacheService.set(cacheKey, cacheObj, 86400);
+              console.log(`[OptionSuggestion] Cached ${parsedMap.size} symbols lot sizes.`);
+              downloadedMap = parsedMap;
+            } else {
+              refreshFailureReason = 'empty or unparseable CSV body';
+            }
+          } else if (res) {
+            refreshFailureReason = `HTTP ${res.status}`;
           } else {
-            refreshFailureReason = 'empty or unparseable CSV body';
+            refreshFailureReason = 'aborted before response';
           }
-        } else if (res) {
-          refreshFailureReason = `HTTP ${res.status}`;
-        } else {
-          refreshFailureReason = 'aborted before response';
+        } catch (innerErr) {
+          if (innerErr instanceof Error && (innerErr.name === 'AbortError' || innerErr.message.includes('aborted'))) {
+            refreshFailureReason = 'download timed out after 5s';
+          } else {
+            refreshFailureReason = `network/parsing error: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`;
+          }
         }
-      } catch (innerErr) {
-        if (innerErr instanceof Error && (innerErr.name === 'AbortError' || innerErr.message.includes('aborted'))) {
-          refreshFailureReason = 'download timed out after 5s';
+      } catch (err) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
+          refreshFailureReason = 'download timed out';
         } else {
-          refreshFailureReason = `network/parsing error: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`;
+          refreshFailureReason = `download error: ${err instanceof Error ? err.message : String(err)}`;
         }
       }
-    } catch (err) {
-      if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
-        refreshFailureReason = 'download timed out';
-      } else {
-        refreshFailureReason = `download error: ${err instanceof Error ? err.message : String(err)}`;
-      }
-    }
     }
 
     // Determine effective upstream map: downloaded wins if successful; otherwise preserve warm cache
