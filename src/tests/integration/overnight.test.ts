@@ -24,6 +24,17 @@ function istAt(ymd: string, hour: number, minute: number): Date {
   return new Date(`${ymd}T${pad2(hour)}:${pad2(minute)}:00+05:30`);
 }
 
+/** Helper to mock prisma.$transaction on the underlying lazy client */
+function mockPrismaTransaction(fn: (promises: unknown[]) => Promise<unknown>): () => void {
+  void (prisma as unknown as { _appliedParent: unknown })._appliedParent;
+  const client = (globalThis as unknown as { prisma: { $transaction: unknown } }).prisma;
+  const original = client.$transaction;
+  client.$transaction = fn;
+  return () => {
+    client.$transaction = original;
+  };
+}
+
 describe('Overnight Engine Tests', () => {
   test('LONG setup (BTST Scoring Logic)', () => {
     const mockStock = {
@@ -574,6 +585,7 @@ describe('Overnight Engine Tests', () => {
     const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1_200_000, avgVolume: 800_000, marketCap: 10000, ltp: 100, history: makeHistory(15), longScoreOverride: 80, shortScoreOverride: 50 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     const upserted: string[] = [];
     prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
@@ -591,6 +603,7 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(upserted.includes('STOCK15'), true, '15 candle history should proceed');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
     }
   });
@@ -607,6 +620,7 @@ describe('Overnight Engine Tests', () => {
     const stockDiff11 = { ...baseStock, symbol: 'DIFF11', longScoreOverride: 80, shortScoreOverride: 69 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
@@ -638,6 +652,7 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(!!diff11, true, 'Diff 11 should be persisted');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
@@ -736,6 +751,7 @@ describe('Overnight Engine Tests', () => {
     const mockStock = { symbol: 'REGIME_TEST', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 101, volume: 2_500_000, avgVolume: 2_000_000, marketCap: 10000, ltp: 101, previousClose: 100, history: makeHistory(100), longScoreOverride: 100, shortScoreOverride: 20 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
@@ -773,6 +789,7 @@ describe('Overnight Engine Tests', () => {
       assert.ok(u0.historyQuality > 0);
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
