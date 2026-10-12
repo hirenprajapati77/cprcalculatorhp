@@ -284,87 +284,90 @@ export class OptionSuggestionService {
 
   private static async loadLotSizes(): Promise<Map<string, number>> {
     const cacheKey = 'fyers_lot_sizes_map';
+    let upstreamMap: Map<string, number> | null = null;
+
     try {
       const cached = await CacheService.get<Record<string, number>>(cacheKey);
-      if (cached) {
-        const map = new Map(Object.entries(cached));
-        for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
-          if (!map.has(sym)) map.set(sym, size);
-        }
-        return map;
+      if (cached && typeof cached === 'object') {
+        upstreamMap = new Map(Object.entries(cached));
       }
     } catch (e) {
       console.warn('[OptionSuggestion] Failed to get lot sizes from cache, fetching...', e);
     }
 
-    const lotSizesMap = new Map<string, number>();
-    try {
-      console.log('[OptionSuggestion] Downloading Fyers symbol master for lot sizes...');
-      // 5s timeout prevents hanging the first enrichment call if Fyers CDN is slow at market open.
-      const csvController = new AbortController();
-      const csvTimeout = setTimeout(() => csvController.abort(), 5000);
-      // Inner try/catch: if the fetch is aborted before a response arrives, `res` is
-      // never assigned and accessing `res.ok` would throw a ReferenceError. We guard
-      // against that here so the outer catch block stays clean.
+    if (!upstreamMap) {
+      const downloadedMap = new Map<string, number>();
       try {
-        let res: Response | undefined;
+        console.log('[OptionSuggestion] Downloading Fyers symbol master for lot sizes...');
+        // 5s timeout prevents hanging the first enrichment call if Fyers CDN is slow at market open.
+        const csvController = new AbortController();
+        const csvTimeout = setTimeout(() => csvController.abort(), 5000);
         try {
-          res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
-        } finally {
-          clearTimeout(csvTimeout);
-        }
-        if (res && res.ok) {
-          const text = await res.text();
-          const lines = text.split('\n');
-          for (const line of lines) {
-            const parts = line.split(',');
-            if (parts.length > 10) {
-              const symbol = parts[9]?.trim();
-              const lotSize = parseInt(parts[3]?.trim(), 10);
-              if (symbol && !isNaN(lotSize) && lotSize > 0) {
-                lotSizesMap.set(symbol, lotSize);
-                const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
-                if (match) {
-                  lotSizesMap.set(match[1], lotSize);
-                }
-                const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
-                if (futMatch) {
-                  lotSizesMap.set(futMatch[1], lotSize);
+          let res: Response | undefined;
+          try {
+            res = await fetch('https://public.fyers.in/sym_details/NSE_FO.csv', { signal: csvController.signal });
+          } finally {
+            clearTimeout(csvTimeout);
+          }
+          if (res && res.ok) {
+            const text = await res.text();
+            const lines = text.split('\n');
+            for (const line of lines) {
+              const parts = line.split(',');
+              if (parts.length > 10) {
+                const symbol = parts[9]?.trim();
+                const lotSize = parseInt(parts[3]?.trim(), 10);
+                if (symbol && !isNaN(lotSize) && lotSize > 0) {
+                  downloadedMap.set(symbol, lotSize);
+                  const match = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}/);
+                  if (match) {
+                    downloadedMap.set(match[1], lotSize);
+                  }
+                  const futMatch = symbol.match(/(?:NSE|BSE):([A-Z0-9_\-&]+)\d{2}[A-Z]{3}FUT/);
+                  if (futMatch) {
+                    downloadedMap.set(futMatch[1], lotSize);
+                  }
                 }
               }
             }
+            if (downloadedMap.size > 0) {
+              // Cache ONLY upstream data (unpolluted by hardcoded fallbacks)
+              const cacheObj = Object.fromEntries(downloadedMap);
+              await CacheService.set(cacheKey, cacheObj, 86400);
+              console.log(`[OptionSuggestion] Cached ${downloadedMap.size} symbols lot sizes.`);
+              upstreamMap = downloadedMap;
+            }
+          } else if (res) {
+            console.error(`[OptionSuggestion] Failed to fetch NSE_FO.csv: HTTP ${res.status}`);
+          } else {
+            console.warn('[OptionSuggestion] NSE_FO.csv fetch aborted before response — falling back to hardcoded lot sizes.');
           }
-          const cacheObj = Object.fromEntries(lotSizesMap);
-          await CacheService.set(cacheKey, cacheObj, 86400);
-          console.log(`[OptionSuggestion] Cached ${lotSizesMap.size} symbols lot sizes.`);
-        } else if (res) {
-          console.error(`[OptionSuggestion] Failed to fetch NSE_FO.csv: HTTP ${res.status}`);
-        } else {
-          console.warn('[OptionSuggestion] NSE_FO.csv fetch aborted before response — falling back to hardcoded lot sizes.');
+        } catch (innerErr) {
+          if (innerErr instanceof Error && (innerErr.name === 'AbortError' || innerErr.message.includes('aborted'))) {
+            console.warn('[OptionSuggestion] NSE_FO.csv download timed out after 5s — falling back to hardcoded lot sizes.');
+          } else {
+            console.error('[OptionSuggestion] Error downloading/parsing NSE_FO.csv response:', innerErr);
+          }
         }
-      } catch (innerErr) {
-        if (innerErr instanceof Error && (innerErr.name === 'AbortError' || innerErr.message.includes('aborted'))) {
-          console.warn('[OptionSuggestion] NSE_FO.csv download timed out after 5s — falling back to hardcoded lot sizes.');
+      } catch (err) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
+          console.warn('[OptionSuggestion] Lot sizes master download timed out — falling back to hardcoded lot sizes.');
         } else {
-          console.error('[OptionSuggestion] Error downloading/parsing NSE_FO.csv response:', innerErr);
+          console.error('[OptionSuggestion] Error downloading lot sizes master:', err);
         }
-      }
-    } catch (err) {
-      if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'))) {
-        console.warn('[OptionSuggestion] Lot sizes master download timed out — falling back to hardcoded lot sizes.');
-      } else {
-        console.error('[OptionSuggestion] Error downloading lot sizes master:', err);
       }
     }
 
-    // Always merge fallback lot sizes (ensuring SENSEX, NIFTY, etc. are always populated even if CSV format lacks BSE)
+    // Merge on read: Start with upstream map (if available), then fill missing symbols with FALLBACK_LOT_SIZES.
+    // Upstream official values take precedence over fallbacks; fallbacks provide resilient coverage for missing or offline symbols.
+    const resultMap = new Map<string, number>(upstreamMap ?? []);
     for (const [sym, size] of Object.entries(FALLBACK_LOT_SIZES)) {
-      if (!lotSizesMap.has(sym)) {
-        lotSizesMap.set(sym, size);
+      if (!resultMap.has(sym)) {
+        resultMap.set(sym, size);
       }
     }
 
-    return lotSizesMap;
+    return resultMap;
   }
 
   /**

@@ -104,3 +104,25 @@ test('DatabaseCircuitBreaker — trips on Prisma connection code P1001 and pool 
   );
   assert.equal(internals().state, CircuitState.OPEN);
 });
+
+test('DatabaseCircuitBreaker — hung probe times out and re-opens circuit with cooldown', async (t) => {
+  t.after(() => resetBreaker());
+  resetBreaker();
+
+  // 1. Force into OPEN state
+  internals().state = CircuitState.OPEN;
+  internals().nextAttemptAt = Date.now() - 1; // Expired cooldown
+
+  // 2. Mock a probe that hangs indefinitely (never resolves)
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(
+        () => new Promise<never>(() => {}) // hangs forever
+      ),
+    /CIRCUIT_OPEN/
+  );
+
+  // 3. Confirm circuit is returned to OPEN and not left wedged in HALF_OPEN
+  assert.equal(internals().state, CircuitState.OPEN);
+  assert.ok(internals().nextAttemptAt > Date.now());
+});

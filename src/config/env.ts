@@ -169,6 +169,20 @@ if (
 }
 
 /**
+ * Production requires a cryptographically strong CRON_SECRET (at least 16 characters)
+ * to secure sensitive internal cron schedules and refresh endpoints.
+ */
+if (
+  parsedEnv.data.NODE_ENV === 'production' &&
+  !isProductionBuildPhase &&
+  (!parsedEnv.data.CRON_SECRET?.trim() || parsedEnv.data.CRON_SECRET.trim().length < 16)
+) {
+  throw new Error(
+    'CRON_SECRET is required in production and must be at least 16 characters long. Set it in the server .env before starting.'
+  );
+}
+
+/**
  * Production requires DATABASE_URL. Fail fast at startup rather than
  * throwing a cryptic PrismaClientInitializationError on the first DB query.
  */
