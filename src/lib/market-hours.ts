@@ -7,6 +7,24 @@ import {
 
 // NSE Trading Holidays mapped by year
 const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
+  '2025': [
+    '2025-02-26', // Mahashivratri
+    '2025-03-14', // Holi
+    '2025-03-31', // Id-Ul-Fitr (Ramzan Eid)
+    '2025-04-10', // Shri Mahavir Jayanti
+    '2025-04-14', // Dr. Baba Saheb Ambedkar Jayanti
+    '2025-04-18', // Good Friday
+    '2025-05-01', // Maharashtra Day
+    '2025-08-15', // Independence Day
+    '2025-08-27', // Ganesh Chaturthi
+    '2025-10-02', // Mahatma Gandhi Jayanti + Vijaya Dashami (Dussehra) — both fall on Oct 2, 2025 per NSE circular
+    // NOTE: Dussehra (Vijaya Dashami) 2025 falls on Oct 2 — same day as Gandhi Jayanti.
+    // NSE lists only one holiday for this date.
+    '2025-10-21', // Diwali — Laxmi Pujan (NSE closed; Muhurat trading held separately per NSE circular CMTR65587)
+    '2025-10-22', // Diwali — Balipratipada
+    '2025-11-05', // Prakash Gurpurb Sri Guru Nanak Dev
+    '2025-12-25', // Christmas
+  ],
   '2026': [
     '2026-01-26', // Republic Day
     '2026-03-03', // Holi
