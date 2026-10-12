@@ -137,3 +137,43 @@ test('P2-5: Lot-size fallback cache merge order (upstream pre-merge, fallback on
     CacheService.set = originalCacheSet;
   }
 });
+
+test('P2-5: Never downgrade warm lot-size cache when upstream refresh fails', async () => {
+  const originalCacheGet = CacheService.get;
+  const originalCacheSet = CacheService.set;
+  const originalFetch = global.fetch;
+
+  let cachedPayload: Record<string, number> | null = {
+    'NIFTY': 80, // revised value in warm cache
+    'TCS': 250,
+  };
+
+  try {
+    CacheService.get = async <T>(_key: string): Promise<T | null> => {
+      return cachedPayload as T | null;
+    };
+    CacheService.set = async (_key: string, value: unknown, _ttl?: number): Promise<void> => {
+      cachedPayload = value as Record<string, number>;
+    };
+
+    // Simulate fetch failure during refresh (e.g. 500 or network reject)
+    global.fetch = (async () => {
+      throw new Error('Fyers CDN connection refused (ECONNREFUSED)');
+    }) as typeof fetch;
+
+    // @ts-expect-error accessing private method for unit testing
+    const loadLotSizes = OptionSuggestionService.loadLotSizes;
+    const lotMap: Map<string, number> = await loadLotSizes();
+
+    // Warm cache values must survive and win over hardcoded fallback values
+    assert.strictEqual(lotMap.get('NIFTY'), 80, 'Warm cached value (80) must win over hardcoded fallback (65) on failed refresh');
+    assert.strictEqual(lotMap.get('TCS'), 250, 'Warm cached value for TCS must be retained');
+
+    // Symbols absent from warm cache fall back to FALLBACK_LOT_SIZES on read
+    assert.strictEqual(lotMap.get('BANKNIFTY'), FALLBACK_LOT_SIZES['BANKNIFTY'], 'Missing symbol still falls back to FALLBACK_LOT_SIZES');
+  } finally {
+    CacheService.get = originalCacheGet;
+    CacheService.set = originalCacheSet;
+    global.fetch = originalFetch;
+  }
+});
