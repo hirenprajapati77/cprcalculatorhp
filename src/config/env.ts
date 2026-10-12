@@ -169,18 +169,32 @@ if (
 }
 
 /**
+ * Validates CRON_SECRET strength in production runtime.
+ * Pure helper exported for unit tests.
+ */
+export function validateProductionCronSecret(params: {
+  nodeEnv: string;
+  isBuildPhase: boolean;
+  cronSecret?: string | null | undefined;
+}): void {
+  if (params.nodeEnv === 'production' && !params.isBuildPhase) {
+    if (!params.cronSecret?.trim() || params.cronSecret.trim().length < 16) {
+      throw new Error(
+        'CRON_SECRET is required in production and must be at least 16 characters long. Set it in the server .env before starting.'
+      );
+    }
+  }
+}
+
+/**
  * Production requires a cryptographically strong CRON_SECRET (at least 16 characters)
  * to secure sensitive internal cron schedules and refresh endpoints.
  */
-if (
-  parsedEnv.data.NODE_ENV === 'production' &&
-  !isProductionBuildPhase &&
-  (!parsedEnv.data.CRON_SECRET?.trim() || parsedEnv.data.CRON_SECRET.trim().length < 16)
-) {
-  throw new Error(
-    'CRON_SECRET is required in production and must be at least 16 characters long. Set it in the server .env before starting.'
-  );
-}
+validateProductionCronSecret({
+  nodeEnv: parsedEnv.data.NODE_ENV,
+  isBuildPhase: isProductionBuildPhase,
+  cronSecret: parsedEnv.data.CRON_SECRET,
+});
 
 /**
  * Production requires DATABASE_URL. Fail fast at startup rather than

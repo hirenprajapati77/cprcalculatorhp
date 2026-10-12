@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { envSchemaForTests } from '../../config/env';
+import { envSchemaForTests, validateProductionCronSecret } from '../../config/env';
 import { fetchDeduped, clearDedupedFetchCache } from '../../lib/deduped-fetch';
 import { OptionSuggestionService, FALLBACK_LOT_SIZES } from '../../services/option-suggestion.service';
 import { CacheService } from '../../services/cache.service';
@@ -12,50 +12,75 @@ test('P2-3: Production runtime CRON_SECRET strength validation', () => {
   });
   assert.strictEqual(validParsed.success, true);
 
-  // Startup production validation check simulation
-  const validateProductionCronSecret = (nodeEnv: string, isBuild: boolean, cronSecret?: string) => {
-    if (nodeEnv === 'production' && !isBuild) {
-      if (!cronSecret?.trim() || cronSecret.trim().length < 16) {
-        throw new Error('CRON_SECRET is required in production and must be at least 16 characters long.');
-      }
-    }
-  };
-
-  // Valid length in production
+  // 1. Valid length (>= 16 chars) in production passes
   assert.doesNotThrow(() => {
-    validateProductionCronSecret('production', false, 'super-secure-cron-secret-12345');
+    validateProductionCronSecret({
+      nodeEnv: 'production',
+      isBuildPhase: false,
+      cronSecret: 'super-secure-cron-secret-12345',
+    });
   });
 
-  // Short length in production throws
+  // 2. 15 characters (too short) in production throws
   assert.throws(
     () => {
-      validateProductionCronSecret('production', false, 'short-secret');
+      validateProductionCronSecret({
+        nodeEnv: 'production',
+        isBuildPhase: false,
+        cronSecret: '123456789012345', // exactly 15 chars
+      });
     },
     /at least 16 characters/
   );
 
-  // Missing or empty in production throws
+  // 3. Missing or empty/whitespace in production throws
   assert.throws(
     () => {
-      validateProductionCronSecret('production', false, '');
+      validateProductionCronSecret({
+        nodeEnv: 'production',
+        isBuildPhase: false,
+        cronSecret: '',
+      });
     },
     /at least 16 characters/
   );
   assert.throws(
     () => {
-      validateProductionCronSecret('production', false, undefined);
+      validateProductionCronSecret({
+        nodeEnv: 'production',
+        isBuildPhase: false,
+        cronSecret: '   ',
+      });
+    },
+    /at least 16 characters/
+  );
+  assert.throws(
+    () => {
+      validateProductionCronSecret({
+        nodeEnv: 'production',
+        isBuildPhase: false,
+        cronSecret: undefined,
+      });
     },
     /at least 16 characters/
   );
 
-  // Build phase bypasses runtime check
+  // 4. Production build phase bypasses runtime check (e.g. for packaging)
   assert.doesNotThrow(() => {
-    validateProductionCronSecret('production', true, undefined);
+    validateProductionCronSecret({
+      nodeEnv: 'production',
+      isBuildPhase: true,
+      cronSecret: undefined,
+    });
   });
 
-  // Non-production environment bypasses runtime check
+  // 5. Non-production environment (development / test) bypasses runtime check
   assert.doesNotThrow(() => {
-    validateProductionCronSecret('development', false, undefined);
+    validateProductionCronSecret({
+      nodeEnv: 'development',
+      isBuildPhase: false,
+      cronSecret: undefined,
+    });
   });
 });
 
