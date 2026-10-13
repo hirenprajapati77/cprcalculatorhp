@@ -277,7 +277,8 @@ test('BreakoutWatcher — deduplication logic', async (t) => {
       const results = await BreakoutWatcherService.detectNewBreakouts(scan);
 
       assert.strictEqual(results.length, 0, 'Should not return any new breakouts due to claim failure');
-      assert.strictEqual(mocks.updateManyCalls.length, 1, 'Should attempt atomic claim');
+      // detectNewBreakouts evaluates both 'BREAKOUT' and 'BREAKDOWN' per symbol (2 directions)
+      assert.strictEqual(mocks.updateManyCalls.length, 2, 'Should attempt atomic claim for both directions');
     } finally {
       mocks.restore();
     }
@@ -297,9 +298,10 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
 
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].symbol, 'SBIN');
-      assert.strictEqual(mocks.updateManyCalls.length, 1);
+      // Evaluates both directions: BREAKOUT claims successfully (1 call), BREAKDOWN also evaluates (1 call) -> 2 total
+      assert.strictEqual(mocks.updateManyCalls.length, 2, 'Evaluates updateMany for both BREAKOUT and BREAKDOWN directions');
       assert.strictEqual(mocks.createCalls.length, 0);
-      assert.strictEqual(mocks.findUniqueCalls.length, 0);
+      assert.strictEqual(mocks.findUniqueCalls.length, 1, 'Evaluates findUnique for BREAKDOWN direction check');
       assert.strictEqual(mocks.upsertCalls.length, 0);
     } finally {
       mocks.restore();
@@ -319,7 +321,8 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
 
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].symbol, 'RELIANCE');
-      assert.strictEqual(mocks.updateManyCalls.length, 1);
+      // BREAKOUT misses initial updateMany (1 call) then creates; BREAKDOWN evaluates updateMany (1 call) -> 2 updateMany total
+      assert.strictEqual(mocks.updateManyCalls.length, 2, 'Evaluates updateMany for both directions');
       assert.strictEqual(mocks.createCalls.length, 1);
     } finally {
       mocks.restore();
@@ -345,7 +348,8 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
 
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].symbol, 'TCS');
-      assert.strictEqual(mocks.updateManyCalls.length, 2);
+      // BREAKOUT attempts updateMany (1), creates & catches P2002, retries updateMany (2); BREAKDOWN evaluates updateMany (3) -> 3 total
+      assert.strictEqual(mocks.updateManyCalls.length, 3, 'Evaluates initial claim + retry on BREAKOUT, plus BREAKDOWN direction');
       assert.strictEqual(mocks.createCalls.length, 1);
     } finally {
       mocks.restore();
@@ -370,7 +374,8 @@ test('BreakoutWatcher — atomic claim path (production Prisma mocks)', async (t
         0,
         'loser in concurrent race must not emit a duplicate breakout alert'
       );
-      assert.strictEqual(mocks.updateManyCalls.length, 2);
+      // BREAKOUT initial updateMany (1), retry updateMany (2); BREAKDOWN updateMany (3) -> 3 total
+      assert.strictEqual(mocks.updateManyCalls.length, 3, 'Evaluates initial claim + retry on BREAKOUT, plus BREAKDOWN direction');
       assert.strictEqual(mocks.createCalls.length, 1);
     } finally {
       mocks.restore();

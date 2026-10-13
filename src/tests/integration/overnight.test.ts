@@ -24,6 +24,15 @@ function istAt(ymd: string, hour: number, minute: number): Date {
   return new Date(`${ymd}T${pad2(hour)}:${pad2(minute)}:00+05:30`);
 }
 
+function mockPrismaTransaction(fn: (promises: unknown[]) => Promise<unknown>): () => void {
+  const client = (globalThis as unknown as { prisma: { $transaction: unknown } }).prisma;
+  const original = client.$transaction;
+  client.$transaction = fn;
+  return () => {
+    client.$transaction = original;
+  };
+}
+
 describe('Overnight Engine Tests', () => {
   test('LONG setup (BTST Scoring Logic)', () => {
     const mockStock = {
@@ -167,23 +176,27 @@ describe('Overnight Engine Tests', () => {
       symbol: 'MOCKSTOCK',
       market: 'NSE' as const,
       sector: 'Technology',
-      open: 100,
-      high: 110,
-      low: 90,
-      close: 105,
+      open: 98,
+      high: 102,
+      low: 96,
+      close: 98,
       volume: 1_200_000,
       avgVolume: 800_000,
       marketCap: 10000,
-      ltp: 105,
+      ltp: 98,
       history: [
-        ...Array.from({ length: 13 }).map((_, i) => ({ date: `2026-06-${(i+10).toString()}`, open: 100, high: 105, low: 95, close: 100, volume: 500000 })),
+        ...Array.from({ length: 13 }).map((_, i) => ({ date: `2026-06-${(i+10).toString()}`, open: 96, high: 98, low: 92, close: 96, volume: 500000 })),
         { date: '2026-07-06', open: 95, high: 98, low: 92, close: 96, volume: 500000 },
-        { date: '2026-07-07', open: 96, high: 110, low: 90, close: 105, volume: 1000000 }
+        { date: '2026-07-07', open: 98, high: 102, low: 96, close: 98, volume: 1000000 }
       ]
     };
 
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
+    const originalRegime = RegimeService.getMarketRegime;
+    RegimeService.getMarketRegime = async () => ({ trend: 'BULL', volatility: 'LOW', score: 80 });
+
     const upserted: unknown[] = [];
     
     prisma.overnightSignal.upsert = (async (args: { create: unknown }) => {
@@ -203,16 +216,17 @@ describe('Overnight Engine Tests', () => {
       
       // Verification:
       // Yesterday candle (2026-07-06): high=98, low=92, close=96 -> BC = (98+92)/2 = 95
-      // Today candle (2026-07-07): high=110, low=90, close=105 -> BC = (110+90)/2 = 100
+      // Today candle (2026-07-07): high=102, low=96, close=98 -> BC = (102+96)/2 = 99
       // So todayCpr.bc !== tomorrowCpr.bc!
-      // Specifically, yesterday's BC is 95, and tomorrow's BC is 100.
+      // Specifically, yesterday's BC is 95, and tomorrow's BC is 99.
       // Let's assert that the score is calculated with rule 3 (Higher Value +20) passed.
-      // (If they were both calculated from today's high/low, rule 3 would fail and score would be 20 points lower)
       assert.ok(signal.overnightScore !== null);
       assert.ok(signal.overnightScore > 0);
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
+      RegimeService.getMarketRegime = originalRegime;
     }
   });
 
@@ -336,8 +350,8 @@ describe('Overnight Engine Tests', () => {
       symbol: 'MISSING_TODAY',
       market: 'NSE' as const,
       sector: 'IT',
-      open: 100, high: 120, low: 100, close: 110,
-      volume: 2_000_000, avgVolume: 1_000_000, marketCap: 10000, ltp: 110.2,
+      open: 0, high: 0, low: 0, close: 0,
+      volume: 2_000_000, avgVolume: 1_000_000, marketCap: 10000, ltp: 0,
       history: makeHistoryEnding('2026-07-07'), // scan day is 2026-07-08
       longScoreOverride: 110,
       shortScoreOverride: 20,
@@ -355,7 +369,11 @@ describe('Overnight Engine Tests', () => {
     };
 
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
+    const originalRegime = RegimeService.getMarketRegime;
+    RegimeService.getMarketRegime = async () => ({ trend: 'BULL', volatility: 'LOW', score: 80 });
+
     const upserted: string[] = [];
     const warns: string[] = [];
     const originalWarn = console.warn;
@@ -387,9 +405,9 @@ describe('Overnight Engine Tests', () => {
       );
       assert.ok(
         warns.some((w) =>
-          w.includes('MISSING_TODAY') && w.includes("Today's daily candle unavailable")
+          w.includes('MISSING_TODAY') && w.includes("Today's daily candle and session OHLC unavailable")
         ),
-        'expected skip log for missing today candle'
+        'expected skip log for missing today candle and session OHLC'
       );
 
       // Journal path only reads OvernightSignal — no row ⇒ no journal entry for skipped symbol.
@@ -400,8 +418,10 @@ describe('Overnight Engine Tests', () => {
       );
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
       console.warn = originalWarn;
+      RegimeService.getMarketRegime = originalRegime;
     }
   });
 
@@ -483,7 +503,7 @@ describe('Overnight Engine Tests', () => {
       `${BTST_CLOCK.discoveryEnd} should be FROZEN`
     );
   });
-  test('getIntradayData validates array lengths for high, low, close, volume', async () => {
+  test('getIntradayData aligns mismatched array lengths to shortest valid prefix', async () => {
     const mockStock = { symbol: 'MISALIGNED', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1000, avgVolume: 1000, marketCap: 1000, ltp: 100, history: [] };
     const originalFetch = global.fetch;
     const originalHistMode = env.HISTORICAL_MODE;
@@ -511,9 +531,9 @@ describe('Overnight Engine Tests', () => {
 
     try {
       const metrics = await OvernightService.getIntradayData(mockStock, new Date());
-      // Expect null metrics because the throw gets caught in try-catch and returns empty intraday
-      assert.strictEqual(metrics.vwap, null);
-      assert.strictEqual(metrics.hasIntraday, false);
+      // Expect aligned prefix length of 1 bar: (105 + 98 + 100)/3 = 101
+      assert.strictEqual(metrics.vwap, 101);
+      assert.strictEqual(metrics.hasIntraday, true);
     } finally {
       global.fetch = originalFetch;
       env.HISTORICAL_MODE = originalHistMode;
@@ -546,7 +566,11 @@ describe('Overnight Engine Tests', () => {
     };
 
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
+    const originalRegime = RegimeService.getMarketRegime;
+    RegimeService.getMarketRegime = async () => ({ trend: 'BULL', volatility: 'LOW', score: 80 });
+
     const upserted: string[] = [];
     prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
       upserted.push(args.create.symbol);
@@ -563,7 +587,9 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(upserted.includes('LIQUID_OK'), true, 'liquid stock should still produce a signal');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
+      RegimeService.getMarketRegime = originalRegime;
     }
   });
 
@@ -574,6 +600,7 @@ describe('Overnight Engine Tests', () => {
     const stock15 = { symbol: 'STOCK15', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 100, volume: 1_200_000, avgVolume: 800_000, marketCap: 10000, ltp: 100, history: makeHistory(15), longScoreOverride: 80, shortScoreOverride: 50 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     const upserted: string[] = [];
     prisma.overnightSignal.upsert = (async (args: { create: { symbol: string } }) => {
@@ -591,6 +618,7 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(upserted.includes('STOCK15'), true, '15 candle history should proceed');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
     }
   });
@@ -607,6 +635,7 @@ describe('Overnight Engine Tests', () => {
     const stockDiff11 = { ...baseStock, symbol: 'DIFF11', longScoreOverride: 80, shortScoreOverride: 69 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
@@ -638,6 +667,7 @@ describe('Overnight Engine Tests', () => {
       assert.strictEqual(!!diff11, true, 'Diff 11 should be persisted');
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;
@@ -736,6 +766,7 @@ describe('Overnight Engine Tests', () => {
     const mockStock = { symbol: 'REGIME_TEST', market: 'NSE' as const, sector: 'IT', open: 100, high: 105, low: 95, close: 101, volume: 2_500_000, avgVolume: 2_000_000, marketCap: 10000, ltp: 101, previousClose: 100, history: makeHistory(100), longScoreOverride: 100, shortScoreOverride: 20 };
     
     const originalUpsert = prisma.overnightSignal.upsert;
+    const restoreTx = mockPrismaTransaction(async (promises: unknown[]) => Promise.all(promises));
     const originalHistMode = env.HISTORICAL_MODE;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const originalElig = require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility;
@@ -773,6 +804,7 @@ describe('Overnight Engine Tests', () => {
       assert.ok(u0.historyQuality > 0);
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
+      restoreTx();
       env.HISTORICAL_MODE = originalHistMode;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/overnight/entry-manager.service').EntryManagerService.evaluateEligibility = originalElig;

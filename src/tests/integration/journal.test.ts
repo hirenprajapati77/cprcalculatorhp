@@ -18,6 +18,7 @@ test('TradeJournalService Phase 3', async (t) => {
         optionType: 'CE',
         entryCmp: 100,
         entryTime: new Date(),
+        cmp916: 99,
         exitCmp: 80,
         pnl: -20,
         pnlPct: -20,
@@ -52,6 +53,7 @@ test('TradeJournalService Phase 3', async (t) => {
         optionType: 'CE',
         entryCmp: 100,
         entryTime: new Date(),
+        cmp916: 99,
         exitCmp: 80,
         pnl: -20,
         pnlPct: -20,
@@ -183,7 +185,7 @@ test('TradeJournalService Phase 3', async (t) => {
     }
   });
 
-  await t.test('fetchOptionCmp rejects mismatched expiry', async () => {
+  await t.test('fetchOptionCmp warns and falls back to LTP on expiry mismatch', async () => {
     const { OptionChainService } = await import('../../services/option-chain.service');
     const originalGetOptionChain = OptionChainService.getOptionChain;
     
@@ -196,7 +198,7 @@ test('TradeJournalService Phase 3', async (t) => {
     try {
       // We expect expiry 24OCT but chain returns 24NOV
       const cmp = await TradeJournalService.fetchOptionCmp('TEST', 25000, 'CE', undefined, '24OCT');
-      assert.strictEqual(cmp, null, 'Should return null when expiry does not match');
+      assert.strictEqual(cmp, 100, 'Should fall back to LTP rather than returning null on expiry mismatch');
     } finally {
       OptionChainService.getOptionChain = originalGetOptionChain;
     }
