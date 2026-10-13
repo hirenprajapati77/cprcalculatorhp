@@ -52,6 +52,7 @@ import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
 
 import { registerCacheClearHandler } from '@/lib/navigation-cache';
 import { fetchDeduped, clearDedupedFetchCache } from '@/lib/deduped-fetch';
+import type { OvernightScanMetrics } from '@/services/overnight/overnight-scan-metrics';
 
 type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
@@ -1181,6 +1182,7 @@ export default function ScannerClient() {
 
   // KPI Bar Stats
   const [latency, setLatency] = useState<number>(0);
+  const [overnightMetrics, setOvernightMetrics] = useState<OvernightScanMetrics | null>(null);
 
   // Comparison Multi-Select
   const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
@@ -1519,6 +1521,7 @@ export default function ScannerClient() {
         setCachedResult(data.cachedResult ?? false);
         setScannedAt(data.scannedAt || '');
         setIsDegraded(!!data.degraded);
+        setOvernightMetrics(data.metrics || null);
 
         // Filter by direction based on scannerMode
         const allResults: Array<{
@@ -1708,6 +1711,7 @@ export default function ScannerClient() {
         setCachedResult(false);
         setScannedAt(data.scannedAt || '');
         setIsDegraded(!!data.degraded);
+        setOvernightMetrics(null);
         if (data.insights) {
           setInsightCounts(data.insights);
           if (data.insights.heatmapSectors) {
@@ -2444,6 +2448,7 @@ export default function ScannerClient() {
         watchlistCount={watchlistCount}
         avoidCount={avoidCount}
         topStocks={topStocks}
+        overnightMetrics={overnightMetrics}
       />
 
       {/* V2 Dashboard Hero */}
