@@ -172,8 +172,8 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       // Premium turnover: buy = 5,000, sell = 6,500, total = 11,500
       assert.equal(res.turnover, 11500);
       assert.equal(res.grossPnl, 1500); // (130 - 100) * 50
-      // STT on sell premium: 6,500 * 0.001 (0.10%) = ₹6.50
-      assert.equal(res.stt, 6.50);
+      // STT on sell premium: 6,500 * 0.0015 (0.15%, April 2026 schedule) = ₹9.75
+      assert.equal(res.stt, 9.75);
       // Stamp duty on buy premium: 5,000 * 0.00003 = ₹0.15
       assert.equal(res.stampDuty, 0.15);
       // Exchange fee: 11,500 * 0.0005 = ₹5.75
@@ -183,9 +183,26 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       // GST: 18% on (40.00 + 5.75 + 0.01) = ₹8.24
       assert.ok(closeTo(res.gst, 8.24, 0.05));
 
-      // Total option friction: ~₹60.65
-      assert.ok(closeTo(res.totalFriction, 60.65, 0.1));
-      assert.ok(closeTo(res.netPnl, 1500 - 60.65, 0.1));
+      // Total option friction: ~₹63.90 (vs ~₹60.65 prior to April 2026 STT rate increase)
+      assert.ok(closeTo(res.totalFriction, 63.90, 0.1));
+      assert.ok(closeTo(res.netPnl, 1500 - 63.90, 0.1));
+    });
+
+    it('asserts 0.15% STT on ₹1,00,000 option sell-premium turnover (₹150 STT)', () => {
+      // Entry 200, Exit 250, Qty 400 -> Sell premium = 250 * 400 = ₹1,00,000
+      const res = estimateOptionPremiumFriction(200, 250, 400);
+
+      assert.equal(res.tierId, 'RETAIL_STATUTORY');
+      // Sell turnover: 250 * 400 = 100,000
+      // STT on sell leg: 100,000 * 0.0015 (0.15%) = ₹150.00 (vs ₹100 at legacy 0.10% rate)
+      assert.equal(res.stt, 150.00);
+      // Buy turnover: 200 * 400 = 80,000 -> Stamp duty: 80,000 * 0.00003 = ₹2.40
+      assert.equal(res.stampDuty, 2.40);
+      // Total turnover: 180,000 -> Exchange: 180,000 * 0.0005 = ₹90.00
+      assert.equal(res.exchangeCharges, 90.00);
+      assert.equal(res.brokerage, 40.00);
+      // Total friction: 150 + 2.40 + 90 + 0.18 + 40 + (130.18 * 0.18 = 23.43) = ~306.01
+      assert.ok(closeTo(res.totalFriction, 306.01, 0.1));
     });
 
     it('verifies that a flat option trade incurs negative net P&L due to statutory drag', () => {
@@ -196,7 +213,7 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       const res = estimateOptionPremiumFriction(entryPremium, exitPremium, lotQty);
 
       assert.equal(res.grossPnl, 0);
-      // Brokerage ₹40 + GST + exchange + STT yields ~₹48 in drag
+      // Brokerage ₹40 + GST + exchange + STT yields ~₹48-54 in drag
       assert.ok(res.totalFriction > 45 && res.totalFriction < 55);
       assert.ok(res.netPnl < -45);
     });

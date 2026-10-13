@@ -184,9 +184,9 @@ describe('Trade Journal Estimated Friction & Net P&L (Step 4 Non-Destructive Lay
       // 2. Coherent lot size
       assert.equal(res.lotSize, 325);
 
-      // 3. Per-unit friction is ~30 paise (not ₹47.36)
-      assert.ok(closeTo(res.estimatedChargesPerUnit, 0.30, 0.05));
-      assert.ok(res.estimatedChargesTotal > 90 && res.estimatedChargesTotal < 105);
+      // 3. Per-unit friction is ~34 paise (not ₹47.36)
+      assert.ok(closeTo(res.estimatedChargesPerUnit, 0.34, 0.05));
+      assert.ok(res.estimatedChargesTotal > 90 && res.estimatedChargesTotal < 115);
 
       // 4. Net P&L remains clearly positive (+3.31% net, not -64.5%)
       assert.ok(closeTo(res.estimatedNetPnl, 2.30, 0.05));
