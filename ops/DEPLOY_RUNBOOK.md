@@ -1,7 +1,7 @@
 # CPR Platform — Deployment Runbook
 
 > **Server:** `ubuntu@129.159.230.41`  
-> **SSH Key:** `C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key`  
+> **SSH Key:** `<path-to-ssh-key>.key` (defaulted in `ops/deploy.ps1` or `$env:DEPLOY_SSH_KEY`)  
 > **App Root on Server:** `/home/ubuntu/cpr-calculator-platform`  
 > **PM2 Process Name:** `cpr-platform`
 
@@ -49,7 +49,7 @@ Expected sizes: standalone ~32MB, static ~0.7MB
 ### Step 4 — Upload to server
 
 ```powershell
-scp -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no `
+scp -i "<path-to-ssh-key>.key" -o StrictHostKeyChecking=no `
     deploy_standalone.tar.gz deploy_static.tar.gz `
     ubuntu@129.159.230.41:/home/ubuntu/
 ```
@@ -59,7 +59,7 @@ Expected: completes in ~15-20 seconds.
 ### Step 5 — Run deploy script on server
 
 ```powershell
-ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no `
+ssh -i "<path-to-ssh-key>.key" -o StrictHostKeyChecking=no `
     ubuntu@129.159.230.41 "bash /home/ubuntu/deploy_extract.sh"
 ```
 
@@ -97,13 +97,13 @@ git push origin main
 
 ```powershell
 # Health check
-ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "curl -s http://localhost:3000/api/health"
+ssh -i "<path-to-ssh-key>.key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "curl -s http://localhost:3000/api/health"
 
 # PM2 status
-ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "pm2 list"
+ssh -i "<path-to-ssh-key>.key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "pm2 list"
 
 # Last 50 PM2 logs
-ssh -i "C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "pm2 logs cpr-platform --lines 50 --nostream"
+ssh -i "<path-to-ssh-key>.key" -o StrictHostKeyChecking=no ubuntu@129.159.230.41 "pm2 logs cpr-platform --lines 50 --nostream"
 ```
 
 ---
