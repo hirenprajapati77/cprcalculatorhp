@@ -24,9 +24,7 @@ function istAt(ymd: string, hour: number, minute: number): Date {
   return new Date(`${ymd}T${pad2(hour)}:${pad2(minute)}:00+05:30`);
 }
 
-/** Helper to mock prisma.$transaction on the underlying lazy client */
 function mockPrismaTransaction(fn: (promises: unknown[]) => Promise<unknown>): () => void {
-  void (prisma as unknown as { _appliedParent: unknown })._appliedParent;
   const client = (globalThis as unknown as { prisma: { $transaction: unknown } }).prisma;
   const original = client.$transaction;
   client.$transaction = fn;
@@ -220,7 +218,7 @@ describe('Overnight Engine Tests', () => {
       // Yesterday candle (2026-07-06): high=98, low=92, close=96 -> BC = (98+92)/2 = 95
       // Today candle (2026-07-07): high=102, low=96, close=98 -> BC = (102+96)/2 = 99
       // So todayCpr.bc !== tomorrowCpr.bc!
-      // Specifically, yesterday's BC is 95, and tomorrow's BC is 98.33 (or 99).
+      // Specifically, yesterday's BC is 95, and tomorrow's BC is 99.
       // Let's assert that the score is calculated with rule 3 (Higher Value +20) passed.
       assert.ok(signal.overnightScore !== null);
       assert.ok(signal.overnightScore > 0);
