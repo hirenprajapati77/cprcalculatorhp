@@ -1811,6 +1811,7 @@ export default function ScannerClient() {
 
   const fetchIndexData = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
+    setOvernightMetrics(null); // clear stale BTST funnel strip when switching to INDEX mode
     const startFetchTime = Date.now();
     try {
       const res = await fetchDeduped('/api/index-scan');
