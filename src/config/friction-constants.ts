@@ -53,7 +53,7 @@ export interface ItemizedCashDeliveryConfig extends BaseFrictionTierConfig {
 
 export interface ItemizedOptionPremiumConfig extends BaseFrictionTierConfig {
   mode: 'ITEMIZED_OPTION_PREMIUM';
-  sttSellRate: number;         // 0.10% on sell premium turnover
+  sttSellRate: number;         // 0.15% on sell premium turnover (April 2026 schedule)
   stampDutyBuyRate: number;   // 0.003% on buy premium turnover
   exchangeRatePerLeg: number; // 0.05% per leg premium turnover (NSE options)
   sebiRate: number;           // ₹10/crore (0.0001%)
@@ -166,10 +166,10 @@ export const FRICTION_MODELS = {
       RETAIL_STATUTORY: {
         id: 'RETAIL_STATUTORY',
         name: 'Retail Option Buying Drag',
-        description: 'STT 0.10% on sell premium, exchange 0.05% per leg, stamp duty 0.003% on buy, ₹20/order brokerage + 18% GST.',
+        description: 'STT 0.15% on sell premium, exchange 0.05% per leg, stamp duty 0.003% on buy, ₹20/order brokerage + 18% GST.',
         isDefault: true,
         mode: 'ITEMIZED_OPTION_PREMIUM',
-        sttSellRate: 0.001,          // 0.10% on sell premium
+        sttSellRate: 0.0015,         // 0.15% on sell premium
         stampDutyBuyRate: 0.00003,   // 0.003% on buy premium
         exchangeRatePerLeg: 0.0005,  // 0.05% per leg on premium
         sebiRate: 0.000001,          // ₹10/crore
