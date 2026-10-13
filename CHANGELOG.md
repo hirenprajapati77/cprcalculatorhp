@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added & Hardened — 02 Oct: Isolated Security-Gated /unlock & Protected Route Gating (`1bff0f42`)
+### Hardened & Verified — 12–13 Oct: Full CI Hardening, 2025 Calendar & Integration Suite Gate (PRs #269–#275)
+
+- **PR #275 (`01fe85ea`) — Live Blocking Integration Suite in CI**:
+  - Wired `npm run test:integration` as a blocking step into `.github/workflows/verify.yml` with Postgres 15 and Redis 6 service containers.
+  - Supplied `TOKEN_ENCRYPTION_KEY` and omitted shadow dummy Telegram credentials so fallback to encrypted `appSettings` succeeds.
+  - Restored full suite enforcement: all 56 integration tests pass blocking in CI (3m 30s).
+- **PR #274 (`1a7746ff`) — Integration Test Suite Drift Repair**:
+  - Repaired 5 root causes of test expectation drift without modifying any application code.
+  - Aligned `breakout-watcher.test.ts` for dual-direction evaluation (`BREAKOUT` + `BREAKDOWN`) claims and state checks.
+  - Patched lazy `prisma.$transaction` Proxy bypass in `overnight.test.ts` discovery mocks via underlying global client handler.
+  - Fixed `journal.test.ts` fixtures with morning marks (`cmp916`) to isolate execution slippage from gap-failure drops, and verified LTP fallback on option expiry mismatch.
+  - Aligned overnight intraday parsing expectations with Yahoo prefix truncation and valid session OHLC skip gates.
+- **PR #272 (`b6e48629`) — 2025 NSE Trading Holidays & Weekend Guards**:
+  - Added complete official 14-date NSE weekday trading holiday calendar for 2025 to `src/lib/market-hours.ts`.
+  - Added Diwali Laxmi Pujan (Muhurat Trading) scheduling rules and documented Gandhi Jayanti / Dussehra calendar collision.
+  - Implemented unit tests verifying holiday exclusion, holiday rollback, and IST-correct weekend regression guards.
+- **PR #271 (`e5207a74`) — Next.js Compiler Build Gate & API Route Coverage**:
+  - Removed `typescript.ignoreBuildErrors: true` and `eslint.ignoreDuringBuilds: true` from `next.config.ts`, making `next build` a real live compiler gate in CI.
+  - Scoped Tier 4 code coverage reporting to active API route handlers (`src/app/api/**/route.ts`), surfacing actionable coverage (22.38% lines, 56.35% branches).
+- **PR #270 (`b13b8d18`) — P2 Resilience & Journal Friction Verification**:
+  - Audited statutory friction calculations and ensured non-destructive journal estimation fallbacks.
+  - Hardened database circuit breaker and fail-stale cache semantics across scanner and journal.
+- **PR #269 (`2db8166b`) — P0/P1 Security & Query Boundary Remediation**:
+  - Closed critical security boundaries, authenticated API token protection, and bounded transaction query timeouts.
 
 - **Security-Gated `/unlock` Shell Isolation (`EnterpriseShell.tsx`)**:
   - Separated workstation shell into `AuthenticatedWorkstationShell` and isolated `/unlock` from all workstation chrome.
