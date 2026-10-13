@@ -334,4 +334,86 @@ describe('Market Hours Utilities', () => {
       }
     });
   });
+
+  describe('NSE 2026 Holidays (Circular NSE/CMTR/71775)', () => {
+    const holidays2026 = [
+      '2026-01-26', // Republic Day (Monday)
+      '2026-03-03', // Holi (Tuesday)
+      '2026-03-26', // Shri Ram Navami (Thursday)
+      '2026-03-31', // Shri Mahavir Jayanti (Tuesday)
+      '2026-04-03', // Good Friday (Friday)
+      '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti (Tuesday)
+      '2026-05-01', // Maharashtra Day (Friday)
+      '2026-05-28', // Bakri Id (Thursday)
+      '2026-06-26', // Muharram (Friday)
+      '2026-09-14', // Ganesh Chaturthi (Monday)
+      '2026-10-02', // Mahatma Gandhi Jayanti (Friday)
+      '2026-10-20', // Dussehra (Tuesday)
+      '2026-11-10', // Diwali-Balipratipada (Tuesday)
+      '2026-11-24', // Prakash Gurpurb Sri Guru Nanak Dev (Tuesday)
+      '2026-12-25', // Christmas (Friday)
+    ];
+
+    it('identifies confirmed 2026 weekday holidays as non-trading days (15 total per NSE/CMTR/71775)', () => {
+      assert.strictEqual(holidays2026.length, 15, 'Official list must contain 15 weekday holidays');
+      for (const ymd of holidays2026) {
+        const d = new Date(`${ymd}T10:00:00+05:30`);
+        const ist = getISTTime(d);
+        assert.strictEqual(ist.isHoliday, true, `${ymd} must be flagged as isHoliday: true`);
+        assert.strictEqual(ist.isTradingDay, false, `${ymd} must not be an NSE trading day`);
+      }
+    });
+
+    it('P1 regression guard: 2026-10-20 (Dussehra), 2026-11-10 (Balipratipada), and 2026-11-24 (Guru Nanak) are closed', () => {
+      // 2026-10-20 (Tuesday, Dussehra)
+      const dussehra = getISTTime(new Date('2026-10-20T10:00:00+05:30'));
+      assert.strictEqual(dussehra.isHoliday, true, '2026-10-20 Dussehra must be isHoliday: true');
+      assert.strictEqual(dussehra.isTradingDay, false, '2026-10-20 Dussehra must NOT be a trading day');
+
+      // 2026-11-10 (Tuesday, Diwali-Balipratipada)
+      const balipratipada = getISTTime(new Date('2026-11-10T10:00:00+05:30'));
+      assert.strictEqual(balipratipada.isHoliday, true, '2026-11-10 Balipratipada must be isHoliday: true');
+      assert.strictEqual(balipratipada.isTradingDay, false, '2026-11-10 Balipratipada must NOT be a trading day');
+
+      // 2026-11-24 (Tuesday, Guru Nanak Jayanti)
+      const guruNanak = getISTTime(new Date('2026-11-24T10:00:00+05:30'));
+      assert.strictEqual(guruNanak.isHoliday, true, '2026-11-24 Guru Nanak must be isHoliday: true');
+      assert.strictEqual(guruNanak.isTradingDay, false, '2026-11-24 Guru Nanak must NOT be a trading day');
+    });
+
+    it('P1 regression guard: 2026-11-03 and 2026-11-04 are normal active trading days (not falsely closed)', () => {
+      // Nov 3 and Nov 4, 2026 are regular Tuesday and Wednesday trading sessions
+      const nov3 = getISTTime(new Date('2026-11-03T10:00:00+05:30'));
+      assert.strictEqual(nov3.isHoliday, false, '2026-11-03 must NOT be a holiday');
+      assert.strictEqual(nov3.isTradingDay, true, '2026-11-03 must remain an active trading day');
+
+      const nov4 = getISTTime(new Date('2026-11-04T10:00:00+05:30'));
+      assert.strictEqual(nov4.isHoliday, false, '2026-11-04 must NOT be a holiday');
+      assert.strictEqual(nov4.isTradingDay, true, '2026-11-04 must remain an active trading day');
+    });
+
+    it('Case: getRecentNseTradingDays bridges across 2026-10-20 Dussehra correctly', () => {
+      // 2026-10-16 (Friday), 2026-10-17/18 (Weekend), 2026-10-19 (Monday), 2026-10-20 (Tuesday Dussehra Holiday)
+      // 2026-10-21 (Wednesday). Looking back 3 trading days from Wednesday 2026-10-21:
+      const wednesday = new Date('2026-10-21T12:00:00+05:30');
+      const days = getRecentNseTradingDays(3, wednesday);
+      assert.deepStrictEqual(days, [
+        '2026-10-16',
+        '2026-10-19',
+        '2026-10-21',
+      ]);
+      assert.strictEqual(days.includes('2026-10-20'), false, '2026-10-20 Dussehra must be skipped');
+    });
+
+    it('regression guard: 2026 holiday list contains NO weekend dates via getISTTime', () => {
+      for (const ymd of holidays2026) {
+        const { isWeekend, weekday } = getISTTime(new Date(`${ymd}T12:00:00+05:30`));
+        assert.strictEqual(
+          isWeekend,
+          false,
+          `${ymd} (${weekday}) is a weekend and must not be in the weekday holiday table`
+        );
+      }
+    });
+  });
 });
