@@ -25,6 +25,7 @@ That's it. The script handles everything:
 - Use `Compress-Archive` / zip (Windows paths break on Linux)
 - Use `npm ci` on the server (takes 3+ minutes unnecessarily)
 - Use `pm2 restart --update-env` (stale env cache — always delete+start)
+- Use ad-hoc file upload scripts (legacy `ops/deploy.js` was retired) — always use `.\ops\deploy.ps1` as the sole deployment pipeline
 
 ---
 
@@ -33,7 +34,7 @@ That's it. The script handles everything:
 | Item | Value |
 |---|---|
 | Server | `ubuntu@129.159.230.41` |
-| SSH Key | `C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key` |
+| SSH Key | `C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key` (or `$env:DEPLOY_SSH_KEY`) |
 | PM2 process | `cpr-platform` |
 | Server app root | `/home/ubuntu/cpr-calculator-platform` |
 | Deploy script (server) | `/home/ubuntu/deploy_extract.sh` |
@@ -86,6 +87,12 @@ This **reverses** the earlier always-write-L1 warm-cache behavior (added to prev
 
 6. **After deploy, always restore `.env` `NEXT_PUBLIC_BASE_URL` to `http://localhost:3000`**  
    `deploy.ps1` does this automatically.
+
+7. **Typecheck and lint are enforced during `next build`**  
+   `typescript.ignoreBuildErrors` and `eslint.ignoreDuringBuilds` were removed in PR #271. Local production build via `.\ops\deploy.ps1` and CI builds must be 100% clean of typecheck and lint errors.
+
+8. **`TOKEN_ENCRYPTION_KEY` rotation invalidates stored broker ciphertext**  
+   Rotating `TOKEN_ENCRYPTION_KEY` without migrating existing DB ciphertext renders stored Fyers tokens in `appSettings` undecryptable. `scripts/rotate_secrets.js` guards against accidental rotation and requires explicit `--i-understand-data-loss` confirmation.
 
 ---
 

@@ -1,43 +1,140 @@
-# CPR Calculator Platform - Agent Rules
+# Agent Instructions — CPR Calculator Platform
 
-## Agent Persona: High-Fidelity Trading Systems Engineer
-**Context:**
-You are auditing/extending a production-grade CPR (Central Pivot Range) trading terminal. The system uses Next.js 15, TypeScript, and Prisma. It features an "Advanced Engine" for BTST/STBT signals and a "Shadow Mode" for V2 parallel scoring validation.
+## DEPLOY — Authorization required, ~2-3 Minutes
 
-**Important Note for Agents:** Always verify a rule against the current source code before enforcing it broadly. Treat these guidelines as high-quality constraints, but respect the specific logic of the module you are editing.
+> [!IMPORTANT]
+> **DEPLOY BOUNDARY:** NEVER run `.\ops\deploy.ps1` or deploy/restart PM2 on the production server without explicit review and sign-off/approval from Hiren. Prepare code changes, run verification (`npx tsc --noEmit` and tests) locally, and wait for confirmation before deploying.
 
-### Universal Engineering Guardrails:
+**To deploy to production (ONLY after receiving explicit user sign-off):**
 
-- **Numerical Safety:** NEVER divide two numbers without using a `safeRatio` helper or an explicit denominator > 0 check. Trading metrics like PnL% and ATR ratios are prone to division-by-zero.
-- **Timezone Accuracy:** All trading logic and database keys must resolve to Midnight IST. Use `Intl.DateTimeFormat` with 'Asia/Kolkata' to ensure crons on Day D+1 correctly query signals from Day D.
-- **Data Integrity:** When fetching live quotes (e.g., Yahoo Finance), explicitly verify that high, low, close, and volume arrays are aligned and of equal length before processing.
-- **Performance:** Move expensive objects (like Intl formatters) out of loops.
-- **Testing:** Every fix must be accompanied by appropriate tests, and overnight-service changes should include coverage in `overnight.test.ts` mocking edge cases like misaligned arrays, zero-volume sessions, or market holidays.
+```powershell
+.\ops\deploy.ps1
+```
 
-### Current Repo Conventions (Strategy-Specific):
+That's it. The script handles everything:
+- Pre-flight checks (schema, DATABASE_URL)
+- Sets production URL, builds, packages with tar
+- Uploads via SCP, extracts on server, restarts PM2
+- Restores local .env
 
-- **History Discipline:** For overnight ATR-dependent logic, prefer a minimum of 15 daily candles unless the current module explicitly defines a different validated threshold. Always validate `history.length`.
-- **Shadow Mode Parity:** When modifying signal logic, ensure `scoreV2` and `v2Breakdown` are populated in the TradeJournal to allow for side-by-side performance comparison.
-- **Conflict Resolution:** For overnight conflict-resolution logic, treat score differences under 10 as `NEUTRAL_CONFLICT` unless current module logic specifies otherwise.
-- **Audit Logic:** Look for math redundancies (e.g., obscured pivot formulas) and replace them with clear, standardized expressions.
-- **Corporate Actions:** Maintain the "Auto-Healing" strike logic in TradeJournalService—if an exact strike is missing, find the closest one within a 5% band.
+**DO NOT:**
+- Build manually step-by-step (wastes tokens and time)
+- **NEVER run `npm run build` directly on the Oracle server via SSH.** The server has limited memory and the build will freeze, crash, or take 10+ minutes. ALWAYS use `.\ops\deploy.ps1` to build locally and push the artifacts.
+- **NEVER run `npx prisma generate` on the Oracle server during deploy.** `deploy_extract.sh` must not call it — the local Windows build already embeds `debian-openssl-3.0.x` engines (`binaryTargets` in `schema.prisma`). Generate on the 1GB VM can OOM mid-deploy. Keep `prisma migrate deploy` on the server (Postgres is localhost-only; laptop cannot reach it without an SSH tunnel).
+- **Direct read-only SSH diagnostics (reading logs, querying Redis keys, and checking database records/PM2 status) are fully authorized** for troubleshooting and root-cause analysis. However, do not deploy code changes, test unverified scripts, or run manual database migrations directly on the server; prepare all patches locally and deploy using `.\ops\deploy.ps1`.
+- Use `Compress-Archive` / zip (Windows paths break on Linux)
+- Use `npm ci` on the server (takes 3+ minutes unnecessarily)
+- Use `pm2 restart --update-env` (stale env cache — always delete+start)
+- Use ad-hoc file upload scripts (legacy `ops/deploy.js` was retired) — always use `.\ops\deploy.ps1` as the sole deployment pipeline
 
-### Current System Status for Context:
-- **CPR Engine:** Standardized R1–R4/S1–S4. TC/BC swap used as a data-error guard.
-- **BTST/STBT:** 130-point scoring system. Requires 15-day history for ATR.
-- **Journal:** Automated snapshots at 9:16, 9:30, 9:45, and 10:00 AM IST. 10 AM IST triggers auto-close for all open entries.
+---
 
-### Deployment Authorization Protocol:
-You are permitted to write code, commit, and deploy to production — including running migrations, restarting PM2, and any command that touches the live server or database — but only after Hiren sends a message containing the literal word "approved" or "deploy," referring specifically to the diff/plan you just presented in that same conversation.
-Rules that close prior failure modes, explicitly:
-1. **A conditional statement is not authorization.** If Hiren says something like "reply 'approved' once you're comfortable," "let me know when it's ready and I'll approve it," or any sentence describing a future approval process, that is not the word "approved." Do not treat it as pre-authorization. Wait for the actual word, sent after the actual plan, in response to that specific plan.
-2. **One approval covers one action.** Approval for a diff does not carry over to a different diff, a different migration, or a retry after a step failed. If your first attempt fails and you want to try something different (a different command, a fallback, a manual SQL script instead of the tool you were approved to use), that is a new plan and requires new approval — stop and ask again, even if you're mid-task and it feels like a small pivot.
-3. **If an approved step fails, stop and report — do not escalate on your own.** Do not try a second approach, do not "just fix it quickly," do not fall back to raw SQL or manual server edits because the sanctioned method didn't work. Report the failure exactly as it happened and wait for the next instruction.
-4. **Report everything you actually ran, including failed attempts.** If you tried something, it failed, and you tried something else, all of that goes in your report — not just the step that worked. A report that omits failed or unapproved attempts to make the outcome look cleaner is a serious violation, worse than the original mistake.
-5. **No conflating confidence with authorization.** "I was highly confident this was correct" is never a substitute for the literal approval word. This applies no matter how urgent the situation seems, including production incidents you believe you caused.
-6. **Diffs before actions, always.** For any change touching the database, deployment scripts, or server config, show the full diff/SQL/plan first, in full, and stop. Do not bundle "here's the plan" and "I already ran it" into the same message.
+## Key Facts
 
-If any of this is unclear or you're unsure whether a specific message counts as approval, the default is: it doesn't. Ask explicitly: "Do you approve this exact plan? Reply 'approved' to proceed." and wait.
+| Item | Value |
+|---|---|
+| Server | `ubuntu@129.159.230.41` |
+| SSH Key | `C:\Users\hiren\Downloads\ssh-key-2026-05-30 (1).key` (or `$env:DEPLOY_SSH_KEY`) |
+| PM2 process | `cpr-platform` |
+| Server app root | `/home/ubuntu/cpr-calculator-platform` |
+| Deploy script (server) | `/home/ubuntu/deploy_extract.sh` |
+| Database | PostgreSQL on localhost:5432 |
+| Redis | localhost:6379 (on server only, not local) |
 
-7. **No unprompted secret extraction.** Never read credentials or secrets from .env or any config file on a live server without asking first, even to verify something I asked you to verify. If a step fails due to authorization and requires a live production secret to proceed, stop and ask for explicit permission before retrieving or using that secret.
-8. **Never SSH or SCP directly to the production box** to test, migrate, or deploy anything — even mid-task, even under time pressure, even if a similar action was approved earlier in the session. Prepare diffs, migrations, and scripts locally for Hiren to review and apply through the existing deploy pipeline. If a specific one-off SSH diagnostic command is genuinely necessary, ask for it explicitly and wait for the literal approval word before running it — do not treat "let's get this done" or similar framing as covering direct server access.
+---
+
+## Memory (Oracle Free Tier — ~1 GB RAM)
+
+Production runs on a **956 MB** VM. Next.js standalone alone uses ~330–470 MB RSS at steady state; **55–70% RAM usage is normal**.
+
+**Permanent safeguards (do not remove):**
+- `ops/ecosystem.config.cjs` — PM2 starts with `--max-old-space-size=384` and `max_memory_restart: 650M` (450M/550M caused mid-scan/overnight restart loops; heap stays 384)
+- `ops/mem_watchdog.sh` — crontab every 5 min: **outside** NSE cash session (09:15–15:30 IST) flushes Redis at 75% RAM and flush+restart at 85%; **during** market hours skips FLUSHDB (preserves `cron_done` / unlock rate-limit keys) and may still restart PM2 at 85%
+- Cache layer stores data in **Redis only** when connected (no duplicate L1 in Node heap)
+- Cron jobs call `purgeInProcessCaches()` after auto-scan and BTST alert
+
+### Cache trade-off (documented — not a silent regression)
+
+When Redis is connected, `CacheService.set()` writes **Redis only**. The in-process LRU is populated only when Redis is down or a Redis write fails.
+
+This **reverses** the earlier always-write-L1 warm-cache behavior (added to prevent thundering-herd DB hits after Redis disconnects). On the 1 GB Oracle VM, mirroring ~700 keys into Node heap permanently cost more RAM than we could afford (~90% host usage).
+
+**Known failure mode:** Outside market hours, `mem_watchdog` may flush Redis at 75% RAM → L1 was never warm either → next scan/API batch miss-storms upstream/DB → short CPU/RAM spike. During 09:15–15:30 IST, FLUSHDB is skipped so cron claims / unlock rate limits survive. Accepted: a transient miss burst after an off-hours flush is cheaper than carrying 2× cache residency forever.
+
+**Implication for new features:** do **not** store durable product state (direction hysteresis, alert claims, cooldowns) in Redis alone — it is intentionally disposable under memory pressure. Prefer Postgres (same pattern as `breakoutAlertState` / `btstAlertState`) or a small in-process Map that is explicitly OK to lose on PM2 restart.
+
+**Check memory:** authenticated `GET /api/health` → `memory.process.rssMb` and `memory.l1.size`
+
+**If RAM stays >85% after deploy:** confirm `pm2 show cpr-platform` lists `max memory restart: 681574400` (650M).
+
+---
+
+## Common Pitfalls (Read Before Touching Anything)
+
+1. **`CPR_WEIGHT` / `BTST_SCORING` in `src/services/backtest/btst.service.ts` must stay divergent**
+   Score-path (`calculateLongScore` / `calculateShortScore`) uses `BTST_SCORING.CPR_NARROW_WEIGHT` / `CPR_NARROW_WEIGHT_NO_VDU`. The `scoreBreakdown` path honors `env.CPR_WEIGHT`. This is intentional and has been reverted 3+ times after unauthorized unification. **Any future touch requires explicit owner approval BEFORE the change**, not after via revert. Guarded by the unit test in `src/tests/unit/btst.test.ts`.
+
+2. **`prisma/schema.prisma` must always be `provider = "postgresql"`**  
+   `prisma-setup.js` silently switches it to `sqlite` locally. Always check before building.
+
+3. **`NEXT_PUBLIC_BASE_URL` is inlined at BUILD time**  
+   Production build must use `https://129-159-230-41.nip.io` (see `ops/deploy.ps1`). Prefer that HTTPS URL in the browser — not bare `http://IP` — so Secure session cookies stick.
+
+4. **Cookie `Secure` flag must NOT use `NODE_ENV === 'production'`**  
+   Use request HTTPS / `X-Forwarded-Proto` / `NEXT_PUBLIC_BASE_URL.startsWith('https://')` (`src/lib/auth-cookie.ts`). Nginx TLS terminates at nip.io; Node still listens on localhost HTTP behind the proxy.
+
+5. **Redis errors during `npm run build` are normal** — no local Redis, it falls back to memory.
+
+6. **After deploy, always restore `.env` `NEXT_PUBLIC_BASE_URL` to `http://localhost:3000`**  
+   `deploy.ps1` does this automatically.
+
+7. **Typecheck and lint are enforced during `next build`**  
+   `typescript.ignoreBuildErrors` and `eslint.ignoreDuringBuilds` were removed in PR #271. Local production build via `.\ops\deploy.ps1` and CI builds must be 100% clean of typecheck and lint errors.
+
+8. **`TOKEN_ENCRYPTION_KEY` rotation invalidates stored broker ciphertext**  
+   Rotating `TOKEN_ENCRYPTION_KEY` without migrating existing DB ciphertext renders stored Fyers tokens in `appSettings` undecryptable. `scripts/rotate_secrets.js` guards against accidental rotation and requires explicit `--i-understand-data-loss` confirmation.
+
+---
+
+## Full Deploy Runbook
+
+See [ops/DEPLOY_RUNBOOK.md](ops/DEPLOY_RUNBOOK.md) for detailed explanations.
+
+---
+
+## Cursor Cloud specific instructions
+
+The deploy runbook above targets the Windows/PowerShell production workflow. For local development inside a Cursor Cloud Linux VM, use the notes below. Standard commands live in `package.json` (`dev`, `lint`, `test`, `build`) and `README.md`.
+
+### Services
+- **Next.js app** (the only service that must run): `npm run dev` → http://localhost:3000 (Turbopack). `/` redirects to `/calculate`. Health check: `GET /api/health`.
+- **PostgreSQL 16** is installed locally as the dev database (matches the app's `postgresql` provider, so `prisma/schema.prisma` stays unmodified). It is NOT auto-started — start it each session with `sudo pg_ctlcluster 16 main start`. DB `cpr_pro`, credentials `postgres:postgres`, referenced by `DATABASE_URL` in `.env`.
+- **Redis** is intentionally not run locally; the app falls back to an in-memory cache. `/api/health` reporting `redis: "disconnected"` is expected and not an error.
+
+### Gotchas (non-obvious)
+- **Never set `REDIS_URL=""` in `.env`.** An empty string fails the Zod `.url()` check in `src/config/env.ts` and crashes startup at the instrumentation hook. Omit the variable entirely (leave `CACHE_PROVIDER="memory"`) to use the in-memory fallback.
+- **Do NOT run `node prisma-setup.js` in this environment.** When `DATABASE_URL` isn't a reachable `postgresql://` URL it rewrites `prisma/schema.prisma`'s provider to `sqlite` (tracked-file churn + the pitfall #1 above). Since local Postgres is configured, just use `npx prisma db push` (only needed on a fresh/empty DB) and `npx prisma generate`.
+- `.env` is git-ignored and already configured for the local Postgres + memory-cache setup; it persists across sessions.
+- BTST/overnight endpoints are gated to the 15:10–15:25 IST window; `.env` sets `BTST_BYPASS_WINDOW="true"` so they can be tested any time.
+- Live market data (scanner, signals) needs outbound internet to Yahoo Finance; set `MARKET_DATA_MODE="mock"` to run fully offline. The manual CPR calculator (`/calculate`, `POST /api/cpr/calculate`) takes manual OHLC input and needs no market data.
+
+### Lint / test / build
+- Lint: `npm run lint` (currently clean except pre-existing unused-var warnings).
+- Tests: `npm test` (Node native runner, 485 unit tests; 41 fail in sandboxes without a generated Prisma client — run `prisma generate` first).
+- Build: `npm run build` (production build; dev uses `npm run dev`).
+
+---
+
+## Accepted Risk / Audit Exceptions
+
+### yahoo-finance2 → @modelcontextprotocol/sdk → @hono/node-server (moderate)
+- Advisory: GHSA-frvp-7c67-39w9 — path traversal in `serve-static` via encoded backslash (`%5C`)
+- Windows-specific attack vector; deploy target is Oracle Cloud Linux via PM2 — not exposed
+- Fix requires `yahoo-finance2` downgrade (breaking change, would affect the fallback data source)
+- Reviewed: 2026-07-31. Decision: accept, no action. Revisit if yahoo-finance2 ships a non-breaking patch.
+
+### eslint / eslint-config-next / @eslint/eslintrc chain (high) + transitive minimatch/brace-expansion
+- Advisory: GHSA-mh99-v99m-4gvg (brace-expansion DoS) and related eslint-config-array/eslintrc chain
+- All devDependencies — no runtime/production exposure
+- Fix requires eslint-config-next major downgrade (breaking, affects lint tooling only)
+- Reviewed: 2026-07-31. Decision: accept, no action.

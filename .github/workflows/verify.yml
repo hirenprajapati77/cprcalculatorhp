@@ -1,17 +1,17 @@
-# Runs type-checking, lint, and unit tests on every PR.
+# Runs full verification pipeline on every PR and push to main.
 #
-# Why this exists: next.config.ts sets `typescript.ignoreBuildErrors: true`
-# and `eslint.ignoreDuringBuilds: true` in production, because the 1GB Oracle
-# Cloud VM this app deploys to OOMs if the build also runs type-checking and
-# linting. That's a reasonable tradeoff for the deploy step, but it means
-# NOTHING currently catches type errors or lint issues before merge. This
-# workflow is the substitute -- it runs on GitHub's runners, not the VM, so
-# there's no memory constraint here.
+# Quality gates enforced:
+# - Typecheck (`tsc --noEmit`)
+# - Lint (`eslint`)
+# - Regression lock (core CPR math + execution benchmark)
+# - Unit tests & Coverage gate
+# - Integration tests (PostgreSQL 15 + Redis 6, blocking)
+# - E2E critical flows
+# - Production build (`next build`)
 #
-# NEW FILE -- no CI existed before this. First run may surface pre-existing
-# issues unrelated to whatever PR introduces this file; that's expected, not
-# a regression. Treat failures here as informational until the backlog of
-# pre-existing tsc/lint issues is triaged, then make it required.
+# Note on Next.js build: next.config.ts enforces full typecheck and linting during
+# `next build` (ignoreBuildErrors and ignoreDuringBuilds were permanently removed in #271).
+# Production builds produced in CI and locally via ops/deploy.ps1 must be 100% clean.
 name: Verify (typecheck, lint, test)
 
 on:
