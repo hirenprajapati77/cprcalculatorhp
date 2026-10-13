@@ -11,7 +11,9 @@ import {
   AlertTriangle,
   Star,
   Sparkles,
+  Filter,
 } from 'lucide-react';
+import type { OvernightScanMetrics } from '@/services/overnight/overnight-scan-metrics';
 
 export type ScannerMode = 'CPR' | 'BTST' | 'STBT' | 'OVERNIGHT' | 'INDEX';
 
@@ -30,6 +32,7 @@ interface ScannerKpiStripProps {
   watchlistCount: number;
   avoidCount: number;
   topStocks: Array<{ symbol: string; score: number; alertSuppressedReason?: string | null }>;
+  overnightMetrics?: OvernightScanMetrics | null;
 }
 
 export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
@@ -47,6 +50,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
   watchlistCount,
   avoidCount,
   topStocks,
+  overnightMetrics,
 }) => {
   const isOvernight = scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT';
 
@@ -113,6 +117,57 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
           </div>
         );
       })()}
+
+      {/* ── Overnight Scan Funnel Observability Strip ── */}
+      {isOvernight && overnightMetrics && (
+        <div className="bg-surface-panel border border-border-default rounded-lg px-3.5 py-2 text-[11px] flex flex-wrap items-center justify-between gap-2.5 text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 text-accent-primary font-bold uppercase tracking-wider text-[10px]">
+              <Filter size={12} />
+              <span>Funnel:</span>
+            </div>
+            <span className="text-text-primary">
+              Universe <strong className="text-text-primary">{overnightMetrics.universeSize}</strong>
+            </span>
+            <span className="text-border-strong">·</span>
+            <span className="text-text-primary">
+              Processed <strong className="text-text-primary">{overnightMetrics.processed}</strong>
+            </span>
+            <span className="text-border-strong">·</span>
+            <span className="text-text-primary">
+              Saved <strong className={overnightMetrics.saved > 0 ? 'text-trading-bullish' : 'text-text-muted'}>{overnightMetrics.saved}</strong>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              eligibility=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedEligibility}</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              regime=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedRegime}</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              friday=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedFridayGate}</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              extension=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedExtension}</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              conflict=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedConflict}</span>
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-surface-elevated border border-border-subtle text-text-muted">
+              noIntraday=<span className="text-text-secondary font-semibold">{overnightMetrics.droppedNoIntraday}</span>
+            </span>
+            <span className={`px-1.5 py-0.5 rounded border ${
+              overnightMetrics.errors > 0
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 font-bold'
+                : 'bg-surface-elevated border-border-subtle text-text-muted'
+            }`}>
+              errors=<span className={overnightMetrics.errors > 0 ? 'text-rose-400 font-bold' : 'text-text-secondary font-semibold'}>{overnightMetrics.errors}</span>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── Dynamic Setup Metrics Strip ── */}
       {isOvernight ? (

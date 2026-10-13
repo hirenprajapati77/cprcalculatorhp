@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Robustness Pack: Overnight Funnel Observability & M-1 CPR Width Golden Fixtures
+
+- **Overnight Scan Funnel Observability in Workstation UI (`ScannerKpiStrip.tsx`, `ScannerClient.tsx`, `api/btst/route.ts`, `advanced-discover-bridge.ts`)**:
+  - Surfaced compact M-5 funnel metrics directly in the workstation UI when in `BTST`, `STBT`, or `OVERNIGHT` modes.
+  - Displays pipeline volume and attrition breakdown: `Universe <N> · Processed <N> · Saved <N>` with drop chips: `eligibility=<N>`, `regime=<N>`, `friday=<N>`, `extension=<N>`, `conflict=<N>`, `noIntraday=<N>`, and `errors=<N>`.
+  - Forwards `metrics` from `OvernightService.getLastScanMetrics()` through `advanced-discover-bridge.ts` and `/api/btst` in both cached and fresh discovery paths.
+  - Provides instant operator clarity when `saved=0` so strict market filter attrition is readily distinguished from pipeline faults.
+  - Maintains existing "window closed" state banners when outside discovery hours with graceful degradation if cached metrics are absent.
+
+- **M-1 CPR Width Golden Fixtures (`src/tests/unit/cpr-width-fixtures.test.ts`)**:
+  - Added dedicated test suite with 13 deterministic test cases locking CPR width classification (`NARROW`, `NORMAL`, `WIDE`) and `Trending`/`Balanced`/`Ranging` trends.
+  - Locked fixed-% fallback thresholds (<0.30% NARROW, <0.80% NORMAL, >=0.80% WIDE) across granular boundaries (0.2999% vs 0.3000%, 0.7999% vs 0.8000%).
+  - Locked dynamic ATR-aware scaling across low-volatility (1.5% ATR), baseline (2.0% ATR), and high-volatility (3.0% ATR) regimes.
+  - Locked end-to-end OHLC scenarios for symmetrical compression, zero-width, mid-band, and wide expansion candles, along with `calculateAtrCompressionRatio` guards.
+  - Zero modifications to production CPR math or scoring thresholds.
+
 ### Hardened & Verified — 12–13 Oct: Full CI Hardening, 2025 Calendar & Integration Suite Gate (PRs #269–#275)
 
 - **PR #275 (`01fe85ea`) — Live Blocking Integration Suite in CI**:

@@ -19,6 +19,8 @@ import {
   buildInsightsFromOvernight,
 } from '@/services/overnight/overnight-ui-adapter';
 
+import type { OvernightScanMetrics } from './overnight-scan-metrics';
+
 export interface AdvancedDiscoverResult {
   results: BtstScoreResultEnriched[];
   insights: ReturnType<typeof buildInsightsFromOvernight>;
@@ -29,6 +31,7 @@ export interface AdvancedDiscoverResult {
     signalCount: number;
     overnightUniverseCount: number;
   };
+  metrics?: OvernightScanMetrics;
 }
 
 export async function discoverViaAdvancedEngine(
@@ -38,6 +41,10 @@ export async function discoverViaAdvancedEngine(
   const filtered = filterOvernightByUniverse(overnightSignals, universe);
   const results = filtered.map(overnightSignalToBtstUi);
   const insights = buildInsightsFromOvernight(filtered);
+  const metrics =
+    (overnightSignals as { metrics?: OvernightScanMetrics }).metrics ??
+    OvernightService.getLastScanMetrics() ??
+    undefined;
 
   return {
     results,
@@ -49,5 +56,6 @@ export async function discoverViaAdvancedEngine(
       signalCount: results.length,
       overnightUniverseCount: overnightSignals.length,
     },
+    ...(metrics ? { metrics } : {}),
   };
 }

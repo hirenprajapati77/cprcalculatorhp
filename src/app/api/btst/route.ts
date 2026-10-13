@@ -26,6 +26,7 @@ export async function GET(request: Request) {
       insights: unknown;
       coverage?: unknown;
       engine?: string;
+      metrics?: unknown;
     }
 
     // ── Resolve cache (used by all paths below) ──────────────────────────
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
           engine: cached.engine ?? 'advanced',
           state: windowState,
           ...(cached.coverage ? { coverage: cached.coverage } : {}),
+          ...(cached.metrics ? { metrics: cached.metrics } : {}),
         });
       }
       return NextResponse.json({
@@ -83,6 +85,7 @@ export async function GET(request: Request) {
         engine: cached.engine ?? 'advanced',
         state: windowState,
         ...(cached.coverage ? { coverage: cached.coverage } : {}),
+        ...(cached.metrics ? { metrics: cached.metrics } : {}),
       });
     }
 
@@ -150,6 +153,7 @@ export async function GET(request: Request) {
     const scannedAt = `${timeStr} IST, ${dateStr}`;
 
     const coverage = discovery.coverage;
+    const metrics = discovery.metrics ?? OvernightService.getLastScanMetrics() ?? undefined;
 
     const cacheData = {
       scannedAt,
@@ -158,6 +162,7 @@ export async function GET(request: Request) {
       insights,
       coverage,
       engine: 'advanced',
+      ...(metrics ? { metrics } : {}),
     };
 
     await CacheService.set(CACHE_KEY, cacheData, 86400); // 24 hour cache
@@ -172,6 +177,7 @@ export async function GET(request: Request) {
       coverage,
       engine: 'advanced',
       state: windowState,
+      ...(metrics ? { metrics } : {}),
     });
 
   } catch (error) {
