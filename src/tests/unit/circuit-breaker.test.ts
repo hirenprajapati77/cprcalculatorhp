@@ -104,6 +104,52 @@ test('DatabaseCircuitBreaker — trips on Prisma connection code P1001 and pool 
     /CIRCUIT_OPEN/
   );
   assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  // DNS resolution failure (ENOTFOUND / EAI_AGAIN)
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('getaddrinfo ENOTFOUND db.internal.postgres');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('getaddrinfo EAI_AGAIN db.internal.postgres');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  // Postgres server pool exhaustion
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('FATAL: remaining connection slots are reserved for non-replication superuser connections');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('FATAL: sorry, too many clients already');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
 });
 
 test('DatabaseCircuitBreaker — hung probe times out and re-opens circuit with cooldown', async (t) => {

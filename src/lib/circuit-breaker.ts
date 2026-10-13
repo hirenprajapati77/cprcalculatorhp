@@ -23,9 +23,13 @@ function isConnectionError(error: unknown): boolean {
     msg.includes('econnrefused') ||
     msg.includes('econnreset') ||
     msg.includes('etimedout') ||
+    msg.includes('enotfound') ||
+    msg.includes('eai_again') ||
     msg.includes('connection closed') ||
     msg.includes('connection terminated') ||
     msg.includes('timed out waiting for a connection from the pool') ||
+    msg.includes('remaining connection slots are reserved') ||
+    msg.includes('too many clients') ||
     msg.includes("can't reach database server")
   );
 }
