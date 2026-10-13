@@ -188,9 +188,10 @@ describe('Trade Journal Estimated Friction & Net P&L (Step 4 Non-Destructive Lay
       assert.ok(closeTo(res.estimatedChargesPerUnit, 0.34, 0.05));
       assert.ok(res.estimatedChargesTotal > 90 && res.estimatedChargesTotal < 115);
 
-      // 4. Net P&L remains clearly positive (+3.31% net, not -64.5%)
-      assert.ok(closeTo(res.estimatedNetPnl, 2.30, 0.05));
-      assert.ok(closeTo(res.estimatedNetPnlPct, 3.31, 0.1));
+      // 4. Net P&L reflects higher 0.15% STT (+3.26% net vs +3.31% previously, not -64.5%)
+      assert.ok(closeTo(res.estimatedNetPnl, 2.26, 0.02));
+      assert.ok(closeTo(res.estimatedNetPnlPct, 3.26, 0.05));
+      assert.ok(closeTo(res.estimatedNetPnl, res.grossPnl - res.estimatedChargesPerUnit));
       assert.ok(res.estimatedNetPnl > 0);
       assert.ok(res.estimatedNetPnlPct > 0);
     });
