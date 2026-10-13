@@ -26,24 +26,25 @@ const NSE_HOLIDAYS_BY_YEAR: Record<string, string[]> = {
     '2025-12-25', // Christmas
   ],
   '2026': [
-    '2026-01-26', // Republic Day
-    '2026-03-03', // Holi
-    '2026-03-26', // Shri Ram Navami
-    '2026-03-31', // Shri Mahavir Jayanti
-    '2026-04-03', // Good Friday
-    '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
-    '2026-05-01', // Maharashtra Day
-    '2026-05-28', // Bakri Id
-    '2026-06-26', // Muharram
-    '2026-09-14', // Ganesh Chaturthi (Sept 14, 2026)
-    '2026-10-02', // Mahatma Gandhi Jayanti + Vijaya Dashami (Dussehra) — both fall on Oct 2, 2026 per NSE circular
-    // NOTE: Dussehra (Vijaya Dashami) 2026 falls on Oct 2 — same day as Gandhi Jayanti.
-    // NSE lists only one holiday for this date. Confirmed via NSE holiday circular.
-    // (A previous erroneous '2026-10-20' entry was already removed as the L-1 fix.)
-    '2026-11-03', // Diwali — Laxmi Puja (NSE closed; Muhurat trading may be held separately)
-    '2026-11-04', // Diwali — Balipratipada
-    '2026-11-10', // Prakash Gurpurb Sri Guru Nanak Dev
-    '2026-12-25', // Christmas
+    // Official 15 weekday trading holidays for 2026 per NSE circular NSE/CMTR/71775 (Dec 12, 2025).
+    // Note: Weekend holidays (Mahashivratri Feb 15 Sun, Id-Ul-Fitr Mar 21 Sat, Independence Day Aug 15 Sat,
+    // and Diwali Laxmi Pujan Nov 8 Sun) fall on Sat/Sun and are omitted from weekday closures.
+    // Muhurat trading on Nov 8 (Sun) is conducted as a separate 1-hour special session.
+    '2026-01-26', // Republic Day (Monday)
+    '2026-03-03', // Holi (Tuesday)
+    '2026-03-26', // Shri Ram Navami (Thursday)
+    '2026-03-31', // Shri Mahavir Jayanti (Tuesday)
+    '2026-04-03', // Good Friday (Friday)
+    '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti (Tuesday)
+    '2026-05-01', // Maharashtra Day (Friday)
+    '2026-05-28', // Bakri Id (Thursday)
+    '2026-06-26', // Muharram (Friday)
+    '2026-09-14', // Ganesh Chaturthi (Monday)
+    '2026-10-02', // Mahatma Gandhi Jayanti (Friday)
+    '2026-10-20', // Dussehra / Vijaya Dashami (Tuesday)
+    '2026-11-10', // Diwali-Balipratipada (Tuesday)
+    '2026-11-24', // Prakash Gurpurb Sri Guru Nanak Dev (Tuesday)
+    '2026-12-25', // Christmas (Friday)
   ],
   '2027': [
     '2027-01-26', // Republic Day
