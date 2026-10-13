@@ -2,10 +2,49 @@
 
 **Repo:** cprcalculatorhp / cpr-calculator-platform
 **Branch:** `main`
-**Commit:** `5066a42a` (`5066a42a7faa` — 1-Month Code Review Remediation & Production Deployment)
-**Report pass:** 20 (Post-1-Month Deep Code Review Remediation & Live Production Verification)
-**Report generated:** 2026-09-24
-**Acceptance declaration:** **VERIFIED & PASSED.** Full clean gate run and production deployment completed. All production alignment and operational findings remediated, verified, committed to `main` (`5066a42a`), and actively running on the production Oracle server (`5066a42a7faa`). No open defects or pending issues remain.
+**Commit:** `01fe85ea` (`01fe85ea` — Full CI Hardening, 2025 Holiday Calendar & Blocking Integration Suite)
+**Report pass:** 21 (Full CI Hardening, 2025 Calendar & Blocking Integration Suite Verification)
+**Report generated:** 2026-10-13
+**Acceptance declaration:** **VERIFIED & PASSED.** All 6 PRs (#269, #270, #271, #272, #274, #275) merged into `main`. The integration test suite is fully repaired and running as a live blocking gate in CI with 56/56 passing tests across real Postgres and Redis containers. Zero production regressions.
+
+---
+
+## Pass 21 — 13 Oct 2026: Full CI Hardening, 2025 NSE Calendar & Blocking Integration Suite
+
+| Gate | Result |
+|---|---|
+| `tsc --noEmit` | ✅ 0 errors |
+| ESLint | ✅ 0 errors / 0 warnings |
+| Regression lock | ✅ `2ef002db620a9545a601fb2fb23c92e1a6219ae5012ba4bc977e686e9a2072f5` verified |
+| Unit tests | ✅ **1,441 pass · 0 fail · 2 skip** (offline guards) |
+| Integration tests (CI) | ✅ **56 pass · 0 fail · 0 skip** (live Postgres 15 + Redis 6 blocking CI gate) |
+| Next.js Build Gate | ✅ `next build` live compiler gate active (no `ignoreBuildErrors`/`ignoreDuringBuilds`) |
+| Working tree | ✅ Clean after commit |
+
+### Fixes & Enhancements in this pass
+
+1. **Live Blocking Integration CI Gate (`.github/workflows/verify.yml`, PR #275)**:
+   - Added `npm run test:integration` as a blocking workflow step with live Postgres 15 and Redis 6 service containers.
+   - Supplied `TOKEN_ENCRYPTION_KEY` and omitted shadow dummy Telegram credentials so fallback to encrypted `appSettings` succeeds.
+   - Achieved 100% integration test pass rate (56/56 tests passing in 3m 30s).
+
+2. **Integration Test Suite Drift Repair (`src/tests/integration/`, PR #274)**:
+   - Repaired drifted assertions across `breakout-watcher.test.ts`, `overnight.test.ts`, and `journal.test.ts` without touching application code.
+   - Dual-direction claim evaluation aligned in `breakout-watcher.test.ts`.
+   - Bypassed lazy Prisma proxy in `overnight.test.ts` discovery mocks using `mockPrismaTransaction`.
+   - Added morning mark `cmp916` to journal slippage fixtures and validated LTP fallback on option expiry mismatch.
+
+3. **2025 NSE Trading Holidays Calendar & Guards (`src/lib/market-hours.ts`, PR #272)**:
+   - Populated official 14 weekday trading holidays for 2025 with Diwali Muhurat Trading and Dussehra/Gandhi Jayanti notes.
+   - Added regression unit tests for holiday exclusion, rollover, and IST-accurate weekend checks.
+
+4. **Production Build Gate Hardening & Route Coverage (`next.config.ts`, `scripts/check-coverage-tiers.ts`, PR #271)**:
+   - Removed Next.js build-skip flags (`ignoreBuildErrors`, `ignoreDuringBuilds`).
+   - Scoped Tier 4 code coverage reporting to active API route handlers (`src/app/api/**/route.ts`).
+
+5. **P0/P1/P2 Security, Resilience & Friction Hardening (PRs #269, #270)**:
+   - Resolved security boundaries, token gating, and query statement timeouts.
+   - Audited statutory friction calculations and hardened fail-stale circuit breaker semantics.
 
 ---
 

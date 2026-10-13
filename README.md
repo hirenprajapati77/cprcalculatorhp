@@ -57,6 +57,13 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (October 2026):**
+- **12–13 Oct — Full CI Hardening, 2025 Calendar & Blocking Integration Suite (`01fe85ea`, PRs #269–#275)**:
+  - **Live Blocking Integration CI Gate (`#275`)**: Integrated `npm run test:integration` as a blocking workflow step with live Postgres 15 and Redis 6 containers; 56/56 integration tests pass green in CI.
+  - **Integration Drift Remediation (`#274`)**: Repaired 5 root causes of expectation drift in `breakout-watcher`, `overnight`, and `journal` tests with zero production code changes.
+  - **2025 NSE Trading Calendar (`#272`)**: Added 14 official weekday holidays, Diwali Muhurat timing, and IST-correct weekend regression guards in `src/lib/market-hours.ts`.
+  - **Compiler Gate Hardening (`#271`)**: Removed TypeScript/ESLint build skip flags from `next.config.ts`, making `next build` a real live compiler gate in CI, and scoped Tier 4 coverage to active route handlers.
+  - **P0/P1/P2 Security & Resilience (`#269`, `#270`)**: Closed verified security boundaries, protected query statement timeouts, and hardened circuit breaker/friction models.
+
 - **02 Oct — Security-Gated `/unlock` Shell Isolation & Protected Route Gating (`1bff0f42`)**:
   - **Auth Shell Isolation**: Completely isolated `/unlock` from workstation chrome (Sidebar, TopBar, market tickers, Command Palette, and Footer). Anonymous users see only the security-gated login card.
   - **Edge Route Gating**: Removed `/market-tools` from public page exemptions. Anonymous visits to any workstation page (`/`, `/scanner`, `/calculate`, `/journal`, `/backtest`, `/analytics`, `/watchlist`, `/settings`, `/market-tools/*`) are immediately redirected via `HTTP 307` to `/unlock`.
