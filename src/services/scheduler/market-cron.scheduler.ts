@@ -22,6 +22,7 @@ import {
 } from '@/services/scheduler/cron-run-claim';
 import { EarningsPopulatorService } from '@/services/earnings-populator.service';
 import { runMarketToolsPrecomputeJob } from '@/services/market-tools/market-tools-precompute.job';
+import { MarketToolsWatchService } from '@/services/alert/market-tools-watch.service';
 import { withTimeout, TimeoutError } from '@/lib/with-timeout';
 
 let started = false;
@@ -265,6 +266,18 @@ export function startMarketCronScheduler(): void {
           240_000 // observed real duration ~118s; generous margin above that, not the 60s default
         );
       }
+
+      // 19:30 IST — post-precompute Market Tools WATCH alert window.
+      // Runs once daily after precompute completes, dispatching WATCH notifications to Telegram.
+      if (istTime.hour === 19 && istTime.minute >= 30 && istTime.minute <= 45) {
+        await runClaimedJob(
+          `market-tools-watch:${dateKey}`,
+          () => MarketToolsWatchService.dispatchWatchAlerts(),
+          'market-tools-watch',
+          true,
+          60_000
+        );
+      }
     } finally {
       tickInFlight = false;
     }
@@ -279,7 +292,8 @@ export function startMarketCronScheduler(): void {
   console.log(
     `[MarketCronScheduler] Started (60s poll): cpr-scan (every ${env.CPR_SCAN_INTERVAL_MINUTES || 5}m), ` +
     'btst-alert 15:10–15:25, cpr-journal 15:20–15:24, btst-journal 15:25–15:30, ' +
-    'snapshots 09:16/09:30/09:45 IST, earnings-populate 14:15–14:25 IST'
+    'snapshots 09:16/09:30/09:45 IST, earnings-populate 14:15–14:25 IST, ' +
+    'market-tools-precompute 19:15–19:30 IST, market-tools-watch 19:30–19:45 IST'
   );
 }
 
