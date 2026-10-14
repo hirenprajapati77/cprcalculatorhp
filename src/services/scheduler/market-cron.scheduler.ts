@@ -97,6 +97,33 @@ export async function runEarningsPopulateJob(dateKey: string): Promise<void> {
   );
 }
 
+export function isMarketToolsPrecomputeWindowOpen(date: Date = new Date()): boolean {
+  const { hour, minute, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return false;
+  const timeValue = hour * 100 + minute;
+  // 19:15 - 19:45 IST window
+  return timeValue >= 1915 && timeValue <= 1945;
+}
+
+export function isMarketToolsWatchWindowOpen(date: Date = new Date()): boolean {
+  const { hour, minute, isTradingDay } = getISTTime(date);
+  if (!isTradingDay) return false;
+  const timeValue = hour * 100 + minute;
+  // 19:30 - 21:30 IST window: Safely bounded retry window ensures delayed precompute
+  // or jobs spanning across the 19:30 boundary can retry and successfully dispatch.
+  return timeValue >= 1930 && timeValue <= 2130;
+}
+
+export async function runMarketToolsWatchJob(dateKey: string): Promise<void> {
+  await runClaimedJob(
+    `market-tools-watch:${dateKey}`,
+    () => MarketToolsWatchService.dispatchWatchAlerts(),
+    'market-tools-watch',
+    true,
+    60_000
+  );
+}
+
 
 async function runClaimedJob<T>(
   claimKey: string,
@@ -255,9 +282,9 @@ export function startMarketCronScheduler(): void {
         await runEarningsPopulateJob(dateKey);
       }
 
-      // 19:15 IST — post-bhavcopy market tools pre-computation window.
+      // 19:15–19:45 IST — post-bhavcopy market tools pre-computation window.
       // Runs once daily after Bhavcopy ingestion updates DailyOhlcv records.
-      if (istTime.hour === 19 && istTime.minute >= 15 && istTime.minute <= 30) {
+      if (isMarketToolsPrecomputeWindowOpen(now)) {
         await runClaimedJob(
           `market-tools-precompute:${dateKey}`,
           () => runMarketToolsPrecomputeJob(),
@@ -267,16 +294,13 @@ export function startMarketCronScheduler(): void {
         );
       }
 
-      // 19:30 IST — post-precompute Market Tools WATCH alert window.
+      // 19:30–21:30 IST — post-precompute Market Tools WATCH alert window.
       // Runs once daily after precompute completes, dispatching WATCH notifications to Telegram.
-      if (istTime.hour === 19 && istTime.minute >= 30 && istTime.minute <= 45) {
-        await runClaimedJob(
-          `market-tools-watch:${dateKey}`,
-          () => MarketToolsWatchService.dispatchWatchAlerts(),
-          'market-tools-watch',
-          true,
-          60_000
-        );
+      // Evaluates current clock after precompute completes so that if precompute awaited
+      // and crossed the 19:30 boundary, WATCH immediately executes against the actual current time.
+      const watchNow = new Date();
+      if (isMarketToolsWatchWindowOpen(watchNow)) {
+        await runMarketToolsWatchJob(dateKey);
       }
     } finally {
       tickInFlight = false;
@@ -293,7 +317,7 @@ export function startMarketCronScheduler(): void {
     `[MarketCronScheduler] Started (60s poll): cpr-scan (every ${env.CPR_SCAN_INTERVAL_MINUTES || 5}m), ` +
     'btst-alert 15:10–15:25, cpr-journal 15:20–15:24, btst-journal 15:25–15:30, ' +
     'snapshots 09:16/09:30/09:45 IST, earnings-populate 14:15–14:25 IST, ' +
-    'market-tools-precompute 19:15–19:30 IST, market-tools-watch 19:30–19:45 IST'
+    'market-tools-precompute 19:15–19:45 IST, market-tools-watch 19:30–21:30 IST'
   );
 }
 

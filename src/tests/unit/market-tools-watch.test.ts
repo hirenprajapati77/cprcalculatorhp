@@ -10,7 +10,12 @@ import type { BreakoutVpaFootprint } from '@/services/vpa/vpa.math';
 import { GET as marketToolsWatchRoute } from '@/app/api/cron/market-tools-watch/route';
 import { env } from '@/config/env';
 import { resetCronRunClaims, tryClaimCronRun, completeCronRun } from '@/services/scheduler/cron-run-claim';
-import { shouldCompleteClaimedJob } from '@/services/scheduler/market-cron.scheduler';
+import {
+  shouldCompleteClaimedJob,
+  isMarketToolsPrecomputeWindowOpen,
+  isMarketToolsWatchWindowOpen,
+  runMarketToolsWatchJob,
+} from '@/services/scheduler/market-cron.scheduler';
 
 describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
   const scanDate = '2026-10-14'; // Wednesday
@@ -331,7 +336,7 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
       assert.ok(res.message?.includes('Pivot: <b>₹7750.00</b> (ATH High)'));
     });
 
-    it('labels 52W Pattern pivot explicitly with base depth metrics', async () => {
+    it('labels 52W Pattern pivot honestly as Reference: 52W High without fabricating pattern pivot', async () => {
       const res = await MarketToolsWatchService.assembleWatchReport({
         targetDate: scanDate,
         now: new Date('2026-10-14T14:00:00.000Z'),
@@ -340,9 +345,11 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
       const dixon = res.candidates?.find((c: WatchCandidate) => c.symbol === 'DIXON');
       assert.ok(dixon);
       assert.equal(dixon.structuralPivot, 15200);
-      assert.equal(dixon.structuralPivotLabel, '52W High / Pattern Pivot');
+      assert.equal(dixon.structuralPivotLabel, 'Reference: 52W High');
       assert.equal(dixon.setupDetail, 'Cup & Handle (Tier A+, Score: 98) (Depth: 18.5%, 45d base)');
-      assert.ok(res.message?.includes('Cup &amp; Handle (Tier A+, Score: 98) (Depth: 18.5%, 45d base)'));
+      assert.ok(res.message?.includes('Reference: <b>₹15200.00</b> (52W High)'));
+      assert.ok(res.message?.includes('Status: <i>Pattern candidate — structural pattern pivot pending confirmation</i>'));
+      assert.ok(!res.message?.includes('52W High / Pattern Pivot'));
     });
 
     it('labels Momentum Leaders as Reference: Previous Close, not a structural pivot', async () => {
@@ -691,6 +698,74 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
         const claimedC = await tryClaimCronRun(claimKey);
         assert.equal(claimedC, false); // Locked by cron_done:market-tools-watch:2026-10-14
         assert.equal(telegramCallCount, 1); // Strictly prevented from dispatching twice
+      } finally {
+        TelegramService.sendRawMessage = originalSend;
+      }
+    });
+
+    it('simulates a delayed precompute job spanning across the 19:30 boundary and confirms WATCH eventually sends once reports become ready', async () => {
+      resetCronRunClaims();
+      const dateKey = scanDate;
+
+      // 1. Verify window behavior around boundaries
+      // 19:15 IST (Wednesday) -> Precompute open, Watch closed
+      const t1915 = new Date('2026-10-14T13:45:00.000Z'); // 19:15 IST
+      assert.equal(isMarketToolsPrecomputeWindowOpen(t1915), true);
+      assert.equal(isMarketToolsWatchWindowOpen(t1915), false);
+
+      // 19:29 IST -> Precompute open, Watch closed
+      const t1929 = new Date('2026-10-14T13:59:00.000Z'); // 19:29 IST
+      assert.equal(isMarketToolsPrecomputeWindowOpen(t1929), true);
+      assert.equal(isMarketToolsWatchWindowOpen(t1929), false);
+
+      // 19:31 IST (after crossing 19:30 boundary) -> Precompute open, Watch open
+      const t1931 = new Date('2026-10-14T14:01:00.000Z'); // 19:31 IST
+      assert.equal(isMarketToolsPrecomputeWindowOpen(t1931), true);
+      assert.equal(isMarketToolsWatchWindowOpen(t1931), true);
+
+      // 20:00 IST (extended retry window) -> Precompute closed, Watch open
+      const t2000 = new Date('2026-10-14T14:30:00.000Z'); // 20:00 IST
+      assert.equal(isMarketToolsPrecomputeWindowOpen(t2000), false);
+      assert.equal(isMarketToolsWatchWindowOpen(t2000), true);
+
+      // 21:35 IST (after 21:30 cutoff) -> Precompute closed, Watch closed
+      const t2135 = new Date('2026-10-14T16:05:00.000Z'); // 21:35 IST
+      assert.equal(isMarketToolsPrecomputeWindowOpen(t2135), false);
+      assert.equal(isMarketToolsWatchWindowOpen(t2135), false);
+
+      // 2. Scheduler-level simulation:
+      // Precompute starts at 19:29:50 IST and runs for ~3 minutes, finishing at 19:32:50 IST (spanning 19:30 boundary).
+      // When precompute finishes, reports are not immediately ready (status: 'pending').
+      MultiYearBreakoutService.getBreakoutReport = async () => ({
+        ...mockMultiYearReport,
+        status: 'pending',
+      });
+      let telegramCallCount = 0;
+      const originalSend = TelegramService.sendRawMessage;
+      TelegramService.sendRawMessage = async () => {
+        telegramCallCount++;
+        return { ok: true };
+      };
+
+      try {
+        // Tick 1 at 19:32 IST: precompute has crossed the 19:30 boundary.
+        // Scheduler executes runMarketToolsWatchJob(dateKey) because current clock is in WATCH window.
+        await runMarketToolsWatchJob(dateKey);
+        // Precompute was not ready -> claim was released, Telegram was not called
+        assert.equal(telegramCallCount, 0);
+
+        // Tick 2 at 19:34 IST: Precompute reports have now completed and are ready!
+        MultiYearBreakoutService.getBreakoutReport = async () => mockMultiYearReport;
+        await runMarketToolsWatchJob(dateKey);
+
+        // WATCH sends successfully!
+        assert.equal(telegramCallCount, 1);
+
+        // Tick 3 at 19:50 IST (past old 19:45 window): Another tick occurs
+        await runMarketToolsWatchJob(dateKey);
+
+        // Claim lock prevents duplicate dispatch
+        assert.equal(telegramCallCount, 1);
       } finally {
         TelegramService.sendRawMessage = originalSend;
       }

@@ -187,7 +187,7 @@ export class MarketToolsWatchService {
         sector: s.sector,
         module: 'PATTERN',
         structuralPivot: s.high52w,
-        structuralPivotLabel: '52W High / Pattern Pivot',
+        structuralPivotLabel: 'Reference: 52W High',
         previousClose: s.close,
         setupDetail: `${s.primaryPatternLabel} (Tier ${s.scoreBreakdown.qualityTier}, Score: ${s.scoreBreakdown.totalScore})${baseInfo}`,
         context: `Distance to High: ${s.distanceToHighPct > 0 ? `+${s.distanceToHighPct.toFixed(1)}%` : `${s.distanceToHighPct.toFixed(1)}%`} | VPA: ${s.vpaFootprint?.label ?? 'Neutral'}`,
@@ -321,6 +321,17 @@ export class MarketToolsWatchService {
           `   Setup: <b>${detail}</b>\n` +
           `   Reference: <b>₹${close}</b> (Previous Close)\n` +
           `   Status: <i>Candidate selection only — no entry trigger established</i>\n` +
+          `   Context: ${ctx}${crossTag}\n\n`
+        );
+      }
+
+      if (c.module === 'PATTERN') {
+        const refHigh = (c.structuralPivot ?? c.previousClose).toFixed(2);
+        return (
+          `• <b>${sym}</b> (${sec})\n` +
+          `   Setup: <b>${detail}</b>\n` +
+          `   Reference: <b>₹${refHigh}</b> (52W High) | Close: ₹${close}\n` +
+          `   Status: <i>Pattern candidate — structural pattern pivot pending confirmation</i>\n` +
           `   Context: ${ctx}${crossTag}\n\n`
         );
       }
