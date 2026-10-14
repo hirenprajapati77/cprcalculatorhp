@@ -49,6 +49,15 @@ export async function GET(request: Request) {
       const result = await MarketToolsWatchService.dispatchWatchAlerts();
 
       if (!result.success) {
+        if (result.deliveryStatus === 'delivery_unknown') {
+          // Delivery uncertain: retain claim to prevent duplicate retries without an explicit duplicate policy
+          await completeCronRun(claimKey, true);
+          return NextResponse.json({
+            error: 'Market Tools WATCH delivery uncertain (timeout/network error)',
+            details: result,
+          }, { status: 504 });
+        }
+
         // If precompute is not ready, release claim so scheduler can retry later
         await releaseCronRun(claimKey);
         if (result.reason?.includes('precompute_not_ready')) {

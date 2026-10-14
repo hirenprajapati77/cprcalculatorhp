@@ -40,6 +40,8 @@ export interface DispatchWatchAlertsResult {
   success: boolean;
   sent: boolean;
   dryRun?: boolean | undefined;
+  deliveryStatus?: 'delivered' | 'delivery_unknown' | 'failed' | 'not_sent' | undefined;
+  reportId?: string | undefined;
   reason?: string | undefined;
   scanDate?: string | undefined;
   nextSessionDate?: string | undefined;
@@ -391,10 +393,14 @@ export class MarketToolsWatchService {
       maxCandidates: options?.maxCandidates,
     });
 
+    const reportId = `market-tools-watch:${report.scanDate ?? 'unknown'}:${report.nextSessionDate ?? 'unknown'}`;
+
     if (!report.ready || !report.message) {
       return {
         success: false,
         sent: false,
+        deliveryStatus: 'not_sent',
+        reportId,
         reason: report.reason ?? 'not_ready',
         scanDate: report.scanDate,
         nextSessionDate: report.nextSessionDate,
@@ -403,12 +409,14 @@ export class MarketToolsWatchService {
 
     if (options?.dryRun) {
       console.log(
-        `[MarketToolsWatchService] Dry-run execution for scanDate=${report.scanDate}, candidates=${report.candidateCount}`
+        `[MarketToolsWatchService] Dry-run execution for scanDate=${report.scanDate}, candidates=${report.candidateCount}, reportId=${reportId}`
       );
       return {
         success: true,
         sent: false,
         dryRun: true,
+        deliveryStatus: 'not_sent',
+        reportId,
         scanDate: report.scanDate,
         nextSessionDate: report.nextSessionDate,
         candidateCount: report.candidateCount,
@@ -417,19 +425,43 @@ export class MarketToolsWatchService {
     }
 
     console.log(
-      `[MarketToolsWatchService] Dispatching WATCH alert to Telegram for scanDate=${report.scanDate} (${report.candidateCount} candidates)...`
+      `[MarketToolsWatchService] Dispatching WATCH alert to Telegram for scanDate=${report.scanDate} (${report.candidateCount} candidates, reportId=${reportId})...`
     );
 
     const telegramRes = await TelegramService.sendRawMessage(report.message);
 
     if (!telegramRes.ok) {
+      const isUncertain =
+        typeof telegramRes.reason === 'string' &&
+        (/fetch_error|timeout|aborted|network|econnreset|etimedout/i.test(telegramRes.reason) ||
+         telegramRes.reason === 'max_retries_exceeded');
+
+      if (isUncertain) {
+        console.warn(
+          `[MarketToolsWatchService] Delivery status uncertain (delivery_unknown) for scanDate=${report.scanDate}, nextSession=${report.nextSessionDate}, reportId=${reportId}: ` +
+          `Telegram request timed out or network connection broke after dispatch (${telegramRes.reason}). Automatic retry suppressed to avoid duplicate delivery.`
+        );
+        return {
+          success: false,
+          sent: false,
+          deliveryStatus: 'delivery_unknown',
+          reportId,
+          reason: telegramRes.reason,
+          scanDate: report.scanDate,
+          nextSessionDate: report.nextSessionDate,
+          candidateCount: report.candidateCount,
+        };
+      }
+
       console.error(
-        `[MarketToolsWatchService] Telegram delivery failed for scanDate=${report.scanDate}:`,
+        `[MarketToolsWatchService] Telegram delivery failed for scanDate=${report.scanDate}, reportId=${reportId}:`,
         telegramRes.reason
       );
       return {
         success: false,
         sent: false,
+        deliveryStatus: 'failed',
+        reportId,
         reason: telegramRes.reason,
         scanDate: report.scanDate,
         nextSessionDate: report.nextSessionDate,
@@ -438,12 +470,14 @@ export class MarketToolsWatchService {
     }
 
     console.log(
-      `[MarketToolsWatchService] Successfully dispatched WATCH alert for scanDate=${report.scanDate}`
+      `[MarketToolsWatchService] Successfully dispatched WATCH alert for scanDate=${report.scanDate}, reportId=${reportId}`
     );
 
     return {
       success: true,
       sent: true,
+      deliveryStatus: 'delivered',
+      reportId,
       scanDate: report.scanDate,
       nextSessionDate: report.nextSessionDate,
       candidateCount: report.candidateCount,

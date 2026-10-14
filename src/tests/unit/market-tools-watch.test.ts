@@ -563,7 +563,35 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
 
         assert.equal(res.success, false);
         assert.equal(res.sent, false);
+        assert.equal(res.deliveryStatus, 'failed');
+        assert.equal(res.reportId, `market-tools-watch:${scanDate}:${expectedNextSession}`);
         assert.equal(res.reason, 'telegram_api_error: HTTP 429');
+      } finally {
+        TelegramService.sendRawMessage = originalSend;
+      }
+    });
+
+    it('classifies network/timeout error as delivery_unknown with stable reportId and retains scheduler claim', async () => {
+      const originalSend = TelegramService.sendRawMessage;
+      TelegramService.sendRawMessage = async () => {
+        return { ok: false, reason: 'fetch_error: The operation was aborted' };
+      };
+
+      try {
+        const res = await MarketToolsWatchService.dispatchWatchAlerts({
+          dryRun: false,
+          forceDate: scanDate,
+        });
+
+        assert.equal(res.success, false);
+        assert.equal(res.sent, false);
+        assert.equal(res.deliveryStatus, 'delivery_unknown');
+        assert.equal(res.reportId, `market-tools-watch:${scanDate}:${expectedNextSession}`);
+        assert.ok(res.reason?.includes('fetch_error'));
+
+        // shouldCompleteClaimedJob must evaluate to true to retain claim and prevent automatic duplicate retries
+        const shouldComplete = shouldCompleteClaimedJob(res);
+        assert.equal(shouldComplete, true, 'Uncertain delivery must retain claim to suppress duplicate send');
       } finally {
         TelegramService.sendRawMessage = originalSend;
       }

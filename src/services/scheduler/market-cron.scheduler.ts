@@ -58,6 +58,10 @@ export function shouldCompleteClaimedJob(result: unknown): boolean {
     return true;
   }
 
+  // Market Tools Watch: uncertain delivery (timeout/network drop after dispatch) must retain claim
+  // to prevent uncontrolled automatic retries without an explicit duplicate-delivery policy.
+  if (r.deliveryStatus === 'delivery_unknown') return true;
+
   if (r.success === false) return false;
   if (r.sent === false) return false;
 
@@ -169,6 +173,8 @@ function summarizeResult(result: unknown): string {
   const parts: string[] = [];
   if (typeof r.sent === 'boolean') parts.push(`sent=${r.sent}`);
   if (typeof r.success === 'boolean') parts.push(`success=${r.success}`);
+  if (typeof r.deliveryStatus === 'string') parts.push(`deliveryStatus=${r.deliveryStatus}`);
+  if (typeof r.reportId === 'string') parts.push(`reportId=${r.reportId}`);
   if (typeof r.count === 'number') parts.push(`count=${r.count}`);
   if (typeof r.universe === 'string') parts.push(`universe=${r.universe}`);
   if (Array.isArray(r.logged)) parts.push(`logged=${r.logged.length}`);
