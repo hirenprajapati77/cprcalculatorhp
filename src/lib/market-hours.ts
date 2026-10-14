@@ -147,6 +147,38 @@ export function getRecentNseTradingDays(count: number, asOf: Date = new Date()):
   return tradingDays.reverse();
 }
 
+/**
+ * Returns the next NSE trading day (YYYY-MM-DD string) strictly after `asOf`.
+ * Skips weekends and official NSE holidays.
+ * Accepts either a Date object or a YYYY-MM-DD string.
+ */
+export function getNextNseTradingDay(asOf: Date | string = new Date()): string {
+  let candidate: Date;
+  if (typeof asOf === 'string') {
+    const [y, m, d] = asOf.split('-').map(Number);
+    candidate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  } else {
+    const istDate = getISTDateString(asOf);
+    const [y, m, d] = istDate.split('-').map(Number);
+    candidate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  }
+  const maxIterations = 30; // Bridge long holiday clusters
+  let iterations = 0;
+
+  while (iterations < maxIterations) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+    const { isTradingDay, dateString } = getISTTime(candidate);
+    if (isTradingDay) {
+      return dateString;
+    }
+    iterations++;
+  }
+
+  // Fallback to next calendar day
+  candidate.setUTCDate(candidate.getUTCDate() + 1);
+  return getISTDateString(candidate);
+}
+
 function toTotalMinutes(hour: number, minute: number): number {
   return hour * 60 + minute;
 }
