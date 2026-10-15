@@ -57,6 +57,11 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (October 2026):**
+- **14–15 Oct — Market Tools EOD WATCH Notifications Phase 1, STT 0.15% & 2026 Calendar (`a0380e66`, PRs #280–#284)**:
+  - **Market Tools EOD WATCH Pipeline (`#283`, `#284`)**: Automated evening Telegram watchlist dispatches across Multi-Year Breakout, 52W Patterns, and Momentum Leaders. Bounded retry window (19:30–21:30 IST) following EOD precompute (19:15–19:45 IST). Global candidate cap (<=12), cross-module deduplication, honest reference labeling (no synthetic pivots), `delivery_unknown` duplicate suppression, and safe dry-run route.
+  - **Statutory STT Schedule Update (`#281`, `#282`)**: Aligned option sell-side STT rate to 0.15% (`0.0015`) per NSE Circular `NSE/FATAX/73524` while preserving option buy exemption, and tightened journal net P&L fixtures.
+  - **2026 NSE Trading Calendar (`#280`)**: Configured official 2026 trading holidays per circular `CMTR/71775` with weekend and holiday regression guards.
+
 - **12–13 Oct — Full CI Hardening, 2025 Calendar & Blocking Integration Suite (`01fe85ea`, PRs #269–#275)**:
   - **Live Blocking Integration CI Gate (`#275`)**: Integrated `npm run test:integration` as a blocking workflow step with live Postgres 15 and Redis 6 containers; 56/56 integration tests pass green in CI.
   - **Integration Drift Remediation (`#274`)**: Repaired 5 root causes of expectation drift in `breakout-watcher`, `overnight`, and `journal` tests with zero production code changes.
