@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 13–15 Oct: Market Tools EOD WATCH (Phase 1), STT Rate 0.15% & 2026 Calendar (PRs #280–#284)
+
+- **PR #284 (`a0380e66`) — Fix Date Forwarding in Scheduler & Route (`market-cron.scheduler.ts`, `route.ts`, `market-tools-watch.test.ts`)**:
+  - Threaded `forceDate: dateKey` through `runMarketToolsWatchJob` to eliminate date-drop bugs across boundary conditions and delayed precomputes.
+  - Added optional `?date=` query parameter support in `/api/cron/market-tools-watch` and forwarded `forceDate` in both dry-run and production paths.
+  - Pinned `?date=${scanDate}` in route test URLs, permanently guarding against date-rollover test assertion failures.
+  - Verification: 26/26 WATCH tests pass, 1,496 unit tests pass, typecheck clean, regression lock verified.
+
+- **PR #283 (`25c0936d`) — Market Tools EOD WATCH Notifications Phase 1 (`market-tools-watch.service.ts`, `route.ts`, `market-cron.scheduler.ts`)**:
+  - Implemented automated evening Telegram watchlist alerts for Multi-Year Breakout, 52W Patterns, and Momentum Leaders.
+  - Scheduled bounded execution: Precompute window `19:15–19:45 IST` and WATCH alert window `19:30–21:30 IST`.
+  - Enforced fair slot allocation with a global candidate cap of 12, deterministic backfill, and cross-module deduplication (`🔗 Also:` tags).
+  - Implemented honest labeling: structural breakout pivots for Multi-Year Breakouts, `Reference: 52W High` for 52W Patterns (avoiding synthetic pivots), and `Reference: Previous Close` for Momentum Leaders.
+  - Added `delivery_unknown` classification on network timeouts/drops, retaining the daily claim (`cron_done:market-tools-watch:${dateKey}`) to strictly prevent runaway duplicate notifications.
+  - Added safe `dryRun=true` execution mode that structurally bypasses Telegram dispatch and cron claim acquisition.
+
+- **PR #282 (`f029cb9e`) — Tighten BLUESTARCO Net P&L Assertions (`journal-estimated-friction.test.ts`)**:
+  - Reconciled net P&L assertions for the `BLUESTARCO` production trade fixture to match the exact mathematical outcome of the 0.15% STT schedule (`2.26` / `+3.26%`).
+  - Added tight `closeTo(..., 0.02)` floating-point epsilon guarding mathematical identity without test brittleness.
+
+- **PR #281 (`95895c30`) — Option Premium Sell-Side STT Rate 0.15% (`friction-constants.ts`, `friction-calculator.test.ts`)**:
+  - Updated option premium sell-side Securities Transaction Tax (STT) rate to 0.15% (`0.0015`) in compliance with Indian statutory circular `NSE/FATAX/73524` (Finance Act 2026).
+  - Maintained buy-side option exemption (zero STT on option purchases, preserving statutory ground truth).
+
+- **PR #280 (`0653416f`) — 2026 NSE Trading Holidays Calendar (`src/lib/market-hours.ts`)**:
+  - Aligned 2026 NSE trading holiday calendar with official NSE circular `CMTR/71775`.
+  - Added regression test guards for holiday rollbacks, multi-day weekend bridges, and holiday collision handling.
+
 ### Added — Robustness Pack: Overnight Funnel Observability & M-1 CPR Width Golden Fixtures
 
 - **Overnight Scan Funnel Observability in Workstation UI (`ScannerKpiStrip.tsx`, `ScannerClient.tsx`, `api/btst/route.ts`, `advanced-discover-bridge.ts`)**:
