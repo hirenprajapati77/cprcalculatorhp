@@ -20,6 +20,8 @@ export async function GET(request: Request) {
     const force = url.searchParams.get('force') === 'true';
     const now = new Date();
     const dateString = getISTDateString(now);
+    // Allow ?date=YYYY-MM-DD override for dry-run testing against a specific date
+    const targetDate = url.searchParams.get('date') || dateString;
 
     // In production mode (!dryRun), trading day validation is mandatory and cannot be bypassed
     // to prevent accidental notification dispatches on weekends or holidays.
@@ -32,12 +34,12 @@ export async function GET(request: Request) {
 
     // Dry-run mode skips the cron run claim and never calls Telegram.
     if (dryRun) {
-      const result = await MarketToolsWatchService.dispatchWatchAlerts({ dryRun: true });
+      const result = await MarketToolsWatchService.dispatchWatchAlerts({ dryRun: true, forceDate: targetDate });
       return NextResponse.json(result);
     }
 
     // Dedicated daily cron claim isolated from all CPR / breakout alert claims
-    const claimKey = `market-tools-watch:${dateString}`;
+    const claimKey = `market-tools-watch:${targetDate}`;
 
     // In production delivery mode, claim locking is strictly enforced.
     // An existing completed run cannot be re-executed to prevent duplicate production messages.
@@ -46,7 +48,7 @@ export async function GET(request: Request) {
     }
 
     try {
-      const result = await MarketToolsWatchService.dispatchWatchAlerts();
+      const result = await MarketToolsWatchService.dispatchWatchAlerts({ forceDate: targetDate });
 
       if (!result.success) {
         if (result.deliveryStatus === 'delivery_unknown') {

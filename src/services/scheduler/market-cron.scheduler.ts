@@ -121,7 +121,7 @@ export function isMarketToolsWatchWindowOpen(date: Date = new Date()): boolean {
 export async function runMarketToolsWatchJob(dateKey: string): Promise<void> {
   await runClaimedJob(
     `market-tools-watch:${dateKey}`,
-    () => MarketToolsWatchService.dispatchWatchAlerts(),
+    () => MarketToolsWatchService.dispatchWatchAlerts({ forceDate: dateKey }),
     'market-tools-watch',
     true,
     60_000
