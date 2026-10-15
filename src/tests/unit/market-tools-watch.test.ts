@@ -624,7 +624,7 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
     });
 
     it('dryRun=true executes without locking claim or sending telegram', async () => {
-      const req = new Request('http://localhost/api/cron/market-tools-watch?dryRun=true&force=true', {
+      const req = new Request(`http://localhost/api/cron/market-tools-watch?dryRun=true&force=true&date=${scanDate}`, {
         headers: { 'x-cron-secret': testSecret },
       });
       const res = await marketToolsWatchRoute(req);
@@ -637,7 +637,7 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
     });
 
     it('production mode enforces claim isolation and prevents duplicate executions', async () => {
-      const req1 = new Request('http://localhost/api/cron/market-tools-watch', {
+      const req1 = new Request(`http://localhost/api/cron/market-tools-watch?date=${scanDate}`, {
         headers: { 'x-cron-secret': testSecret },
       });
 
@@ -658,7 +658,7 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
           assert.equal(json1.sent, true);
 
           // Second request for the same day must be rejected by the claim lock
-          const req2 = new Request('http://localhost/api/cron/market-tools-watch', {
+          const req2 = new Request(`http://localhost/api/cron/market-tools-watch?date=${scanDate}`, {
             headers: { 'x-cron-secret': testSecret },
           });
           const res2 = await marketToolsWatchRoute(req2);
@@ -670,6 +670,7 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
         TelegramService.sendRawMessage = originalSend;
       }
     });
+
 
     it('scheduler claim lifecycle: releases claim on precompute_not_ready and retains claim on success preventing double dispatch', async () => {
       const claimKey = `market-tools-watch:${scanDate}`;
