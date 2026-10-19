@@ -35,6 +35,40 @@ interface ScannerKpiStripProps {
   overnightMetrics?: OvernightScanMetrics | null;
 }
 
+export interface LastScanIndicatorResult {
+  formatted: string | null;
+  isStale: boolean;
+}
+
+export function formatLastScanTimestamp(
+  lastScanAt?: string | null,
+  now: Date = new Date()
+): LastScanIndicatorResult {
+  if (!lastScanAt) {
+    return { formatted: null, isStale: false };
+  }
+
+  const scanDate = new Date(lastScanAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const todayDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const isStale = scanDate !== todayDate;
+
+  const timeStr = new Date(lastScanAt).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  if (isStale) {
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayDate = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const dayLabel = scanDate === yesterdayDate ? 'Yesterday' : scanDate;
+    return { formatted: `⚠ Last scan: ${dayLabel} ${timeStr} IST`, isStale: true };
+  }
+
+  return { formatted: `Last scan: ${timeStr} IST`, isStale: false };
+}
+
 export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
   scannerMode,
   universe,
@@ -53,6 +87,8 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
   overnightMetrics,
 }) => {
   const isOvernight = scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT';
+
+  const { formatted: lastScanFormatted, isStale } = formatLastScanTimestamp(overnightMetrics?.lastScanAt);
 
   return (
     <div className="space-y-3 font-mono">
@@ -297,6 +333,21 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
               <AlertTriangle size={17} />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Last Scan Staleness Indicator ── */}
+      {lastScanFormatted && (
+        <div className="flex items-center justify-end px-1 -mt-1">
+          <span
+            className={
+              isStale
+                ? 'text-xs text-amber-400 font-medium'
+                : 'text-xs text-muted-foreground text-text-muted'
+            }
+          >
+            {lastScanFormatted}
+          </span>
         </div>
       )}
     </div>

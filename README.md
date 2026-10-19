@@ -50,6 +50,12 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
    - **Gap Penalties**: Differentiates between favorable and adverse gaps. Implements a severe penalty multiplier (3x) for adverse stop-loss blow-throughs (auction fills) while applying standard slippage to favorable target gaps.
 4. **Observability & Journaling (Phase 3 - Completed)**: End-to-end telemetry (e.g., `eventRiskReason`, `slippageModelVersion`, `regimeSnapshot`) tracks exactly *why* a model generated or downgraded a signal, allowing for direct parity analysis against the executed `TradeJournal`. With the new UI layers, execution outcomes (`EXECUTION_SLIPPAGE`, `GAP_FAILURE`, `MODEL_VALID`) are visually audited inside the native journal tab.
 
+### Scheduler: forceDate
+- **What it is**: A query param `?date=YYYY-MM-DD` that pins the WATCH evaluation to a specific trading date instead of today.
+- **How it flows**: scheduler → `/api/cron/market-tools-watch?date=YYYY-MM-DD` → `MarketToolsWatchService.runWatch({ date })`.
+- **When to use it**: Backfill, QA testing, and post-market replay.
+- **Why**: This threading was broken in PR #283 and fixed in PR #284 — adding docs prevents recurrence.
+
 ---
 
 ## 📜 Releases & Changelog

@@ -5,7 +5,7 @@ import { MultiYearBreakoutService, type MultiYearBreakoutReport } from '@/servic
 import { PatternBreakoutService, type PatternBreakoutReport } from '@/services/market-tools/pattern-breakout.service';
 import { MomentumLeadersService, type MomentumLeadersReport } from '@/services/market-tools/momentum-leaders.service';
 import { TelegramService } from '@/services/alert/telegram.service';
-import { getNextNseTradingDay } from '@/lib/market-hours';
+import { getNextNseTradingDay, getISTDateString } from '@/lib/market-hours';
 import type { BreakoutVpaFootprint } from '@/services/vpa/vpa.math';
 import { GET as marketToolsWatchRoute } from '@/app/api/cron/market-tools-watch/route';
 import { env } from '@/config/env';
@@ -797,6 +797,61 @@ describe('Market Tools Telegram WATCH Pipeline (Phase 1)', () => {
         assert.equal(telegramCallCount, 1);
       } finally {
         TelegramService.sendRawMessage = originalSend;
+      }
+    });
+  });
+
+  describe('7. WATCH Scheduler forceDate Propagation Regression Guards', () => {
+    const originalRunWatch = MarketToolsWatchService.runWatch;
+
+    beforeEach(() => {
+      resetCronRunClaims();
+    });
+
+    it('captures forceDate when runMarketToolsWatchJob is invoked with a specific date', async () => {
+      let capturedDate: string | null | undefined = undefined;
+      MarketToolsWatchService.runWatch = async (date?: string | null) => {
+        capturedDate = date;
+        return { success: true, sent: true };
+      };
+
+      try {
+        await runMarketToolsWatchJob('2026-10-14');
+        assert.equal(capturedDate, '2026-10-14');
+      } finally {
+        MarketToolsWatchService.runWatch = originalRunWatch;
+      }
+    });
+
+    it('captures today IST date string when runMarketToolsWatchJob is invoked without forceDate', async () => {
+      let capturedDate: string | null | undefined = undefined;
+      MarketToolsWatchService.runWatch = async (date?: string | null) => {
+        capturedDate = date;
+        return { success: true, sent: true };
+      };
+
+      try {
+        await runMarketToolsWatchJob();
+        const expectedDate = getISTDateString(new Date());
+        assert.equal(capturedDate, expectedDate);
+      } finally {
+        MarketToolsWatchService.runWatch = originalRunWatch;
+      }
+    });
+
+    it('captures today IST date string when runMarketToolsWatchJob is invoked with null forceDate', async () => {
+      let capturedDate: string | null | undefined = undefined;
+      MarketToolsWatchService.runWatch = async (date?: string | null) => {
+        capturedDate = date;
+        return { success: true, sent: true };
+      };
+
+      try {
+        await runMarketToolsWatchJob(null);
+        const expectedDate = getISTDateString(new Date());
+        assert.equal(capturedDate, expectedDate);
+      } finally {
+        MarketToolsWatchService.runWatch = originalRunWatch;
       }
     });
   });

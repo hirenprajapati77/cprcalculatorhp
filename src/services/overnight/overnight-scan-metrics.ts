@@ -32,6 +32,7 @@ export interface OvernightScanMetrics {
   droppedIgnore: number;
   droppedVpaGate: number;
   errors: number;
+  lastScanAt?: string;
 }
 
 export function createEmptyOvernightScanMetrics(universeSize: number = 0): OvernightScanMetrics {
@@ -56,6 +57,7 @@ export function createEmptyOvernightScanMetrics(universeSize: number = 0): Overn
 export function finalizeOvernightScanMetrics(metrics: OvernightScanMetrics, savedCount: number): OvernightScanMetrics {
   metrics.saved = savedCount;
   metrics.passed = savedCount;
+  metrics.lastScanAt = new Date().toISOString();
   return metrics;
 }
 

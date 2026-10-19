@@ -220,8 +220,10 @@ describe('Overnight Engine Tests', () => {
       // So todayCpr.bc !== tomorrowCpr.bc!
       // Specifically, yesterday's BC is 95, and tomorrow's BC is 99.
       // Let's assert that the score is calculated with rule 3 (Higher Value +20) passed.
-      assert.ok(signal.overnightScore !== null);
-      assert.ok(signal.overnightScore > 0);
+      assert.ok(
+        signal.overnightScore !== null && signal.overnightScore >= 80,
+        `Expected overnightScore >= 80, got ${signal.overnightScore}`
+      );
     } finally {
       prisma.overnightSignal.upsert = originalUpsert;
       restoreTx();
@@ -270,7 +272,7 @@ describe('Overnight Engine Tests', () => {
       // vwap = typicalPrice = 101.333
       assert.ok(metrics.hasIntraday);
       assert.ok(metrics.vwap !== null && !isNaN(metrics.vwap));
-      assert.ok(Math.abs(metrics.vwap - 101.33) < 0.05);
+      assert.ok(Math.abs(metrics.vwap - 101.33) < 0.01);
     } finally {
       global.fetch = originalFetch;
       env.HISTORICAL_MODE = originalHistMode;
@@ -452,13 +454,13 @@ describe('Overnight Engine Tests', () => {
     const metricsNearZero = await OvernightRiskService.calculateOvernightRisk(stockNearZeroClose);
 
     // Assert returns are calculated safely (e.g. falling back or zero instead of NaN/Infinity)
-    assert.ok(!isNaN(metricsZero.volatility) && isFinite(metricsZero.volatility));
-    assert.ok(!isNaN(metricsZero.gapRisk) && isFinite(metricsZero.gapRisk));
-    assert.ok(!isNaN(metricsZero.shortSqueezeProb) && isFinite(metricsZero.shortSqueezeProb));
+    assert.ok(!isNaN(metricsZero.volatility) && isFinite(metricsZero.volatility) && metricsZero.volatility >= 0);
+    assert.ok(!isNaN(metricsZero.gapRisk) && isFinite(metricsZero.gapRisk) && metricsZero.gapRisk >= 0);
+    assert.ok(!isNaN(metricsZero.shortSqueezeProb) && isFinite(metricsZero.shortSqueezeProb) && metricsZero.shortSqueezeProb >= 0);
 
-    assert.ok(!isNaN(metricsNearZero.volatility) && isFinite(metricsNearZero.volatility));
-    assert.ok(!isNaN(metricsNearZero.gapRisk) && isFinite(metricsNearZero.gapRisk));
-    assert.ok(!isNaN(metricsNearZero.shortSqueezeProb) && isFinite(metricsNearZero.shortSqueezeProb));
+    assert.ok(!isNaN(metricsNearZero.volatility) && isFinite(metricsNearZero.volatility) && metricsNearZero.volatility >= 0);
+    assert.ok(!isNaN(metricsNearZero.gapRisk) && isFinite(metricsNearZero.gapRisk) && metricsNearZero.gapRisk >= 0);
+    assert.ok(!isNaN(metricsNearZero.shortSqueezeProb) && isFinite(metricsNearZero.shortSqueezeProb) && metricsNearZero.shortSqueezeProb >= 0);
   });
 
   test('determineState holiday freeze boundary transitions', () => {

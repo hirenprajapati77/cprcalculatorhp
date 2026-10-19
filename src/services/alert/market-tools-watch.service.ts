@@ -382,6 +382,16 @@ export class MarketToolsWatchService {
   }
 
   /**
+   * Dispatches the WATCH notification via TelegramService for a specific date (or defaults to today IST).
+   * Convenience wrapper / entrypoint used by scheduler jobs and integration tests.
+   */
+  static async runWatch(
+    date?: string | null
+  ): Promise<DispatchWatchAlertsResult> {
+    return this.dispatchWatchAlerts(date ? { forceDate: date } : undefined);
+  }
+
+  /**
    * Dispatches the WATCH notification via TelegramService.
    * Supports dry-run mode and structured logs.
    */
