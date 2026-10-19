@@ -177,4 +177,80 @@ NON FNO STOCK,NONFNO`);
       MarketService.clearDynamicFnoSymbols();
     }
   });
+
+  await t.test('canary: MarketService static universe includes YESBANK, ZOMATO, NYKAA, POLICYBZR with isFnO: true', () => {
+    MarketService.clearDynamicFnoSymbols();
+    const rawUniverse = MarketService.getRawUniverse();
+
+    const canarySymbols = ['YESBANK', 'ZOMATO', 'NYKAA', 'POLICYBZR', 'DELHIVERY', 'PAYTM'];
+    for (const sym of canarySymbols) {
+      const stock = rawUniverse.find(s => s.symbol.trim() === sym);
+      assert.ok(stock, `Stock ${sym} must be present in MarketService.getRawUniverse()`);
+      assert.strictEqual(stock?.isFnO, true, `Stock ${sym} must have isFnO: true in MarketService.getRawUniverse()`);
+    }
+
+    const fnoUniverse = MarketService.getUniverse('NSE_FNO');
+    for (const sym of canarySymbols) {
+      assert.ok(
+        fnoUniverse.some(s => s.symbol.trim() === sym),
+        `Stock ${sym} must be present in MarketService.getUniverse('NSE_FNO')`
+      );
+    }
+  });
+
+  await t.test('should identify YESBANK in NSE feed and detect drift if local universe is out of date', async () => {
+    // 1. If YESBANK is marked non-FNO locally, checkDrift flags it as newlyEligible
+    mockRawUniverse.push({
+      symbol: 'YESBANK     ',
+      name: 'Yes Bank',
+      sector: 'Financial Services',
+      marketCap: 60000,
+      isNifty50: false,
+      isNifty200: true,
+      isFnO: false,
+    });
+
+    setupMocks(`UNDERLYING,SYMBOL
+HDFC BANK,HDFCBANK
+RELIANCE INDUSTRIES,RELIANCE
+YES BANK,YESBANK`);
+
+    try {
+      const result = await FnoUniverseCheckService.checkDrift();
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.data?.hasDrift, true);
+      assert.ok(result.data?.newlyEligible.some(s => s.trim() === 'YESBANK'), 'YESBANK should be flagged as newlyEligible');
+    } finally {
+      mockRawUniverse.pop();
+    }
+
+    // 2. When YESBANK has isFnO: true locally, it matches without drift
+    mockRawUniverse.push({
+      symbol: 'YESBANK     ',
+      name: 'Yes Bank',
+      sector: 'Financial Services',
+      marketCap: 60000,
+      isNifty50: false,
+      isNifty200: true,
+      isFnO: true,
+    });
+
+    setupMocks(`UNDERLYING,SYMBOL
+HDFC BANK,HDFCBANK
+RELIANCE INDUSTRIES,RELIANCE
+YES BANK,YESBANK`);
+
+    try {
+      const result = await FnoUniverseCheckService.checkDrift();
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(result.data?.hasDrift, false);
+      assert.strictEqual(result.data?.newlyEligible.length, 0);
+      assert.strictEqual(result.data?.symbolsOnlyInNse.length, 0);
+      assert.strictEqual(result.data?.newlyIneligible.length, 0);
+      assert.ok(MarketService.getDynamicFnoSymbols()?.has('YESBANK'), 'Dynamic symbols should include YESBANK');
+    } finally {
+      mockRawUniverse.pop();
+    }
+  });
 });
+
