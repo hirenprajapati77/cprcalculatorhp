@@ -120,3 +120,45 @@ describe('Scanner Workspace Presentation Contract (Phase 4)', () => {
     assert.equal(selectedIndex, 0);
   });
 });
+
+describe('ScannerKpiStrip Last Scan Indicator (Fix #7)', () => {
+  it('returns null when lastScanAt is undefined or null', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    assert.deepEqual(formatLastScanTimestamp(undefined), { formatted: null, isStale: false });
+    assert.deepEqual(formatLastScanTimestamp(null), { formatted: null, isStale: false });
+  });
+
+  it('formats fresh timestamp on same IST date without warning', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const now = new Date('2026-10-19T10:00:00.000Z'); // 15:30 IST on 2026-10-19
+    const scanAt = '2026-10-19T04:02:00.000Z'; // 09:32 IST on 2026-10-19
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.equal(result.isStale, false);
+    assert.ok(result.formatted?.startsWith('Last scan: '));
+    assert.ok(result.formatted?.endsWith('IST'));
+    assert.ok(!result.formatted?.includes('⚠'));
+  });
+
+  it('formats stale timestamp from yesterday with warning and Yesterday label', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const now = new Date('2026-10-19T04:00:00.000Z'); // 09:30 IST on 2026-10-19
+    const scanAt = '2026-10-18T09:59:00.000Z'; // 15:29 IST on 2026-10-18 (yesterday)
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.equal(result.isStale, true);
+    assert.ok(result.formatted?.startsWith('⚠ Last scan: Yesterday '));
+    assert.ok(result.formatted?.endsWith('IST'));
+  });
+
+  it('formats stale timestamp from 3 days ago with date string and warning', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const now = new Date('2026-10-19T04:00:00.000Z'); // 09:30 IST on 2026-10-19
+    const scanAt = '2026-10-16T09:59:00.000Z'; // 15:29 IST on 2026-10-16
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.equal(result.isStale, true);
+    assert.ok(result.formatted?.startsWith('⚠ Last scan: 2026-10-16 '));
+    assert.ok(result.formatted?.endsWith('IST'));
+  });
+});

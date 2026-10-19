@@ -5,7 +5,7 @@ import { MultiYearBreakoutService, type MultiYearBreakoutReport } from '@/servic
 import { PatternBreakoutService, type PatternBreakoutReport } from '@/services/market-tools/pattern-breakout.service';
 import { MomentumLeadersService, type MomentumLeadersReport } from '@/services/market-tools/momentum-leaders.service';
 import { TelegramService } from '@/services/alert/telegram.service';
-import { getNextNseTradingDay } from '@/lib/market-hours';
+import { getNextNseTradingDay, getISTDateString } from '@/lib/market-hours';
 import type { BreakoutVpaFootprint } from '@/services/vpa/vpa.math';
 import { GET as marketToolsWatchRoute } from '@/app/api/cron/market-tools-watch/route';
 import { env } from '@/config/env';

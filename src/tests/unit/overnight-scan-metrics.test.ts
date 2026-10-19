@@ -27,13 +27,19 @@ describe('OvernightScanMetrics Pure Helpers (M-5)', () => {
     assert.strictEqual(m.droppedIgnore, 0);
     assert.strictEqual(m.droppedVpaGate, 0);
     assert.strictEqual(m.errors, 0);
+    assert.strictEqual(m.lastScanAt, undefined);
   });
 
-  it('finalizes metrics by updating saved and passed counts', () => {
+  it('finalizes metrics by updating saved, passed counts, and lastScanAt timestamp', () => {
+    const before = new Date().toISOString();
     const m = createEmptyOvernightScanMetrics(50);
     finalizeOvernightScanMetrics(m, 5);
+    const after = new Date().toISOString();
+
     assert.strictEqual(m.saved, 5);
     assert.strictEqual(m.passed, 5);
+    assert.ok(m.lastScanAt, 'lastScanAt should be populated');
+    assert.ok(m.lastScanAt >= before && m.lastScanAt <= after, 'lastScanAt should be a recent ISO timestamp');
   });
 
   it('formats single-line structured summary matching specification', () => {

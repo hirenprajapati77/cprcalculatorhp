@@ -118,10 +118,11 @@ export function isMarketToolsWatchWindowOpen(date: Date = new Date()): boolean {
   return timeValue >= 1930 && timeValue <= 2130;
 }
 
-export async function runMarketToolsWatchJob(dateKey: string): Promise<void> {
+export async function runMarketToolsWatchJob(dateKey?: string | null): Promise<void> {
+  const targetDate = dateKey || getISTDateString(new Date());
   await runClaimedJob(
-    `market-tools-watch:${dateKey}`,
-    () => MarketToolsWatchService.dispatchWatchAlerts({ forceDate: dateKey }),
+    `market-tools-watch:${targetDate}`,
+    () => MarketToolsWatchService.runWatch(targetDate),
     'market-tools-watch',
     true,
     60_000

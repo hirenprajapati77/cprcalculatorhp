@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import YahooFinance from 'yahoo-finance2';
 import {
   MarketService,
   DAILY_CANDLES_CACHE_TTL_SEC,
@@ -7,6 +8,10 @@ import {
 } from '../../services/market.service';
 import { CacheService } from '../../services/cache.service';
 import { FyersAuthService } from '../../services/fyers-auth.service';
+import {
+  fetchAuthoritativeCandle,
+  _clearInflightCandlesForTest,
+} from '../../services/stock-candle.service';
 import { env } from '../../config/env';
 
 test('MarketService - Daily Candle Caching & Session TTL', async (suite) => {
@@ -16,6 +21,7 @@ test('MarketService - Daily Candle Caching & Session TTL', async (suite) => {
   const originalGetAccessToken = FyersAuthService.getAccessToken;
   const originalGetCredentials = FyersAuthService.getCredentials;
   const originalClearToken = FyersAuthService.clearToken;
+  const originalChart = YahooFinance.prototype.chart;
   const originalMode = env.MARKET_DATA_MODE;
 
   function restoreAll(): void {
@@ -25,6 +31,8 @@ test('MarketService - Daily Candle Caching & Session TTL', async (suite) => {
     FyersAuthService.getAccessToken = originalGetAccessToken;
     FyersAuthService.getCredentials = originalGetCredentials;
     FyersAuthService.clearToken = originalClearToken;
+    YahooFinance.prototype.chart = originalChart;
+    _clearInflightCandlesForTest();
     (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
     MarketService.clearFyersQuoteCache();
     MarketService.clearFyersPermissionBlock();
@@ -396,4 +404,53 @@ test('MarketService - Daily Candle Caching & Session TTL', async (suite) => {
     assert.ok(data!.candle15m, '15m candle populated from fresh intraday fetch');
     assert.strictEqual(data!.candle15m!.close, 2999.5);
   });
+
+  await suite.test('fetchAuthoritativeCandle: singleflight coalesces concurrent requests into a single fetch', async () => {
+    let yahooCallCount = 0;
+
+    YahooFinance.prototype.chart = (async (_ticker: string, _options?: unknown) => {
+      yahooCallCount++;
+      // Simulate slow Yahoo Finance upstream response (50ms delay)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return {
+        quotes: [
+          {
+            date: new Date('2026-10-18T00:00:00.000Z'),
+            open: 2800,
+            high: 2850,
+            low: 2790,
+            close: 2840,
+          },
+          {
+            date: new Date('2026-10-19T00:00:00.000Z'),
+            open: 2840,
+            high: 2890,
+            low: 2830,
+            close: 2875,
+          },
+        ],
+      };
+    }) as unknown as typeof YahooFinance.prototype.chart;
+
+    _clearInflightCandlesForTest();
+
+    // Call fetchAuthoritativeCandle for the same symbol 3 times concurrently
+    const [res1, res2, res3] = await Promise.all([
+      fetchAuthoritativeCandle('RELIANCE'),
+      fetchAuthoritativeCandle('RELIANCE'),
+      fetchAuthoritativeCandle('RELIANCE'),
+    ]);
+
+    // Assert that the Yahoo fetch was only called once (not 3 times)
+    assert.strictEqual(yahooCallCount, 1, 'Yahoo chart should only be called once across concurrent requests');
+
+    // Assert all 3 calls return the same result
+    assert.ok(res1 !== null, 'result 1 should not be null');
+    assert.strictEqual(res1?.symbol, 'RELIANCE');
+    assert.deepStrictEqual(res1, res2, 'all concurrent calls should return identical candle data');
+    assert.deepStrictEqual(res2, res3, 'all concurrent calls should return identical candle data');
+    assert.strictEqual(res1, res2, 'concurrent calls should coalesce to the exact same promise instance');
+    assert.strictEqual(res2, res3, 'concurrent calls should coalesce to the exact same promise instance');
+  });
 });
+
