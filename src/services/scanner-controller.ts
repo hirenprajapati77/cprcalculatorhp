@@ -33,13 +33,30 @@ export interface ScanGenerationMeta {
   persistedChunks?: number;
   totalChunks?: number;
   totalStocks?: number;
-  status: 'calculating' | 'persisting' | 'completed' | 'superseded';
+  status: 'calculating' | 'pending' | 'persisting' | 'completed' | 'superseded' | 'failed';
+  failedAt?: string;
+  failureReason?: string;
   supersededBy?: string;
 }
 
 // In-process map of latest active/persisted scan generation per "universe:market:date".
 // Under single-process PM2 fork_mode, this strictly prevents older scan persist chunks from overwriting newer scans.
 const latestScanGenerations = new Map<string, ScanGenerationMeta>();
+
+export function pruneOldScanGenerations(todayDate?: string): void {
+  const todayKey = todayDate ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // 'YYYY-MM-DD'
+  for (const [key] of latestScanGenerations) {
+    // Keys follow pattern `universe:market:YYYY-MM-DD`
+    if (!key.endsWith(todayKey)) {
+      latestScanGenerations.delete(key);
+    }
+  }
+  // Hard cap at 20 entries regardless of date
+  if (latestScanGenerations.size > 20) {
+    const entries = [...latestScanGenerations.keys()];
+    entries.slice(0, entries.length - 20).forEach(k => latestScanGenerations.delete(k));
+  }
+}
 
 /** Test helper — reset generation state between tests. */
 export function _resetScanGenerationsForTesting(): void {
@@ -96,6 +113,7 @@ export class ScannerController {
     const today = getISTDateString();
     const scanId = `scan_${startTime}_${Math.random().toString(36).slice(2, 7)}`;
     const scanStartedAt = new Date(startTime).toISOString();
+    pruneOldScanGenerations(today);
     const genKey = `${universeName}:${market}:${today}`;
 
     console.log(`[SCAN:${scanId}] Started CPR Scan V2 for universe=${universeName}, market=${market} on ${today} at ${scanStartedAt}...`);
@@ -255,6 +273,7 @@ export class ScannerController {
     scanStartedAtMs?: number;
     retryDelayMs?: number;
   }): Promise<void> {
+
     const {
       filtered,
       universeName,
@@ -266,6 +285,7 @@ export class ScannerController {
       retryDelayMs = 3000,
     } = args;
 
+    pruneOldScanGenerations(today);
     const genKey = `${universeName}:${market}:${today}`;
 
     const doPersist = async () => {
@@ -466,6 +486,13 @@ export class ScannerController {
       console.error(
         `[SCAN:${scanId}] Retry DB persist failed for ${universeName}:${market}: ${errMsg}. Writing failure marker to Redis.`
       );
+
+      const existingMeta = latestScanGenerations.get(genKey);
+      if (existingMeta && existingMeta.scanId === scanId) {
+        existingMeta.status = 'failed';
+        existingMeta.failedAt = new Date().toISOString();
+        existingMeta.failureReason = errMsg;
+      }
 
       const timestamp = Date.now();
       const failureKey = `scan_persist_failed:${universeName}:${today}:${timestamp}`;

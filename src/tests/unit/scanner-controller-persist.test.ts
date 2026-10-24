@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { prisma } from '../../lib/db';
 import {
   ScannerController,
+  pruneOldScanGenerations,
   _resetScanGenerationsForTesting,
   _getLatestScanGeneration,
   _setScanGenerationForTesting,
@@ -527,4 +528,101 @@ test('generation-safe persistence: different universe/market/date generations do
   }
 });
 
+test('pruneOldScanGenerations removes entries from prior days and enforces hard cap of 20', () => {
+  _resetScanGenerationsForTesting();
+  const today = '2026-10-24';
+  const yesterday = '2026-10-23';
 
+  // Seed older day entries
+  _setScanGenerationForTesting(`NIFTY_FNO:NSE:${yesterday}`, {
+    scanId: 'old_1',
+    universeName: 'NIFTY_FNO',
+    market: 'NSE',
+    date: yesterday,
+    scanStartedAt: new Date().toISOString(),
+    scanStartedAtMs: Date.now() - 86400000,
+    status: 'completed',
+  });
+
+  // Seed today entries (25 entries to test the 20 cap)
+  for (let i = 0; i < 25; i++) {
+    _setScanGenerationForTesting(`UNIVERSE_${i}:NSE:${today}`, {
+      scanId: `scan_today_${i}`,
+      universeName: `UNIVERSE_${i}`,
+      market: 'NSE',
+      date: today,
+      scanStartedAt: new Date().toISOString(),
+      scanStartedAtMs: Date.now(),
+      status: 'completed',
+    });
+  }
+
+  // Prune
+  pruneOldScanGenerations(today);
+
+  // Yesterday's entry should be deleted
+  assert.equal(_getLatestScanGeneration(`NIFTY_FNO:NSE:${yesterday}`), undefined);
+
+  // The 25 entries should be pruned to at most 20
+  let count = 0;
+  for (let i = 0; i < 25; i++) {
+    if (_getLatestScanGeneration(`UNIVERSE_${i}:NSE:${today}`)) {
+      count++;
+    }
+  }
+  assert.equal(count, 20);
+
+  _resetScanGenerationsForTesting();
+});
+
+test('persistScanResults failure sets status to failed, records failedAt and failureReason', async () => {
+  _resetScanGenerationsForTesting();
+  const originalScannerUpsert = prisma.scannerResult.upsert;
+  const originalSnapshotUpsert = prisma.marketSnapshot.upsert;
+  const originalHistoryCreate = prisma.scanHistory.create;
+  const originalCacheSet = CacheService.set;
+
+  prisma.scannerResult.upsert = (async () => {
+    throw new Error('Fatal Persistence Error');
+  }) as unknown as typeof prisma.scannerResult.upsert;
+  prisma.marketSnapshot.upsert = (async () => ({} as never)) as unknown as typeof prisma.marketSnapshot.upsert;
+  prisma.scanHistory.create = (async () => ({} as never)) as unknown as typeof prisma.scanHistory.create;
+  CacheService.set = (async () => {}) as unknown as typeof CacheService.set;
+
+  try {
+    const scanId = 'scan_fail_test';
+    const genKey = 'NIFTY_FNO:NSE:2026-10-24';
+    _setScanGenerationForTesting(genKey, {
+      scanId,
+      universeName: 'NIFTY_FNO',
+      market: 'NSE',
+      date: '2026-10-24',
+      scanStartedAt: new Date().toISOString(),
+      scanStartedAtMs: Date.now(),
+      status: 'calculating',
+    });
+
+    await ScannerController.persistScanResults({
+      filtered: [makeRow('FAIL_SYM')],
+      universeName: 'NIFTY_FNO',
+      market: 'NSE',
+      today: '2026-10-24',
+      scanDurationMs: 100,
+      scanId,
+      retryDelayMs: 0,
+    });
+
+    const meta = _getLatestScanGeneration(genKey);
+    assert.equal(meta?.status, 'failed');
+    assert.equal(meta?.failureReason, 'Fatal Persistence Error');
+    assert.ok(meta?.failedAt);
+  } finally {
+    prisma.scannerResult.upsert = originalScannerUpsert;
+    prisma.marketSnapshot.upsert = originalSnapshotUpsert;
+    prisma.scanHistory.create = originalHistoryCreate;
+    CacheService.set = originalCacheSet;
+    _resetScanGenerationsForTesting();
+  }
+
+
+});
