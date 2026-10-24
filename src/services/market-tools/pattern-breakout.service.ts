@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getISTDateString } from '@/lib/market-hours';
 import { Prisma } from '@prisma/client';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
@@ -234,7 +235,7 @@ export class PatternBreakoutService {
    */
   static getPendingPatternBreakoutReport(): PatternBreakoutReport {
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: getISTDateString(),
       tradingDaysAvailable: 0,
       totalScanned: 0,
       qualifiedCount: 0,

@@ -188,6 +188,25 @@ describe('Centralized Friction Calculator — Named Tiers & Statutory Schedules'
       assert.ok(closeTo(res.netPnl, 1500 - 63.90, 0.1));
     });
 
+    it('applies STT to entry sell premium and stamp duty to exit buy premium when isShortOption is true', () => {
+      // Short option / option writing: sell at entry 250, buy back at exit 200, Qty 400
+      const res = estimateOptionPremiumFriction(250, 200, 400, undefined, true);
+
+      assert.equal(res.tierId, 'RETAIL_STATUTORY');
+      // Gross P&L: (entry - exit) * qty = (250 - 200) * 400 = 20,000
+      assert.equal(res.grossPnl, 20000);
+      // Sell turnover is on entry leg: 250 * 400 = 100,000
+      // STT on sell leg: 100,000 * 0.0015 (0.15%) = ₹150.00
+      assert.equal(res.stt, 150.00);
+      // Buy turnover is on exit leg: 200 * 400 = 80,000 -> Stamp duty: 80,000 * 0.00003 = ₹2.40
+      assert.equal(res.stampDuty, 2.40);
+      // Total turnover: 180,000 -> Exchange: 180,000 * 0.0005 = ₹90.00
+      assert.equal(res.exchangeCharges, 90.00);
+      assert.equal(res.brokerage, 40.00);
+      assert.ok(closeTo(res.totalFriction, 306.01, 0.1));
+      assert.ok(closeTo(res.netPnl, 20000 - 306.01, 0.1));
+    });
+
     it('asserts 0.15% STT on ₹1,00,000 option sell-premium turnover (₹150 STT)', () => {
       // Entry 200, Exit 250, Qty 400 -> Sell premium = 250 * 400 = ₹1,00,000
       const res = estimateOptionPremiumFriction(200, 250, 400);

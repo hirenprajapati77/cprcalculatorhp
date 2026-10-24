@@ -5,8 +5,8 @@ import { CalculationRecord } from '@/types/cpr.types';
  */
 export function exportToCSV(record: Omit<CalculationRecord, 'id' | 'createdAt'> & { createdAt?: Date }): string {
   const dateStr = record.createdAt 
-    ? record.createdAt.toLocaleString('en-IN') 
-    : new Date().toLocaleString('en-IN');
+    ? record.createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) 
+    : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
 
   const rows = [
     ['Central Pivot Range (CPR) Analysis Report', ''],

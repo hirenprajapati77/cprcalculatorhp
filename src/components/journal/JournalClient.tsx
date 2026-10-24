@@ -17,7 +17,7 @@ import { JournalKpiStrip } from '@/components/journal/JournalKpiStrip';
 import { TradeDetailDrawer, type JournalTradeData } from '@/components/journal/TradeDetailDrawer';
 import { JournalFilters, type JournalFiltersState } from '@/components/journal/JournalFilters';
 import { JournalAnalyticsView } from '@/components/journal/JournalAnalyticsView';
-import { BTST_CLOCK } from '@/lib/market-hours';
+import { BTST_CLOCK, getISTDateString } from '@/lib/market-hours';
 
 interface ColumnDef {
   key: string;
@@ -851,7 +851,7 @@ export default function JournalClient({ initialReportingData }: { initialReporti
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `trade-journal-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `trade-journal-${getISTDateString()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

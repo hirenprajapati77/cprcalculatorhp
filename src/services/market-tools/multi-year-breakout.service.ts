@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getISTDateString } from '@/lib/market-hours';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
 import { executeGuardedQuery } from '@/lib/db-query-guard';
@@ -203,7 +204,7 @@ export class MultiYearBreakoutService {
    */
   static getPendingBreakoutReport(): MultiYearBreakoutReport {
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: getISTDateString(),
       tradingDaysAvailable: 0,
       totalScanned: 0,
       breakoutCounts: {

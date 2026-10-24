@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { getISTDateString } from '@/lib/market-hours';
 import { isLikelyEtfOrFund } from '@/lib/nse-fund-exclusion';
 import { ExportActions } from '@/components/market-tools/ExportActions';
 import { generateCsvContent, downloadFile } from '@/lib/export-utils';
@@ -247,7 +248,7 @@ export default function PatternBreakoutPage() {
       s.scoreBreakdown.qualityTier,
     ]);
     const csvContent = generateCsvContent(headers, rows);
-    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    const dateStr = report.date || getISTDateString();
     downloadFile(csvContent, `pattern_breakout_${dateStr}.csv`);
   };
 

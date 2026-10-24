@@ -201,7 +201,7 @@ export default function CalculatorClient() {
       `===================================================\n` +
       `CPR PRO — QUANTITATIVE LEVEL REPORT\n` +
       `Symbol: ${activeSymbol || 'MANUAL INPUT'}\n` +
-      `Date: ${new Date().toLocaleDateString('en-IN')}\n` +
+      `Date: ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}\n` +
       `===================================================\n\n` +
       `[INPUT CANDLE]\n` +
       `  High:  ₹${fmt(record.high)}\n` +

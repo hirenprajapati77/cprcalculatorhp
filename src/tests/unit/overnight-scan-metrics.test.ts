@@ -197,4 +197,85 @@ describe('OvernightService.discover Funnel Observability Integration (M-5)', () 
       (globalThis as any).prisma.$transaction = origTx;
     }
   });
+
+  it('finalizes metrics and increments error count on batch upsert failure (A-3, A-4)', async () => {
+    const origGetRegime = RegimeService.getMarketRegime;
+    const origGetBulkEvent = EventCalendarService.getBulkEventRisk;
+    const origGetMacro = EventCalendarService.getMacroEventRisk;
+    const origTx = prisma.$transaction;
+    const origUpsert = (globalThis as any).prisma?.overnightSignal?.upsert;
+
+    try {
+      RegimeService.getMarketRegime = async () => ({
+        trend: 'BULL' as const,
+        volatility: 'LOW' as const,
+        score: 80,
+        niftyClose: 24500,
+        niftyEma20: 24200,
+        niftyReturn5d: 1.2,
+        reliable: true,
+      });
+      EventCalendarService.getBulkEventRisk = async () => ({});
+      EventCalendarService.getMacroEventRisk = async () => ({
+        severity: 0,
+        reason: null,
+        source: 'LOCAL_DB',
+        confidence: 'HIGH',
+      });
+
+      (globalThis as any).prisma.overnightSignal.upsert = (args: any) => args;
+      (globalThis as any).prisma.$transaction = async () => {
+        throw new Error('Database transaction timeout');
+      };
+
+      const history = Array.from({ length: 25 }, (_, i) => ({
+        date: `2026-09-${String(i + 1).padStart(2, '0')}`,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: 200_000,
+      }));
+
+      const stockLiquid = {
+        symbol: 'MOCK_FAIL_UPSERT',
+        market: 'NSE' as const,
+        sector: 'FINANCE',
+        open: 101,
+        high: 104,
+        low: 100,
+        close: 103,
+        ltp: 103,
+        volume: 400_000,
+        avgVolume: 200_000,
+        marketCap: 50_000,
+        history,
+        longScoreOverride: 92,
+        shortScoreOverride: 40,
+      };
+
+      await assert.rejects(
+        () => OvernightService.discover(
+          'BOTH',
+          new Date('2026-10-07T09:45:00.000Z'),
+          [stockLiquid as any]
+        ),
+        /Database transaction timeout/
+      );
+
+      const metrics = OvernightService.getLastScanMetrics();
+      assert.ok(metrics, 'Expected lastScanMetrics to be populated');
+      assert.strictEqual(metrics.errors, 1, 'metrics.errors should be incremented on upsert failure');
+      assert.strictEqual(metrics.saved, 0, 'metrics.saved should be 0 since transaction aborted');
+      assert.ok(metrics.lastScanAt, 'metrics.lastScanAt should be set even on partial failure');
+    } finally {
+      RegimeService.getMarketRegime = origGetRegime;
+      EventCalendarService.getBulkEventRisk = origGetBulkEvent;
+      EventCalendarService.getMacroEventRisk = origGetMacro;
+      if (origUpsert) {
+        (globalThis as any).prisma.overnightSignal.upsert = origUpsert;
+      }
+      (globalThis as any).prisma.$transaction = origTx;
+    }
+  });
 });

@@ -124,8 +124,14 @@ describe('Scanner Workspace Presentation Contract (Phase 4)', () => {
 describe('ScannerKpiStrip Last Scan Indicator (Fix #7)', () => {
   it('returns null when lastScanAt is undefined or null', async () => {
     const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
-    assert.deepEqual(formatLastScanTimestamp(undefined), { formatted: null, isStale: false });
-    assert.deepEqual(formatLastScanTimestamp(null), { formatted: null, isStale: false });
+    assert.equal(formatLastScanTimestamp(undefined), null);
+    assert.equal(formatLastScanTimestamp(null), null);
+  });
+
+  it('returns null for unparseable invalid date string', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    assert.equal(formatLastScanTimestamp('not-a-valid-date'), null);
+    assert.equal(formatLastScanTimestamp('2026-99-99T99:99:99Z'), null);
   });
 
   it('formats fresh timestamp on same IST date without warning', async () => {
@@ -134,10 +140,49 @@ describe('ScannerKpiStrip Last Scan Indicator (Fix #7)', () => {
     const scanAt = '2026-10-19T04:02:00.000Z'; // 09:32 IST on 2026-10-19
     const result = formatLastScanTimestamp(scanAt, now);
 
+    assert.ok(result);
     assert.equal(result.isStale, false);
-    assert.ok(result.formatted?.startsWith('Last scan: '));
-    assert.ok(result.formatted?.endsWith('IST'));
-    assert.ok(!result.formatted?.includes('⚠'));
+    assert.ok(result.label.startsWith('Last scan: '));
+    assert.ok(result.label.endsWith('IST'));
+    assert.ok(!result.label.includes('⚠'));
+  });
+
+  it('treats overnight scan from yesterday 23:55 IST as fresh during pre-market (before 09:15 IST)', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const scanAt = '2026-10-18T18:25:00.000Z'; // 23:55 IST on 2026-10-18 (yesterday after 15:00)
+    const now = new Date('2026-10-19T03:00:00.000Z'); // 08:30 IST on 2026-10-19 (before 09:15)
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.ok(result);
+    assert.equal(result.isStale, false);
+    assert.ok(result.label.startsWith('Last scan: '));
+    assert.ok(result.label.endsWith('IST'));
+    assert.ok(!result.label.includes('⚠'));
+  });
+
+  it('treats overnight scan from yesterday 23:55 IST as stale post market open (after 09:15 IST)', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const scanAt = '2026-10-18T18:25:00.000Z'; // 23:55 IST on 2026-10-18
+    const now = new Date('2026-10-19T04:00:00.000Z'); // 09:30 IST on 2026-10-19 (after 09:15)
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.ok(result);
+    assert.equal(result.isStale, true);
+    assert.ok(result.label.startsWith('⚠ Last scan: Yesterday '));
+    assert.ok(result.label.endsWith('IST'));
+  });
+
+  it('treats future timestamp as fresh due to clock drift guard', async () => {
+    const { formatLastScanTimestamp } = await import('../../components/scanner/ScannerKpiStrip');
+    const now = new Date('2026-10-19T04:00:00.000Z'); // 09:30 IST on 2026-10-19
+    const scanAt = '2026-10-20T04:00:00.000Z'; // Tomorrow (clock drift)
+    const result = formatLastScanTimestamp(scanAt, now);
+
+    assert.ok(result);
+    assert.equal(result.isStale, false);
+    assert.ok(result.label.startsWith('Last scan: '));
+    assert.ok(result.label.endsWith('IST'));
+    assert.ok(!result.label.includes('⚠'));
   });
 
   it('formats stale timestamp from yesterday with warning and Yesterday label', async () => {
@@ -146,9 +191,10 @@ describe('ScannerKpiStrip Last Scan Indicator (Fix #7)', () => {
     const scanAt = '2026-10-18T09:59:00.000Z'; // 15:29 IST on 2026-10-18 (yesterday)
     const result = formatLastScanTimestamp(scanAt, now);
 
+    assert.ok(result);
     assert.equal(result.isStale, true);
-    assert.ok(result.formatted?.startsWith('⚠ Last scan: Yesterday '));
-    assert.ok(result.formatted?.endsWith('IST'));
+    assert.ok(result.label.startsWith('⚠ Last scan: Yesterday '));
+    assert.ok(result.label.endsWith('IST'));
   });
 
   it('formats stale timestamp from 3 days ago with date string and warning', async () => {
@@ -157,8 +203,9 @@ describe('ScannerKpiStrip Last Scan Indicator (Fix #7)', () => {
     const scanAt = '2026-10-16T09:59:00.000Z'; // 15:29 IST on 2026-10-16
     const result = formatLastScanTimestamp(scanAt, now);
 
+    assert.ok(result);
     assert.equal(result.isStale, true);
-    assert.ok(result.formatted?.startsWith('⚠ Last scan: 2026-10-16 '));
-    assert.ok(result.formatted?.endsWith('IST'));
+    assert.ok(result.label.startsWith('⚠ Last scan: 2026-10-16 '));
+    assert.ok(result.label.endsWith('IST'));
   });
 });

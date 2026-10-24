@@ -14,11 +14,13 @@ function isConnectionError(error: unknown): boolean {
   }
   const code = (error as { code?: string }).code;
   if (code && typeof code === 'string') {
-    if (['P1000', 'P1001', 'P1002', 'P1008', 'P1017'].includes(code)) {
+    if (['P1000', 'P1001', 'P1002', 'P1008', 'P1011', 'P1017'].includes(code)) {
       return true;
     }
   }
-  const msg = error.message.toLowerCase();
+  const msg = (error.message ?? '').toLowerCase();
+  const tlsPatterns = ['p1011', 'tls ', 'ssl ', 'certificate', 'handshake failed', 'cert_', 'self signed'];
+  if (tlsPatterns.some((p) => msg.includes(p))) return true;
   return (
     msg.includes('econnrefused') ||
     msg.includes('econnreset') ||

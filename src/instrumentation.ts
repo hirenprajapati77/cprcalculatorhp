@@ -12,6 +12,13 @@ export async function register() {
     console.log(`📦 VERSION: ${appVersion}`);
     console.log(`⚙️  MODE:    ${execMode}`);
 
+    if (process.env.NODE_ENV === 'production' && !process.env.TRUST_PROXY) {
+      console.warn(
+        '[Startup] WARNING: TRUST_PROXY is not set. Rate limiting will fall back to 127.0.0.1 for all clients behind a reverse proxy. ' +
+        'Set TRUST_PROXY=true in .env if running behind Nginx/Cloudflare.'
+      );
+    }
+
     // Test DB
     try {
       await prisma.$queryRaw`SELECT 1`;
@@ -34,6 +41,14 @@ export async function register() {
       }
     } catch (_e) {
       console.log('❌ REDIS:   UNREACHABLE');
+    }
+
+    try {
+      const { MarketService } = await import('@/services/market.service');
+      await MarketService.loadDynamicFnoUniverse();
+      console.log('[Instrumentation] Dynamic F&O universe restored from Redis cache');
+    } catch (err) {
+      console.warn('[Instrumentation] Could not restore dynamic F&O universe from Redis — using static baseline:', err instanceof Error ? err.message : err);
     }
 
     // Event Calendar Freshness Test

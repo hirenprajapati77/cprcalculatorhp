@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getISTDateString } from '@/lib/market-hours';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
 import { executeGuardedQuery } from '@/lib/db-query-guard';
@@ -387,7 +388,7 @@ export class MomentumLeadersService {
    */
   static getPendingMomentumLeadersReport(universe: MomentumUniverse = 'NSE_FNO'): MomentumLeadersReport {
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: getISTDateString(),
       universe,
       totalScanned: 0,
       qualifiedCount: 0,

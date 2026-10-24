@@ -37,6 +37,16 @@ export interface JournalEstimatedFrictionResult {
 
 export const DEFAULT_OPTION_LOT_SIZE = 500;
 
+export function normalizeIndexSymbol(sym: string): string {
+  const s = sym.replace(/^NSE:|^BSE:/, '').trim().toUpperCase().replace(/\s+/g, '');
+  if (s === 'NIFTY50' || s === '^NSEI' || s === 'NIFTY') return 'NIFTY';
+  if (s === 'BANKNIFTY' || s === '^NSEBANK' || s === 'NIFTYBANK') return 'BANKNIFTY';
+  if (s === 'FINNIFTY' || s === 'NIFTYFIN' || s === 'NIFTY_FIN_SERVICE') return 'FINNIFTY';
+  if (s === 'MIDCPNIFTY' || s === '^NSEMDCP50') return 'MIDCPNIFTY';
+  if (s === 'SENSEX' || s === '^BSESN') return 'SENSEX';
+  return s;
+}
+
 export interface ResolveOptionLotSizeParams {
   symbol?: string | null | undefined;
   optionStrike?: number | null | undefined;
@@ -60,7 +70,7 @@ export function resolveOptionLotSize(params: ResolveOptionLotSizeParams): number
   }
 
   if (params.symbol) {
-    const cleanSym = params.symbol.replace(/^NSE:|^BSE:/, '').trim().toUpperCase();
+    const cleanSym = normalizeIndexSymbol(params.symbol);
     const mapped = FALLBACK_LOT_SIZES[cleanSym];
     if (mapped && mapped > 0) {
       return mapped;
@@ -80,7 +90,7 @@ export function resolveOptionLotSize(params: ResolveOptionLotSizeParams): number
   }
 
   if (strike && strike > 0) {
-    const approx = Math.round(500_000 / strike);
+    const approx = Math.round(1_500_000 / strike);
     return Math.max(25, approx);
   }
 
@@ -95,6 +105,7 @@ export interface JournalEstimatedFrictionOptions {
   optionContract?: string;
   optionStrike?: number;
   isShortUnderlying?: boolean;
+  isShortOption?: boolean;
   lotSize?: number;
 }
 
@@ -106,9 +117,9 @@ export interface JournalEstimatedFrictionOptions {
 export function computeJournalPnl(
   entryCmp: number,
   exitCmp: number,
-  opts?: { isShortUnderlying?: boolean | undefined }
+  opts?: { isShortUnderlying?: boolean | undefined; isShortOption?: boolean | undefined }
 ): OptionPnl {
-  const isShort = Boolean(opts?.isShortUnderlying);
+  const isShort = Boolean(opts?.isShortUnderlying || opts?.isShortOption);
   const pnl = isShort ? entryCmp - exitCmp : exitCmp - entryCmp;
   const pnlPct = safeRatio(pnl, entryCmp, 0) * 100;
   return {
@@ -139,12 +150,13 @@ export function computeJournalEstimatedFriction(
     optionContract,
     optionStrike,
     isShortUnderlying,
+    isShortOption,
   } = params;
 
   const gross = computeJournalPnl(
     entryCmp,
     exitCmp,
-    isShortUnderlying !== undefined ? { isShortUnderlying } : undefined
+    { isShortUnderlying, isShortOption }
   );
   const isUnderlying = Boolean(optionContract && optionContract.startsWith('UNDERLYING'));
 
@@ -164,7 +176,13 @@ export function computeJournalEstimatedFriction(
       optionContract,
       explicitLotSize: params.lotSize,
     });
-    breakdown = estimateOptionPremiumFriction(entryCmp, exitCmp, lotSize);
+    breakdown = estimateOptionPremiumFriction(
+      entryCmp,
+      exitCmp,
+      lotSize,
+      undefined,
+      isShortOption
+    );
   }
 
   const estimatedChargesTotal = breakdown.totalFriction;

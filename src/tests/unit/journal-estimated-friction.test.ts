@@ -17,6 +17,8 @@ import {
   computeJournalPnl,
   computeOptionPnl,
   computeJournalEstimatedFriction,
+  resolveOptionLotSize,
+  normalizeIndexSymbol,
 } from '@/lib/pnl';
 
 function closeTo(actual: number, expected: number, epsilon = 0.02): boolean {
@@ -94,6 +96,27 @@ describe('Trade Journal Estimated Friction & Net P&L (Step 4 Non-Destructive Lay
       // Net loss is strictly worse than gross loss
       assert.ok(res.estimatedNetPnl < res.grossPnl);
       assert.ok(res.estimatedNetPnlPct < -20);
+    });
+
+    it('computes direction-aware gross and net P&L for short option (option writing)', () => {
+      const entryCmp = 200;
+      const exitCmp = 150;
+      const res = computeJournalEstimatedFriction({
+        entryCmp,
+        exitCmp,
+        symbol: 'NIFTY',
+        optionContract: '26JUL25000PE',
+        isShortOption: true,
+      });
+
+      // Direction aware gross P&L for short option: entry - exit = 200 - 150 = 50
+      assert.equal(res.grossPnl, 50);
+      assert.equal(res.grossPnlPct, 25);
+      assert.equal(res.isModelEstimate, true);
+      assert.equal(res.lotSize, 65);
+      // Net P&L is positive and lower than gross
+      assert.ok(res.estimatedNetPnl > 0);
+      assert.ok(res.estimatedNetPnl < res.grossPnl);
     });
 
     it('proves flat option trade incurs strictly negative net P&L due to statutory & broker drag', () => {
@@ -238,14 +261,41 @@ describe('Trade Journal Estimated Friction & Net P&L (Step 4 Non-Destructive Lay
 
       assert.equal(res.grossPnl, 10);
       assert.equal(res.grossPnlPct, 20);
-      // Heuristic: 500,000 / 2000 = 250 lot size
-      assert.equal(res.lotSize, 250);
+      // Heuristic: 1,500,000 / 2000 = 750 lot size (SEBI ₹15L minimum contract value)
+      assert.equal(res.lotSize, 750);
       // Per unit friction should be ~₹0.20, not ₹47.20
       assert.ok(res.estimatedChargesPerUnit < 0.5);
       // Net return remains healthily positive (~+19.6%), not negative (-74.5%)
       assert.ok(res.estimatedNetPnlPct > 19);
       assert.ok(Number.isFinite(res.estimatedNetPnl));
       assert.ok(Number.isFinite(res.estimatedNetPnlPct));
+    });
+
+    it('normalizes index aliases (NIFTY50, ^NSEI, BANKNIFTY, ^NSEBANK) to mapped lot size', () => {
+      const resNifty50 = computeJournalEstimatedFriction({
+        entryCmp: 100,
+        exitCmp: 130,
+        symbol: 'NIFTY50',
+        optionContract: '26JUL25000CE',
+      });
+      assert.equal(resNifty50.lotSize, 65); // NIFTY lot size
+
+      const resNiftySpace = resolveOptionLotSize({ symbol: 'NIFTY 50' });
+      assert.equal(resNiftySpace, 65);
+
+      const resNsei = resolveOptionLotSize({ symbol: '^NSEI' });
+      assert.equal(resNsei, 65);
+
+      const resBankNifty = resolveOptionLotSize({ symbol: '^NSEBANK' });
+      assert.equal(resBankNifty, 30);
+
+      const resFinnifty = resolveOptionLotSize({ symbol: 'NIFTYFIN' });
+      assert.equal(resFinnifty, 60);
+
+      const resSensex = resolveOptionLotSize({ symbol: '^BSESN' });
+      assert.equal(resSensex, 10);
+
+      assert.equal(normalizeIndexSymbol('NSE:NIFTY 50'), 'NIFTY');
     });
 
     it('falls back to DEFAULT_OPTION_LOT_SIZE (500) when neither symbol nor strike is known', () => {
