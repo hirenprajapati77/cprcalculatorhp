@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 19–24 Oct: 2-Month Code Review Remediation across All Domains (PRs #286–#287)
+
+- **PR #287 (`7ef8595c`) — 2-Month Deep Code Review Remediation across All Domains**:
+  - **Security & Dependency Audit (B-1)**: Upgraded `next` to `15.5.28` (patching SSG cache poisoning GHSA-4jqv-mc3x and SVG RCE GHSA-2464-fhr4); added targeted overrides for `body-parser` and `zod` (`^4.6.7`); passed `npm run security:check` with 0 high/critical issues.
+  - **SEBI ₹15L Notional Heuristic & Index Alias Normalization (A-1, C-1)**: Updated strike divisor in `resolveOptionLotSize()` from 500,000 to 1,500,000 per SEBI contract minimum value guidelines; added `normalizeIndexSymbol()` mapping index aliases (`NIFTY50`, `^NSEI`, `BANKNIFTY`, `SENSEX`) to canonical lot size specs.
+  - **Index BTST Friday Gate (A-2)**: Added Friday weekend-gap risk suppression gate (`day === 5` in IST) to `IndexDiscoverService`, ensuring index BTST LONG calls are blocked on Fridays just like stock BTST.
+  - **Overnight Batch Metrics & Partial Error Resilience (A-3, A-4)**: Guaranteed `finalizeOvernightScanMetrics()` runs on partial batch failures and accurately increments `metrics.errors++`.
+  - **PM2 Cold-Start F&O Dynamic Universe Recovery (B-2)**: Added `await MarketService.loadDynamicFnoUniverse()` inside `src/instrumentation.ts` so PM2 restarts instantly recover cached F&O eligibility from Redis.
+  - **Scanner Controller In-Memory Map Pruning (B-3)**: Implemented `pruneOldScanGenerations()` in `ScannerController` to drop prior-day entries and enforce a 20-entry ceiling.
+  - **Scan Telemetry Failed State (D-1)**: Added explicit `'failed'` state, `failedAt`, and `failureReason` to `ScanGenerationMeta` in `ScannerController` when retries are exhausted.
+  - **Scanner Staleness Telemetry Refinement (C-2)**: Updated `formatLastScanTimestamp()` in `ScannerKpiStrip` with market-session open boundary logic (09:15 IST), eliminating false midnight amber warnings.
+  - **Direction-Aware Option Writing Friction (C-3)**: Added `isShortOption?: boolean` to `estimateOptionPremiumFriction()`, correctly applying STT to the entry premium leg on short options.
+  - **IST Timezone Normalization across Market Tools & Exports (C-4, C-5)**: Replaced raw UTC slices with `getISTDateString()` in `market-breadth`, `momentum-leaders`, `multi-year-breakout`, `pattern-breakout`, and enforced `{ timeZone: 'Asia/Kolkata' }` in `export.ts` and `CalculatorClient.tsx`.
+  - **Trailing Slash Normalization in Enterprise Shell (C-6)**: Added trailing-slash normalization for `/unlock/` in `EnterpriseShell.tsx`.
+  - **Prisma TLS/SSL Connection Error Handling (D-2)**: Added Prisma error code `P1011` and certificate/TLS error message patterns to `isConnectionError()` in `src/lib/circuit-breaker.ts`.
+  - **Reverse Proxy Validation Warning (B-4)**: Added production startup warning in `src/instrumentation.ts` when `TRUST_PROXY` is unset.
+  - Verification: 1,518 unit tests pass, 0 type errors, regression lock hash verified.
+
+- **PR #286 (`8bc6b7e4`) — Review Improvements, Test Tightening, Staleness Indicator & F&O Universe Sync**:
+  - **F&O Universe Audit**: Added `YESBANK` (`Financial Services`, `isNifty200: true`, `isFnO: true`) and `IRCTC` (`isFnO: true`). Corrected `ZOMATO` ticker from legacy `ETERNAL` to official NSE symbol. Added canary unit tests for F&O listings.
+  - **Metrics Staleness Indicator**: Added `lastScanAt` timestamp to `OvernightScanMetrics` and visual staleness indicator in `ScannerKpiStrip`.
+  - **Candle Cache Stampede Guard**: Implemented singleflight promise-coalescing on `fetchAuthoritativeCandle` with concurrent fetch unit tests.
+  - **Integration Test Tightening & WATCH forceDate Test**: Restored exact/tight value checks in `overnight.test.ts` and added regression test suite for WATCH scheduler `forceDate` parameter propagation.
+  - **Documentation**: Documented `forceDate` scheduler architecture in `README.md`.
+  - Verification: 1,506 unit tests pass, typecheck clean, regression lock verified.
+
 ### Added & Hardened — 13–15 Oct: Market Tools EOD WATCH (Phase 1), STT Rate 0.15% & 2026 Calendar (PRs #280–#284)
 
 - **PR #284 (`a0380e66`) — Fix Date Forwarding in Scheduler & Route (`market-cron.scheduler.ts`, `route.ts`, `market-tools-watch.test.ts`)**:
