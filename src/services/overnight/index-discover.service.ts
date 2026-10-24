@@ -497,6 +497,9 @@ export class IndexDiscoverService {
   static async discover(dateOverride?: Date): Promise<IndexSignalResult[]> {
     const currentTime = dateOverride || new Date();
     const dateStr = getISTDateString(currentTime);
+    const istDayOfWeek = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'Asia/Kolkata' })
+      .format(currentTime);
+    const isFriday = istDayOfWeek === 'Fri';
     // Stable per-day signalTime so OvernightSignal upserts update one row
     // per index/day instead of inserting a new row on every refresh minute.
     const timeStr = BTST_CLOCK.discoveryStart;
@@ -589,11 +592,21 @@ export class IndexDiscoverService {
         );
 
         // BTST LONG
-        // B4 fix: when kill switch is off, push an IGNORE result so the upsert
-        // overwrites any stale BTST_READY signals already in DB from earlier scans.
-        // Previously just logging and skipping left stale signals active, defeating
-        // the kill switch — downstream journal/alert code would still pick them up.
-        if (!env.INDEX_BTST_ENABLED) {
+        // Friday gate: Friday holds carry 60+ hours of weekend gap risk vs 18 hours on weekdays.
+        // Skip LONG/BTST direction and only allow SHORT/STBT.
+        if (isFriday) {
+          console.log('[IndexDiscover] Friday gate active — BTST LONG suppressed for weekend gap risk');
+          results.push(
+            this.ignoreResult(
+              instrument.symbol,
+              dateStr,
+              timeStr,
+              'LONG',
+              ['Friday gate active — BTST LONG suppressed for weekend gap risk'],
+              longRegime
+            )
+          );
+        } else if (!env.INDEX_BTST_ENABLED) {
           console.log(`[IndexDiscover] Skipping LONG / BTST discovery for ${instrument.symbol} because INDEX_BTST_ENABLED is false`);
           results.push(
             this.ignoreResult(

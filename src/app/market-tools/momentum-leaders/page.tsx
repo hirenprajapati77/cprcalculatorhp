@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { getISTDateString } from '@/lib/market-hours';
 import {
   MomentumLeadersReport,
   MomentumStock,
@@ -211,7 +212,7 @@ export default function MomentumLeadersPage() {
     ]);
 
     const csvContent = generateCsvContent(headers, rows);
-    const dateStr = report?.date || new Date().toISOString().slice(0, 10);
+    const dateStr = report?.date || getISTDateString();
     downloadFile(csvContent, `momentum-leaders-${selectedUniverse.toLowerCase()}-${dateStr}.csv`, 'text/csv');
   };
 

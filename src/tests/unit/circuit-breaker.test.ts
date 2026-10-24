@@ -150,6 +150,32 @@ test('DatabaseCircuitBreaker — trips on Prisma connection code P1001 and pool 
     /CIRCUIT_OPEN/
   );
   assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  // Prisma TLS connection error code P1011
+  const prismaTlsError = new Error('Error opening a TLS connection: handshake failed');
+  (prismaTlsError as unknown as { code: string }).code = 'P1011';
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw prismaTlsError;
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
+
+  resetBreaker();
+
+  // TLS / Certificate pattern errors
+  await assert.rejects(
+    () =>
+      DatabaseCircuitBreaker.execute(async () => {
+        throw new Error('unable to verify the first certificate (self signed)');
+      }),
+    /CIRCUIT_OPEN/
+  );
+  assert.equal(internals().state, CircuitState.OPEN);
 });
 
 test('DatabaseCircuitBreaker — hung probe times out and re-opens circuit with cooldown', async (t) => {

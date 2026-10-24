@@ -36,37 +36,53 @@ interface ScannerKpiStripProps {
 }
 
 export interface LastScanIndicatorResult {
-  formatted: string | null;
+  label: string;
   isStale: boolean;
 }
 
 export function formatLastScanTimestamp(
   lastScanAt?: string | null,
-  now: Date = new Date()
-): LastScanIndicatorResult {
-  if (!lastScanAt) {
-    return { formatted: null, isStale: false };
+  now?: Date
+): LastScanIndicatorResult | null {
+  if (!lastScanAt) return null;
+  const parsed = new Date(lastScanAt);
+  if (isNaN(parsed.getTime())) return null;
+
+  const nowDate = now ?? new Date();
+  const toIST = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const toISTTime = (d: Date) => d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+  const toISTHour = (d: Date) => {
+    const [h, m] = d.toLocaleTimeString('en-CA', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number);
+    return h + m / 60;
+  };
+
+  const scanDate = toIST(parsed);
+  const todayDate = toIST(nowDate);
+  const yesterdayDate = toIST(new Date(nowDate.getTime() - 86400000));
+
+  const scanTimeHour = toISTHour(parsed);
+  const nowHour = toISTHour(nowDate);
+
+  // Future timestamp: treat as fresh (clock drift guard)
+  if (scanDate > todayDate) {
+    return { label: `Last scan: ${toISTTime(parsed)} IST`, isStale: false };
   }
 
-  const scanDate = new Date(lastScanAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-  const todayDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-  const isStale = scanDate !== todayDate;
-
-  const timeStr = new Date(lastScanAt).toLocaleTimeString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  if (isStale) {
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayDate = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const dayLabel = scanDate === yesterdayDate ? 'Yesterday' : scanDate;
-    return { formatted: `⚠ Last scan: ${dayLabel} ${timeStr} IST`, isStale: true };
+  // Today's scan: always fresh
+  if (scanDate === todayDate) {
+    return { label: `Last scan: ${toISTTime(parsed)} IST`, isStale: false };
   }
 
-  return { formatted: `Last scan: ${timeStr} IST`, isStale: false };
+  // Yesterday's scan after 15:00 IST + current time before 09:15 IST = pre-market, still fresh
+  if (scanDate === yesterdayDate && scanTimeHour >= 15 && nowHour < 9.25) {
+    return { label: `Last scan: ${toISTTime(parsed)} IST`, isStale: false };
+  }
+
+  // Otherwise stale
+  const label = scanDate === yesterdayDate
+    ? `⚠ Last scan: Yesterday ${toISTTime(parsed)} IST`
+    : `⚠ Last scan: ${scanDate} ${toISTTime(parsed)} IST`;
+  return { label, isStale: true };
 }
 
 export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
@@ -88,7 +104,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
 }) => {
   const isOvernight = scannerMode === 'BTST' || scannerMode === 'STBT' || scannerMode === 'OVERNIGHT';
 
-  const { formatted: lastScanFormatted, isStale } = formatLastScanTimestamp(overnightMetrics?.lastScanAt);
+  const lastScan = formatLastScanTimestamp(overnightMetrics?.lastScanAt);
 
   return (
     <div className="space-y-3 font-mono">
@@ -337,16 +353,16 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
       )}
 
       {/* ── Last Scan Staleness Indicator ── */}
-      {lastScanFormatted && (
+      {lastScan && (
         <div className="flex items-center justify-end px-1 -mt-1">
           <span
             className={
-              isStale
+              lastScan.isStale
                 ? 'text-xs text-amber-400 font-medium'
                 : 'text-xs text-muted-foreground text-text-muted'
             }
           >
-            {lastScanFormatted}
+            {lastScan.label}
           </span>
         </div>
       )}

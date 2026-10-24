@@ -278,7 +278,7 @@ export const EnterpriseShell: React.FC<EnterpriseShellProps> = ({
 
   // /unlock is the isolated security-gated authentication barrier.
   // It must never render the enterprise sidebar, topbar, market ticker, command palette, or workstation navigation.
-  if (pathname === '/unlock') {
+  if (pathname === '/unlock' || pathname.replace(/\/$/, '') === '/unlock') {
     return (
       <main
         id="main-content"

@@ -226,13 +226,16 @@ export function estimateOptionPremiumFriction(
   entryPremium: number,
   exitPremium: number,
   quantity = 1,
-  tierId: OptionPremiumFrictionTier = FRICTION_MODELS.OPTION_PREMIUM.DEFAULT_TIER
+  tierId: OptionPremiumFrictionTier = FRICTION_MODELS.OPTION_PREMIUM.DEFAULT_TIER,
+  isShortOption = false
 ): FrictionBreakdown {
   const tier = FRICTION_MODELS.OPTION_PREMIUM.TIERS[tierId] ?? FRICTION_MODELS.OPTION_PREMIUM.TIERS.RETAIL_STATUTORY;
-  const buyTurnover = entryPremium * quantity;
-  const sellTurnover = exitPremium * quantity;
+  const buyTurnover = (isShortOption ? exitPremium : entryPremium) * quantity;
+  const sellTurnover = (isShortOption ? entryPremium : exitPremium) * quantity;
   const turnover = buyTurnover + sellTurnover;
-  const grossPnl = (exitPremium - entryPremium) * quantity;
+  const grossPnl = isShortOption
+    ? (entryPremium - exitPremium) * quantity
+    : (exitPremium - entryPremium) * quantity;
 
   const stt = sellTurnover * tier.sttSellRate;
   const stampDuty = buyTurnover * tier.stampDutyBuyRate;

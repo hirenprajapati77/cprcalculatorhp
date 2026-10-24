@@ -238,6 +238,27 @@ describe('IndexDiscoverService.discover - Gating Flags', () => {
     assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
   });
 
+  it('suppresses BTST LONG on Fridays due to weekend gap risk gate while allowing SHORT', async () => {
+    // 2026-07-24 is a Friday
+    const fridayDate = new Date('2026-07-24T10:00:00+05:30');
+    const results = await IndexDiscoverService.discover(fridayDate);
+
+    const longSignals = results.filter(r => r.direction === 'LONG');
+    const shortSignals = results.filter(r => r.direction === 'SHORT');
+
+    assert.equal(longSignals.length, INDEX_INSTRUMENTS.length);
+    assert.ok(
+      longSignals.every(r => r.classification === 'IGNORE'),
+      'All Friday LONG signals must be IGNORE'
+    );
+    assert.ok(
+      longSignals.every(r => r.reasons.some(reason => reason.includes('Friday gate active'))),
+      'All Friday LONG signals must cite Friday gate active'
+    );
+    assert.equal(shortSignals.length, INDEX_INSTRUMENTS.length);
+  });
+
+
   it('gating INDEX_STBT_ENABLED=false filters out all SHORT results, leaves LONG intact', async () => {
     env.INDEX_BTST_ENABLED = true;
     env.INDEX_STBT_ENABLED = false;

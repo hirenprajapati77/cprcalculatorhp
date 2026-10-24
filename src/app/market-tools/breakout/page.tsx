@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { getISTDateString } from '@/lib/market-hours';
 import { ExportActions } from '@/components/market-tools/ExportActions';
 import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import {
@@ -162,7 +163,7 @@ export default function MultiYearBreakoutPage() {
       s.volume,
     ]);
     const csvContent = generateCsvContent(headers, rows);
-    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    const dateStr = report.date || getISTDateString();
     downloadFile(
       csvContent,
       `multi_year_breakouts_${selectedWindow.toLowerCase()}_${dateStr}.csv`

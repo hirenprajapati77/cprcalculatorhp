@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getISTDateString } from '@/lib/market-hours';
 import { cache } from '@/lib/redis';
 import { withTimeout } from '@/lib/with-timeout';
 import { executeGuardedQuery } from '@/lib/db-query-guard';
@@ -220,7 +221,7 @@ export class MarketBreadthService {
     };
 
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: getISTDateString(),
       tradingDaysAvailable: 0,
       overallScore: 0,
       marketRegime: 'NEUTRAL',

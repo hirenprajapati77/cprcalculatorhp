@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { getISTDateString } from '@/lib/market-hours';
 import { ExportActions } from '@/components/market-tools/ExportActions';
 import { generateCsvContent, downloadFile } from '@/lib/export-utils';
 import { MarketBreadthReport, UniverseBreadth } from '@/services/market-tools/market-breadth.service';
@@ -137,7 +138,7 @@ export default function MarketBreadthPage() {
       s.status,
     ]);
     const csvContent = generateCsvContent(headers, rows);
-    const dateStr = report.date || new Date().toISOString().split('T')[0];
+    const dateStr = report.date || getISTDateString();
     downloadFile(
       csvContent,
       `market_breadth_sectors_${selectedUniverse.toLowerCase()}_${dateStr}.csv`

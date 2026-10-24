@@ -20,3 +20,26 @@ describe('INDEX_OVERNIGHT_INSTRUMENT_WHERE', () => {
     });
   });
 });
+
+import { IndexDiscoverService } from '../../services/overnight/index-discover.service';
+
+describe('IndexDiscoverService Friday Weekend Gate', () => {
+  it('suppresses BTST LONG on Fridays to prevent 60+ hour weekend gap risk', async () => {
+    // 2026-07-24 is a Friday
+    const fridayDate = new Date('2026-07-24T10:00:00+05:30');
+    const results = await IndexDiscoverService.discover(fridayDate);
+
+    const longSignals = results.filter((r) => r.direction === 'LONG');
+    assert.ok(longSignals.length > 0, 'Expected index LONG results');
+    assert.ok(
+      longSignals.every((r) => r.classification === 'IGNORE'),
+      'All LONG signals on Friday must be classified as IGNORE'
+    );
+    assert.ok(
+      longSignals.every((r) =>
+        r.reasons.some((re) => re.includes('Friday gate active'))
+      ),
+      'All Friday LONG signals must cite Friday gate suppression'
+    );
+  });
+});
