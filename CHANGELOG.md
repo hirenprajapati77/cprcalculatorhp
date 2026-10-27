@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Ops -- 26 Oct: Production Re-Deploy to Activate next@15.5.28 CVE Patch
+
+- **Re-deploy (31e4be1b)**: Identified that production server was still running 
+ext@15.5.21 after PR #287 (which committed 
+ext@15.5.28 to package.json) -- the prior deploy had not run 
+pm ci on the server. Re-deployed today with full 
+pm ci + build + PM2 restart. Production is now confirmed on 
+ext@15.5.28 (patches GHSA-4jqv-mc3x SSG cache poisoning and GHSA-2464-fhr4 SVG RCE). No code changes -- ops-only.
+- **Verification**: Health check passed, 0 PM2 restarts, all post-deploy smoke probes green.
+
 
 ### Added & Hardened — 19–24 Oct: 2-Month Code Review Remediation across All Domains (PRs #286–#287)
 
