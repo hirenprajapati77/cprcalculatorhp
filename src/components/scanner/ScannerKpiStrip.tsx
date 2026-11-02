@@ -12,6 +12,8 @@ import {
   Star,
   Sparkles,
   Filter,
+  Compass,
+  Info,
 } from 'lucide-react';
 import type { OvernightScanMetrics } from '@/services/overnight/overnight-scan-metrics';
 
@@ -109,7 +111,7 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
   return (
     <div className="space-y-3 font-mono">
       {/* ── Telemetry & Engine Bar ── */}
-      <div className="bg-surface-panel border border-border-default rounded-lg px-3.5 py-2.5 text-[11px] grid grid-cols-2 sm:grid-cols-6 items-center gap-3 text-text-secondary">
+      <div className="bg-surface-panel border border-border-default rounded-lg px-3.5 py-2.5 text-[11px] grid grid-cols-2 sm:grid-cols-7 items-center gap-3 text-text-secondary">
         <div className="flex items-center gap-1.5 border-r border-border-subtle last:border-none pr-2">
           <Layers size={13} className="text-accent-primary" />
           <span className="text-text-muted">Universe:</span>
@@ -138,6 +140,19 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
           <TrendingUp size={13} className="text-cyan-400" />
           <span className="text-text-muted">Latency:</span>
           <span className="font-bold text-text-primary">{latency}ms</span>
+        </div>
+        <div className="flex items-center gap-1.5 border-r border-border-subtle last:border-none pr-2">
+          <Compass size={13} className={overnightMetrics?.regimeTrend === 'BULL' ? 'text-trading-bullish' : overnightMetrics?.regimeTrend === 'BEAR' ? 'text-trading-bearish' : 'text-amber-400'} />
+          <span className="text-text-muted">Regime:</span>
+          <span className={`font-bold uppercase ${
+            overnightMetrics?.regimeTrend === 'BULL'
+              ? 'text-trading-bullish'
+              : overnightMetrics?.regimeTrend === 'BEAR'
+              ? 'text-trading-bearish'
+              : 'text-amber-400'
+          }`}>
+            {overnightMetrics?.regimeTrend ? `${overnightMetrics.regimeTrend}/${overnightMetrics.regimeVolatility || 'VOL'}` : 'NIFTY CHOP'}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -217,6 +232,38 @@ export const ScannerKpiStrip: React.FC<ScannerKpiStripProps> = ({
             }`}>
               errors=<span className={overnightMetrics.errors > 0 ? 'text-rose-400 font-bold' : 'text-text-secondary font-semibold'}>{overnightMetrics.errors}</span>
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Zero Signals Context / Attribution Card ── */}
+      {isOvernight && overnightMetrics && overnightMetrics.processed > 0 && overnightMetrics.saved === 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3.5 text-xs font-mono text-amber-300 space-y-1.5 animate-fade-in">
+          <div className="flex items-center gap-2 font-bold text-amber-400">
+            <AlertTriangle size={15} />
+            <span>Market Context: 0 Qualified Setups Passed Quality Gates Today</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px] pt-1">
+            <div className="bg-surface-panel/60 border border-amber-500/20 rounded p-2">
+              <span className="text-text-muted block text-[10px] uppercase">Eligibility Rejections</span>
+              <span className="text-text-primary font-bold text-sm">{overnightMetrics.droppedEligibility} stocks</span>
+              <p className="text-[9px] text-text-muted mt-0.5">Volume &lt; 100k or VDU ratio &lt; 1.5x</p>
+            </div>
+            <div className="bg-surface-panel/60 border border-amber-500/20 rounded p-2">
+              <span className="text-text-muted block text-[10px] uppercase">Regime Blocked</span>
+              <span className="text-text-primary font-bold text-sm">{overnightMetrics.droppedRegime} stocks</span>
+              <p className="text-[9px] text-text-muted mt-0.5">Misaligned with NIFTY {overnightMetrics.regimeTrend || 'trend'}</p>
+            </div>
+            <div className="bg-surface-panel/60 border border-amber-500/20 rounded p-2">
+              <span className="text-text-muted block text-[10px] uppercase">Friday / Extended</span>
+              <span className="text-text-primary font-bold text-sm">{overnightMetrics.droppedFridayGate + overnightMetrics.droppedExtension} stocks</span>
+              <p className="text-[9px] text-text-muted mt-0.5">Weekend gap risk or stretched ATR</p>
+            </div>
+            <div className="bg-surface-panel/60 border border-amber-500/20 rounded p-2">
+              <span className="text-text-muted block text-[10px] uppercase">Disciplined Outcome</span>
+              <span className="text-emerald-400 font-bold text-sm">FAIL-CLOSED</span>
+              <p className="text-[9px] text-text-muted mt-0.5">Better to skip than force bad trades</p>
+            </div>
           </div>
         </div>
       )}

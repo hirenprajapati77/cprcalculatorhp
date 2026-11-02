@@ -339,11 +339,14 @@ export class OvernightService {
 
     const state = this.determineState(currentTime);
     const regime = await RegimeService.getMarketRegime(dateStr);
+
     
     const universeStocks = mockStocks 
       ? mockStocks.map(s => ({ symbol: s.symbol })) 
       : MarketService.getUniverse('NSE_FNO');
     const metrics = createEmptyOvernightScanMetrics(universeStocks.length);
+    metrics.regimeTrend = regime?.trend;
+    metrics.regimeVolatility = regime?.volatility;
     OvernightService.lastScanMetrics = metrics;
 
     const signalsToSave: Prisma.OvernightSignalCreateInput[] = [];
