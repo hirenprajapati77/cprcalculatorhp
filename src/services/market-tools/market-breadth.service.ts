@@ -393,12 +393,18 @@ export class MarketBreadthService {
 
     // Mock/Filter Nifty 50 and FNO symbol subsets if present
     const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
+    if (nifty50Stats.length === 0) {
+      console.warn('[MarketBreadth] NIFTY50_SYMBOLS filter matched 0 stocks - falling back to slice(0,50). Check DailyOhlcv data coverage.');
+    }
     const nifty50 = computeUniverseBreadth(
       'NIFTY_50',
       nifty50Stats.length > 0 ? nifty50Stats : operatingStockStats.slice(0, 50)
     );
 
     const fnoStats = operatingStockStats.filter((s) => FNO_SYMBOLS.has(s.symbol));
+    if (fnoStats.length === 0) {
+      console.warn('[MarketBreadth] FNO_SYMBOLS filter matched 0 stocks - falling back to slice(0,180). Check DailyOhlcv data coverage.');
+    }
     const nseFno = computeUniverseBreadth(
       'NSE_FNO',
       fnoStats.length > 0 ? fnoStats : operatingStockStats.slice(0, 180)
