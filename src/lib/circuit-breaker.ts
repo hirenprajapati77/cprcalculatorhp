@@ -44,6 +44,11 @@ export class DatabaseCircuitBreaker {
   private static readonly DEFAULT_PROBE_TIMEOUT_MS = 5000;
   private static probeTimeoutMs: number = DatabaseCircuitBreaker.DEFAULT_PROBE_TIMEOUT_MS;
 
+  /** Returns the current circuit state for health check / telemetry visibility. */
+  static getState(): CircuitState {
+    return this.state;
+  }
+
   /** Test-only hook to shorten probe timeout during unit testing. */
   static _setProbeTimeoutMsForTesting(ms: number): void {
     this.probeTimeoutMs = ms;

@@ -4,6 +4,7 @@ import { CacheService } from '@/services/cache.service';
 import { getProcessMemorySnapshot } from '@/lib/process-memory';
 import { QueueService } from '@/services/queue.service';
 import { prisma } from '@/lib/db';
+import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 import { getISTDateString } from '@/lib/market-hours';
 import { RegimeService } from '@/services/overnight/regime.service';
 import { hashToken, timingSafeEqual } from '@/lib/auth-token';
@@ -124,6 +125,7 @@ export async function GET(req: NextRequest) {
       executionMode,
       checks: {
         database: dbStatus,
+        circuitBreaker: DatabaseCircuitBreaker.getState(),
         redis: redisOk ? 'connected' : 'disconnected',
         signals: signalsHealth,
         events: eventsHealth,
