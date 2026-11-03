@@ -1,6 +1,8 @@
+// P1-4: Surface silent API failures as non-blocking toasts
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useToast } from '@/components/ui/Toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -59,6 +61,8 @@ const NAV_GROUPS = [
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
+  const { showToast } = useToast();
+  const lastErrorToastRef = useRef<number>(0);
   const toolsRef = React.useRef<HTMLDivElement>(null);
   const moreRef = React.useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -90,16 +94,24 @@ export const Navbar: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           setMarketStatus(data);
+        } else {
+          if (Date.now() - lastErrorToastRef.current > 60000) {
+            lastErrorToastRef.current = Date.now();
+            showToast('Market data feed temporarily unavailable', 'error');
+          }
         }
       } catch {
-        // Fallback silently if offline
+        if (Date.now() - lastErrorToastRef.current > 60000) {
+          lastErrorToastRef.current = Date.now();
+          showToast('Market data feed temporarily unavailable', 'error');
+        }
       }
     };
 
     fetchStatus();
     const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 8);

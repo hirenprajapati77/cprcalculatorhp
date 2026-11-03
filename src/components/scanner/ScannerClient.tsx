@@ -1,3 +1,9 @@
+// P1-1: Collapsible advanced filters + filter presets
+// P1-2: Zero-signal / empty state card for scanner table
+// P1-3: Auto-refresh status badge with live activity pulse
+// P1-5: Keyboard navigation & ARIA labels on filter controls
+// P1-6: Mobile-responsive card view (< 768px)
+// P1-7: Print / PDF export toolbar button with print layout
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -20,7 +26,10 @@ import {
   X,
   Clock,
   LayoutGrid,
-  Info
+  Info,
+  SearchX,
+  Printer,
+  SlidersHorizontal
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -204,25 +213,51 @@ function useBtstState(mode: ScannerMode = 'BTST') {
   return { state, message, emptyMessage, nextRefresh, timeStr };
 }
 
-const BtstEmptyState = ({ mode, overnightMetrics }: { mode?: ScannerMode; overnightMetrics?: OvernightScanMetrics | null }) => {
+const BtstEmptyState = ({
+  mode,
+  overnightMetrics,
+  onResetFilters,
+  onViewLogs,
+}: {
+  mode?: ScannerMode;
+  overnightMetrics?: OvernightScanMetrics | null;
+  onResetFilters?: () => void;
+  onViewLogs?: () => void;
+}) => {
   const hasZeroSignalsAttribution = !!(overnightMetrics && overnightMetrics.processed > 0 && overnightMetrics.saved === 0);
   const { emptyMessage, nextRefresh } = useBtstState(mode);
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none animate-fade-in">
-      <Radar size={48} className="text-accent-blue/40 mb-3 animate-pulse" />
-      <p className="text-xs text-text-primary font-bold">{hasZeroSignalsAttribution ? "No Qualified Setups" : "Scanner Empty"}</p>
-      <p className="text-[10px] text-accent-blue mt-1 max-w-[340px]">
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center font-mono select-none animate-fade-in bg-surface-panel/40 rounded-xl border border-border-default/60 my-6 max-w-md mx-auto">
+      <SearchX size={44} className="text-accent-blue/50 mb-3" />
+      <h3 className="text-sm text-text-primary font-bold uppercase tracking-wider">
+        {hasZeroSignalsAttribution ? "No Qualifying Setups Today" : "Scanner Empty"}
+      </h3>
+      <p className="text-[10px] text-accent-blue mt-1.5 max-w-[340px]">
         {hasZeroSignalsAttribution
           ? `All ${overnightMetrics.universeSize} candidates were suppressed by volume (${overnightMetrics.droppedEligibility}), regime (${overnightMetrics.droppedRegime}), or risk filters.`
           : emptyMessage}
       </p>
       {hasZeroSignalsAttribution && (
-        <p className="text-[9px] text-text-secondary mt-1 max-w-[360px]">
+        <p className="text-[9px] text-text-secondary mt-1.5 max-w-[360px] leading-relaxed">
           The overnight pipeline operates in <span className="text-emerald-400 font-semibold">fail-closed</span> mode: capital preservation avoids forcing low-probability setups.
         </p>
       )}
       {nextRefresh !== "Locked" && nextRefresh !== "" && !hasZeroSignalsAttribution && (
         <p className="text-[9px] text-text-secondary mt-2">Next Event: {nextRefresh}</p>
+      )}
+      {(onResetFilters || onViewLogs) && (
+        <div className="flex items-center gap-2.5 mt-4">
+          {onResetFilters && (
+            <Button variant="secondary" size="sm" onClick={onResetFilters} className="text-xs h-8 px-3">
+              Reset filters
+            </Button>
+          )}
+          {onViewLogs && (
+            <Button variant="ghost" size="sm" onClick={onViewLogs} className="text-xs h-8 px-3">
+              View scan log
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1059,6 +1094,127 @@ function AutoRefreshCountdownLabel({
   return <>{`${m}:${s.toString().padStart(2, '0')}`}</>;
 }
 
+// P1-6: Mobile-responsive card representation of a scanned stock (< 768px)
+const StockCard: React.FC<{
+  row: ScannedStock;
+  isStarred?: boolean;
+  scoreThresholds: { strong: number; ready: number; watch: number };
+  onToggleWatchlist: (symbol: string, key: keyof WatchlistItemState) => void;
+  onOpenDrawer: (stock: ScannedStock) => void;
+}> = ({ row, isStarred, scoreThresholds, onToggleWatchlist, onOpenDrawer }) => {
+  const [expanded, setExpanded] = useState(false);
+  const scoreColor =
+    row.score >= scoreThresholds.strong
+      ? 'text-accent-green bg-accent-green/10 border-accent-green/30'
+      : row.score >= scoreThresholds.ready
+      ? 'text-accent-blue bg-accent-blue/10 border-accent-blue/30'
+      : 'text-text-secondary bg-surface-base border-border-default';
+
+  return (
+    <div className="p-3 bg-surface-panel rounded-lg border border-border-default space-y-2 font-mono text-xs">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onToggleWatchlist(row.symbol, 'starred')}
+            className="text-text-tertiary hover:text-accent-amber transition-colors"
+            title="Star symbol"
+            aria-label="Star symbol"
+          >
+            <Star size={14} fill={isStarred ? 'currentColor' : 'none'} className={isStarred ? 'text-accent-amber' : ''} />
+          </button>
+          <span className="font-bold text-text-primary text-sm">{row.symbol}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-secondary text-text-secondary border border-border-secondary">
+            {row.sector || 'EQ'}
+          </span>
+          {row.direction && (
+            <span
+              className={`text-[9px] px-1 rounded font-bold ${
+                row.direction === 'LONG'
+                  ? 'text-accent-green bg-accent-green/10'
+                  : 'text-accent-red bg-accent-red/10'
+              }`}
+            >
+              {row.direction}
+            </span>
+          )}
+        </div>
+        <div className="text-right">
+          <div className="font-bold text-text-primary">₹{row.ltp.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${scoreColor}`}>
+            Score: {row.score}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-base text-text-secondary border border-border-default">
+            {row.classification} ({row.width?.toFixed(2)}%)
+          </span>
+        </div>
+        <Button
+          onClick={() => onOpenDrawer(row)}
+          size="sm"
+          variant="secondary"
+          className="text-[11px] h-7 px-2.5 py-0"
+        >
+          Inspect
+        </Button>
+      </div>
+
+      {/* Compact Entry/SL/Target row */}
+      <div className="grid grid-cols-3 gap-2 p-2 bg-surface-base/60 rounded border border-border-subtle text-[11px] text-center">
+        <div>
+          <span className="text-[9px] text-text-tertiary uppercase block">Entry</span>
+          <span className="font-semibold text-text-primary">
+            {row.entry ? `₹${row.entry.toFixed(2)}` : '—'}
+          </span>
+        </div>
+        <div>
+          <span className="text-[9px] text-text-tertiary uppercase block">Stop Loss</span>
+          <span className="font-semibold text-accent-red">
+            {row.sl ? `₹${row.sl.toFixed(2)}` : '—'}
+          </span>
+        </div>
+        <div>
+          <span className="text-[9px] text-text-tertiary uppercase block">Target</span>
+          <span className="font-semibold text-accent-green">
+            {row.target ? `₹${row.target.toFixed(2)}` : '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* Secondary details expansion */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="text-[10px] text-text-tertiary hover:text-text-primary flex items-center gap-1 pt-1"
+        >
+          <span>{expanded ? 'Hide Details' : 'More Details (R:R, Signals)'}</span>
+          <ChevronRight size={11} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        </button>
+        {expanded && (
+          <div className="pt-2 text-[10px] text-text-secondary space-y-1 border-t border-border-subtle mt-1.5">
+            <div>Model R:R: <span className="font-bold text-text-primary">{row.rr || '—'}</span></div>
+            <div>Pivot: ₹{row.pivot?.toFixed(2)} | TC: ₹{row.tc?.toFixed(2)} | BC: ₹{row.bc?.toFixed(2)}</div>
+            {row.signals && row.signals.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {row.signals.map((sig, i) => (
+                  <span key={i} className="px-1.5 py-0.5 rounded bg-bg-secondary text-text-secondary text-[8px] border border-border-secondary">
+                    {sig}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function ScannerClient() {
   const router = useRouter();
   const { showToast } = useToast();
@@ -1148,6 +1304,7 @@ export default function ScannerClient() {
   const [minWidth, setMinWidth] = useState<string>('');
   const [maxWidth, setMaxWidth] = useState<string>('');
 
+
   // Advanced CPR Filters
   const [advancedCprCollapsed, setAdvancedCprCollapsed] = useState<boolean>(true);
   const [cprRelationshipFilter, setCprRelationshipFilter] = useState<string>('ALL'); // ALL, HIGHER_VALUE, LOWER_VALUE, INSIDE_VALUE, OVERLAPPING
@@ -1177,6 +1334,95 @@ export default function ScannerClient() {
   const watchlistRef = useRef(watchlist);
   watchlistRef.current = watchlist;
   const [showWatchlistOnly, setShowWatchlistOnly] = useState<boolean>(false);
+
+  // P1-1: Preset & Active Filter state
+  const [activePreset, setActivePreset] = useState<string>('default');
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState<boolean>(false);
+
+  const applyPreset = useCallback((presetKey: string) => {
+    setActivePreset(presetKey);
+    if (presetKey === 'default') {
+      setMinScore('');
+      setMaxScore('');
+      setMinPrice('20');
+      setMaxPrice('');
+      setMinWidth('');
+      setMaxWidth('');
+      setMode('ALL');
+      setShowWatchlistOnly(false);
+      setSelectedSector('ALL');
+      setMarketCapCategory('ALL');
+      setSearchQuery('');
+    } else if (presetKey === 'high-conviction') {
+      setMinScore('75');
+      setShowWatchlistOnly(false);
+    } else if (presetKey === 'narrow-cpr') {
+      setMode('NARROW');
+      setShowWatchlistOnly(false);
+    } else if (presetKey === 'watchlist') {
+      setShowWatchlistOnly(true);
+    }
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setActivePreset('default');
+    setMinScore('');
+    setMaxScore('');
+    setMinPrice('20');
+    setMaxPrice('');
+    setMinWidth('');
+    setMaxWidth('');
+    setMode('ALL');
+    setShowWatchlistOnly(false);
+    setSelectedSector('ALL');
+    setMarketCapCategory('ALL');
+    setSearchQuery('');
+    setPage(1);
+  }, []);
+
+  const activeFilters = useMemo(() => {
+    const list: Array<{ id: string; label: string; value: string; onRemove: () => void }> = [];
+    if (universe !== 'NIFTY50' && universe !== 'NIFTY_FNO') {
+      list.push({ id: 'universe', label: 'Universe', value: universe, onRemove: () => setUniverse('NIFTY_FNO') });
+    }
+    if (market !== 'NSE') {
+      list.push({ id: 'market', label: 'Exchange', value: market, onRemove: () => setMarket('NSE') });
+    }
+    if (selectedSector !== 'ALL') {
+      list.push({ id: 'sector', label: 'Sector', value: selectedSector, onRemove: () => setSelectedSector('ALL') });
+    }
+    if (marketCapCategory !== 'ALL') {
+      list.push({ id: 'marketCap', label: 'Cap', value: marketCapCategory, onRemove: () => setMarketCapCategory('ALL') });
+    }
+    if (minScore) {
+      list.push({ id: 'minScore', label: 'Score ≥', value: minScore, onRemove: () => setMinScore('') });
+    }
+    if (maxScore) {
+      list.push({ id: 'maxScore', label: 'Score ≤', value: maxScore, onRemove: () => setMaxScore('') });
+    }
+    if (minPrice && minPrice !== '20') {
+      list.push({ id: 'minPrice', label: 'Price ≥', value: `₹${minPrice}`, onRemove: () => setMinPrice('20') });
+    }
+    if (maxPrice) {
+      list.push({ id: 'maxPrice', label: 'Price ≤', value: `₹${maxPrice}`, onRemove: () => setMaxPrice('') });
+    }
+    if (minWidth) {
+      list.push({ id: 'minWidth', label: 'Width ≥', value: `${minWidth}%`, onRemove: () => setMinWidth('') });
+    }
+    if (maxWidth) {
+      list.push({ id: 'maxWidth', label: 'Width ≤', value: `${maxWidth}%`, onRemove: () => setMaxWidth('') });
+    }
+    if (mode !== 'ALL') {
+      list.push({ id: 'mode', label: 'Signal', value: mode, onRemove: () => setMode('ALL') });
+    }
+    if (showWatchlistOnly) {
+      list.push({ id: 'watchlist', label: 'Filter', value: 'Starred Only', onRemove: () => setShowWatchlistOnly(false) });
+    }
+    if (searchQuery.trim()) {
+      list.push({ id: 'search', label: 'Search', value: searchQuery.trim(), onRemove: () => setSearchQuery('') });
+    }
+    return list;
+  }, [universe, market, selectedSector, marketCapCategory, minScore, maxScore, minPrice, maxPrice, minWidth, maxWidth, mode, showWatchlistOnly, searchQuery]);
 
   // Auto Refresh Mode
   const [refreshInterval, setRefreshInterval] = useState<string>('Off'); // Off, 5m, 15m, 30m
@@ -2535,11 +2781,36 @@ export default function ScannerClient() {
               </select>
             </div>
             
+            {/* P1-3: Auto-Refresh Status Badge */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-bg-secondary border border-border-secondary text-[10px] font-mono text-text-secondary select-none">
+              {isRefreshing ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-blue animate-ping" />
+              ) : refreshInterval !== 'Off' ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-green animate-pulse" />
+              ) : null}
+              <span>
+                Last scanned: {lastRefreshed ? `${lastRefreshed} IST` : '—'} · Auto-refresh: {refreshInterval}
+              </span>
+            </div>
+
+            {/* P1-7: Print Toolbar Button */}
+            <Button
+              onClick={() => window.print()}
+              size="sm"
+              variant="secondary"
+              className="flex items-center gap-1.5 text-[10px] h-9 no-print"
+              title="Print or export PDF of current scanner results"
+              aria-label="Print or export PDF"
+            >
+              <Printer size={13} />
+              <span className="hidden md:inline">Print</span>
+            </Button>
+
             <Button
               onClick={() => setShowLogsList(!showLogsList)}
               size="sm"
               variant="secondary"
-              className="text-[10px] h-9"
+              className="text-[10px] h-9 no-print"
             >
               Scan Run Logs ({scanHistoryLog.length})
             </Button>
@@ -2886,15 +3157,65 @@ export default function ScannerClient() {
             {/* Collapsible filter body */}
             {showFilters && (
               <div className="px-4 pb-4 space-y-3 border-t border-border-primary/40">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-3">
+                {/* P1-1: Presets Bar & Active Filter Chips */}
+                <div className="pt-3 pb-2 border-b border-border-primary/30 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-text-tertiary uppercase font-bold">Filter Presets:</span>
+                    <select
+                      aria-label="Filter presets"
+                      value={activePreset}
+                      onChange={(e) => applyPreset(e.target.value)}
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1 rounded text-[11px] font-mono focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer"
+                    >
+                      <option value="default">Default</option>
+                      <option value="high-conviction">High Conviction (Score ≥ 75)</option>
+                      <option value="narrow-cpr">Narrow CPR Only</option>
+                      <option value="watchlist">Watchlist Symbols</option>
+                    </select>
+                  </div>
 
+                  {/* Active filter pills */}
+                  {activeFilters.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[9px] text-text-tertiary font-bold uppercase mr-1">Active ({activeFilters.length}):</span>
+                      {activeFilters.map((f) => (
+                        <span
+                          key={f.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-accent-blue/10 border border-accent-blue/30 text-accent-blue text-[10px] font-mono font-medium"
+                        >
+                          <span>{f.label} {f.value}</span>
+                          <button
+                            type="button"
+                            onClick={f.onRemove}
+                            className="hover:text-white rounded-full p-0.5 focus:outline-none"
+                            title={`Remove ${f.label}`}
+                            aria-label={`Remove filter ${f.label}`}
+                          >
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={clearAllFilters}
+                        className="text-[10px] text-accent-red hover:underline ml-1 font-bold uppercase tracking-wider"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Primary Filters Row (Always Visible) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-1">
                   {/* Universe */}
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] text-text-tertiary uppercase">Universe</span>
                     <select
+                      aria-label="Universe filter"
                       value={universe}
                       onChange={(e) => handleFilterChange('universe', e.target.value)}
-                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer text-[11px]"
                     >
                       <option value="NIFTY50">Nifty 50 {universeCount > 0 && universe === 'NIFTY50' ? `(${universeCount})` : '(50)'}</option>
                       <option value="NIFTY200">Nifty 200</option>
@@ -2907,9 +3228,10 @@ export default function ScannerClient() {
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] text-text-tertiary uppercase">Exchange</span>
                     <select
+                      aria-label="Exchange filter"
                       value={market}
                       onChange={(e) => handleFilterChange('market', e.target.value)}
-                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer text-[11px]"
                     >
                       <option value="NSE">NSE (India)</option>
                       <option value="BSE">BSE (India)</option>
@@ -2920,9 +3242,10 @@ export default function ScannerClient() {
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] text-text-tertiary uppercase">Sector</span>
                     <select
+                      aria-label="Sector filter"
                       value={selectedSector}
                       onChange={(e) => setSelectedSector(e.target.value)}
-                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer text-[11px]"
                     >
                       <option value="ALL">All Sectors</option>
                       {SECTORS_LIST.map(sec => (
@@ -2935,9 +3258,10 @@ export default function ScannerClient() {
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] text-text-tertiary uppercase">Market Cap</span>
                     <select
+                      aria-label="Market cap filter"
                       value={marketCapCategory}
                       onChange={(e) => setMarketCapCategory(e.target.value)}
-                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]"
+                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer text-[11px]"
                     >
                       <option value="ALL">All Sizes</option>
                       <option value="LARGE">Large Cap (&gt;20k Cr)</option>
@@ -2946,106 +3270,169 @@ export default function ScannerClient() {
                     </select>
                   </div>
 
-                  {/* Search */}
+                  {/* Quick Search */}
                   <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
                     <span className="text-[10px] text-text-tertiary uppercase">Quick Search</span>
                     <div className="relative">
                       <input
                         type="text"
+                        aria-label="Quick search symbol or sector"
                         placeholder="Symbol, Sector..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary pl-8 pr-3 py-1.5 rounded focus:outline-none focus:border-accent-blue w-full text-[11px]"
+                        className="bg-bg-secondary border border-border-secondary text-text-primary pl-8 pr-3 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-full text-[11px]"
                       />
                       <Search size={12} className="absolute left-2.5 top-2.5 text-text-tertiary" />
                     </div>
                   </div>
-
-                  {/* Price Range */}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-text-tertiary uppercase">Price Min/Max</span>
-                    <div className="flex items-center gap-1">
-                      <input type="number" placeholder="Min" value={minPrice} onChange={(e) => setMinPrice(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                      <input type="number" placeholder="Max" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                    </div>
-                  </div>
-
-                  {/* Score Range */}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-text-tertiary uppercase">Score Min/Max</span>
-                    <div className="flex items-center gap-1">
-                      <input type="number" placeholder="Min" value={minScore} onChange={(e) => setMinScore(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                      <input type="number" placeholder="Max" value={maxScore} onChange={(e) => setMaxScore(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                    </div>
-                  </div>
-
-                  {/* Width Range */}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-text-tertiary uppercase">Width % Min/Max</span>
-                    <div className="flex items-center gap-1">
-                      <input type="number" step="0.01" placeholder="Min" value={minWidth} onChange={(e) => setMinWidth(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                      <input type="number" step="0.01" placeholder="Max" value={maxWidth} onChange={(e) => setMaxWidth(e.target.value)}
-                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus:outline-none focus:border-accent-blue w-1/2 text-[11px]" />
-                    </div>
-                  </div>
-
-                  {/* Active Signal */}
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-text-tertiary uppercase">Active Signal</span>
-                    <select value={mode} onChange={(e) => handleFilterChange('mode', e.target.value)}
-                      className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus:outline-none focus:border-accent-blue cursor-pointer text-[11px]">
-                      <option value="ALL">All Signals</option>
-                      <option value="NARROW">Narrow CPR</option>
-                      <option value="WIDE">Wide CPR</option>
-                      <option value="NORMAL">Normal CPR</option>
-                      <option value="BULLISH">Bullish Bias</option>
-                      <option value="BEARISH">Bearish Bias</option>
-                      <option value="INSIDE">Inside CPR</option>
-                      <option value="BREAKOUT">Breakout</option>
-                      <option value="VIRGIN">Virgin CPR</option>
-                      <option value="GAP_UP">Gap Up</option>
-                      <option value="GAP_DOWN">Gap Down</option>
-                      <option value="VOLUME_SPIKE">Volume Spike</option>
-                      <option value="MOMENTUM">Momentum</option>
-                      <option value="INSIDE_VALUE">Inside Value</option>
-                      <option value="HIGHER_VALUE">Higher Value</option>
-                      <option value="LOWER_VALUE">Lower Value</option>
-                      <option value="HOT_ZONE">Hot Zone</option>
-                      <option value="HP_INSIDE_CPR">HP Inside CPR</option>
-                      <option value="HP_OUTSIDE_CPR">HP Outside CPR</option>
-                      <option value="HP_ASC_CPR">HP Ascending CPR</option>
-                      <option value="HP_DESC_CPR">HP Descending CPR</option>
-                      <option value="HP_RTP">HP RTP (Slope Match)</option>
-                      <option value="HP_HP_RTP">HP HP-RTP (200 SMA Cross)</option>
-                      <option value="HP_DIRECT_UP">HP Direct Up</option>
-                      <option value="HP_DIRECT_DOWN">HP Direct Down</option>
-                      <option value="HP_REVERSAL_UP">HP Reversal Up</option>
-                      <option value="HP_REVERSAL_DOWN">HP Reversal Down</option>
-                      <option value="HP_CAM_BULL_BIAS">HP Camarilla Bullish Bias</option>
-                      <option value="HP_CAM_BEAR_BIAS">HP Camarilla Bearish Bias</option>
-                    </select>
-                  </div>
-
-                  {/* Starred Only */}
-                  <div className="flex items-end gap-2">
-                    <button
-                      onClick={() => { setShowWatchlistOnly(!showWatchlistOnly); setPage(1); }}
-                      className={`flex items-center justify-center gap-1.5 w-full py-2 rounded border text-[11px] font-bold transition-all ${
-                        showWatchlistOnly
-                          ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
-                          : 'bg-bg-secondary border-border-secondary text-text-secondary hover:text-text-primary'
-                      }`}
-                    >
-                      <Star size={12} fill={showWatchlistOnly ? 'currentColor' : 'none'} />
-                      Starred Only
-                    </button>
-                  </div>
                 </div>
+
+                {/* P1-1: Collapsible Advanced Filters */}
+                <details
+                  open={advancedFiltersOpen}
+                  onToggle={(e) => setAdvancedFiltersOpen((e.target as HTMLDetailsElement).open)}
+                  className="group pt-2 border-t border-border-primary/20"
+                >
+                  <summary className="cursor-pointer text-[11px] font-bold text-text-secondary hover:text-text-primary flex items-center justify-between py-1.5 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-blue rounded">
+                    <div className="flex items-center gap-1.5 uppercase tracking-wider">
+                      <SlidersHorizontal size={12} className="text-accent-blue" />
+                      <span>Advanced Filters</span>
+                      <span className="text-[9px] text-text-tertiary font-normal">(Price, Score, Width, Signal)</span>
+                    </div>
+                    <ChevronRight size={12} className="text-text-tertiary transition-transform group-open:rotate-90" />
+                  </summary>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pt-3 mt-1">
+                    {/* Price Range */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-tertiary uppercase">Price Min/Max</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          aria-label="Minimum price"
+                          placeholder="Min"
+                          value={minPrice}
+                          onChange={(e) => setMinPrice(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                        <input
+                          type="number"
+                          aria-label="Maximum price"
+                          placeholder="Max"
+                          value={maxPrice}
+                          onChange={(e) => setMaxPrice(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Score Range */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-tertiary uppercase">Score Min/Max</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          aria-label="Minimum score"
+                          placeholder="Min"
+                          value={minScore}
+                          onChange={(e) => setMinScore(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                        <input
+                          type="number"
+                          aria-label="Maximum score"
+                          placeholder="Max"
+                          value={maxScore}
+                          onChange={(e) => setMaxScore(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Width Range */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-tertiary uppercase">Width % Min/Max</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          aria-label="Minimum CPR width"
+                          step="0.01"
+                          placeholder="Min"
+                          value={minWidth}
+                          onChange={(e) => setMinWidth(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                        <input
+                          type="number"
+                          aria-label="Maximum CPR width"
+                          step="0.01"
+                          placeholder="Max"
+                          value={maxWidth}
+                          onChange={(e) => setMaxWidth(e.target.value)}
+                          className="bg-bg-secondary border border-border-secondary text-text-primary px-2 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none w-1/2 text-[11px]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Active Signal */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-tertiary uppercase">Active Signal</span>
+                      <select
+                        aria-label="Active signal mode"
+                        value={mode}
+                        onChange={(e) => handleFilterChange('mode', e.target.value)}
+                        className="bg-bg-secondary border border-border-secondary text-text-primary px-2.5 py-1.5 rounded focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none cursor-pointer text-[11px]"
+                      >
+                        <option value="ALL">All Signals</option>
+                        <option value="NARROW">Narrow CPR</option>
+                        <option value="WIDE">Wide CPR</option>
+                        <option value="NORMAL">Normal CPR</option>
+                        <option value="BULLISH">Bullish Bias</option>
+                        <option value="BEARISH">Bearish Bias</option>
+                        <option value="INSIDE">Inside CPR</option>
+                        <option value="BREAKOUT">Breakout</option>
+                        <option value="VIRGIN">Virgin CPR</option>
+                        <option value="GAP_UP">Gap Up</option>
+                        <option value="GAP_DOWN">Gap Down</option>
+                        <option value="VOLUME_SPIKE">Volume Spike</option>
+                        <option value="MOMENTUM">Momentum</option>
+                        <option value="INSIDE_VALUE">Inside Value</option>
+                        <option value="HIGHER_VALUE">Higher Value</option>
+                        <option value="LOWER_VALUE">Lower Value</option>
+                        <option value="HOT_ZONE">Hot Zone</option>
+                        <option value="HP_INSIDE_CPR">HP Inside CPR</option>
+                        <option value="HP_OUTSIDE_CPR">HP Outside CPR</option>
+                        <option value="HP_ASC_CPR">HP Ascending CPR</option>
+                        <option value="HP_DESC_CPR">HP Descending CPR</option>
+                        <option value="HP_RTP">HP RTP (Slope Match)</option>
+                        <option value="HP_HP_RTP">HP HP-RTP (200 SMA Cross)</option>
+                        <option value="HP_DIRECT_UP">HP Direct Up</option>
+                        <option value="HP_DIRECT_DOWN">HP Direct Down</option>
+                        <option value="HP_REVERSAL_UP">HP Reversal Up</option>
+                        <option value="HP_REVERSAL_DOWN">HP Reversal Down</option>
+                        <option value="HP_CAM_BULL_BIAS">HP Camarilla Bullish Bias</option>
+                        <option value="HP_CAM_BEAR_BIAS">HP Camarilla Bearish Bias</option>
+                      </select>
+                    </div>
+
+                    {/* Starred Only */}
+                    <div className="flex items-end gap-2">
+                      <button
+                        type="button"
+                        aria-label="Show starred only"
+                        onClick={() => { setShowWatchlistOnly(!showWatchlistOnly); setPage(1); }}
+                        className={`flex items-center justify-center gap-1.5 w-full py-2 rounded border text-[11px] font-bold transition-all focus-visible:ring-2 focus-visible:ring-accent-blue focus-visible:outline-none ${
+                          showWatchlistOnly
+                            ? 'bg-accent-amber/10 border-accent-amber/30 text-accent-amber'
+                            : 'bg-bg-secondary border-border-secondary text-text-secondary hover:text-text-primary'
+                        }`}
+                      >
+                        <Star size={12} fill={showWatchlistOnly ? 'currentColor' : 'none'} />
+                        Starred Only
+                      </button>
+                    </div>
+                  </div>
+                </details>
 
                 {/* Advanced CPR Filters */}
                 <div className="mt-4 border border-border-primary/50 rounded overflow-hidden">
@@ -3295,17 +3682,72 @@ export default function ScannerClient() {
                         No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
                       </p>
                     </div>
-                  ) : scannerMode !== 'CPR' ? <BtstEmptyState mode={scannerMode} overnightMetrics={overnightMetrics} /> : (
-                    <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
-                      <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
-                      <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
-                      <p className="text-[9px] text-text-secondary mt-1 max-w-[280px]">
-                        No stocks currently match the filter pipeline. Adjust price, score, or signal criteria.
+                  ) : scannerMode !== 'CPR' ? (
+                    <BtstEmptyState
+                      mode={scannerMode}
+                      overnightMetrics={overnightMetrics}
+                      onResetFilters={clearAllFilters}
+                      onViewLogs={() => setShowLogsList(true)}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-20 px-4 text-center font-mono select-none bg-surface-panel/40 rounded-xl border border-border-default/60 my-6 max-w-md mx-auto">
+                      {/* P1-2: Dedicated Empty State Card */}
+                      <SearchX size={44} className="text-accent-blue/50 mb-3" />
+                      <h3 className="text-sm text-text-primary font-bold uppercase tracking-wider">No qualifying setups today</h3>
+                      <p className="text-[11px] text-text-secondary mt-2 leading-relaxed">
+                        No stocks currently qualify under the active filter criteria. Possible causes: market is outside session hours, filter thresholds (price, score, width) are too tight, or scan window is inactive (stock BTST window is 15:10–15:25 IST).
                       </p>
+                      <div className="flex items-center gap-3 mt-5">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={clearAllFilters}
+                          className="text-xs h-8 px-3"
+                        >
+                          Reset filters
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowLogsList(true)}
+                          className="text-xs h-8 px-3"
+                        >
+                          View scan log
+                        </Button>
+                      </div>
                     </div>
                   )
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div>
+                    {/* P1-7: Print Report Header */}
+                    <div className="hidden print:block mb-4 border-b border-black pb-2 font-mono">
+                      <div className="flex items-center justify-between text-sm font-bold">
+                        <span>CPR PRO — Market Scanner Report</span>
+                        <span>{new Date().toLocaleDateString('en-IN')} {lastRefreshed ? `${lastRefreshed} IST` : ''}</span>
+                      </div>
+                      <div className="text-xs text-gray-700 mt-1">
+                        Universe: {universe} | Mode: {scannerMode} | Active Filters: {activeFilters.length > 0 ? activeFilters.map(f => `${f.label} ${f.value}`).join(', ') : 'Default'}
+                      </div>
+                    </div>
+
+                    {/* P1-6: Mobile-Responsive Card View (< 768px) */}
+                    {scannerMode !== 'INDEX' && (
+                      <div className="md:hidden space-y-2.5 p-2.5 no-print">
+                        {results.map((row) => (
+                          <StockCard
+                            key={row.id}
+                            row={row}
+                            isStarred={watchlist[row.symbol]?.starred}
+                            scoreThresholds={thresholds}
+                            onToggleWatchlist={handleToggleWatchlistState}
+                            onOpenDrawer={handleOpenDrawer}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Desktop & Print Table View */}
+                    <div className={`${scannerMode === 'INDEX' ? 'block' : 'hidden md:block'} overflow-x-auto print:block`}>
                     {scannerMode === 'INDEX' ? (
                       <table className="w-full text-left border-collapse font-mono text-xs select-none whitespace-nowrap">
                         <thead>
@@ -3411,6 +3853,7 @@ export default function ScannerClient() {
                   </table>
                     )}
                   </div>
+                  </div>
                 )}
               </div>
 
@@ -3447,6 +3890,28 @@ export default function ScannerClient() {
           )}
         </div>
       </Card>
+
+      {/* P1-7: Print Stylesheet */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          nav, aside, header, footer, .no-print, [role="navigation"] {
+            display: none !important;
+          }
+          body {
+            background: white !important;
+            color: black !important;
+          }
+          table {
+            width: 100% !important;
+            font-size: 10px !important;
+          }
+          th, td {
+            border: 1px solid #ddd !important;
+            padding: 4px !important;
+            color: black !important;
+          }
+        }
+      ` }} />
 
       {/* Checkbox Compare Floating Action Banner */}
       {compareSymbols.length > 0 && (
