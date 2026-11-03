@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 02–03 Nov: Observability, Scanner Attrition UI, Runbook & Validation Tools (PRs #290–#293)
+
+- **PR #293 (`ff302ac4`) — CPR Width Historical Distribution Validation Tool (`scripts/validate-cpr-width-distribution.ts`)**:
+  - Implemented self-contained historical evaluation script comparing fixed fallback (`< 0.3% / < 0.8%`) vs ATR-aware (`0.15 * ATR% * 100 / 0.40 * ATR% * 100`) classifications across all `EQ` stocks in `DailyOhlcv`.
+  - 100% read-only queries against PostgreSQL, isolated from CI build via `scripts/**/*.ts` exclusion in `tsconfig.json`.
+  - Computes exact NARROW / NORMAL / WIDE candle counts and percentage distributions, flagging when NARROW falls outside the healthy 10%–90% envelope.
+
+- **PR #292 (`0bc3758e`) — Database Circuit Breaker Observability & MT-01 Runbook (`circuit-breaker.ts`, `health/route.ts`, `MT01_FALLBACK_RUNBOOK.md`)**:
+  - **Circuit Breaker State Exposure**: Added `DatabaseCircuitBreaker.getState()` method returning `CLOSED | OPEN | HALF_OPEN` and exposed it under `checks.circuitBreaker` in `GET /api/health` for instant on-call DB health observability.
+  - **Operational Runbook**: Created `docs/MT01_FALLBACK_RUNBOOK.md` documenting root causes for empty-filter universe fallbacks, SQL diagnostic queries, symbol suffix reconciliations, and remediation steps.
+
+- **PR #291 (`100c0013`) — Scanner Zero-Signal Gate Attribution & Nifty Regime Telemetry (`ScannerKpiStrip.tsx`, `ScannerClient.tsx`)**:
+  - **Regime Telemetry Badge**: Exposed Nifty 50 market trend & volatility (`BULL/HIGH`, `BEAR/LOW`, etc.) in `ScannerKpiStrip` telemetry bar to give operators immediate visibility into why directional setups (such as STBT shorts during bull regimes) are filtered.
+  - **Zero-Signal Context Attribution Card**: Rendered an actionable breakdown card in `ScannerKpiStrip` when `processed > 0 && saved === 0` displaying exact rejections: eligibility volume/VDU drops, regime gate blocks, and Friday/extension filters.
+  - **Enhanced Empty State**: Updated `BtstEmptyState` in `ScannerClient` to report quantitative suppression counts and confirm fail-closed capital preservation architecture.
+
+- **PR #290 (`2435c0f7`) — Market Breadth Fallback Warning Log (MT-01) (`market-breadth.service.ts`)**:
+  - Added structured warning logs in `MarketBreadthService.computeMarketBreadth()` when `NIFTY50_SYMBOLS` or `FNO_SYMBOLS` filter matches 0 stocks and falls back to `operatingStockStats.slice(0, N)`, eliminating silent data degradation on cold-start caches.
+
 ### Ops -- 26 Oct: Production Re-Deploy to Activate next@15.5.28 CVE Patch
 
 - **Re-deploy (31e4be1b)**: Identified that production server was still running 
