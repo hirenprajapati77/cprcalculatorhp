@@ -177,7 +177,7 @@ export const Navbar: React.FC = () => {
             {/* Direct Trading Links */}
             <Link
               href="/calculate"
-              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal ${
                 isActive('/calculate')
                   ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -192,7 +192,7 @@ export const Navbar: React.FC = () => {
 
             <Link
               href="/scanner"
-              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal ${
                 isActive('/scanner')
                   ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -221,7 +221,7 @@ export const Navbar: React.FC = () => {
 
             <Link
               href="/watchlist"
-              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal ${
                 isActive('/watchlist')
                   ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -243,7 +243,7 @@ export const Navbar: React.FC = () => {
                   setToolsOpen(v => !v);
                   setMoreOpen(false);
                 }}
-                className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide cursor-pointer ${
+                className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal cursor-pointer ${
                   toolsOpen || pathname.startsWith('/market-tools') || pathname === '/heatmap' || pathname === '/backtest' || pathname === '/compare'
                     ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -271,7 +271,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/market-tools/pattern-breakout"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/market-tools/pattern-breakout'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -289,7 +289,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/market-tools/breakout"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/market-tools/breakout'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -304,7 +304,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/market-tools/breadth"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/market-tools/breadth'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -319,7 +319,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/market-tools/momentum-leaders"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/market-tools/momentum-leaders'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -339,7 +339,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/heatmap"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/heatmap'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -352,7 +352,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/backtest"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/backtest'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -365,7 +365,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/compare"
                     onClick={() => setToolsOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/compare'
                         ? 'bg-blue-500/15 text-blue-300 font-bold'
                         : 'text-slate-300 hover:bg-white/5 hover:text-white'
@@ -381,7 +381,7 @@ export const Navbar: React.FC = () => {
             {/* Direct Journal & History */}
             <Link
               href="/journal"
-              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal ${
                 isActive('/journal')
                   ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -396,7 +396,7 @@ export const Navbar: React.FC = () => {
 
             <Link
               href="/history"
-              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide ${
+              className={`relative flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal ${
                 isActive('/history')
                   ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -418,7 +418,7 @@ export const Navbar: React.FC = () => {
                   setMoreOpen(v => !v);
                   setToolsOpen(false);
                 }}
-                className={`relative flex items-center gap-1.5 px-2 py-1.5 text-[11px] font-semibold rounded-md transition-all duration-200 font-mono tracking-wide cursor-pointer ${
+                className={`relative flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-medium rounded-md transition-all duration-200 font-sans tracking-normal cursor-pointer ${
                   moreOpen || pathname === '/about' || pathname === '/faq' || pathname === '/settings'
                     ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
@@ -439,7 +439,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/about"
                     onClick={() => setMoreOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/about' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
                   >
@@ -449,7 +449,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/faq"
                     onClick={() => setMoreOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/faq' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
                   >
@@ -459,7 +459,7 @@ export const Navbar: React.FC = () => {
                   <Link
                     href="/settings"
                     onClick={() => setMoreOpen(false)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium font-sans transition-all ${
                       pathname === '/settings' ? 'bg-blue-500/15 text-blue-300' : 'text-slate-300 hover:bg-white/5 hover:text-white'
                     }`}
                   >

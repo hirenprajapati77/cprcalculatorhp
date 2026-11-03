@@ -190,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </span>
 
                     {!collapsed && (
-                      <span className="truncate flex-1 tracking-tight text-[11px]">
+                      <span className="truncate flex-1 font-sans text-xs font-medium tracking-normal">
                         {item.label}
                       </span>
                     )}
