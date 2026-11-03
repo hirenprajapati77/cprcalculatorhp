@@ -62,7 +62,19 @@ The platform goes beyond raw signal generation by implementing a realistic, mult
 For a detailed version history and architectural changes, please see the **[CHANGELOG.md](CHANGELOG.md)**.
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
-**Recent Updates (October 2026):**
+**Recent Updates (November 2026):**
+- **02–03 Nov — Observability, Scanner Attrition UI, Runbook & Validation Tools (`ff302ac4`, PRs #290–#293)**:
+  - **CPR Width Validation Script (`#293`)**: Historical validation script in `scripts/validate-cpr-width-distribution.ts` evaluating fixed vs ATR-aware CPR width classification distributions across `DailyOhlcv`.
+  - **Database Circuit Breaker Observability & MT-01 Runbook (`#292`)**: Added `circuitBreaker: DatabaseCircuitBreaker.getState()` in `/api/health` and created `docs/MT01_FALLBACK_RUNBOOK.md` for symbol-drift and cold-start fallback triage.
+  - **Scanner Zero-Signal Gate Attribution & Regime Telemetry (`#291`)**: Added Nifty regime badge (`BULL/HIGH`, etc.) in `ScannerKpiStrip`, zero-signal suppression attribution card explaining rejected candidates, and enhanced `BtstEmptyState`.
+  - **Market Breadth Fallback Warning (`#290`)**: Structured warning log when NIFTY50/F&O breadth filters yield 0 matches and fall back to slice, eliminating silent telemetry degradation.
+
+- **24–26 Oct — 2-Month Deep Code Review Remediation & Production CVE Alignment (`7ef8595c`, `0be42e98`, PRs #286–#289)**:
+  - **Security & Dependency Audit (`#287`, `#289`)**: Upgraded `next` to `15.5.28` (CVE patches GHSA-4jqv-mc3x, GHSA-2464-fhr4) with confirmed production deploy.
+  - **SEBI ₹15L Notional & Friday Gate (`#287`)**: Aligned option lot size strike divisor to ₹15L notional; added Friday weekend-gap risk suppression gate to `IndexDiscoverService`.
+  - **F&O Universe Audit & Metrics Staleness (`#286`)**: Added `YESBANK` and `IRCTC` to F&O universe; added `lastScanAt` telemetry to `ScannerKpiStrip` and singleflight candle cache stampede guard.
+
+**Earlier Updates (October 2026):**
 - **14–15 Oct — Market Tools EOD WATCH Notifications Phase 1, STT 0.15% & 2026 Calendar (`a0380e66`, PRs #280–#284)**:
   - **Market Tools EOD WATCH Pipeline (`#283`, `#284`)**: Automated evening Telegram watchlist dispatches across Multi-Year Breakout, 52W Patterns, and Momentum Leaders. Bounded retry window (19:30–21:30 IST) following EOD precompute (19:15–19:45 IST). Global candidate cap (<=12), cross-module deduplication, honest reference labeling (no synthetic pivots), `delivery_unknown` duplicate suppression, and safe dry-run route.
   - **Statutory STT Schedule Update (`#281`, `#282`)**: Aligned option sell-side STT rate to 0.15% (`0.0015`) per NSE Circular `NSE/FATAX/73524` while preserving option buy exemption, and tightened journal net P&L fixtures.
