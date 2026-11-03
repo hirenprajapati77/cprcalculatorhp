@@ -204,16 +204,24 @@ function useBtstState(mode: ScannerMode = 'BTST') {
   return { state, message, emptyMessage, nextRefresh, timeStr };
 }
 
-const BtstEmptyState = ({ mode }: { mode?: ScannerMode }) => {
+const BtstEmptyState = ({ mode, overnightMetrics }: { mode?: ScannerMode; overnightMetrics?: OvernightScanMetrics | null }) => {
+  const hasZeroSignalsAttribution = !!(overnightMetrics && overnightMetrics.processed > 0 && overnightMetrics.saved === 0);
   const { emptyMessage, nextRefresh } = useBtstState(mode);
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none animate-fade-in">
       <Radar size={48} className="text-accent-blue/40 mb-3 animate-pulse" />
-      <p className="text-xs text-text-primary font-bold">Scanner Empty</p>
-      <p className="text-[10px] text-accent-blue mt-1 max-w-[280px]">
-        {emptyMessage}
+      <p className="text-xs text-text-primary font-bold">{hasZeroSignalsAttribution ? "No Qualified Setups" : "Scanner Empty"}</p>
+      <p className="text-[10px] text-accent-blue mt-1 max-w-[340px]">
+        {hasZeroSignalsAttribution
+          ? `All ${overnightMetrics.universeSize} candidates were suppressed by volume (${overnightMetrics.droppedEligibility}), regime (${overnightMetrics.droppedRegime}), or risk filters.`
+          : emptyMessage}
       </p>
-      {nextRefresh !== 'Locked' && nextRefresh !== '' && (
+      {hasZeroSignalsAttribution && (
+        <p className="text-[9px] text-text-secondary mt-1 max-w-[360px]">
+          The overnight pipeline operates in <span className="text-emerald-400 font-semibold">fail-closed</span> mode: capital preservation avoids forcing low-probability setups.
+        </p>
+      )}
+      {nextRefresh !== "Locked" && nextRefresh !== "" && !hasZeroSignalsAttribution && (
         <p className="text-[9px] text-text-secondary mt-2">Next Event: {nextRefresh}</p>
       )}
     </div>
@@ -3287,7 +3295,7 @@ export default function ScannerClient() {
                         No starred stocks in your selection. Click the ★ icon next to any ticker to monitor it here.
                       </p>
                     </div>
-                  ) : scannerMode !== 'CPR' ? <BtstEmptyState mode={scannerMode} /> : (
+                  ) : scannerMode !== 'CPR' ? <BtstEmptyState mode={scannerMode} overnightMetrics={overnightMetrics} /> : (
                     <div className="flex flex-col items-center justify-center py-24 text-center font-mono select-none">
                       <Radar size={48} className="text-accent-blue/40 mb-3 animate-spin duration-3000" />
                       <p className="text-xs text-text-primary font-bold">Scanner Empty</p>

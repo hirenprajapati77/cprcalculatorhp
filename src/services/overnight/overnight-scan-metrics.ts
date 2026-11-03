@@ -33,6 +33,8 @@ export interface OvernightScanMetrics {
   droppedVpaGate: number;
   errors: number;
   lastScanAt?: string;
+  regimeTrend?: 'BULL' | 'BEAR' | 'CHOPPY';
+  regimeVolatility?: 'HIGH' | 'LOW';
 }
 
 export function createEmptyOvernightScanMetrics(universeSize: number = 0): OvernightScanMetrics {
