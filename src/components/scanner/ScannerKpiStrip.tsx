@@ -13,7 +13,6 @@ import {
   Sparkles,
   Filter,
   Compass,
-  Info,
 } from 'lucide-react';
 import type { OvernightScanMetrics } from '@/services/overnight/overnight-scan-metrics';
 
