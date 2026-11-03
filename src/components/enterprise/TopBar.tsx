@@ -1,6 +1,8 @@
+// P1-4: Surface silent API failures as non-blocking toasts
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useToast } from '@/components/ui/Toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -40,6 +42,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [isOnline, setIsOnline] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [fyersConnected, setFyersConnected] = useState<boolean | null>(null);
+  const { showToast } = useToast();
+  const lastMarketToastRef = useRef<number>(0);
+  const lastFyersToastRef = useRef<number>(0);
 
   // Network online listener
   useEffect(() => {
@@ -63,16 +68,24 @@ export const TopBar: React.FC<TopBarProps> = ({
           const data = (await res.json()) as MarketStatusData;
           setMarketStatus(data);
           setLastUpdated(new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false, hour: '2-digit', minute: '2-digit' }));
+        } else {
+          if (Date.now() - lastMarketToastRef.current > 60000) {
+            lastMarketToastRef.current = Date.now();
+            showToast('Market data feed temporarily unavailable', 'error');
+          }
         }
       } catch {
-        // Fallback silently if offline
+        if (Date.now() - lastMarketToastRef.current > 60000) {
+          lastMarketToastRef.current = Date.now();
+          showToast('Market data feed temporarily unavailable', 'error');
+        }
       }
     };
 
     fetchStatus();
     const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]);
 
   // Fyers status check
   useEffect(() => {
@@ -82,15 +95,25 @@ export const TopBar: React.FC<TopBarProps> = ({
         if (res.ok) {
           const data = await res.json();
           setFyersConnected(Boolean(data.connected));
+        } else {
+          setFyersConnected(null);
+          if (Date.now() - lastFyersToastRef.current > 60000) {
+            lastFyersToastRef.current = Date.now();
+            showToast('Broker feed offline — Yahoo fallback active', 'info');
+          }
         }
       } catch {
         setFyersConnected(null);
+        if (Date.now() - lastFyersToastRef.current > 60000) {
+          lastFyersToastRef.current = Date.now();
+          showToast('Broker feed offline — Yahoo fallback active', 'info');
+        }
       }
     };
     checkFyers();
     const interval = setInterval(checkFyers, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [showToast]);
 
   const getBreadcrumbTitle = () => {
     if (pathname === '/') return 'Dashboard';
