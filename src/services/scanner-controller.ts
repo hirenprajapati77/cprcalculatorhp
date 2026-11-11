@@ -512,7 +512,20 @@ export class ScannerController {
         console.error('[SCAN] Failed to write scan persist failure marker to Redis:', cacheErr);
       }
 
-      // TODO: // AWAITING OWNER DECISION — Alert channel wiring (e.g. Telegram / Ops channel) for DB persistence failures.
+      // Send ops Telegram alert for DB persistence failure (with cooldown)
+      try {
+        const { TelegramService, escapeTelegramHtml } = await import('@/services/alert/telegram.service');
+        const alertMsg =
+          `🚨 <b>SCANNER DB PERSISTENCE FAILED</b>\n\n` +
+          `• Universe: <code>${escapeTelegramHtml(universeName)}</code>\n` +
+          `• Market: <code>${escapeTelegramHtml(market)}</code>\n` +
+          `• Date: <code>${escapeTelegramHtml(today)}</code>\n` +
+          `• Error: <code>${escapeTelegramHtml(errMsg.slice(0, 200))}</code>\n\n` +
+          `<i>Scanner results served from memory/cache fallback.</i>`;
+        await TelegramService.sendMessage(alertMsg);
+      } catch (tgErr) {
+        console.error('[SCAN] Failed to dispatch Telegram alert for scan persist failure:', tgErr);
+      }
     }
   }
 }
