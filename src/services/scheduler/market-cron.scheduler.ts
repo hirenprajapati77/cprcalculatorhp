@@ -265,6 +265,27 @@ export function startMarketCronScheduler(): void {
         );
       }
 
+      // 09:00 AM IST — check Fyers authentication session and notify via Telegram if expired
+      if (istTime.hour === 9 && istTime.minute >= 0 && istTime.minute <= 5) {
+        await runClaimedJob(
+          `fyers-session-check:${dateKey}`,
+          async () => {
+            const { FyersAuthService } = await import('@/services/fyers-auth.service');
+            const token = await FyersAuthService.getAccessToken();
+            if (!token) {
+              const { TelegramService } = await import('@/services/alert/telegram.service');
+              const msg =
+                `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
+                `The daily Fyers broker token has expired.\n` +
+                `Please visit <a href="https://129-159-230-41.nip.io/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+              await TelegramService.sendMessage(msg);
+              console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
+            }
+          },
+          'fyers-session-check'
+        );
+      }
+
       // 09:16 AM IST — gap-failure exit alert for previous-session overnight signals.
       // Must execute BEFORE morning journal-snapshot so adverse gaps are closed immediately
       // and not overwritten by subsequent regular snapshots.

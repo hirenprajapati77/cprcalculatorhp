@@ -19,13 +19,20 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    
-    // Auto-remove after 2.5 seconds
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 5000);
+    setToasts((prev) => {
+      // Deduplicate identical active message to prevent toast stacking
+      if (prev.some((t) => t.message === message)) {
+        return prev;
+      }
+      const id = Math.random().toString(36).substring(2, 9);
+      // Auto-remove after 5 seconds
+      setTimeout(() => {
+        setToasts((current) => current.filter((t) => t.id !== id));
+      }, 5000);
+      // Cap at 3 visible toasts max
+      const updated = [...prev, { id, message, type }];
+      return updated.length > 3 ? updated.slice(-3) : updated;
+    });
   }, []);
 
   return (
