@@ -35,6 +35,7 @@ export function toYahooTicker(symbol: string, market: 'NSE' | 'BSE' = 'NSE'): st
   if (sym === 'BANKNIFTY' || sym === 'NIFTYBANK' || sym === 'BANK NIFTY') return '^NSEBANK';
   if (sym === 'FINNIFTY' || sym === 'NIFTY_FIN_SERVICE') return 'NIFTY_FIN_SERVICE.NS';
   if (sym === 'MIDCPNIFTY') return '^NSEMDCP50';
+  if (sym === 'SENSEX' || sym === 'BSE_SENSEX' || sym === 'BSESN') return '^BSESN';
   if (sym.startsWith('^') || sym.endsWith('.NS') || sym.endsWith('.BO')) return sym;
   return market === 'NSE' ? `${sym}.NS` : `${sym}.BO`;
 }

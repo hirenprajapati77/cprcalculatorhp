@@ -2,6 +2,7 @@ import { env } from '@/config/env';
 import { CacheService } from './cache.service';
 import { getISTDateString, isTodayCandleClosed, getRecentNseTradingDays } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
+import { toYahooTicker } from './stock-candle.service';
 import { FyersAuthService } from './fyers-auth.service';
 import {
   buildFyersQuotesUrl,
@@ -817,7 +818,7 @@ export class MarketService {
     market: 'NSE' | 'BSE',
     todayStr: string
   ): Promise<DailyHistoryBundle | null> {
-    const ticker = market === 'NSE' ? `${cleanSymbol}.NS` : `${cleanSymbol}.BO`;
+    const ticker = toYahooTicker(cleanSymbol, market);
 
     try {
       const res = await this.fetchWithTimeout(
@@ -1235,7 +1236,7 @@ export class MarketService {
       return cached;
     }
 
-    const ticker = market === 'NSE' ? `${cleanSymbol}.NS` : `${cleanSymbol}.BO`;
+    const ticker = toYahooTicker(cleanSymbol, market);
 
     // Look up metadata — works for all 200+ F&O stocks
     const staticMeta = STOCK_UNIVERSE.find(s => s.symbol.trim() === cleanSymbol);

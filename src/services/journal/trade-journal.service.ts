@@ -248,6 +248,66 @@ export class TradeJournalService {
    * and snapshots fire the next morning — both must resolve to the same IST date key.
    * At 9:45 AM auto-closes entries that have no manual exit yet.
    */
+  /**
+   * Fetches the current live CMP for an underlying cash or index leg.
+   * Handles index symbols (NIFTY, BANKNIFTY, SENSEX, etc.) via Yahoo Finance index tickers
+   * (^NSEI, ^NSEBANK, ^BSESN) and Fyers, and equity stocks via MarketService.
+   */
+  static async fetchUnderlyingCmp(symbol: string): Promise<number | null> {
+    const cleanSym = symbol.trim().toUpperCase();
+
+    // 1. Index Symbol Detection & Resolution
+    const isIndex = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY'].some(
+      (idx) => cleanSym === idx || cleanSym.startsWith(idx)
+    );
+
+    if (isIndex) {
+      try {
+        const { toYahooTicker } = await import('@/services/stock-candle.service');
+        const ticker = toYahooTicker(cleanSym);
+        const YahooFinance = (await import('yahoo-finance2')).default;
+        const yf = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+        const quote = await yf.quote(ticker);
+        const ltp = quote?.regularMarketPrice;
+        if (typeof ltp === 'number' && ltp > 0) {
+          return ltp;
+        }
+      } catch (err) {
+        console.warn(`[TradeJournal] Yahoo index quote failed for ${cleanSym}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    // 2. Primary / Equity Fallback: MarketService
+    try {
+      const { MarketService } = await import('@/services/market.service');
+      const stockData = await MarketService.getStockData(cleanSym);
+      if (stockData?.ltp && stockData.ltp > 0) {
+        return stockData.ltp;
+      }
+    } catch (err) {
+      console.warn(`[TradeJournal] MarketService getStockData failed for ${cleanSym}:`, err instanceof Error ? err.message : err);
+    }
+
+    // 3. Fallback: Yahoo Finance quote for equities if MarketService returned null
+    if (!isIndex) {
+      try {
+        const { toYahooTicker } = await import('@/services/stock-candle.service');
+        const ticker = toYahooTicker(cleanSym);
+        const YahooFinance = (await import('yahoo-finance2')).default;
+        const yf = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+        const quote = await yf.quote(ticker);
+        const ltp = quote?.regularMarketPrice;
+        if (typeof ltp === 'number' && ltp > 0) {
+          return ltp;
+        }
+      } catch (err) {
+        console.warn(`[TradeJournal] Yahoo stock quote fallback failed for ${cleanSym}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    return null;
+  }
+
   static async captureSnapshot(timeSlot: '916' | '930' | '945', forDate?: Date): Promise<void> {
     try {
       // Snapshots run on D+1 — query entries logged on D, the previous TRADING day (not
@@ -279,9 +339,7 @@ export class TradeJournalService {
 
         if (TradeJournalService.isUnderlyingJournalLeg(entry.optionContract)) {
           // Option quote never arrived — track underlying so the signal is not lost.
-          const { MarketService } = await import('@/services/market.service');
-          const stockData = await MarketService.getStockData(entry.symbol);
-          cmp = stockData?.ltp && stockData.ltp > 0 ? stockData.ltp : null;
+          cmp = await TradeJournalService.fetchUnderlyingCmp(entry.symbol);
         } else {
           // Use the stored optionExpiry column (written at signal time) when available.
           // @deprecated L4: Legacy regex fallback for pre-2026-08 rows. Scheduled for removal by 2026-10-01.

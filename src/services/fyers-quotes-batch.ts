@@ -38,12 +38,23 @@ export type FyersQuotesApiResponse = {
 
 export function toFyersEquitySymbol(cleanSymbol: string, market: 'NSE' | 'BSE' = 'NSE'): string {
   const sym = cleanSymbol.trim().toUpperCase();
+  if (sym === 'NIFTY' || sym === 'NIFTY50' || sym === 'NIFTY 50') return 'NSE:NIFTY50-INDEX';
+  if (sym === 'BANKNIFTY' || sym === 'NIFTYBANK' || sym === 'BANK NIFTY') return 'NSE:NIFTYBANK-INDEX';
+  if (sym === 'SENSEX') return 'BSE:SENSEX-INDEX';
+  if (sym === 'FINNIFTY') return 'NSE:FINNIFTY-INDEX';
+  if (sym === 'MIDCPNIFTY') return 'NSE:MIDCPNIFTY-INDEX';
   return market === 'NSE' ? `NSE:${sym}-EQ` : `BSE:${sym}-EQ`;
 }
 
-/** Strip `NSE:RELIANCE-EQ` / `BSE:FOO-EQ` → `RELIANCE` / `FOO`. */
+/** Strip `NSE:RELIANCE-EQ` / `BSE:FOO-EQ` / `NSE:NIFTY50-INDEX` → `RELIANCE` / `FOO` / `NIFTY`. */
 export function fromFyersEquitySymbol(fyersSymbol: string): string | null {
-  const m = /^[A-Z]+:([A-Z0-9&.-]+)-EQ$/i.exec(fyersSymbol.trim());
+  const trimmed = fyersSymbol.trim().toUpperCase();
+  if (trimmed === 'NSE:NIFTY50-INDEX') return 'NIFTY';
+  if (trimmed === 'NSE:NIFTYBANK-INDEX') return 'BANKNIFTY';
+  if (trimmed === 'BSE:SENSEX-INDEX') return 'SENSEX';
+  if (trimmed === 'NSE:FINNIFTY-INDEX') return 'FINNIFTY';
+  if (trimmed === 'NSE:MIDCPNIFTY-INDEX') return 'MIDCPNIFTY';
+  const m = /^[A-Z]+:([A-Z0-9&.-]+)-EQ$/i.exec(trimmed);
   return m ? m[1]!.toUpperCase() : null;
 }
 
