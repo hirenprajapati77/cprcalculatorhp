@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 11 Nov: 2-Month Deep Code Review Remediation, Index Routing Fix & UI Polish (PRs #295–#299)
+
+- **PR #299 (`3af32595`) — 2-Month Deep Code Review Remediation across All Domains**:
+  - **Toast Deduplication & Mobile Queue Cap (C-1)**: Deduplicated identical active messages in `ToastProvider` (`src/components/ui/Toast.tsx`) to eliminate duplicate offline toasts emitted simultaneously by `Navbar` and `TopBar`. Capped visible toasts at a maximum of 3.
+  - **Scanner Bulk DB Persistence Alert (D-1)**: Replaced unhandled TODO in `src/services/scanner-controller.ts` with Telegram alert dispatch. Dispatches an ops-critical notification if Prisma batch writes fail during heavy scanner load while results safely serve from memory/cache fallback.
+  - **Daily Fyers Session Expiry Monitor (A-1)**: Added an automated 09:00 AM IST cron probe in `src/services/scheduler/market-cron.scheduler.ts`. If the 24h broker token has expired, a Telegram alert is dispatched with a direct link to `/settings` so operators can re-authenticate before the 15:20 scan.
+  - **Historical Trade Journal Backfill (B-1)**: Backfilled and closed all 8 historical open/orphaned index and stock trades in PostgreSQL with exact D+1 market close prices, bringing total open orphaned trades in `TradeJournal` to 0.
+
+- **PR #298 (`106e2cc5`) — Multi-Tier Index Underlying Ticker Routing in Snapshot Capture**:
+  - **Index Ticker Mapping (`fyers-quotes-batch.ts`, `stock-candle.service.ts`, `market.service.ts`)**: Mapped index symbols (`NIFTY` -> `NSE:NIFTY50-INDEX` / `^NSEI`, `BANKNIFTY` -> `NSE:NIFTYBANK-INDEX` / `^NSEBANK`, `SENSEX` -> `BSE:SENSEX-INDEX` / `^BSESN`, `FINNIFTY`, `MIDCPNIFTY`) instead of treating them as equities with `-EQ` or `.NS`.
+  - **Multi-Tier Resolution (`trade-journal.service.ts`)**: Added `fetchUnderlyingCmp` in `TradeJournalService` with primary Yahoo Finance caret quotes, `MarketService` fallback, and Yahoo equity fallback, guaranteeing automated D+1 snapshots and auto-closes for `UNDERLYING CE`/`UNDERLYING PE` trades even when Fyers is disconnected.
+
+- **PR #297 (`00efeb29`) — Scanner KPI Strip Cleanup**:
+  - Removed unused `Info` icon import from `ScannerKpiStrip.tsx`.
+
+- **PR #296 (`75cf2d89`) — Navigation Typography Modernization**:
+  - Updated navbar link typography from monospace to modern sans-serif (`font-sans`, 12px, medium weight) for visual hierarchy and readability.
+
+- **PR #295 (`f37c180b`) — Scanner Institutional UI/UX Enhancements (P1-1 through P1-7)**:
+  - **P1-1 Collapsible Filter Controls**: Added expandable advanced filter panel with persistent presets (High Score, Narrow CPR, Today's Breakouts).
+  - **P1-2 Empty State Attribution**: Replaced generic blank screen with structured card explaining volume, regime, and risk attribution.
+  - **P1-3 Live Activity Pulse**: Added real-time auto-refresh countdown badge with live polling status indicator.
+  - **P1-4 Non-Blocking Error Toasts**: Converted silent API errors into non-intrusive floating toasts.
+  - **P1-5 Accessibility & Keyboard Navigation**: Full ARIA markup and arrow key navigation across filter strips.
+  - **P1-6 Mobile-Responsive Card View**: Implemented adaptive card layout for viewports `< 768px`.
+  - **P1-7 Print & PDF Export Toolbar**: Dedicated print layout styles and PDF export button.
+
 ### Added & Hardened — 02–03 Nov: Observability, Scanner Attrition UI, Runbook & Validation Tools (PRs #290–#293)
 
 - **PR #293 (`ff302ac4`) — CPR Width Historical Distribution Validation Tool (`scripts/validate-cpr-width-distribution.ts`)**:
