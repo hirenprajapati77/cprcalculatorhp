@@ -15,6 +15,12 @@ test('fyers-quotes-batch helpers', async (t) => {
     assert.equal(toFyersEquitySymbol('SBIN', 'BSE'), 'BSE:SBIN-EQ');
     assert.equal(fromFyersEquitySymbol('NSE:RELIANCE-EQ'), 'RELIANCE');
     assert.equal(fromFyersEquitySymbol('BSE:SBIN-EQ'), 'SBIN');
+    assert.equal(toFyersEquitySymbol('NIFTY', 'NSE'), 'NSE:NIFTY50-INDEX');
+    assert.equal(toFyersEquitySymbol('BANKNIFTY', 'NSE'), 'NSE:NIFTYBANK-INDEX');
+    assert.equal(toFyersEquitySymbol('SENSEX', 'BSE'), 'BSE:SENSEX-INDEX');
+    assert.equal(fromFyersEquitySymbol('NSE:NIFTY50-INDEX'), 'NIFTY');
+    assert.equal(fromFyersEquitySymbol('NSE:NIFTYBANK-INDEX'), 'BANKNIFTY');
+    assert.equal(fromFyersEquitySymbol('BSE:SENSEX-INDEX'), 'SENSEX');
     assert.equal(fromFyersEquitySymbol('bad'), null);
   });
 
