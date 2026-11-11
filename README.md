@@ -63,6 +63,14 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (November 2026):**
+- **11 Nov — 2-Month Deep Code Review Remediation, Index Underlying Routing & Scanner UX (`3af32595`, `106e2cc5`, PRs #295–#299)**:
+  - **Toast Deduplication & Mobile Cap (`#299`)**: Deduplicated identical active messages in `ToastProvider` to eliminate double-toasting from concurrent `Navbar`/`TopBar` status checks, and added a 3-toast queue cap for mobile ergonomics.
+  - **Scanner DB Persistence Ops Alert (`#299`)**: Wired ops Telegram alerting for bulk scanner DB persistence failures while safely preserving in-memory/cache fallback.
+  - **Daily Fyers Expiry Reminder (`#299`)**: Added automated 09:00 AM IST cron probe in `market-cron.scheduler.ts` dispatching a Telegram reminder if the broker session expired overnight.
+  - **Historical Trade Journal Backfill (`#299`)**: Backfilled and closed all 8 historical open/orphaned index/equity legs in PostgreSQL with verified D+1 close prices (0 remaining open orphaned trades in DB).
+  - **Multi-Tier Index Underlying Routing (`#298`)**: Resolved index quote lookup in `TradeJournalService.fetchUnderlyingCmp` and `MarketService` using caret index tickers (`^NSEI`, `^NSEBANK`, `^BSESN`) and `-INDEX` Fyers symbols, ensuring automated D+1 snapshots and auto-closes for `UNDERLYING CE`/`UNDERLYING PE` trades.
+  - **Scanner Institutional UX Enhancements (`#295`–`#297`)**: P1-1 collapsible filter presets, P1-2 empty state attribution, P1-3 auto-refresh pulse badge, P1-4 non-blocking error toasts, P1-5 ARIA keyboard navigation, P1-6 mobile card view (< 768px), and P1-7 print/PDF layout.
+
 - **02–03 Nov — Observability, Scanner Attrition UI, Runbook & Validation Tools (`ff302ac4`, PRs #290–#293)**:
   - **CPR Width Validation Script (`#293`)**: Historical validation script in `scripts/validate-cpr-width-distribution.ts` evaluating fixed vs ATR-aware CPR width classification distributions across `DailyOhlcv`.
   - **Database Circuit Breaker Observability & MT-01 Runbook (`#292`)**: Added `circuitBreaker: DatabaseCircuitBreaker.getState()` in `/api/health` and created `docs/MT01_FALLBACK_RUNBOOK.md` for symbol-drift and cold-start fallback triage.
