@@ -67,7 +67,8 @@ const envSchema = z.object({
   FYERS_REQUEST_TIMEOUT_MS: z.coerce.number().default(10000),
   /** Fyers Quotes API hard-caps at 50 symbols per request. */
   FYERS_QUOTES_BATCH_SIZE: z.coerce.number().default(50),
-  /** In-process LTP quote seed TTL after prefetchFyersQuotes (ms). */
+  /** Delay in milliseconds between prefetchFyersQuotes batch requests to stay under 5 req/s. */
+  FYERS_BATCH_DELAY_MS: z.coerce.number().default(250),
   /** In-process LTP quote seed TTL after prefetchFyersQuotes (ms). 90s covers a full NSE_FNO scan. */
   FYERS_QUOTE_CACHE_TTL_MS: z.coerce.number().default(90_000),
   PROVIDER_ERROR_LOG_COOLDOWN_MS: z.coerce.number().default(300000),

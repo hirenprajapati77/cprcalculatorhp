@@ -522,6 +522,11 @@ export class MarketService {
           this.seedFyersQuoteCache(sym, market, quote, ttl);
           seeded++;
         }
+
+        // Pacing delay between batch chunks to respect standard plan 5 req/s limit
+        if (env.FYERS_BATCH_DELAY_MS > 0 && chunks.indexOf(chunk) < chunks.length - 1) {
+          await new Promise((r) => setTimeout(r, env.FYERS_BATCH_DELAY_MS));
+        }
       } catch (err) {
         if (this.shouldLogProviderError('fyers-quotes-batch-exception')) {
           console.warn(
@@ -1272,10 +1277,18 @@ export class MarketService {
         const sma20Slope = bundle.sma20Slope;
         const sma50Slope = bundle.sma50Slope;
 
-        // -- Fetch 15m intraday data for VWAP, candle15m, and live price --
+        // -- Fetch 15m intraday data for VWAP, candle15m, session OHLCV aggregation, and live price --
         let vwap = (prevHigh + prevLow + prevClose) / 3;
         let candle15m: MarketStockData['candle15m'] = null;
         let ltp = bundle.regularMarketPrice ?? prevClose;
+
+        // Session OHLCV tracking for today's live activity
+        let liveOpen = prevOpen;
+        let liveHigh = prevHigh;
+        let liveLow = prevLow;
+        let liveClose = ltp;
+        let liveVolume = prevVolume;
+        let hasAggregatedIntraday = false;
 
         try {
           const res15m = await this.fetchWithTimeout(
@@ -1295,6 +1308,10 @@ export class MarketService {
             const meta15 = result15?.meta;
             if (typeof meta15?.regularMarketPrice === 'number' && Number.isFinite(meta15.regularMarketPrice)) {
               ltp = meta15.regularMarketPrice;
+              liveClose = meta15.regularMarketPrice;
+            }
+            if (typeof meta15?.regularMarketVolume === 'number' && Number.isFinite(meta15.regularMarketVolume) && meta15.regularMarketVolume > 0) {
+              liveVolume = meta15.regularMarketVolume;
             }
             const quotes15 = result15?.indicators?.quote?.[0];
             const rawTs15 = result15?.timestamp as number[] | undefined;
@@ -1313,10 +1330,16 @@ export class MarketService {
             if (quotes15 && len15 > 0) {
               let sumPriceVol = 0;
               let sumVol = 0;
+              let minLow = Infinity;
+              let maxHigh = -Infinity;
+              let firstOpen: number | null = null;
+              let totalVolume15m = 0;
+
               for (let i = 0; i < len15; i++) {
                 const h = quotes15.high[i];
                 const l = quotes15.low[i];
                 const c = quotes15.close[i];
+                const o = quotes15.open?.[i];
                 const v = quotes15.volume?.[i];
                 if (
                   typeof h === 'number' && Number.isFinite(h) &&
@@ -1327,10 +1350,29 @@ export class MarketService {
                   const vol = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
                   sumPriceVol += typ * vol;
                   sumVol += vol;
+                  totalVolume15m += vol;
+
+                  if (h > maxHigh) maxHigh = h;
+                  if (l < minLow) minLow = l;
+                  if (firstOpen === null && typeof o === 'number' && Number.isFinite(o)) {
+                    firstOpen = o;
+                  }
                 }
               }
               if (sumVol > 0) {
                 vwap = sumPriceVol / sumVol;
+              }
+
+              if (Number.isFinite(maxHigh) && maxHigh > -Infinity && Number.isFinite(minLow) && minLow < Infinity) {
+                liveHigh = maxHigh;
+                liveLow = minLow;
+                if (firstOpen !== null) {
+                  liveOpen = firstOpen;
+                }
+                if (totalVolume15m > 0 && liveVolume === prevVolume) {
+                  liveVolume = totalVolume15m;
+                }
+                hasAggregatedIntraday = true;
               }
 
               let lastValidIdx = len15 - 1;
@@ -1361,6 +1403,7 @@ export class MarketService {
                   };
                   if (!meta15?.regularMarketPrice) {
                     ltp = c15;
+                    liveClose = c15;
                   }
                 }
               }
@@ -1374,12 +1417,12 @@ export class MarketService {
           symbol: cleanSymbol,
           market,
           sector,
-          open: prevOpen,
-          high: prevHigh,
-          low: prevLow,
-          close: prevClose,
+          open: hasAggregatedIntraday ? liveOpen : prevOpen,
+          high: hasAggregatedIntraday ? liveHigh : prevHigh,
+          low: hasAggregatedIntraday ? liveLow : prevLow,
+          close: hasAggregatedIntraday ? liveClose : prevClose,
           previousClose,
-          volume: prevVolume,
+          volume: liveVolume,
           avgVolume,
           marketCap,
           ltp,
