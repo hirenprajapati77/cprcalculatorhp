@@ -464,7 +464,8 @@ export class MarketService {
     const chunks = chunkSymbols(unique, this.quotesBatchSize());
     let seeded = 0;
 
-    for (const chunk of chunks) {
+    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+      const chunk = chunks[cIdx];
       if (this.fyersRateLimitedUntilMs > Date.now() || this.fyersPermissionBlockedUntilMs > Date.now()) {
         break;
       }
@@ -524,7 +525,7 @@ export class MarketService {
         }
 
         // Pacing delay between batch chunks to respect standard plan 5 req/s limit
-        if (env.FYERS_BATCH_DELAY_MS > 0 && chunks.indexOf(chunk) < chunks.length - 1) {
+        if (env.FYERS_BATCH_DELAY_MS > 0 && cIdx < chunks.length - 1) {
           await new Promise((r) => setTimeout(r, env.FYERS_BATCH_DELAY_MS));
         }
       } catch (err) {

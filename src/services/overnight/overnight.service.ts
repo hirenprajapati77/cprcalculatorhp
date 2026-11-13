@@ -384,6 +384,11 @@ export class OvernightService {
             stockDataBySymbol.set(symbol, null);
           }
         });
+
+        // Throttle Fyers primary history requests between chunks to stay under 5 req/s ceiling
+        if (env.FYERS_BATCH_DELAY_MS > 0 && i + STOCK_DATA_PREFETCH_CHUNK < symbols.length) {
+          await new Promise((resolve) => setTimeout(resolve, env.FYERS_BATCH_DELAY_MS));
+        }
       }
     }
 
