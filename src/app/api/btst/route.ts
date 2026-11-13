@@ -10,7 +10,8 @@ import { publicApiError } from '@/lib/api-error';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const universe = searchParams.get('universe') || 'NIFTY50';
+    // Canonical default universe is NIFTY_FNO, same as /api/scanner and /api/scanner/refresh (PR #302)
+    const universe = searchParams.get('universe') || 'NIFTY_FNO';
     const bypassQuery = searchParams.get('bypass') === 'true';
 
     const executionWindowOpen = BtstService.isExecutionWindowOpen(bypassQuery);

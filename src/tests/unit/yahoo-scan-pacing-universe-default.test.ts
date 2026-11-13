@@ -248,5 +248,45 @@ describe('Yahoo Fallback Scan Pacing + Scanner Universe Default Consistency', ()
         prisma.scannerResult.findFirst = origFindFirst;
       }
     });
+
+    it('GET /api/btst without universe query param defaults to NIFTY_FNO', async () => {
+      const { GET: getBtstRoute } = await import('../../app/api/btst/route');
+      const { BtstService } = await import('../../services/backtest/btst.service');
+      const { CacheService } = await import('../../services/cache.service');
+
+      const origDiscover = BtstService.discover;
+      const origCacheGet = CacheService.get;
+      const origWindowOpen = BtstService.isExecutionWindowOpen;
+
+      let discoveredUniverse: string | undefined;
+      BtstService.discover = (async (u: string) => {
+        discoveredUniverse = u;
+        return {
+          results: [],
+          insights: {
+            strongSignal: 0,
+            breakoutReady: 0,
+            avoid: 0,
+            totalLong: 0,
+            totalShort: 0,
+            totalConflict: 0,
+          },
+        };
+      }) as unknown as typeof BtstService.discover;
+
+      CacheService.get = (async () => null) as unknown as typeof CacheService.get;
+      BtstService.isExecutionWindowOpen = () => true;
+
+      try {
+        const reqOmitted = new NextRequest('http://localhost:3000/api/btst?bypass=true');
+        const resOmitted = await getBtstRoute(reqOmitted);
+        assert.strictEqual(resOmitted.status, 200);
+        assert.strictEqual(discoveredUniverse, 'NIFTY_FNO');
+      } finally {
+        BtstService.discover = origDiscover;
+        CacheService.get = origCacheGet;
+        BtstService.isExecutionWindowOpen = origWindowOpen;
+      }
+    });
   });
 });
