@@ -392,7 +392,7 @@ export class MarketBreadthService {
     const allNse = computeUniverseBreadth('ALL_NSE', operatingStockStats);
 
     // Mock/Filter Nifty 50 and FNO symbol subsets if present
-    const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
+    const nifty50Stats = operatingStockStats.filter((s) => isNifty50Symbol(s.symbol));
     if (nifty50Stats.length === 0) {
       console.warn('[MarketBreadth] NIFTY50_SYMBOLS filter matched 0 stocks - falling back to slice(0,50). Check DailyOhlcv data coverage.');
     } else if (nifty50Stats.length < 45) {
@@ -515,7 +515,7 @@ export class MarketBreadthService {
       );
 
       const activeSet = new Set(activeRows.map((r) => r.symbol));
-      const HISTORICAL_ALIASES = new Set(['TATAMOTORS', 'LTIM', 'AMBUJACEMENT', 'GMRINFRA', 'TATACHEMICALS']);
+      const HISTORICAL_ALIASES = new Set(['TATAMOTORS', 'LTIM', 'AMBUJACEMENT', 'GMRINFRA', 'TATACHEMICALS', 'TATASTEEL', 'LICI', 'SIEMENS']);
 
       const missingNifty50 = Array.from(NIFTY50_SYMBOLS)
         .filter((sym) => !HISTORICAL_ALIASES.has(sym) && !activeSet.has(sym));
@@ -776,16 +776,36 @@ export function getSymbolSector(symbol: string): string {
   return 'OTHERS';
 }
 
+/**
+ * Canonical 50 active NIFTY 50 constituents.
+ * Exactly 50 constituents aligned with STOCK_UNIVERSE (isNifty50: true).
+ */
 export const NIFTY50_SYMBOLS = new Set([
   'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'BHARTIARTL', 'ITC', 'SBIN', 'LTM', 'SHRIRAMFIN',
   'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TMPV', 'AXISBANK',
-  'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'TATASTEEL', 'JSWSTEEL',
-  'ADANIPORTS', 'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE',
-  'DIVISLAB', 'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND',
-  'ETERNAL',
-  // Historical / Bhavcopy aliases for backwards compatibility with historical DailyOhlcv records
-  'TATAMOTORS', 'LTIM'
+  'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'JSWSTEEL', 'ADANIPORTS',
+  'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE', 'DIVISLAB',
+  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'ETERNAL'
 ]);
+
+/**
+ * Historical / Bhavcopy aliases and legacy index constituents recognized for lookback.
+ * Allows backwards compatibility with historical DailyOhlcv records without bloating NIFTY50_SYMBOLS.size.
+ */
+export const NIFTY50_HISTORICAL_ALIASES = new Set([
+  'TATAMOTORS', // Renamed to TMPV
+  'LTIM',       // Renamed to LTM
+  'TATASTEEL',  // Maintained for lookback coverage
+  'LICI',       // Legacy list alias (Nifty Next 50)
+  'SIEMENS',    // Legacy list alias (Nifty Next 50)
+]);
+
+/**
+ * Returns true if a symbol is either a canonical NIFTY 50 constituent or a known historical alias.
+ */
+export function isNifty50Symbol(symbol: string): boolean {
+  return NIFTY50_SYMBOLS.has(symbol) || NIFTY50_HISTORICAL_ALIASES.has(symbol);
+}
 
 export const FNO_SYMBOLS = new Set([
   'AARTIIND', 'ABB', 'ABBOTINDIA', 'ABCAPITAL', 'ABFRL', 'ACC', 'ADANIENT', 'ADANIPORTS', 'ALKEM', 'AMBUJACEMENT', 'AMBUJACEM',

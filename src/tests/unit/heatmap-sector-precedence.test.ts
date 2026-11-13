@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveHeatmapSector } from '../../lib/heatmap-helpers';
+import { resolveHeatmapSector } from '../../services/market-tools/heatmap-helpers';
 import { getSymbolSector } from '../../services/market-tools/market-breadth.service';
 import { canonicalizeSector } from '../../services/market-tools/nse-sector-map';
 

@@ -1,5 +1,5 @@
-import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
-import { getSymbolSector } from '@/services/market-tools/market-breadth.service';
+import { canonicalizeSector } from './nse-sector-map';
+import { getSymbolSector } from './market-breadth.service';
 
 /**
  * Resolves a symbol's sector preferring the authoritative getSymbolSector (nse-sector-map),

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
-import { resolveHeatmapSector } from '@/lib/heatmap-helpers';
+import { resolveHeatmapSector } from '@/services/market-tools/heatmap-helpers';
 
 export const dynamic = 'force-dynamic';
 

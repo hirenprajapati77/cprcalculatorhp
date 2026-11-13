@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FNO_SYMBOLS, NIFTY50_SYMBOLS } from '../../services/market-tools/market-breadth.service';
+import {
+  FNO_SYMBOLS,
+  NIFTY50_SYMBOLS,
+  NIFTY50_HISTORICAL_ALIASES,
+  isNifty50Symbol,
+} from '../../services/market-tools/market-breadth.service';
 
 /**
  * R-6: Bhavcopy alias presence test.
@@ -78,8 +83,17 @@ test('NIFTY50_SYMBOLS coverage (Fix 3a)', async (t) => {
     assert.ok(NIFTY50_SYMBOLS.has('LTM'), 'NIFTY50_SYMBOLS must include LTM');
   });
 
-  await t.test('NIFTY50_SYMBOLS has >= 50 symbols', () => {
+  await t.test('NIFTY50_SYMBOLS has exactly 50 symbols', () => {
     assert.ok(NIFTY50_SYMBOLS instanceof Set, 'NIFTY50_SYMBOLS should be a Set');
-    assert.ok(NIFTY50_SYMBOLS.size >= 50, `NIFTY50_SYMBOLS size (${NIFTY50_SYMBOLS.size}) should be >= 50`);
+    assert.strictEqual(NIFTY50_SYMBOLS.size, 50, `NIFTY50_SYMBOLS size (${NIFTY50_SYMBOLS.size}) should be exactly 50`);
+  });
+
+  await t.test('historical aliases are recognized by isNifty50Symbol', () => {
+    assert.ok(isNifty50Symbol('TATAMOTORS'), 'TATAMOTORS should be recognized as Nifty 50 historical alias');
+    assert.ok(isNifty50Symbol('LTIM'), 'LTIM should be recognized as Nifty 50 historical alias');
+    assert.ok(isNifty50Symbol('TMPV'), 'TMPV should be recognized as active Nifty 50 constituent');
+    assert.ok(isNifty50Symbol('TATASTEEL'), 'TATASTEEL should be recognized for lookback');
+    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('TATAMOTORS'), 'TATAMOTORS in NIFTY50_HISTORICAL_ALIASES');
+    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('LTIM'), 'LTIM in NIFTY50_HISTORICAL_ALIASES');
   });
 });
