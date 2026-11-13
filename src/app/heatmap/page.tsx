@@ -23,9 +23,13 @@ interface HeatmapItem {
 
 // Cache to prevent loading spinner on navigation
 let _cachedHeatmap: HeatmapItem[] | null = null;
+let _cachedAsOfDate: string | null = null;
+let _cachedIsFallback: boolean = false;
 
 registerCacheClearHandler(() => {
   _cachedHeatmap = null;
+  _cachedAsOfDate = null;
+  _cachedIsFallback = false;
 });
 
 const TRACKED_SIGNALS = [
@@ -41,6 +45,8 @@ const TRACKED_SIGNALS = [
 
 export default function HeatmapPage() {
   const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>(() => _cachedHeatmap || []);
+  const [asOfDate, setAsOfDate] = useState<string | null>(() => _cachedAsOfDate);
+  const [isFallback, setIsFallback] = useState<boolean>(() => _cachedIsFallback);
   const [loading, setLoading] = useState<boolean>(() => !_cachedHeatmap);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const { showToast } = useToast();
@@ -49,8 +55,10 @@ export default function HeatmapPage() {
   useEffect(() => {
     if (heatmapData.length > 0) {
       _cachedHeatmap = heatmapData;
+      _cachedAsOfDate = asOfDate;
+      _cachedIsFallback = isFallback;
     }
-  }, [heatmapData]);
+  }, [heatmapData, asOfDate, isFallback]);
 
   const fetchHeatmap = useCallback(async (isRefreshCall = false) => {
     if (isRefreshCall) setIsRefreshing(true);
@@ -61,7 +69,14 @@ export default function HeatmapPage() {
       if (!res.ok) throw new Error('Failed to fetch heatmap data');
       const data = await res.json();
       setHeatmapData(data.heatmap || []);
-      if (isRefreshCall) showToast('Heatmap data updated successfully', 'success');
+      setAsOfDate(data.asOfDate || null);
+      setIsFallback(Boolean(data.isFallback));
+      _cachedHeatmap = data.heatmap || [];
+      _cachedAsOfDate = data.asOfDate || null;
+      _cachedIsFallback = Boolean(data.isFallback);
+      if (isRefreshCall && !data.isFallback) {
+        showToast('Heatmap data updated successfully', 'success');
+      }
     } catch (err) {
       console.error(err);
       showToast('Failed to load structural heatmap matrix', 'error');
@@ -125,6 +140,16 @@ export default function HeatmapPage() {
             <span className="text-[10px] bg-accent-blue/10 text-accent-blue border border-accent-blue/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
               Quant Signal Matrix
             </span>
+            {asOfDate && (
+              <span className="text-[10px] text-text-tertiary border border-border-primary px-2 py-0.5 rounded font-semibold shrink-0">
+                As of {asOfDate}
+              </span>
+            )}
+            {isFallback && (
+              <span className="text-[10px] bg-accent-amber/10 text-accent-amber border border-accent-amber/20 px-2 py-0.5 rounded font-semibold uppercase shrink-0">
+                Not today&apos;s scan
+              </span>
+            )}
           </div>
           <p className="text-xs text-text-tertiary mt-1">
             Real-time signal density and capital rotation matrix across industrial sectors.

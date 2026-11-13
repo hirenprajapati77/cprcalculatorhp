@@ -2,17 +2,18 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import type { MarketSnapshot, ScannerResult } from '@prisma/client';
 import { getISTDateString } from '@/lib/market-hours';
-import { canonicalizeSector } from '@/services/market-tools/nse-sector-map';
-import { getSymbolSector } from '@/services/market-tools/market-breadth.service';
+import { resolveHeatmapSector } from '@/lib/heatmap-helpers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     const today = getISTDateString();
+    let asOfDate = today;
+    let isFallback = false;
 
     // 1. Fetch all scan results for today
-    const scans = await prisma.scannerResult.findMany({
+    let scans = await prisma.scannerResult.findMany({
       where: { date: today },
     });
 
@@ -22,11 +23,11 @@ export async function GET() {
         orderBy: { date: 'desc' }
       });
       if (latestResult) {
-        const latestDate = latestResult.date;
-        const fallbackScans = await prisma.scannerResult.findMany({
-          where: { date: latestDate }
+        asOfDate = latestResult.date;
+        isFallback = true;
+        scans = await prisma.scannerResult.findMany({
+          where: { date: asOfDate }
         });
-        scans.push(...fallbackScans);
       }
     }
 
@@ -42,8 +43,7 @@ export async function GET() {
     const counts: Record<string, Record<string, number>> = {};
 
     scans.forEach((scan: ScannerResult) => {
-      const rawSector = sectorMap.get(scan.symbol) || getSymbolSector(scan.symbol);
-      const sector = canonicalizeSector(rawSector);
+      const sector = resolveHeatmapSector(scan.symbol, sectorMap.get(scan.symbol));
       const signals = scan.signalSummary ? scan.signalSummary.split(',') : [];
 
       if (!counts[sector]) {
@@ -75,7 +75,7 @@ export async function GET() {
       signals,
     }));
 
-    return NextResponse.json({ success: true, heatmap }, { status: 200 });
+    return NextResponse.json({ success: true, heatmap, asOfDate, isFallback }, { status: 200 });
   } catch (err) {
     console.error('Heatmap API failed:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

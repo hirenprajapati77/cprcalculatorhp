@@ -395,6 +395,8 @@ export class MarketBreadthService {
     const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
     if (nifty50Stats.length === 0) {
       console.warn('[MarketBreadth] NIFTY50_SYMBOLS filter matched 0 stocks - falling back to slice(0,50). Check DailyOhlcv data coverage.');
+    } else if (nifty50Stats.length < 45) {
+      console.warn(`[MarketBreadth] NIFTY50_SYMBOLS filter matched only ${nifty50Stats.length} stocks (< 45). Check DailyOhlcv data coverage.`);
     }
     const nifty50 = computeUniverseBreadth(
       'NIFTY_50',
@@ -468,6 +470,75 @@ export class MarketBreadthService {
     }
 
     return report;
+  }
+
+  /**
+   * Validates that symbols in NIFTY50_SYMBOLS and FNO_SYMBOLS have had active DailyOhlcv
+   * records within the last N trading sessions (default: 10). Logs a warning if any
+   * non-historical symbol has zero rows so ticker renames don't silently shrink universes.
+   */
+  static async checkUniverseCoverage(options?: { days?: number }): Promise<{
+    missingNifty50: string[];
+    missingFno: string[];
+  }> {
+    const sessions = options?.days ?? 10;
+    try {
+      const latestDates = await executeGuardedQuery(
+        (tx) =>
+          tx.$queryRaw<{ date: string }[]>`
+            SELECT DISTINCT date FROM "DailyOhlcv"
+            ORDER BY date DESC
+            LIMIT ${sessions}
+          `,
+        {
+          statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.MARKET_BREADTH_MS,
+          label: 'MarketBreadth.checkUniverseCoverage.dates',
+        }
+      );
+
+      if (latestDates.length === 0) {
+        return { missingNifty50: [], missingFno: [] };
+      }
+
+      const oldestInWindow = latestDates[latestDates.length - 1].date;
+
+      const activeRows = await executeGuardedQuery(
+        (tx) =>
+          tx.$queryRaw<{ symbol: string }[]>`
+            SELECT DISTINCT symbol FROM "DailyOhlcv"
+            WHERE date >= ${oldestInWindow} AND series = 'EQ'
+          `,
+        {
+          statementTimeoutMs: MARKET_TOOLS_QUERY_TIMEOUTS.MARKET_BREADTH_MS,
+          label: 'MarketBreadth.checkUniverseCoverage.activeSymbols',
+        }
+      );
+
+      const activeSet = new Set(activeRows.map((r) => r.symbol));
+      const HISTORICAL_ALIASES = new Set(['TATAMOTORS', 'LTIM', 'AMBUJACEMENT', 'GMRINFRA', 'TATACHEMICALS']);
+
+      const missingNifty50 = Array.from(NIFTY50_SYMBOLS)
+        .filter((sym) => !HISTORICAL_ALIASES.has(sym) && !activeSet.has(sym));
+      const missingFno = Array.from(FNO_SYMBOLS)
+        .filter((sym) => !HISTORICAL_ALIASES.has(sym) && !activeSet.has(sym));
+
+      if (missingNifty50.length > 0) {
+        console.warn(
+          `[MarketBreadth] NIFTY50_SYMBOLS missing DailyOhlcv in last ${sessions} sessions: ${missingNifty50.join(', ')}`
+        );
+      }
+
+      if (missingFno.length > 0) {
+        console.warn(
+          `[MarketBreadth] FNO_SYMBOLS missing DailyOhlcv in last ${sessions} sessions: ${missingFno.join(', ')}`
+        );
+      }
+
+      return { missingNifty50, missingFno };
+    } catch (err) {
+      console.error('[MarketBreadth] Failed to check universe coverage:', err);
+      return { missingNifty50: [], missingFno: [] };
+    }
   }
 }
 
@@ -705,12 +776,15 @@ export function getSymbolSector(symbol: string): string {
   return 'OTHERS';
 }
 
-const NIFTY50_SYMBOLS = new Set([
-  'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'BHARTIARTL', 'ITC', 'SBIN', 'LTIM', 'LICI',
-  'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TATAMOTORS', 'AXISBANK',
+export const NIFTY50_SYMBOLS = new Set([
+  'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'BHARTIARTL', 'ITC', 'SBIN', 'LTM', 'SHRIRAMFIN',
+  'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TMPV', 'AXISBANK',
   'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'TATASTEEL', 'JSWSTEEL',
-  'ADANIPORTS', 'COALINDIA', 'SIEMENS', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE',
-  'DIVISLAB', 'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND'
+  'ADANIPORTS', 'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE',
+  'DIVISLAB', 'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND',
+  'ETERNAL',
+  // Historical / Bhavcopy aliases for backwards compatibility with historical DailyOhlcv records
+  'TATAMOTORS', 'LTIM'
 ]);
 
 export const FNO_SYMBOLS = new Set([
@@ -719,16 +793,16 @@ export const FNO_SYMBOLS = new Set([
   'BAJFINANCE', 'BALKRISIND', 'BALRAMCHIN', 'BANDHANBNK', 'BANKBARODA', 'BATAINDIA', 'BEL', 'BERGEPAINT', 'BHARATFORG', 'BHARTIARTL',
   'BHEL', 'BIOCON', 'BOSCHLTD', 'BPCL', 'BRITANNIA', 'BSOFT', 'CANBK', 'CANFINHOME', 'CHAMBLFERT', 'CHOLAFIN',
   'CIPLA', 'COALINDIA', 'COFORGE', 'COLPAL', 'CONCOR', 'COROMANDEL', 'CROMPTON', 'CUB', 'CUMMINSIND', 'DABUR',
-  'DALBHARAT', 'DEEPAKNTR', 'DIVISLAB', 'DIXON', 'DLF', 'DRREDDY', 'EICHERMOT', 'ESCORTS', 'EXIDEIND', 'FEDERALBNK',
+  'DALBHARAT', 'DEEPAKNTR', 'DIVISLAB', 'DIXON', 'DLF', 'DRREDDY', 'EICHERMOT', 'ESCORTS', 'ETERNAL', 'EXIDEIND', 'FEDERALBNK',
   'GAIL', 'GLENMARK', 'GMRINFRA', 'GMRP&UI', 'GNFC', 'GODREJPROP', 'GRANULES', 'GRASIM', 'GUJGASLTD', 'HAL', 'HAVELLS',
   'HCLTECH', 'HDFCBANK', 'HDFCLIFE', 'HEROMOTOCO', 'HINDALCO', 'HINDCOPPER', 'HINDPETRO', 'HINDUNILVR', 'ICICIBANK', 'ICICIGI',
   'ICICIPRULI', 'IDEA', 'IDFCFIRSTB', 'IEX', 'IGL', 'INDHOTEL', 'INDIACEM', 'INDIAMART', 'INDIGO', 'INDUSINDBK',
   'INDUSTOWER', 'INFY', 'IOC', 'IPCALAB', 'IRCTC', 'ITC', 'JINDALSTEL', 'JKCEMENT', 'JSWSTEEL', 'JUBLFOOD',
-  'KALYANKJIL', 'KEI', 'KOTAKBANK', 'LALPATHLAB', 'LAURUSLABS', 'LICHSGFIN', 'LTIM', 'LT', 'LUPIN', 'M&M',
+  'KALYANKJIL', 'KEI', 'KOTAKBANK', 'LALPATHLAB', 'LAURUSLABS', 'LICHSGFIN', 'LTM', 'LTIM', 'LT', 'LUPIN', 'M&M',
   'MANAPPURAM', 'MARICO', 'MARUTI', 'MCX', 'METROPOLIS', 'MFSL', 'MGL', 'MOTHERSON', 'MPHASIS', 'MRF',
   'MUTHOOTFIN', 'NATIONALUM', 'NAVINFLUOR', 'NESTLEIND', 'NMDC', 'NTPC', 'OBEROIRLTY', 'OFSS', 'ONGC', 'PAGEIND',
   'PERSISTENT', 'PETRONET', 'PFC', 'PIDILITIND', 'PIIND', 'PNB', 'POLYCAB', 'POWERGRID', 'PVRINOX', 'RAMCOCEM',
   'RBLBANK', 'RECLTD', 'RELIANCE', 'SAIL', 'SBICARD', 'SBILIFE', 'SBIN', 'SHREECEM', 'SHRIRAMFIN', 'SIEMENS',
-  'SRF', 'SUNPHARMA', 'SUNTV', 'SYNGENE', 'TATACHEMICALS', 'TATACHEM', 'TATACONSUM', 'TATAMOTORS', 'TATAPOWER', 'TATASTEEL', 'TCS',
+  'SRF', 'SUNPHARMA', 'SUNTV', 'SYNGENE', 'TATACHEMICALS', 'TATACHEM', 'TATACONSUM', 'TMPV', 'TATAMOTORS', 'TATAPOWER', 'TATASTEEL', 'TCS',
   'TECHM', 'TITAN', 'TORNTPHARM', 'TRENT', 'TVSMOTOR', 'UBL', 'ULTRACEMCO', 'UPL', 'VEDL', 'VOLTAS', 'WIPRO', 'ZEEL'
 ]);
