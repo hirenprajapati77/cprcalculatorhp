@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documented & Hardened — 13 Nov: Regulatory Option Lot-Size Sizing (PR #287 Follow-up)
+
+- **SEBI ₹15L Derivative Minimum Contract Sizing Heuristic (`src/lib/pnl.ts`)**:
+  - Documented that `Math.round(1_500_000 / strike)` in `resolveOptionLotSize` derives contract lot sizes for unmapped options based on SEBI's regulatory mandate increasing minimum derivative contract value from ₹5 Lakhs to ₹15–20 Lakhs. Added formal decision record in `docs/decisions/lot-size-heuristic-sebi-15l-2026-11-13.md`.
+
+### Fixed & Hardened — 13 Nov: Official NSE ETERNAL Ticker Restoration, 9:00 AM Fyers Check Guard (PR #308)
+
+- **PR #308 — Official NSE ETERNAL Ticker Restoration, 9:00 AM Fyers Check Guard**:
+  - **Ticker Restoration (`src/services/market.service.ts`)**: Restored `ETERNAL` (Eternal Limited) as the official active NSE and Fyers ticker (renamed April 9, 2025; lot size 2425), reverting the erroneous rename to delisted symbol `ZOMATO`. Aligned `nse-sector-map.ts` and `fno-universe-check.test.ts`.
+  - **Fyers 9:00 AM Session Check Guard (`src/services/scheduler/market-cron.scheduler.ts`)**: Wrapped session check in a try/catch inspecting PostgreSQL directly to avoid false-positive session expiry Telegram alarms on transient DB errors. Replaced hardcoded server URL with dynamic `process.env.NEXT_PUBLIC_BASE_URL`.
+  - **Decision Memo Updates (`docs/decisions/volume-sourcing-fallback-2026-11-13.md`)**: Set memo status to pending owner review; documented raw 30-day SQL volume baseline and Fyers 429 log counts.
+
 ### Fixed & Hardened — 13 Nov: Telemetry for Session Aggregation, 200 SMA Chunking, and avgVolume Alignment (PR #305)
 
 - **PR #305 — Telemetry for Session Aggregation, 200 SMA Chunking, and avgVolume Alignment**:

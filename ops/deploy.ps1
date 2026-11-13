@@ -21,6 +21,11 @@ function Err($msg) { Write-Host "[ERROR] $msg" -ForegroundColor Red; exit 1 }
 # ── 1. PRE-FLIGHT CHECKS ─────────────────────────────────────
 Log "Running pre-flight checks..."
 
+if ($env:CONFIRM_PROD_DEPLOY -ne "true") {
+    Err "Production deployment requires explicit authorization. Set `$env:CONFIRM_PROD_DEPLOY = 'true' before running deploy.ps1."
+}
+Ok "CONFIRM_PROD_DEPLOY = true (authorized)"
+
 $schema = Get-Content "prisma\schema.prisma" -Raw
 if ($schema -notmatch 'provider\s*=\s*"postgresql"') {
     Err "prisma/schema.prisma has wrong provider. Expected postgresql. Run: (Get-Content prisma\schema.prisma) -replace 'provider = ""sqlite""', 'provider = ""postgresql""' | Set-Content prisma\schema.prisma"

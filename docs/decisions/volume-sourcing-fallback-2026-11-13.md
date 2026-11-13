@@ -1,9 +1,8 @@
 # Decision Memo: Session-Volume Sourcing and Yahoo-Fallback Hardening
 
 **Date:** 2026-11-13  
-**Owner:** Hiren Prajapati  
-**Covers:** PRs #301–#307  
-**Status:** Approved; Deployed to Production (BUILD_ID: `a361a35db107`)  
+**Covers:** PRs #301–#308  
+**Status:** Pending Owner Review / Sign-Off; Live on Production (BUILD_ID: `70c93adedaa7`)  
 
 ---
 
@@ -15,7 +14,7 @@
 | No 12 Nov BTST | Logged `volume 28644 < 100000` (frozen snapshot); true ratio 706,846 / 882,211 = 0.80 < 1.5, so rejected anyway | Log verified; 20D vs 50D window unreconciled |
 | Universe-wide freeze | Median stored volume / EOD volume was 0.006–0.036 across 130–185 symbols | Verified via 30-day SQL baseline query on production `cpr_pro` DB |
 | Mechanism | Yahoo fallback read `bundle.lastCandle.volume` from an 8h cache written ~09:16 IST; 15m fetch updated LTP only | Verified (code + Redis key) |
-| Why Yahoo fallback | Fyers 429 rate limits (16 to 59 per day in PM2 error logs) trigger automatic 60s cooldown | Verified from `/home/ubuntu/.pm2/logs/cpr-platform-error.log*` |
+| Why Yahoo fallback | Fyers 429 rate limits (59 events recorded in rotated log `cpr-platform-error.log.1`) trigger automatic 60s cooldown | Verified from `/home/ubuntu/.pm2/logs/cpr-platform-error.log*` |
 
 The freeze did not cause the GVT&D misses. It is a real universe-wide defect, fixed on its own merits.
 
@@ -30,7 +29,9 @@ The freeze did not cause the GVT&D misses. It is a real universe-wide defect, fi
 | #303 | Fyers history + overnight prefetch pacing (250 ms) | Operational |
 | #304 | `resolveSessionVolume` shared by gate, BTST/STBT VDU rule (25 pts), VPA RVOL | Behaviour-affecting |
 | #305 | `sessionAggregated` flag/warning; 200-SMA chunking; empty-history `avgVolume` → 0 | Telemetry + minor |
-| #306 | Test fix (market-hours-dependent test) | Test only |
+| #306 | Test fix (market-hours-dependent test with `bypass: true`) | Test only |
+| #307 | Retroactive decision memo documentation | Documentation |
+| #308 | Restore official NSE `ETERNAL` ticker, guard 9:00 AM Fyers check against DB errors | Correctness + Operational |
 
 ### Expected Effects
 1. **Fallback days**: Category B points (up to 25) and `VOLUME_SPIKE` become reachable. The morning effect is small (GVT&D ratio 0.35 at 10:00) and grows later in the day.
