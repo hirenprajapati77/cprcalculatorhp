@@ -153,10 +153,12 @@ export class ScannerController {
     // getStockData skips N quote round-trips (history/15m still per-symbol).
     await MarketService.prefetchFyersQuotes(symbols, market);
 
-    // Parallel fetch with batching — shrink when Fyers is rate-limited (Oracle 1GB VM).
-    const batchSize = MarketService.isFyersTemporarilyUnavailable() ? 2 : 5;
-    if (batchSize < 5) {
-      console.log(`[SCAN] Fyers cooldown active — batch size ${batchSize}`);
+    // Parallel fetch with batching — shrink and pace when Fyers is rate-limited (Oracle 1GB VM).
+    const isFyersCooldown = MarketService.isFyersTemporarilyUnavailable();
+    const batchSize = isFyersCooldown ? 2 : 5;
+    const yahooBatchDelay = isFyersCooldown ? env.YAHOO_SCAN_BATCH_DELAY_MS : 0;
+    if (isFyersCooldown) {
+      console.log(`[Scanner] Yahoo/Fyers-cooldown pacing: batchSize=${batchSize} delayMs=${yahooBatchDelay}`);
     }
     for (let i = 0; i < stocks.length; i += batchSize) {
       const batch = stocks.slice(i, i + batchSize);
@@ -206,6 +208,10 @@ export class ScannerController {
       batchPromisesResults.forEach((r) => {
         if (r) rawResults.push(r);
       });
+
+      if (yahooBatchDelay > 0 && i + batchSize < stocks.length) {
+        await new Promise((resolve) => setTimeout(resolve, yahooBatchDelay));
+      }
     }
 
     // Rank the stocks using the RankingService

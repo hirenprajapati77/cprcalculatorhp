@@ -69,6 +69,8 @@ const envSchema = z.object({
   FYERS_QUOTES_BATCH_SIZE: z.coerce.number().default(50),
   /** Delay in milliseconds between prefetchFyersQuotes batch requests to stay under 5 req/s. */
   FYERS_BATCH_DELAY_MS: z.coerce.number().default(250),
+  /** Inter-batch pacing delay (ms) during Yahoo fallback / Fyers cooldown scans (Oracle 1GB VM guard). */
+  YAHOO_SCAN_BATCH_DELAY_MS: z.coerce.number().default(120),
   /** In-process LTP quote seed TTL after prefetchFyersQuotes (ms). 90s covers a full NSE_FNO scan. */
   FYERS_QUOTE_CACHE_TTL_MS: z.coerce.number().default(90_000),
   PROVIDER_ERROR_LOG_COOLDOWN_MS: z.coerce.number().default(300000),

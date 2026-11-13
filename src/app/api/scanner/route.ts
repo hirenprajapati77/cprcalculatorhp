@@ -71,7 +71,8 @@ async function enrichWithOptionSuggestions(
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const market = (searchParams.get('market') || 'NSE') as 'NSE' | 'BSE';
-  const universe = (searchParams.get('universe') || 'NIFTY50') as ScannerUniverse;
+  // Canonical default universe is NIFTY_FNO (full ~211 F&O universe)
+  const universe = (searchParams.get('universe') || 'NIFTY_FNO') as ScannerUniverse;
   try {
     const mode = searchParams.get('mode') || 'ALL'; // NARROW | WIDE | BULLISH | BEARISH | BREAKOUT | etc.
     const limitParam = searchParams.get('limit') || '10';

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 13 Nov: Yahoo Fallback Scan Pacing & Scanner Universe Default Consistency (PR #302)
+
+- **PR #302 — Yahoo Fallback Scan Pacing & Scanner Universe Default Consistency**:
+  - **Inter-Batch Scan Pacing on Yahoo Fallback (`src/services/scanner-controller.ts`, `src/config/env.ts`)**: Added `YAHOO_SCAN_BATCH_DELAY_MS` (default `120ms`) between batches of size 2 during Fyers cooldown / rate-limit fallback in `ScannerController.executeScan`. Prevents secondary rate-limiting/timeouts against Yahoo on the 1GB Oracle VM while keeping healthy Fyers-primary execution unaffected. Added single-log notice at scan start: `[Scanner] Yahoo/Fyers-cooldown pacing: batchSize=2 delayMs=120`.
+  - **Canonical Full F&O Default Across Scanner Entry Points (`src/app/api/scanner/route.ts`, `src/app/api/scanner/refresh/route.ts`, `src/components/scanner/ScannerClient.tsx`)**: Replaced residual `NIFTY50` defaults with `NIFTY_FNO` when `universe` is omitted in `GET /api/scanner` and `POST /api/scanner/refresh`. Guarantees F&O stocks (such as F&O banking names outside Nifty 50) are discoverable by default instead of silently constrained to 50 names. Aligned `ScannerClient.tsx` history log typecast to recognize `NIFTY_FNO`.
+
 ### Fixed & Hardened — 13 Nov: Live 15m Session OHLCV Aggregation, Fyers Batch Pacing & Overnight Volume Sourcing (PR #301)
 
 - **PR #301 — Live Session OHLCV Aggregation, Fyers 429 Prevention & Eligibility Volume Alignment**:
