@@ -29,9 +29,9 @@ test('Market Breadth universe coverage and threshold warnings (Fix 3b & 3c)', as
           { date: '2026-11-02' }
         ];
       }
-      // SELECT DISTINCT symbol FROM "DailyOhlcv" - return all except ETERNAL to simulate a missing symbol
+      // SELECT DISTINCT symbol FROM "DailyOhlcv" - return all except TATASTEEL to simulate a missing symbol
       const activeSymbols = Array.from(FNO_SYMBOLS)
-        .filter((s) => s !== 'ETERNAL')
+        .filter((s) => s !== 'TATASTEEL')
         .map((s) => ({ symbol: s }));
       return activeSymbols;
     };
@@ -53,8 +53,8 @@ test('Market Breadth universe coverage and threshold warnings (Fix 3b & 3c)', as
 
     try {
       const coverage = await MarketBreadthService.checkUniverseCoverage({ days: 10 });
-      assert.ok(coverage.missingNifty50.includes('ETERNAL'), 'ETERNAL should be identified as missing from Nifty 50');
-      assert.ok(coverage.missingFno.includes('ETERNAL'), 'ETERNAL should be identified as missing from FNO');
+      assert.ok(coverage.missingNifty50.includes('TATASTEEL'), 'TATASTEEL should be identified as missing from Nifty 50');
+      assert.ok(coverage.missingFno.includes('TATASTEEL'), 'TATASTEEL should be identified as missing from FNO');
       assert.ok(
         warnings.some((w) => w.includes('[MarketBreadth] NIFTY50_SYMBOLS missing DailyOhlcv')),
         'Warning should be logged for NIFTY50_SYMBOLS'

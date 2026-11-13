@@ -515,7 +515,7 @@ export class MarketBreadthService {
       );
 
       const activeSet = new Set(activeRows.map((r) => r.symbol));
-      const HISTORICAL_ALIASES = new Set(['TATAMOTORS', 'LTIM', 'AMBUJACEMENT', 'GMRINFRA', 'TATACHEMICALS', 'TATASTEEL', 'LICI', 'SIEMENS']);
+      const HISTORICAL_ALIASES = new Set(['TATAMOTORS', 'LTIM', 'AMBUJACEMENT', 'GMRINFRA', 'TATACHEMICALS', 'LICI', 'SIEMENS']);
 
       const missingNifty50 = Array.from(NIFTY50_SYMBOLS)
         .filter((sym) => !HISTORICAL_ALIASES.has(sym) && !activeSet.has(sym));
@@ -785,7 +785,7 @@ export const NIFTY50_SYMBOLS = new Set([
   'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TMPV', 'AXISBANK',
   'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'JSWSTEEL', 'ADANIPORTS',
   'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE', 'DIVISLAB',
-  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'ETERNAL'
+  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'TATASTEEL'
 ]);
 
 /**
@@ -795,7 +795,6 @@ export const NIFTY50_SYMBOLS = new Set([
 export const NIFTY50_HISTORICAL_ALIASES = new Set([
   'TATAMOTORS', // Renamed to TMPV
   'LTIM',       // Renamed to LTM
-  'TATASTEEL',  // Maintained for lookback coverage
   'LICI',       // Legacy list alias (Nifty Next 50)
   'SIEMENS',    // Legacy list alias (Nifty Next 50)
 ]);
