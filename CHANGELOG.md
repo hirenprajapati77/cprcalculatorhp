@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 13 Nov: Volume Sourcing Alignment across Gate, VDU Score, and VPA (PR #304)
+
+- **PR #304 — Volume Sourcing Alignment across Gate, VDU Score, and VPA**:
+  - **Shared Volume Resolver (`src/lib/session-volume.ts`)**: Introduced `resolveSessionVolume(stockVolume, intradayVolume, hasIntraday)` as the single source of truth for resolving session volume figures. Prefers aggregated intraday volume when available and greater than the (potentially frozen/stale morning snapshot) daily candle volume, with full null/NaN/negative defense.
+  - **Overnight Eligibility Gate Refactor (`src/services/overnight/entry-manager.service.ts`)**: Refactored `EntryManagerService.evaluateEligibility` to delegate to `resolveSessionVolume` with zero behavioral change, locking PR #301's eligibility semantics.
+  - **BTST/STBT VDU Scoring Alignment (`src/services/overnight/btst-ranking.service.ts`, `src/services/overnight/stbt-ranking.service.ts`)**: Aligned Rule 1 (Strong VDU, 25 points) and VPA market input construction (`buildVpaInputs`) to use `sessionVolume`. Prevents stocks that passed the 1.5× eligibility gate on live intraday volume from unfairly losing 25 VDU points or distorting VPA RVOL classification due to frozen morning daily volume snapshots.
+  - **Unit Tests (`src/tests/unit/session-volume.test.ts`)**: Added comprehensive test suite verifying volume resolution edge cases and VDU point allocation for both BTST and STBT when daily volume is frozen low.
+
 ### Fixed & Hardened — 13 Nov: Fyers History Loop Pacing & Quotes Batch Loop Index Optimization (PR #303)
 
 - **PR #303 — Fyers History Loop Pacing & Quotes Batch Loop Index Optimization**:
