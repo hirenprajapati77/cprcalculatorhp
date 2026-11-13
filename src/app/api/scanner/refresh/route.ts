@@ -5,7 +5,8 @@ import { isUniverseLiveForScanner, type ScannerUniverse } from '@/lib/scanner-se
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const universe = (body.universe || 'NIFTY50') as ScannerUniverse;
+    // Canonical default universe is NIFTY_FNO (full ~211 F&O universe)
+    const universe = (body.universe || 'NIFTY_FNO') as ScannerUniverse;
     const market = body.market || 'NSE';
 
     if (!['NIFTY50', 'NIFTY200', 'NIFTY_FNO', 'ALL'].includes(universe)) {

@@ -2408,7 +2408,7 @@ export default function ScannerClient() {
   // Load past history run
   const handleLoadPastScan = (log: HistoryLog) => {
     showToast(`Loading scan run from ${formatIST(log.createdAt, { timeOnly: true })}`, 'info');
-    if (log.filters.universe) setUniverse(log.filters.universe as 'NIFTY50' | 'NIFTY200' | 'ALL');
+    if (log.filters.universe) setUniverse(log.filters.universe as 'NIFTY50' | 'NIFTY200' | 'NIFTY_FNO' | 'ALL');
     if (log.filters.market) setMarket(log.filters.market as 'NSE' | 'BSE');
     setShowLogsList(false);
     fetchScannerData();
