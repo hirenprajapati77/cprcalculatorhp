@@ -234,7 +234,7 @@ describe('Yahoo Fallback Scan Pacing + Scanner Universe Default Consistency', ()
         const req = new NextRequest('http://localhost:3000/api/scanner/refresh', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ market: 'NSE' }), // universe omitted!
+          body: JSON.stringify({ market: 'NSE', bypass: true }), // universe omitted, bypass ensures execution
         });
 
         const res = await postRefreshRoute(req);
