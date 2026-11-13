@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 13 Nov: Fyers History Loop Pacing & Quotes Batch Loop Index Optimization (PR #303)
+
+- **PR #303 — Fyers History Loop Pacing & Quotes Batch Loop Index Optimization**:
+  - **Fyers History Batch Pacing in Scanner (`src/services/scanner-controller.ts`)**: Extended `FYERS_BATCH_DELAY_MS` (250ms) to the healthy Fyers-primary history batch loop in `ScannerController.executeScan`. Coordinated with PR #302 by gating Fyers pacing on `!isFyersCooldown` so delays never stack with `YAHOO_SCAN_BATCH_DELAY_MS` (120ms), ensuring requests stay under the Fyers Standard plan's 5 req/s ceiling while preventing self-induced 429 rate-limiting during daytime full scans.
+  - **Fyers History Chunk Pacing in Overnight Discovery (`src/services/overnight/overnight.service.ts`)**: Applied `FYERS_BATCH_DELAY_MS` between chunked parallel fetches (`STOCK_DATA_PREFETCH_CHUNK = 8`) in `OvernightService.discover`'s stock-data prefetch loop, throttling per-symbol daily and 15m history bursts while leaving Yahoo 5m intraday prefetching unconstrained.
+  - **Quotes Batch Loop Index Cleanup (`src/services/market.service.ts`)**: Replaced O(n) `chunks.indexOf(chunk) < chunks.length - 1` with indexed loop counter `cIdx < chunks.length - 1` in `prefetchFyersQuotes`.
+
 ### Fixed & Hardened — 13 Nov: Yahoo Fallback Scan Pacing & Scanner Universe Default Consistency (PR #302)
 
 - **PR #302 — Yahoo Fallback Scan Pacing & Scanner Universe Default Consistency**:

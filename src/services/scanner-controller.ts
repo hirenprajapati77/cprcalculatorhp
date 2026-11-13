@@ -153,12 +153,13 @@ export class ScannerController {
     // getStockData skips N quote round-trips (history/15m still per-symbol).
     await MarketService.prefetchFyersQuotes(symbols, market);
 
-    // Parallel fetch with batching — shrink and pace when Fyers is rate-limited (Oracle 1GB VM).
+    // Parallel fetch with batching — shrink and pace when Fyers is rate-limited (Oracle 1GB VM),
+    // and throttle Fyers primary history calls to stay under the 5 req/s standard-plan ceiling.
     const isFyersCooldown = MarketService.isFyersTemporarilyUnavailable();
     const batchSize = isFyersCooldown ? 2 : 5;
-    const yahooBatchDelay = isFyersCooldown ? env.YAHOO_SCAN_BATCH_DELAY_MS : 0;
+    const batchDelay = isFyersCooldown ? env.YAHOO_SCAN_BATCH_DELAY_MS : env.FYERS_BATCH_DELAY_MS;
     if (isFyersCooldown) {
-      console.log(`[Scanner] Yahoo/Fyers-cooldown pacing: batchSize=${batchSize} delayMs=${yahooBatchDelay}`);
+      console.log(`[Scanner] Yahoo/Fyers-cooldown pacing: batchSize=${batchSize} delayMs=${batchDelay}`);
     }
     for (let i = 0; i < stocks.length; i += batchSize) {
       const batch = stocks.slice(i, i + batchSize);
@@ -209,8 +210,8 @@ export class ScannerController {
         if (r) rawResults.push(r);
       });
 
-      if (yahooBatchDelay > 0 && i + batchSize < stocks.length) {
-        await new Promise((resolve) => setTimeout(resolve, yahooBatchDelay));
+      if (batchDelay > 0 && i + batchSize < stocks.length) {
+        await new Promise((resolve) => setTimeout(resolve, batchDelay));
       }
     }
 
