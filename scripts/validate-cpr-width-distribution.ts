@@ -49,7 +49,6 @@ async function main() {
   let totalBars = 0;
   const fixed = zeroed();
   const atrAware = zeroed();
-  const skippedShortHistory = 0;
 
   for (const { symbol } of symbols) {
     const candles = await prisma.dailyOhlcv.findMany({
@@ -91,7 +90,7 @@ async function main() {
     }
   }
 
-  const pct = (n: number) => ((n / totalBars) * 100).toFixed(2);
+  const pct = (n: number) => (totalBars > 0 ? ((n / totalBars) * 100).toFixed(2) : '0.00');
 
   console.log('================ CPR WIDTH DISTRIBUTION SUMMARY ================');
   console.log(`Total Evaluated Daily Bars: ${totalBars.toLocaleString()}`);
@@ -108,7 +107,7 @@ async function main() {
   console.log('=================================================================\n');
 
   // Heuristic flag: if ATR-aware classifies > 90% as NARROW, thresholds may be too permissive
-  const narrowRatio = atrAware.narrow / totalBars;
+  const narrowRatio = totalBars > 0 ? atrAware.narrow / totalBars : 0;
   if (narrowRatio > 0.90) {
     console.warn(
       `⚠️  WARNING: ${(narrowRatio * 100).toFixed(1)}% of bars classified NARROW under ATR-aware thresholds. ` +
