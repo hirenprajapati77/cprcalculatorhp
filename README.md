@@ -63,6 +63,14 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (November 2026):**
+- **13 Nov — Volume Sourcing Alignment, Fyers 429 Protection, ETERNAL Ticker Restoration & UI Polish (PRs #301–#311)**:
+  - **Scanner UI Preset Exclusivity & Defaults (`#311`)**: Mutually exclusive filter presets, canonical `NIFTY_FNO` baseline reset for "Clear all" and "Default", generalized empty-state candidate copy, and stable toast reference outside context providers.
+  - **Canonical BTST API Default (`#310`)**: Aligned `GET /api/btst` default universe parameter to `NIFTY_FNO`, matching `/api/scanner` and `/api/scanner/refresh`.
+  - **Production Deploy Technical Gate & Governance (`#309`)**: Added `$env:CONFIRM_PROD_DEPLOY = 'true'` pre-flight enforcement in `ops/deploy.ps1`, formal decision record for SEBI ₹15L option lot size heuristic, and volume fallback memo updates.
+  - **Official NSE Ticker Restoration & Cron Guard (`#308`)**: Restored `ETERNAL` (Eternal Limited, renamed April 2025; lot size 2425) as active NSE/Fyers ticker; guarded 09:00 AM Fyers session check in `market-cron.scheduler.ts` against false-positive Telegram alarms on transient DB errors.
+  - **Session OHLCV Fallback Aggregation & Telemetry (`#301`, `#304`, `#305`)**: When Fyers rate-limits, `MarketService` aggregates live session extremes from 15m intraday bars; resolved session volume consistently via `resolveSessionVolume` across eligibility gates, Rule 1 VDU scoring, and VPA; added `sessionAggregated` telemetry and chunked 200 SMA caching.
+  - **Fyers History & Quotes Pacing (`#301`, `#302`, `#303`)**: Added inter-batch delays (`FYERS_BATCH_DELAY_MS = 250ms`, `YAHOO_SCAN_BATCH_DELAY_MS = 120ms`) to protect against the 5 req/s ceiling on Fyers Standard plan and prevent secondary Yahoo timeouts.
+
 - **11 Nov — 2-Month Deep Code Review Remediation, Index Underlying Routing & Scanner UX (`3af32595`, `106e2cc5`, PRs #295–#299)**:
   - **Toast Deduplication & Mobile Cap (`#299`)**: Deduplicated identical active messages in `ToastProvider` to eliminate double-toasting from concurrent `Navbar`/`TopBar` status checks, and added a 3-toast queue cap for mobile ergonomics.
   - **Scanner DB Persistence Ops Alert (`#299`)**: Wired ops Telegram alerting for bulk scanner DB persistence failures while safely preserving in-memory/cache fallback.

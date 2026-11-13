@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Documented & Hardened — 13 Nov: Regulatory Option Lot-Size Sizing (PR #287 Follow-up)
+### Fixed & Hardened — 13 Nov: Scanner UI Preset Exclusivity, Default F&O Reset, Empty-State Text & Toast Hygiene (PR #311)
 
-- **SEBI ₹15L Derivative Minimum Contract Sizing Heuristic (`src/lib/pnl.ts`)**:
-  - Documented that `Math.round(1_500_000 / strike)` in `resolveOptionLotSize` derives contract lot sizes for unmapped options based on SEBI's regulatory mandate increasing minimum derivative contract value from ₹5 Lakhs to ₹15–20 Lakhs. Added formal decision record in `docs/decisions/lot-size-heuristic-sebi-15l-2026-11-13.md`.
+- **PR #311 (`d6c3ac2b`) — Scanner Filter Presets, Clear-All Defaults, Empty-State Copy, and Toast Stability**:
+  - **Mutually Exclusive Presets (`src/components/scanner/ScannerClient.tsx`)**: Presets now reset base filter state (price, CPR width, sector, market cap, search) before applying specific preset criteria (`HIGH_CONVICTION`, `NARROW_CPR`, `TODAYS_BREAKOUTS`), preventing sequential preset selections from accumulating unintended filter constraints.
+  - **Canonical F&O Universe Reset (`src/components/scanner/ScannerClient.tsx`)**: `clearAllFilters()` and the "Default" preset now explicitly reset `universe` to `NIFTY_FNO` and `exchange` to `NSE`. Active-filter chips and the header pill correctly recognize `NIFTY_FNO` as default, displaying a filter chip whenever a non-default universe (e.g., `NIFTY50`, `NIFTY200`, `ALL`) is selected.
+  - **Generalized Empty-State Attribution (`src/components/scanner/ScannerClient.tsx`)**: Replaced overly specific empty-state copy with generalized message ("filtered out by eligibility, regime, or risk/timing criteria") that accurately reflects all reasons candidates might be excluded.
+  - **Toast Context Stability & Timer Hygiene (`src/components/ui/Toast.tsx`)**: Returns a stable static `NOOP_TOAST` reference when `useToast()` is called outside a `ToastProvider`, avoiding infinite re-renders or effect churn. Moved `setTimeout` scheduling cleanly outside the `setToasts` functional state updater.
+  - **CPR Width Validation Script Polish (`scripts/validate-cpr-width-distribution.ts`)**: Removed unused `skippedShortHistory` constant and added a guard against division by zero when calculating bar percentages.
+
+### Fixed & Hardened — 13 Nov: BTST API Canonical Default Universe Alignment (PR #310)
+
+- **PR #310 (`061a3793`) — Default `GET /api/btst` Universe to Canonical `NIFTY_FNO`**:
+  - **API Universe Consistency (`src/app/api/btst/route.ts`)**: Changed default universe fallback from `NIFTY50` to `NIFTY_FNO` (`searchParams.get('universe') || 'NIFTY_FNO'`), matching `GET /api/scanner` and `POST /api/scanner/refresh` (PR #302). Guarantees direct API callers query the complete F&O universe by default.
+  - **Unit Test (`src/tests/unit/yahoo-scan-pacing-universe-default.test.ts`)**: Added unit test asserting `GET /api/btst` defaults to `NIFTY_FNO` when invoked without a `universe` query parameter.
+
+### Governance & Hardening — 13 Nov: Production Deploy Technical Gate & Decision Records (PR #309)
+
+- **PR #309 (`bd65cbfb`) — Production Deploy Technical Gate, SEBI 15L Decision Record & Memo Updates**:
+  - **Technical Deploy Guard (`ops/deploy.ps1`)**: Added strict environment pre-flight check requiring `$env:CONFIRM_PROD_DEPLOY = 'true'` before initiating production deployments, preventing accidental or unauthorized automated executions.
+  - **SEBI ₹15L Derivative Minimum Contract Sizing Heuristic (`src/lib/pnl.ts`)**: Documented that `Math.round(1_500_000 / strike)` in `resolveOptionLotSize` derives contract lot sizes for unmapped options based on SEBI's regulatory mandate increasing minimum derivative contract value from ₹5 Lakhs to ₹15–20 Lakhs. Added formal decision record in `docs/decisions/lot-size-heuristic-sebi-15l-2026-11-13.md`.
+  - **Decision Memo Alignment (`docs/decisions/volume-sourcing-fallback-2026-11-13.md`)**: Updated decision memo to "Pending Owner Review / Sign-Off", refined 429 evidence to "59 rate-limit events in rotated log `cpr-platform-error.log.1`", and updated build IDs.
 
 ### Fixed & Hardened — 13 Nov: Official NSE ETERNAL Ticker Restoration, 9:00 AM Fyers Check Guard (PR #308)
 
