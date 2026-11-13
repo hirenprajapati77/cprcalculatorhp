@@ -26,6 +26,10 @@ export interface HistoricalCandle {
 
 export const DAILY_CANDLES_CACHE_TTL_SEC = 8 * 3600; // 8 hours (28,800s)
 
+export const SMA200_CHUNK_SIZE = 8;
+export const SMA200_CHUNK_DELAY_MS = 120;
+export const SMA200_FAILURE_WARN_THRESHOLD = 0.2; // 20% failure rate threshold
+
 export interface DailyHistoryBundle {
   history: HistoricalCandle[];
   sma20Slope: number;
@@ -61,6 +65,7 @@ export interface MarketStockData {
   sma20Slope?: number;
   sma50Slope?: number;
   sma200?: number;
+  sessionAggregated?: boolean;
 }
 
 export interface LiveStatus {
@@ -800,7 +805,7 @@ export class MarketService {
       const avgVolume =
         volumeBase.length > 0
           ? volumeBase.reduce((a, c) => a + c.volume, 0) / volumeBase.length
-          : last.volume;
+          : 0;
 
       return {
         history: slicedHistory,
@@ -908,7 +913,7 @@ export class MarketService {
         : volumeEntries.map(e => e.v);
       const avgVolume = validVolumes.length > 0
         ? validVolumes.reduce((a, b) => a + b, 0) / validVolumes.length
-        : (prevVolume > 0 ? prevVolume : 1);
+        : 0;
 
       const regularMarketPrice =
         typeof meta?.regularMarketPrice === 'number' && Number.isFinite(meta.regularMarketPrice)
@@ -1414,6 +1419,14 @@ export class MarketService {
           // Fallback handled by initial vwap/ltp assignment
         }
 
+        if (!hasAggregatedIntraday) {
+          if (this.shouldLogProviderError(`yahoo-15m-aggregation-skipped:${ticker}`)) {
+            console.warn(
+              `[LiveFeed] Yahoo 15m session aggregation skipped for ${ticker}: using daily candle snapshot (sessionAggregated=false)`
+            );
+          }
+        }
+
         const resultData: MarketStockData = {
           symbol: cleanSymbol,
           market,
@@ -1432,6 +1445,7 @@ export class MarketService {
           candle15m,
           sma20Slope,
           sma50Slope,
+          sessionAggregated: hasAggregatedIntraday,
         };
         if (sma200 !== undefined) {
           resultData.sma200 = sma200;
@@ -1675,7 +1689,7 @@ export class MarketService {
         ? qv.prev_close_price
         : bundle.previousClose;
 
-      const avgVolume = bundle.avgVolume > 0 ? bundle.avgVolume : volume;
+      const avgVolume = bundle.avgVolume > 0 ? bundle.avgVolume : 0;
 
       const typical = (high + low + close) / 3;
       let vwap = MarketService.isPositivePrice(qv.atp) ? qv.atp : typical;
@@ -1861,46 +1875,69 @@ export class MarketService {
     let successCount = 0;
     let failedCount = 0;
 
-    for (const sym of symbols) {
-      try {
-        const ticker = `${sym}.NS`;
-        const res = await this.fetchWithTimeout(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`,
-          {
-            cache: 'no-store',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-              'Accept': 'application/json',
+    for (let i = 0; i < symbols.length; i += SMA200_CHUNK_SIZE) {
+      const chunk = symbols.slice(i, i + SMA200_CHUNK_SIZE);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(async (sym) => {
+          const ticker = `${sym}.NS`;
+          const res = await this.fetchWithTimeout(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`,
+            {
+              cache: 'no-store',
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json',
+              },
             },
-          },
-          env.YAHOO_REQUEST_TIMEOUT_MS
-        );
+            env.YAHOO_REQUEST_TIMEOUT_MS
+          );
 
-        if (!res.ok) {
-          throw new Error(`Yahoo Finance HTTP ${res.status}`);
-        }
+          if (!res.ok) {
+            throw new Error(`Yahoo Finance HTTP ${res.status}`);
+          }
 
-        const json = await res.json();
-        const quote = json?.chart?.result?.[0]?.indicators?.quote?.[0];
+          const json = await res.json();
+          const quote = json?.chart?.result?.[0]?.indicators?.quote?.[0];
 
-        if (!quote || !quote.close || !Array.isArray(quote.close)) {
-          throw new Error(`Invalid quote data`);
-        }
+          if (!quote || !quote.close || !Array.isArray(quote.close)) {
+            throw new Error(`Invalid quote data`);
+          }
 
-        const validCloses = quote.close.filter((c: number | null): c is number => c !== null && !isNaN(c));
-        
-        if (validCloses.length >= 200) {
-          const last200 = validCloses.slice(-200);
-          const sma200 = last200.reduce((sum: number, val: number) => sum + val, 0) / 200;
-          await CacheService.set(`sma200:${sym}`, sma200, 24 * 60 * 60); // 24h TTL
+          const validCloses = quote.close.filter((c: number | null): c is number => c !== null && !isNaN(c));
+          
+          if (validCloses.length >= 200) {
+            const last200 = validCloses.slice(-200);
+            const sma200 = last200.reduce((sum: number, val: number) => sum + val, 0) / 200;
+            await CacheService.set(`sma200:${sym}`, sma200, 24 * 60 * 60); // 24h TTL
+            return true;
+          }
+          throw new Error(`Insufficient history (${validCloses.length} < 200 bars)`);
+        })
+      );
+
+      for (let j = 0; j < chunkResults.length; j++) {
+        const result = chunkResults[j];
+        if (result.status === 'fulfilled') {
           successCount++;
         } else {
+          console.warn(
+            `[MarketService] 200 SMA caching failed for ${chunk[j]}:`,
+            result.reason instanceof Error ? result.reason.message : String(result.reason)
+          );
           failedCount++;
         }
-      } catch (err) {
-        console.warn(`[MarketService] 200 SMA caching failed for ${sym}:`, err instanceof Error ? err.message : String(err));
-        failedCount++;
       }
+
+      if (i + SMA200_CHUNK_SIZE < symbols.length && SMA200_CHUNK_DELAY_MS > 0) {
+        await new Promise((resolve) => setTimeout(resolve, SMA200_CHUNK_DELAY_MS));
+      }
+    }
+
+    const total = symbols.length;
+    if (total > 0 && failedCount / total >= SMA200_FAILURE_WARN_THRESHOLD) {
+      console.warn(
+        `[MarketService] 200 SMA high failure rate: ${failedCount}/${total} failed (${((failedCount / total) * 100).toFixed(1)}% >= ${(SMA200_FAILURE_WARN_THRESHOLD * 100).toFixed(0)}% threshold)`
+      );
     }
 
     return { success: successCount, failed: failedCount };

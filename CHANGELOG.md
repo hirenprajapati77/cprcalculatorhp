@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 13 Nov: Telemetry for Session Aggregation, 200 SMA Chunking, and avgVolume Alignment (PR #305)
+
+- **PR #305 — Telemetry for Session Aggregation, 200 SMA Chunking, and avgVolume Alignment**:
+  - **Session Aggregation Telemetry (Task A3, `src/services/market.service.ts`)**: Added optional `sessionAggregated?: boolean` to `MarketStockData`. Set to `true` when live 15m intraday bars are successfully aggregated into session OHLCV on Yahoo fallback, and `false` when aggregation fails or is skipped. Emits a throttled warning via `shouldLogProviderError` and documents operational remediation in `docs/MT01_FALLBACK_RUNBOOK.md`.
+  - **200 SMA Loop Chunking & Pacing (Task B4, `src/services/market.service.ts`)**: Refactored `MarketService.cache200SMA` from an unpaced sequential loop into chunked batches (`SMA200_CHUNK_SIZE = 8`) with an inter-chunk delay (`SMA200_CHUNK_DELAY_MS = 120ms`). Emits a high-failure-rate warning when failure rate exceeds `SMA200_FAILURE_WARN_THRESHOLD = 0.2` (20%), preventing silent 429 cache dropouts.
+  - **Provider avgVolume Fallback Consistency (Task B5, `src/services/market.service.ts`)**: Aligned degenerate empty/non-positive volume history fallback across Fyers and Yahoo paths to consistently resolve to `0`.
+  - **Unit Tests (`src/tests/unit/market.test.ts`, `src/tests/unit/sma200-cache.test.ts`)**: Added tests asserting `sessionAggregated` flags on 15m success/failure, degenerate `avgVolume` resolution parity, 200 SMA batch chunking, and high-failure-rate alerting.
+
 ### Fixed & Hardened — 13 Nov: Volume Sourcing Alignment across Gate, VDU Score, and VPA (PR #304)
 
 - **PR #304 — Volume Sourcing Alignment across Gate, VDU Score, and VPA**:

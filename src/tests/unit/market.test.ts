@@ -343,6 +343,7 @@ test('Market Service - 200 SMA Plumbing', async (t) => {
       assert.ok(data);
       assert.strictEqual(data!.ltp, 123);
       assert.strictEqual(data!.candle15m?.close, 123);
+      assert.strictEqual(data!.sessionAggregated, true, 'sessionAggregated should be true when 15m succeeds');
       assert.ok(fyersTokenCalls >= 1, 'Fyers should be attempted first');
     } finally {
       MarketService.clearFyersPermissionBlock();
@@ -694,6 +695,136 @@ test('MarketService Fyers quote batch prefetch', async (t) => {
       (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
       CacheService.get = originalCacheGet;
       CacheService.set = originalCacheSet;
+    }
+  });
+
+  await t.test('Task A3: sessionAggregated is false when 15m intraday fails on Yahoo fallback', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+    FyersAuthService.getAccessToken = async () => 'fyers_test_token';
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
+
+    const t1 = Date.UTC(2026, 6, 20) / 1000;
+    const t2 = Date.UTC(2026, 6, 21) / 1000;
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('api-t1.fyers.in')) {
+        return new Response(JSON.stringify({ s: 'error', code: 403, message: 'Permission denied' }), { status: 403 });
+      }
+      if (url.includes('interval=1d')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              meta: { regularMarketPrice: 123 },
+              timestamp: [t1, t2],
+              indicators: {
+                quote: [{
+                  open: [100, 110],
+                  high: [105, 125],
+                  low: [95, 108],
+                  close: [102, 120],
+                  volume: [1000, 2000],
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      if (url.includes('interval=15m')) {
+        // Simulate 15m request failure (429 or 500)
+        return new Response('rate limited', { status: 429 });
+      }
+      return new Response('unexpected', { status: 500 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('LTM', 'NSE');
+      assert.ok(data);
+      assert.strictEqual(data!.sessionAggregated, false, 'sessionAggregated must be false when 15m fails');
+      assert.strictEqual(data!.open, 110, 'falls back to daily open');
+      assert.strictEqual(data!.close, 120, 'falls back to daily close');
+    } finally {
+      MarketService.clearFyersPermissionBlock();
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
+    }
+  });
+
+  await t.test('Task B5: degenerate avgVolume produces 0 consistently across Fyers and Yahoo fallback paths', async () => {
+    const originalMode = env.MARKET_DATA_MODE;
+    const originalFetch = global.fetch;
+    const originalCacheGet = CacheService.get;
+    const originalCacheSet = CacheService.set;
+    const originalGetAccessToken = FyersAuthService.getAccessToken;
+    const originalGetCredentials = FyersAuthService.getCredentials;
+
+    (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = 'live';
+    CacheService.get = async () => null;
+    CacheService.set = async () => {};
+    FyersAuthService.getAccessToken = async () => 'fyers_test_token';
+    FyersAuthService.getCredentials = () => ({
+      appId: 'TESTAPP-100',
+      secretId: 'x',
+      redirectUrl: 'http://localhost',
+    });
+
+    const t1 = Date.UTC(2026, 6, 20) / 1000;
+    // Mock Yahoo daily with empty volume entries -> avgVolume should be 0
+    global.fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = input.toString();
+      if (url.includes('api-t1.fyers.in')) {
+        return new Response(JSON.stringify({ s: 'error', code: 403 }), { status: 403 });
+      }
+      if (url.includes('interval=1d')) {
+        return new Response(JSON.stringify({
+          chart: {
+            result: [{
+              meta: { regularMarketPrice: 100 },
+              timestamp: [t1],
+              indicators: {
+                quote: [{
+                  open: [100],
+                  high: [105],
+                  low: [95],
+                  close: [100],
+                  volume: [null], // null volume -> validVolumes length 0
+                }],
+              },
+            }],
+          },
+        }));
+      }
+      return new Response('not found', { status: 404 });
+    };
+
+    try {
+      const data = await MarketService.getStockData('TEST', 'NSE');
+      assert.ok(data);
+      assert.strictEqual(data!.avgVolume, 0, 'degenerate empty volume series should resolve avgVolume = 0');
+    } finally {
+      MarketService.clearFyersPermissionBlock();
+      (env as { MARKET_DATA_MODE: string }).MARKET_DATA_MODE = originalMode;
+      global.fetch = originalFetch;
+      CacheService.get = originalCacheGet;
+      CacheService.set = originalCacheSet;
+      FyersAuthService.getAccessToken = originalGetAccessToken;
+      FyersAuthService.getCredentials = originalGetCredentials;
     }
   });
 });
