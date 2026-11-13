@@ -234,7 +234,7 @@ const BtstEmptyState = ({
       </h3>
       <p className="text-[10px] text-accent-blue mt-1.5 max-w-[340px]">
         {hasZeroSignalsAttribution
-          ? `All ${overnightMetrics.universeSize} candidates were suppressed by volume (${overnightMetrics.droppedEligibility}), regime (${overnightMetrics.droppedRegime}), or risk filters.`
+          ? `All ${overnightMetrics.universeSize} candidates were filtered out by eligibility, regime, or risk/timing criteria.`
           : emptyMessage}
       </p>
       {hasZeroSignalsAttribution && (
@@ -1341,25 +1341,37 @@ export default function ScannerClient() {
 
   const applyPreset = useCallback((presetKey: string) => {
     setActivePreset(presetKey);
+    // Baseline reset so presets are mutually exclusive rather than cumulative
+    setMinPrice('20');
+    setMaxPrice('');
+    setMinWidth('');
+    setMaxWidth('');
+    setSelectedSector('ALL');
+    setMarketCapCategory('ALL');
+    setSearchQuery('');
+    setPage(1);
+
     if (presetKey === 'default') {
       setMinScore('');
       setMaxScore('');
-      setMinPrice('20');
-      setMaxPrice('');
-      setMinWidth('');
-      setMaxWidth('');
       setMode('ALL');
       setShowWatchlistOnly(false);
-      setSelectedSector('ALL');
-      setMarketCapCategory('ALL');
-      setSearchQuery('');
+      setUniverse('NIFTY_FNO');
+      setMarket('NSE');
     } else if (presetKey === 'high-conviction') {
       setMinScore('75');
+      setMaxScore('');
+      setMode('ALL');
       setShowWatchlistOnly(false);
     } else if (presetKey === 'narrow-cpr') {
+      setMinScore('');
+      setMaxScore('');
       setMode('NARROW');
       setShowWatchlistOnly(false);
     } else if (presetKey === 'watchlist') {
+      setMinScore('');
+      setMaxScore('');
+      setMode('ALL');
       setShowWatchlistOnly(true);
     }
   }, []);
@@ -1377,12 +1389,14 @@ export default function ScannerClient() {
     setSelectedSector('ALL');
     setMarketCapCategory('ALL');
     setSearchQuery('');
+    setUniverse('NIFTY_FNO');
+    setMarket('NSE');
     setPage(1);
   }, []);
 
   const activeFilters = useMemo(() => {
     const list: Array<{ id: string; label: string; value: string; onRemove: () => void }> = [];
-    if (universe !== 'NIFTY50' && universe !== 'NIFTY_FNO') {
+    if (universe !== 'NIFTY_FNO') {
       list.push({ id: 'universe', label: 'Universe', value: universe, onRemove: () => setUniverse('NIFTY_FNO') });
     }
     if (market !== 'NSE') {
@@ -3145,7 +3159,7 @@ export default function ScannerClient() {
               </span>
               <div className="flex items-center gap-2">
                 {/* Quick active filter pills */}
-                {universe !== 'NIFTY50' && <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-accent-amber/10 text-accent-amber text-[8px] border border-accent-amber/20">{universe}</span>}
+                {universe !== 'NIFTY_FNO' && <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-accent-amber/10 text-accent-amber text-[8px] border border-accent-amber/20">{universe}</span>}
                 {selectedSector !== 'ALL' && <span className="hidden sm:inline px-1.5 py-0.5 rounded bg-accent-purple/10 text-accent-purple text-[8px] border border-accent-purple/20">{selectedSector}</span>}
                 <ChevronRight
                   size={13}
