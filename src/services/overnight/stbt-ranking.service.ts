@@ -1,4 +1,5 @@
 import { VOLUME_THRESHOLDS, ADVANCED_SCORE } from '@/config/trading-constants';
+import { resolveSessionVolume } from '@/lib/session-volume';
 import type { AdvancedScoreBreakdown } from './btst-ranking.service';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled } from '@/config/vpa.config';
@@ -58,10 +59,16 @@ export class StbtRankingService {
     };
     const range = inputs.high - inputs.low;
 
+    const sessionVolume = resolveSessionVolume(
+      inputs.volume,
+      inputs.intradayVolume,
+      inputs.hasConfirmationCandles
+    );
+
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
     // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×
     // separates strong volume days within the eligible universe (Option B).
-    if (inputs.avgVolume > 0 && inputs.volume >= VOLUME_THRESHOLDS.SPIKE_RATIO * inputs.avgVolume) {
+    if (inputs.avgVolume > 0 && sessionVolume >= VOLUME_THRESHOLDS.SPIKE_RATIO * inputs.avgVolume) {
       breakdown.vdu = 25;
     }
 
@@ -129,7 +136,7 @@ export class StbtRankingService {
           high: inputs.high,
           low: inputs.low,
           close: inputs.close,
-          volume: inputs.volume,
+          volume: sessionVolume,
           avgVolume: inputs.avgVolume,
         },
         { bc: inputs.todayBc, tc: inputs.todayTc }

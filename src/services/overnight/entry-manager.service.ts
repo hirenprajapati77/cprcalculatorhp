@@ -2,6 +2,7 @@ import { getAtrPct } from '@/lib/atr';
 import { getCompletedHistory, getISTDateString } from '@/lib/market-hours';
 import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import { MarketStockData } from '../market.service';
+import { resolveSessionVolume } from '@/lib/session-volume';
 import { evaluateBtstScannerConflict } from '@/lib/cpr-breakout-conflict';
 
 export interface ExclusionCheckResult {
@@ -46,9 +47,7 @@ export class EntryManagerService {
 
     // In overnight scans, prefer intradayVolume if available and greater than stock.volume
     // (e.g. when stock.volume is frozen at morning partial volume), else stock.volume.
-    const volume = (hasIntraday && typeof intradayVolume === 'number' && intradayVolume > (stock.volume || 0))
-      ? intradayVolume
-      : (stock.volume || 0);
+    const volume = resolveSessionVolume(stock.volume, intradayVolume, hasIntraday);
     const avgVolume = stock.avgVolume || 0;
     const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
 
