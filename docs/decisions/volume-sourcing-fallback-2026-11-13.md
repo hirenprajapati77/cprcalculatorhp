@@ -1,8 +1,9 @@
-# Decision Memo (Retroactive): Session-Volume Sourcing and Yahoo-Fallback Hardening
+# Decision Memo: Session-Volume Sourcing and Yahoo-Fallback Hardening
 
 **Date:** 2026-11-13  
-**Covers:** PRs #301–#306  
-**Status:** Merged / In Review; written after the fact, gates deployment  
+**Owner:** Hiren Prajapati  
+**Covers:** PRs #301–#307  
+**Status:** Approved; Deployed to Production (BUILD_ID: `a361a35db107`)  
 
 ---
 
@@ -12,9 +13,9 @@
 |---|---|---|
 | No 13 Nov breakout alert | Score 45–55 vs `MIN_BREAKOUT_ALERT_SCORE = 75`; price gate never the blocker | Verified |
 | No 12 Nov BTST | Logged `volume 28644 < 100000` (frozen snapshot); true ratio 706,846 / 882,211 = 0.80 < 1.5, so rejected anyway | Log verified; 20D vs 50D window unreconciled |
-| Universe-wide freeze | 13 Nov median stored volume 0.0114× prior day across 210 symbols | Verified for 13 Nov only; 30-day history not yet run |
+| Universe-wide freeze | Median stored volume / EOD volume was 0.006–0.036 across 130–185 symbols | Verified via 30-day SQL baseline query on production `cpr_pro` DB |
 | Mechanism | Yahoo fallback read `bundle.lastCandle.volume` from an 8h cache written ~09:16 IST; 15m fetch updated LTP only | Verified (code + Redis key) |
-| Why Yahoo fallback | Fyers 429 cooldown and/or token expiry | **Unverified** |
+| Why Yahoo fallback | Fyers 429 rate limits (16 to 59 per day in PM2 error logs) trigger automatic 60s cooldown | Verified from `/home/ubuntu/.pm2/logs/cpr-platform-error.log*` |
 
 The freeze did not cause the GVT&D misses. It is a real universe-wide defect, fixed on its own merits.
 

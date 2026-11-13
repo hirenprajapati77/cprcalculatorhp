@@ -270,16 +270,24 @@ export function startMarketCronScheduler(): void {
         await runClaimedJob(
           `fyers-session-check:${dateKey}`,
           async () => {
-            const { FyersAuthService } = await import('@/services/fyers-auth.service');
-            const token = await FyersAuthService.getAccessToken();
-            if (!token) {
-              const { TelegramService } = await import('@/services/alert/telegram.service');
-              const msg =
-                `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
-                `The daily Fyers broker token has expired.\n` +
-                `Please visit <a href="https://129-159-230-41.nip.io/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
-              await TelegramService.sendMessage(msg);
-              console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
+            try {
+              const { prisma } = await import('@/lib/db');
+              const tokenRecord = await prisma.brokerToken.findUnique({
+                where: { broker: 'fyers' },
+              });
+              const isExpired = !tokenRecord || tokenRecord.expiresAt <= new Date();
+              if (isExpired) {
+                const { TelegramService } = await import('@/services/alert/telegram.service');
+                const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
+                const msg =
+                  `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
+                  `The daily Fyers broker token has expired.\n` +
+                  `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+                await TelegramService.sendMessage(msg);
+                console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
+              }
+            } catch (dbErr) {
+              console.error('[MarketCronScheduler] Skipped Fyers session check due to database error:', dbErr);
             }
           },
           'fyers-session-check'

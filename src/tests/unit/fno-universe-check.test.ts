@@ -178,11 +178,11 @@ NON FNO STOCK,NONFNO`);
     }
   });
 
-  await t.test('canary: MarketService static universe includes YESBANK, ZOMATO, NYKAA, POLICYBZR with isFnO: true', () => {
+  await t.test('canary: MarketService static universe includes YESBANK, ETERNAL, NYKAA, POLICYBZR with isFnO: true', () => {
     MarketService.clearDynamicFnoSymbols();
     const rawUniverse = MarketService.getRawUniverse();
 
-    const canarySymbols = ['YESBANK', 'ZOMATO', 'NYKAA', 'POLICYBZR', 'DELHIVERY', 'PAYTM'];
+    const canarySymbols = ['YESBANK', 'ETERNAL', 'NYKAA', 'POLICYBZR', 'DELHIVERY', 'PAYTM'];
     for (const sym of canarySymbols) {
       const stock = rawUniverse.find(s => s.symbol.trim() === sym);
       assert.ok(stock, `Stock ${sym} must be present in MarketService.getRawUniverse()`);
