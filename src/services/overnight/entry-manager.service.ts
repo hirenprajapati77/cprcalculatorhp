@@ -44,7 +44,11 @@ export class EntryManagerService {
       return { eligible: false, reason: 'Insufficient market data' };
     }
 
-    const volume = stock.volume || 0;
+    // In overnight scans, prefer intradayVolume if available and greater than stock.volume
+    // (e.g. when stock.volume is frozen at morning partial volume), else stock.volume.
+    const volume = (hasIntraday && typeof intradayVolume === 'number' && intradayVolume > (stock.volume || 0))
+      ? intradayVolume
+      : (stock.volume || 0);
     const avgVolume = stock.avgVolume || 0;
     const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
 

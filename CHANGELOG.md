@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 13 Nov: Live 15m Session OHLCV Aggregation, Fyers Batch Pacing & Overnight Volume Sourcing (PR #301)
+
+- **PR #301 — Live Session OHLCV Aggregation, Fyers 429 Prevention & Eligibility Volume Alignment**:
+  - **Live Session OHLCV Enrichment under Yahoo Fallback (`src/services/market.service.ts`)**: When Fyers rate-limits or disconnects, `MarketService.getStockData` now aggregates live session extremes directly from the 15-minute intraday bars (`interval=15m&range=1d`) and quote metadata. `high`, `low`, `open`, and `volume` no longer stay frozen at the 09:16 AM snapshot.
+  - **Fyers Quotes Batch Rate-Limit Protection (`src/services/market.service.ts`, `src/config/env.ts`)**: Added `FYERS_BATCH_DELAY_MS` (default `250ms`) between chunked quote batches in `prefetchFyersQuotes`, ensuring universe-wide requests respect the Standard plan's 5 req/s ceiling and preventing self-induced HTTP 429 cooldowns.
+  - **Overnight Eligibility Gate Volume Sourcing (`src/services/overnight/entry-manager.service.ts`)**: Updated `EntryManagerService.evaluateEligibility` to prefer `intradayVolume` when it reflects greater activity than `stock.volume`, preventing stocks from failing the 100k absolute volume filter or the 1.5x breakout ratio gate due to frozen morning snapshots.
+
 ### Added & Hardened — 11 Nov: 2-Month Deep Code Review Remediation, Index Routing Fix & UI Polish (PRs #295–#299)
 
 - **PR #299 (`3af32595`) — 2-Month Deep Code Review Remediation across All Domains**:
