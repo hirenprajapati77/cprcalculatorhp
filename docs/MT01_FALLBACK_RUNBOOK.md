@@ -101,3 +101,34 @@ If the latest `createdAt` is more than 1 trading day old, the ingestion job may 
 - The fallback is **defensive only** — it prevents blank UI tabs during initial setup or data gaps. It is **not** intended for steady-state production operation.
 - With full production data loaded, the filter matches correctly and the fallback never activates.
 - If you see the warning log repeatedly in steady state, treat it as a data-ingestion or symbol-mapping issue, not a code bug.
+
+---
+
+# Yahoo 15m Session Aggregation Fallback — Runbook (Task A3 / PR #305)
+
+**Domain**: Market Data · Live Feed · `src/services/market.service.ts`  
+**Effective**: 2026-11-13  
+**Related**: PR #301, PR #305
+
+## Purpose
+
+When Fyers is temporarily unavailable or in 429 cooldown, `MarketService.getStockData` falls back to Yahoo Finance. To avoid freezing intraday OHLCV at the 09:16 daily candle snapshot (the defect addressed in PR #301), Yahoo 15m intraday bars are aggregated into live session `open/high/low/close/volume`.
+
+If the Yahoo 15m request itself fails (e.g. Yahoo 429, timeout, or missing intraday series), the system falls back to the daily candle snapshot (`sessionAggregated = false`).
+
+## Telemetry & Logging
+
+When 15m aggregation fails, `MarketService` tags the returned `MarketStockData`:
+```ts
+resultData.sessionAggregated = false;
+```
+and logs a throttled warning via `shouldLogProviderError`:
+```
+[LiveFeed] Yahoo 15m session aggregation skipped for <TICKER>: using daily candle snapshot (sessionAggregated=false)
+```
+
+## Remediation & Operational Response
+
+1. Check if Fyers token or connectivity has restored (`/api/health` or `/api/broker/fyers/status`). Once Fyers is back, traffic immediately reverts to the primary provider.
+2. If Yahoo throttling is persistent, inspect Yahoo 429 rates and confirm `YAHOO_SCAN_BATCH_DELAY_MS` (120ms) and `YAHOO_REQUEST_TIMEOUT_MS` (12s) are effective.
+
