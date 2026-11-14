@@ -3,6 +3,7 @@ import { resolveSessionVolume } from '@/lib/session-volume';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled } from '@/config/vpa.config';
 import type { VpaConfirmationResult } from '@/services/vpa';
+import { VolumeShadowMonitorService } from '../monitor/volume-shadow-monitor.service';
 
 export interface BtstScoringInputs {
   volume: number;
@@ -24,6 +25,7 @@ export interface BtstScoringInputs {
   hasConfirmationCandles: boolean;
   rsi14: number | null | undefined;
   emaCross: { cross: 'BULLISH' | 'BEARISH' | 'NONE'; isBullishAlignment: boolean } | null | undefined;
+  symbol?: string;
 }
 
 /** Per-rule points for Advanced BTST (max 130) — keys match Scanner explainability UI. */
@@ -78,6 +80,21 @@ export class BtstRankingService {
       inputs.intradayVolume,
       inputs.hasConfirmationCandles
     );
+
+    try {
+      VolumeShadowMonitorService.recordBtstVolumeShadow(
+        inputs.symbol || 'UNKNOWN',
+        inputs.volume,
+        inputs.intradayVolume || 0,
+        sessionVolume,
+        inputs.avgVolume,
+        undefined,
+        'BTST'
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      VolumeShadowMonitorService.warnOnce('btst-volume-record-err', `Failed to record BTST volume shadow: ${msg}`);
+    }
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
     // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×

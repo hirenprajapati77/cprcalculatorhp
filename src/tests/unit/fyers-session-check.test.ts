@@ -1,0 +1,123 @@
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { checkFyersSession } from '@/services/scheduler/market-cron.scheduler';
+import { prisma } from '@/lib/db';
+import { encrypt } from '@/lib/crypto';
+import { env } from '@/config/env';
+import { TelegramService } from '@/services/alert/telegram.service';
+
+describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
+  let origFindUnique: any;
+  let origSendMessage: any;
+  let origKey: any;
+  let sentMessages: string[] = [];
+
+  beforeEach(() => {
+    origFindUnique = prisma.brokerToken.findUnique;
+    origSendMessage = TelegramService.sendMessage;
+    origKey = (env as any).TOKEN_ENCRYPTION_KEY;
+    (env as any).TOKEN_ENCRYPTION_KEY = 'test-token-encryption-key-secret';
+    process.env.TOKEN_ENCRYPTION_KEY = 'test-token-encryption-key-secret';
+    sentMessages = [];
+
+    TelegramService.sendMessage = async (msg: string) => {
+      sentMessages.push(msg);
+      return { ok: true };
+    };
+  });
+
+  afterEach(() => {
+    prisma.brokerToken.findUnique = origFindUnique;
+    TelegramService.sendMessage = origSendMessage;
+    (env as any).TOKEN_ENCRYPTION_KEY = origKey;
+    process.env.TOKEN_ENCRYPTION_KEY = origKey;
+  });
+
+  it('1. valid token + decrypt success: returns VALID and sends no alert', async () => {
+    const future = new Date(Date.now() + 3600_000);
+    const validCiphertext = encrypt('valid_fyers_access_token_123');
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: validCiphertext,
+      expiresAt: future,
+    })) as any;
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'VALID');
+    assert.equal(res.alertSent, false);
+    assert.equal(sentMessages.length, 0);
+  });
+
+  it('2. expired token: returns EXPIRED and sends session expired alert', async () => {
+    const past = new Date(Date.now() - 3600_000);
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: 'encrypted_expired_token',
+      expiresAt: past,
+    })) as any;
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'EXPIRED');
+    assert.equal(res.alertSent, true);
+    assert.equal(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes('FYERS SESSION EXPIRED'));
+  });
+
+  it('3. missing record: returns MISSING and sends session expired alert', async () => {
+    prisma.brokerToken.findUnique = (async () => null) as any;
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'MISSING');
+    assert.equal(res.alertSent, true);
+    assert.equal(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes('FYERS SESSION EXPIRED'));
+  });
+
+  it('4. decrypt failure: returns DECRYPT_FAILED and sends invalid session alert', async () => {
+    const future = new Date(Date.now() + 3600_000);
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: 'corrupted_token_not_valid_hex',
+      expiresAt: future,
+    })) as any;
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'DECRYPT_FAILED');
+    assert.equal(res.alertSent, true);
+    assert.equal(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes('FYERS SESSION INVALID'));
+    assert.ok(sentMessages[0].includes('could not be decrypted'));
+  });
+
+  it('5. database error: returns DB_ERROR and sends distinct sanitised warning alert', async () => {
+    prisma.brokerToken.findUnique = (async () => {
+      throw new Error('Connection pool exhausted: sensitive_host_user_string');
+    }) as any;
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'DB_ERROR');
+    assert.equal(res.alertSent, true);
+    assert.equal(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes('FYERS SESSION CHECK ERROR'));
+    assert.ok(sentMessages[0].includes('internal system error'));
+    assert.equal(sentMessages[0].includes('Connection pool exhausted'), false, 'DB error message must not be leaked');
+    assert.equal(sentMessages[0].includes('sensitive_host_user_string'), false, 'DB details must not be leaked');
+  });
+
+  it('6. telegram send failure does not corrupt status into DB_ERROR', async () => {
+    const past = new Date(Date.now() - 3600_000);
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: 'encrypted_expired_token',
+      expiresAt: past,
+    })) as any;
+
+    TelegramService.sendMessage = async () => {
+      throw new Error('Telegram network gateway timeout');
+    };
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'EXPIRED', 'Status must remain EXPIRED even if Telegram fails');
+    assert.equal(res.alertSent, false);
+  });
+});
