@@ -1,8 +1,9 @@
 # Decision Memo: Session-Volume Sourcing and Yahoo-Fallback Hardening
 
 **Date:** 2026-11-13  
-**Covers:** PRs #301–#308  
-**Status:** Pending Owner Review / Sign-Off; Live on Production (BUILD_ID: `70c93adedaa7`)  
+**Covers:** PRs #301–#306 (+#307 memo); #308 is a separate correctness change  
+**Status:** Deployed before sign-off; pending owner review. Current live build: `df5ef053169b` (Commit `df5ef053`, PR #313; previously `70c93adedaa7`, PR #308).  
+**Governance Note:** The policy requirement ("memo before deploy") was not met prior to deploying the current live build.
 
 ---
 
@@ -12,9 +13,40 @@
 |---|---|---|
 | No 13 Nov breakout alert | Score 45–55 vs `MIN_BREAKOUT_ALERT_SCORE = 75`; price gate never the blocker | Verified |
 | No 12 Nov BTST | Logged `volume 28644 < 100000` (frozen snapshot); true ratio 706,846 / 882,211 = 0.80 < 1.5, so rejected anyway | Log verified; 20D vs 50D window unreconciled |
-| Universe-wide freeze | Median stored volume / EOD volume was 0.006–0.036 across 130–185 symbols | Verified via 30-day SQL baseline query on production `cpr_pro` DB |
+| Universe-wide freeze | Median stored volume / EOD volume was 0.0098–0.0360 across 209–224 symbols (23 Oct–12 Nov); 0.9755 on 13 Nov | Verified via production SQL baseline query on `cpr_pro` DB |
 | Mechanism | Yahoo fallback read `bundle.lastCandle.volume` from an 8h cache written ~09:16 IST; 15m fetch updated LTP only | Verified (code + Redis key) |
-| Why Yahoo fallback | Fyers 429 rate limits (59 events recorded in rotated log `cpr-platform-error.log.1`) trigger automatic 60s cooldown | Verified from `/home/ubuntu/.pm2/logs/cpr-platform-error.log*` |
+| Why Yahoo fallback | Cause unconfirmed. Volume was frozen on all 15 recorded sessions (23 Oct–12 Nov), including sessions with no logged rate-limit events. Likely contributors: Fyers primary unavailable (token absent or expired) and 429 cooldowns on 12–13 Nov (27 and 59 logged events in compressed logs; date ranges to be confirmed). | Production log & DB check: `BrokerToken` table holds 0 rows; compressed error logs show 59 events in `cpr-platform-error.log.2.gz` and 27 in `cpr-platform-error.log.3.gz` (0 in earlier logs) |
+
+### 1.1 15-Session Production Volume Baseline (`cpr_pro` DB)
+
+```text
+    date    | symbols_count | median_ratio | notes
+------------+---------------+--------------+-------------------------------------------------------------
+ 2026-11-13 |           210 |       0.9755 | scan after deploy, post-close; not an in-session test
+ 2026-11-12 |           210 |       0.0098 | frozen (0.98% of day's volume)
+ 2026-11-11 |           210 |       0.0329 | frozen (3.29% of day's volume)
+ 2026-11-09 |           210 |       0.0275 | frozen (2.75% of day's volume)
+ 2026-11-06 |           210 |       0.0347 | frozen (3.47% of day's volume)
+ 2026-11-05 |           210 |       0.0360 | frozen (3.60% of day's volume)
+ 2026-11-04 |           210 |       0.0171 | frozen (1.71% of day's volume)
+ 2026-11-03 |           210 |       0.0285 | frozen (2.85% of day's volume)
+ 2026-11-02 |           224 |       0.0255 | frozen (224 symbols: pre-cleaning / wider universe scan)
+ 2026-10-30 |           210 |       0.0172 | frozen (1.72% of day's volume)
+ 2026-10-29 |           210 |       0.0220 | frozen (2.20% of day's volume)
+ 2026-10-28 |           210 |       0.0244 | frozen (2.44% of day's volume)
+ 2026-10-27 |           209 |       0.0141 | frozen (209 symbols: 1 symbol without matching bhavcopy volume)
+ 2026-10-26 |           210 |       0.0175 | frozen (1.75% of day's volume)
+ 2026-10-23 |           210 |       0.0163 | frozen (1.63% of day's volume)
+```
+
+### 1.2 Unconfirmed Fallback Root Cause & Competing Hypotheses
+
+The earlier claim citing "59 rate-limit events in rotated log `cpr-platform-error.log.1`" was corrected upon server inspection: plain `grep` skipped compressed logs. The 59 logged events actually reside in `cpr-platform-error.log.2.gz` (with 27 events in `.error.log.3.gz` and 0 in `.4.gz`/`.5.gz`). Because earlier sessions (23 Oct–9 Nov) showed 0 logged 429 events while remaining equally frozen at 1%–3.6% volume, 429 rate-limit cooldowns cannot explain the persistent multi-week fallback.
+
+The primary contributing hypothesis is Fyers primary unavailability:
+1. **Broker token absence or expiration:** An inspection of `BrokerToken` in `cpr_pro` returned 0 rows. Without an active token, all Fyers calls skip immediately to Yahoo fallback. Confirming weekday-morning status requires checking morning `[LiveFeed]` logs and 09:00 AM session alert dispatch.
+2. **Rate-limit cooldown spikes:** On days when Fyers was connected (12–13 Nov), 429 rate limits (27 and 59 logged occurrences) triggered 60-second cooldown fallbacks.
+3. **Symbol-format encoding failures:** Handled by URL encoding hardening.
 
 The freeze did not cause the GVT&D misses. It is a real universe-wide defect, fixed on its own merits.
 
