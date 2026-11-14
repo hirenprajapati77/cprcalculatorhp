@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-13  
 **Covers:** `src/lib/pnl.ts` (Commit `7ef8595c`, PR #287)  
-**Status:** Approved by Owner (Hiren Prajapati)  
+**Status:** Pending owner confirmation  
 
 ---
 
@@ -22,14 +22,11 @@ Previously, this formula used `500_000 / strike`.
 
 ---
 
-## 2. Rationale: SEBI Minimum Contract Value Revision
+## 2. Rationale & Limitations
 
-Under SEBI circular guidelines, the minimum contract size for index and stock derivatives in the Indian equity market was revised upwards from ₹5 Lakhs (`500_000`) to ₹15–20 Lakhs (`1_500_000`).
-
-Exchange lot sizes are dynamically calibrated such that:
-$$\text{Lot Size} \times \text{Strike Price} \approx ₹15,00,000 \text{ to } ₹20,00,000$$
-
-Using `1_500_000 / strike` reflects the modern regulatory contract sizing framework.
+- **Exchange Authority:** Actual contract lot sizes are determined and published exclusively by the respective exchanges (NSE/BSE) via periodic circulars.
+- **Heuristic Only:** The formula `Math.round(1_500_000 / strike)` is purely an internal fallback heuristic to prevent division-by-zero or single-share distortion in simulated friction and P&L calculations when a newly added or unmapped derivative contract lacks an entry in `FALLBACK_LOT_SIZES`.
+- **Regulatory Sizing Baseline:** The formula aligns with the derivative contract value calibration band (referenced in SEBI Circular `SEBI/HO/MRD/MRD-PoD-2/P/CIR/2024/132` establishing a ₹15 Lakhs minimum contract value floor for derivatives at the time of introduction). Exchange lot sizes are calibrated periodically such that notional contract values fall within authorized regulatory bands.
 
 ---
 
@@ -37,4 +34,4 @@ Using `1_500_000 / strike` reflects the modern regulatory contract sizing framew
 
 - **Narrow Scope:** Applies only to fallback cases where a stock is absent from `FALLBACK_LOT_SIZES`. The static dictionary in `option-suggestion.service.ts` and `pnl.ts` already contains explicit exchange lot sizes for active F&O symbols.
 - **Journal Impact:** Affects estimated friction and gross P&L calculations for journal entries on unmapped symbols by scaling lot size approximation to match ₹15 Lakhs notional value.
-- **Decision:** Confirmed and retained in `src/lib/pnl.ts`. Future modifications to `pnl.ts` strictly require pre-merge review under the frozen core policy.
+- **Status:** Pending written confirmation by owner. Future modifications to `pnl.ts` strictly require pre-merge review under the frozen core policy.

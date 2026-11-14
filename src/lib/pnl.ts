@@ -61,7 +61,8 @@ export interface ResolveOptionLotSizeParams {
  * 1. Explicit lotSize parameter (> 0) if provided by caller.
  * 2. Exact symbol lookup in FALLBACK_LOT_SIZES table.
  * 3. Heuristic estimate based on option strike:
- *    Under SEBI derivative guidelines, equity option contracts target ~₹5 Lakhs notional (500,000 / strike).
+ *    Exchange lot sizes are determined by the exchange. As an internal fallback for unmapped symbols,
+ *    an heuristic estimate approximates ~₹15 Lakhs notional (1,500,000 / strike).
  * 4. Safe median option lot size proxy (500 shares) — NEVER 1 share for an exchange-traded option contract.
  */
 export function resolveOptionLotSize(params: ResolveOptionLotSizeParams): number {
