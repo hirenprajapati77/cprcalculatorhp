@@ -566,6 +566,10 @@ export class MarketService {
       msg.includes('too many requests');
     if (!hit) return false;
     this.fyersRateLimitedUntilMs = Date.now() + 60_000;
+    try {
+      const { VolumeShadowMonitorService } = require('./monitor/volume-shadow-monitor.service');
+      VolumeShadowMonitorService.recordFyersCooldown();
+    } catch {}
     if (this.shouldLogProviderError('fyers-rate-limit-cooldown')) {
       console.warn(
         `[LiveFeed] Fyers rate limited (${message ?? `HTTP ${status}`}). Skipping Fyers for 60s; Yahoo fallback active.`
@@ -1420,6 +1424,10 @@ export class MarketService {
         }
 
         if (!hasAggregatedIntraday) {
+          try {
+            const { VolumeShadowMonitorService } = require('./monitor/volume-shadow-monitor.service');
+            VolumeShadowMonitorService.recordAggregationFailure(cleanSymbol);
+          } catch {}
           if (this.shouldLogProviderError(`yahoo-15m-aggregation-skipped:${ticker}`)) {
             console.warn(
               `[LiveFeed] Yahoo 15m session aggregation skipped for ${ticker}: using daily candle snapshot (sessionAggregated=false)`

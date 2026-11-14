@@ -24,6 +24,7 @@ export interface BtstScoringInputs {
   hasConfirmationCandles: boolean;
   rsi14: number | null | undefined;
   emaCross: { cross: 'BULLISH' | 'BEARISH' | 'NONE'; isBullishAlignment: boolean } | null | undefined;
+  symbol?: string;
 }
 
 /** Per-rule points for Advanced BTST (max 130) — keys match Scanner explainability UI. */
@@ -78,6 +79,17 @@ export class BtstRankingService {
       inputs.intradayVolume,
       inputs.hasConfirmationCandles
     );
+
+    try {
+      const { VolumeShadowMonitorService } = require('../monitor/volume-shadow-monitor.service');
+      VolumeShadowMonitorService.recordBtstVolumeShadow(
+        inputs.symbol || 'UNKNOWN',
+        inputs.volume,
+        inputs.intradayVolume || 0,
+        sessionVolume,
+        inputs.avgVolume
+      );
+    } catch {}
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
     // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×

@@ -157,6 +157,10 @@ export class ScannerController {
     // and throttle Fyers primary history calls to stay under the 5 req/s standard-plan ceiling.
     const isFyersCooldown = MarketService.isFyersTemporarilyUnavailable();
     const batchSize = isFyersCooldown ? 2 : 5;
+    let fyersCount = 0;
+    let yahooAggregatedCount = 0;
+    let yahooSnapshotCount = 0;
+
     const batchDelay = isFyersCooldown ? env.YAHOO_SCAN_BATCH_DELAY_MS : env.FYERS_BATCH_DELAY_MS;
     if (isFyersCooldown) {
       console.log(`[Scanner] Yahoo/Fyers-cooldown pacing: batchSize=${batchSize} delayMs=${batchDelay}`);
@@ -173,6 +177,13 @@ export class ScannerController {
         try {
           const data = await MarketService.getStockData(stockMeta.symbol, market);
           if (data) {
+            if (data.sessionAggregated === true) {
+              yahooAggregatedCount++;
+            } else if (data.sessionAggregated === false) {
+              yahooSnapshotCount++;
+            } else {
+              fyersCount++;
+            }
             // Reset failure count on success
             await CacheService.delete(`failure_count_${stockMeta.symbol}`);
             const risk = eventRisks[stockMeta.symbol.trim()] || { severity: 0, reason: null, source: 'LOCAL_DB', confidence: 'UNKNOWN' };
@@ -246,6 +257,17 @@ export class ScannerController {
       void CacheService.set(`scanner_gen:${genKey}`, genMeta, 86400).catch(() => {});
     }
 
+    const providerMix = {
+      fyers: fyersCount,
+      yahooAggregated: yahooAggregatedCount,
+      yahooSnapshot: yahooSnapshotCount,
+      total: rawResults.length,
+    };
+    try {
+      const { VolumeShadowMonitorService } = await import('@/services/monitor/volume-shadow-monitor.service');
+      VolumeShadowMonitorService.recordProviderMix(today, providerMix);
+    } catch {}
+
     // Cache first so cron/UI can read results without waiting for DB upserts.
     const cacheKey = `list:${universeName}:${market}`;
     await CacheService.set(cacheKey, filtered, 5 * 60);
@@ -258,6 +280,7 @@ export class ScannerController {
       scanDurationMs,
       scanId,
       scanStartedAtMs: startTime,
+      providerMix,
     }).catch((err) => {
       console.error(`[SCAN:${scanId}] Background persist failed:`, err);
     });
@@ -279,6 +302,7 @@ export class ScannerController {
     scanId?: string;
     scanStartedAtMs?: number;
     retryDelayMs?: number;
+    providerMix?: { fyers: number; yahooAggregated: number; yahooSnapshot: number; total: number };
   }): Promise<void> {
 
     const {
@@ -445,9 +469,13 @@ export class ScannerController {
       }
 
       const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
+      const filtersPayload: Record<string, any> = { universe: universeName, market, scanId };
+      if (args.providerMix) {
+        filtersPayload.providerMix = args.providerMix;
+      }
       await prisma.scanHistory.create({
         data: {
-          filtersJson: JSON.stringify({ universe: universeName, market, scanId }),
+          filtersJson: JSON.stringify(filtersPayload),
           resultCount: filtered.length,
           durationMs: scanDurationMs,
           topSymbols,
