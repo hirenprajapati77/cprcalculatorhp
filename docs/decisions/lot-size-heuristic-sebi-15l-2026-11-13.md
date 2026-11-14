@@ -26,12 +26,12 @@ Previously, this formula used `500_000 / strike`.
 
 - **Exchange Authority:** Actual contract lot sizes are determined and published exclusively by the respective exchanges (NSE/BSE) via periodic circulars.
 - **Heuristic Only:** The formula `Math.round(1_500_000 / strike)` is purely an internal fallback heuristic to prevent division-by-zero or single-share distortion in simulated friction and P&L calculations when a newly added or unmapped derivative contract lacks an entry in `FALLBACK_LOT_SIZES`.
-- **Contract Value Baseline:** The formula aligns with the ₹15 Lakhs minimum contract value baseline for equity and index derivatives. Exchange lot sizes are calibrated periodically such that notional contract values fall within regulatory bands.
+- **Contract Value Estimate:** The ₹15 Lakhs numerator is an internal working estimate for contract sizing, not verified against current regulatory circulars or exchange specifications.
 
 ---
 
 ## 3. Scope & Operational Impact
 
 - **Narrow Scope:** Applies only to fallback cases where a stock is absent from `FALLBACK_LOT_SIZES`. The static dictionary in `option-suggestion.service.ts` and `pnl.ts` already contains explicit exchange lot sizes for active F&O symbols.
-- **Journal Impact:** Affects estimated friction and gross P&L calculations for journal entries on unmapped symbols by scaling lot size approximation to match ₹15 Lakhs notional value.
+- **Journal Impact:** Affects estimated friction and gross P&L calculations for journal entries on unmapped symbols by scaling lot size approximation using this internal estimate.
 - **Status:** Pending written confirmation by owner. Future modifications to `pnl.ts` strictly require pre-merge review under the frozen core policy.
