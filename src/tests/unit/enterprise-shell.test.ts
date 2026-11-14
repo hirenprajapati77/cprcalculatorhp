@@ -60,8 +60,11 @@ describe('Enterprise Navigation & Shell Configuration', () => {
 
     const momentumItem = allItems.find((i) => i.href === '/market-tools/momentum-leaders');
     assert.ok(momentumItem);
-    assert.equal(momentumItem.badge, 'HOT');
-    assert.equal(momentumItem.badgeVariant, 'amber');
+    assert.equal(momentumItem.badge, undefined, 'Momentum Leaders should not have hardcoded static badge');
+
+    const patternItem = allItems.find((i) => i.href === '/market-tools/pattern-breakout');
+    assert.ok(patternItem);
+    assert.equal(patternItem.badge, undefined, '52W Patterns should not have hardcoded static badge');
   });
 
   it('ensures each navigation item has an icon and label', () => {

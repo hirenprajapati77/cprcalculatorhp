@@ -32,6 +32,8 @@ export async function runMarketToolsPrecomputeJob(): Promise<{
       if (breadth.status !== 'pending') {
         breadthDate = breadth.date;
       }
+      // Validate universe coverage for active DailyOhlcv records
+      await MarketBreadthService.checkUniverseCoverage();
     } catch (err) {
       console.error('[MarketToolsPrecomputeJob] Failed Market Breadth:', err);
     }

@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FNO_SYMBOLS } from '../../services/market-tools/market-breadth.service';
+import {
+  FNO_SYMBOLS,
+  NIFTY50_SYMBOLS,
+  NIFTY50_HISTORICAL_ALIASES,
+  isNifty50Symbol,
+} from '../../services/market-tools/market-breadth.service';
 
 /**
  * R-6: Bhavcopy alias presence test.
@@ -20,6 +25,9 @@ import { FNO_SYMBOLS } from '../../services/market-tools/market-breadth.service'
  *   AMBUJACEMENT (F&O) ↔ AMBUJACEM  (Bhavcopy equity CSV)
  *   TATACHEMICALS (F&O) ↔ TATACHEM  (Bhavcopy equity CSV)
  *   GMRINFRA (F&O)     ↔ GMRP&UI   (Bhavcopy equity CSV — post-merger name)
+ *   TATAMOTORS (demerged) ↔ TMPV (Passenger Vehicles) & TMCV (Commercial Vehicles)
+ *   LTIM (renamed) ↔ LTM
+ *   ETERNAL (Eternal Limited, renamed from Zomato)
  */
 
 test('R-6: Bhavcopy alias coverage in FNO_SYMBOLS', async (t) => {
@@ -56,8 +64,40 @@ test('R-6: Bhavcopy alias coverage in FNO_SYMBOLS', async (t) => {
     );
   });
 
+  await t.test('ETERNAL, TMPV, and LTM active listings in FNO_SYMBOLS (Fix 3a)', () => {
+    assert.ok(FNO_SYMBOLS.has('ETERNAL'), 'FNO_SYMBOLS must include ETERNAL');
+    assert.ok(FNO_SYMBOLS.has('TMPV'), 'FNO_SYMBOLS must include TMPV (Tata Motors demerged F&O entity)');
+    assert.ok(FNO_SYMBOLS.has('LTM'), 'FNO_SYMBOLS must include LTM (LTIMindtree renamed ticker)');
+  });
+
   await t.test('FNO_SYMBOLS is a non-empty Set', () => {
     assert.ok(FNO_SYMBOLS instanceof Set, 'FNO_SYMBOLS should be a Set');
     assert.ok(FNO_SYMBOLS.size >= 150, `FNO_SYMBOLS has only ${FNO_SYMBOLS.size} entries — suspiciously small`);
+  });
+});
+
+test('NIFTY50_SYMBOLS coverage (Fix 3a)', async (t) => {
+  await t.test('contains active constituents TATASTEEL, ETERNAL, TMPV, and LTM', () => {
+    assert.ok(NIFTY50_SYMBOLS.has('TATASTEEL'), 'NIFTY50_SYMBOLS must include TATASTEEL');
+    assert.ok(NIFTY50_SYMBOLS.has('ETERNAL'), 'NIFTY50_SYMBOLS must include ETERNAL');
+    assert.ok(NIFTY50_SYMBOLS.has('TMPV'), 'NIFTY50_SYMBOLS must include TMPV');
+    assert.ok(NIFTY50_SYMBOLS.has('LTM'), 'NIFTY50_SYMBOLS must include LTM');
+  });
+
+  await t.test('NIFTY50_SYMBOLS has >= 50 symbols', () => {
+    assert.ok(NIFTY50_SYMBOLS instanceof Set, 'NIFTY50_SYMBOLS should be a Set');
+    assert.ok(NIFTY50_SYMBOLS.size >= 50, `NIFTY50_SYMBOLS size (${NIFTY50_SYMBOLS.size}) should be >= 50`);
+  });
+
+  await t.test('historical aliases are recognized by isNifty50Symbol', () => {
+    assert.ok(isNifty50Symbol('TATAMOTORS'), 'TATAMOTORS should be recognized as Nifty 50 historical alias');
+    assert.ok(isNifty50Symbol('LTIM'), 'LTIM should be recognized as Nifty 50 historical alias');
+    assert.ok(isNifty50Symbol('TMPV'), 'TMPV should be recognized as active Nifty 50 constituent');
+    assert.ok(isNifty50Symbol('TATASTEEL'), 'TATASTEEL should be recognized as active Nifty 50 constituent');
+    assert.ok(isNifty50Symbol('ETERNAL'), 'ETERNAL should be recognized as active Nifty 50 constituent');
+    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('TATAMOTORS'), 'TATAMOTORS in NIFTY50_HISTORICAL_ALIASES');
+    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('LTIM'), 'LTIM in NIFTY50_HISTORICAL_ALIASES');
+    assert.ok(!NIFTY50_HISTORICAL_ALIASES.has('TATASTEEL'), 'TATASTEEL must NOT be in historical aliases');
+    assert.ok(!NIFTY50_HISTORICAL_ALIASES.has('ETERNAL'), 'ETERNAL must NOT be in historical aliases');
   });
 });

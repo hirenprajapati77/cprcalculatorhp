@@ -67,8 +67,8 @@ export const SIDEBAR_SECTIONS: NavSection[] = [
       { href: '/market-tools/breadth', label: 'Market Breadth', icon: <TrendingUp size={16} /> },
       { href: '/heatmap', label: 'Sector Heatmap', icon: <LayoutGrid size={16} /> },
       { href: '/market-tools/breakout', label: 'Multi-Year Breakout', icon: <Zap size={16} /> },
-      { href: '/market-tools/pattern-breakout', label: '52W Patterns', icon: <Zap size={16} />, badge: 'NEW', badgeVariant: 'amber' },
-      { href: '/market-tools/momentum-leaders', label: 'Momentum Leaders', icon: <Flame size={16} />, badge: 'HOT', badgeVariant: 'amber' },
+      { href: '/market-tools/pattern-breakout', label: '52W Patterns', icon: <Zap size={16} /> },
+      { href: '/market-tools/momentum-leaders', label: 'Momentum Leaders', icon: <Flame size={16} /> },
     ],
   },
   {

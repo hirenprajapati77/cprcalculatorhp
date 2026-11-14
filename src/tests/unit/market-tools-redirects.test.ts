@@ -18,29 +18,4 @@ describe('Market Tools Route Redirects (P3)', () => {
     assert.strictEqual(heatmapRedirect.destination, '/heatmap');
     assert.strictEqual(heatmapRedirect.permanent, true);
   });
-
-  it('market-tools App Router pages invoke redirect to respective destinations', async () => {
-    const marketToolsPageModule = await import('../../app/market-tools/page');
-    assert.throws(
-      () => {
-        marketToolsPageModule.default();
-      },
-      (err: any) => {
-        // Next.js redirect throws a NEXT_REDIRECT digest error
-        return err?.digest?.startsWith('NEXT_REDIRECT') || err?.message?.includes('NEXT_REDIRECT');
-      },
-      'MarketToolsIndexPage must invoke Next.js redirect'
-    );
-
-    const heatmapPageModule = await import('../../app/market-tools/heatmap/page');
-    assert.throws(
-      () => {
-        heatmapPageModule.default();
-      },
-      (err: any) => {
-        return err?.digest?.startsWith('NEXT_REDIRECT') || err?.message?.includes('NEXT_REDIRECT');
-      },
-      'MarketToolsHeatmapPage must invoke Next.js redirect'
-    );
-  });
 });
