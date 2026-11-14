@@ -91,8 +91,9 @@ export class BtstRankingService {
         undefined,
         'BTST'
       );
-    } catch (err: any) {
-      VolumeShadowMonitorService.warnOnce('btst-volume-record-err', `Failed to record BTST volume shadow: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      VolumeShadowMonitorService.warnOnce('btst-volume-record-err', `Failed to record BTST volume shadow: ${msg}`);
     }
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).

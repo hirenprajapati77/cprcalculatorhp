@@ -77,8 +77,9 @@ export class StbtRankingService {
         undefined,
         'STBT'
       );
-    } catch (err: any) {
-      VolumeShadowMonitorService.warnOnce('stbt-volume-record-err', `Failed to record STBT volume shadow: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      VolumeShadowMonitorService.warnOnce('stbt-volume-record-err', `Failed to record STBT volume shadow: ${msg}`);
     }
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).

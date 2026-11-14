@@ -469,7 +469,7 @@ export class ScannerController {
       }
 
       const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
-      const filtersPayload: Record<string, any> = { universe: universeName, market, scanId };
+      const filtersPayload: Record<string, unknown> = { universe: universeName, market, scanId };
       try {
         const { VolumeShadowMonitorService } = await import('@/services/monitor/volume-shadow-monitor.service');
         if (args.providerMix && VolumeShadowMonitorService.isFlagEnabled()) {

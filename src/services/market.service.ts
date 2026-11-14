@@ -569,8 +569,9 @@ export class MarketService {
     this.fyersRateLimitedUntilMs = Date.now() + 60_000;
     try {
       VolumeShadowMonitorService.recordFyersCooldown();
-    } catch (err: any) {
-      VolumeShadowMonitorService.warnOnce('fyers-cooldown-record-err', `Failed to record Fyers cooldown: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      VolumeShadowMonitorService.warnOnce('fyers-cooldown-record-err', `Failed to record Fyers cooldown: ${msg}`);
     }
     if (this.shouldLogProviderError('fyers-rate-limit-cooldown')) {
       console.warn(
@@ -1428,8 +1429,9 @@ export class MarketService {
         if (!hasAggregatedIntraday) {
           try {
             VolumeShadowMonitorService.recordAggregationFailure(cleanSymbol);
-          } catch (err: any) {
-            VolumeShadowMonitorService.warnOnce('agg-failure-record-err', `Failed to record aggregation failure: ${err?.message}`);
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            VolumeShadowMonitorService.warnOnce('agg-failure-record-err', `Failed to record aggregation failure: ${msg}`);
           }
           if (this.shouldLogProviderError(`yahoo-15m-aggregation-skipped:${ticker}`)) {
             console.warn(
