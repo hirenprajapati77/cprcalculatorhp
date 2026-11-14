@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 14 Nov: NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)
+
+- **PR #324 — Align NIFTY 50 Constituents with Official NSE List, Enforce Exact 50 Cap & Export Breadth Filter Helper**:
+  - **Constituent Alignment (`src/services/market.service.ts`, `src/services/market-tools/market-breadth.service.ts`)**: Reconciled `STOCK_UNIVERSE` (`isNifty50`) and `NIFTY50_SYMBOLS` against the official NSE Indices factsheet (`ind_nifty50list.csv`). Set active constituents to exactly 50 members by activating 6 confirmed active members (`BEL`, `BSE`, `HINDALCO`, `INDIGO`, `JIOFIN`, `MAXHEALTH`) and deactivating 7 exited members (`BPCL`, `BRITANNIA`, `DIVISLAB`, `HEROMOTOCO`, `INDUSINDBK`, `LTM`, `WIPRO`).
+  - **Breadth Filter Helper & Dead Code Removal (`src/services/market-tools/market-breadth.service.ts`)**: Exported `filterNifty50Stats` helper with trimmed symbol matching (`NIFTY50_SYMBOLS.has(s.symbol.trim())`) to strictly isolate the published `NIFTY_50` breadth calculation to active constituents. Removed dead, unreferenced `isNifty50Symbol()` and `NIFTY50_HISTORICAL_ALIASES` exports to prevent live traded exited companies from contaminating Nifty 50 breadth samples.
+  - **Strict Set Invariant & Unit Test Guard (`src/tests/unit/market-breadth-alias.test.ts`)**: Enforced `NIFTY50_SYMBOLS.size === 50` in unit tests, verified inclusion of active additions, and added an operational unit test asserting `filterNifty50Stats` excludes exited members and handles space-padding.
+
+
 ### Fixed & Hardened — 14 Nov: Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (PR #313)
 
 - **PR #313 (`df5ef053`) — Market Tools Heatmap Sector Precedence, As-Of Date, Breadth Universes, and Route Cleanup**:
