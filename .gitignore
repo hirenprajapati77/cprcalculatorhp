@@ -73,11 +73,13 @@ remote_deploy.sh
 *.sql
 !prisma/migrations/**/*.sql
 *.txt
+*.jsonl
 ssh_history.jsonl
-history.txt
-history_commands.txt
+history*.txt
+commands_history.txt
 raw*.txt
 clean_ssh_history.txt
+remote_env.txt
 migration_diff.sql
 scratch/
 prisma/*.old.prisma
