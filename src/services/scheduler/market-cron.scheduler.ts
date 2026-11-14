@@ -149,13 +149,13 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
     }
   };
 
-  let tokenRecord: any;
+  let tokenRecord: { accessToken: string; expiresAt: Date } | null = null;
   try {
     const { prisma } = await import('@/lib/db');
     tokenRecord = await prisma.brokerToken.findUnique({
       where: { broker: 'fyers' },
     });
-  } catch (dbErr: any) {
+  } catch (dbErr: unknown) {
     console.error('[MarketCronScheduler] Fyers session check could not run due to database error:', dbErr);
     const msg =
       `⚠️ <b>FYERS SESSION CHECK ERROR</b>\n\n` +
