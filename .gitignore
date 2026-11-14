@@ -70,15 +70,20 @@ remote_deploy.sh
 *.local.sh
 
 # temporary debug / scratch files
-*.sql
+/*.sql
 !prisma/migrations/**/*.sql
-*.txt
-ssh_history.jsonl
-history.txt
-history_commands.txt
-raw*.txt
-clean_ssh_history.txt
-migration_diff.sql
+/*.txt
+/*.jsonl
+/ssh_history.jsonl
+/*history*.txt
+/commands_history.txt
+/raw*.txt
+/diff*.txt
+/crontab_fix.txt
+/temp_html.txt
+/clean_ssh_history.txt
+/remote_env.txt
+/migration_diff.sql
 scratch/
 prisma/*.old.prisma
 
