@@ -63,9 +63,11 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (November 2026):**
+- **14 Nov — NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)**:
+  - **Constituent Alignment & Exact 50 Cap (`#324`)**: Aligned `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS` to official NSE CSV (50 active members); activated confirmed additions (`BEL`, `BSE`, `HINDALCO`, `INDIGO`, `JIOFIN`, `MAXHEALTH`) and deactivated exited members. Exported `filterNifty50Stats` with trimmed matching and removed dead alias exports.
 - **14 Nov — Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (`df5ef053`, PR #313)**:
   - **Sector Heatmap Precedence & As-Of Date (`#313`)**: Prioritizes `getSymbolSector()` over snapshot `"Other"` bucket, returns `asOfDate` telemetry, and surfaces an amber stale-data warning badge when displaying fallback scans. Moved `heatmap-helpers.ts` under `src/services/market-tools/`.
-  - **Active Constituents & Alias Hygiene (`#313`)**: Preserves both `TATASTEEL` and `ETERNAL` (Zomato) as active `isNifty50: true` constituents in `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS`; separated historical aliases (`LICI`, `LTIM`, `SIEMENS`, `TATAMOTORS`) into `NIFTY50_HISTORICAL_ALIASES`.
+  - **Active Constituents & Alias Hygiene (`#313`)**: Preserves both `TATASTEEL` and `ETERNAL` (Zomato) as active `isNifty50: true` constituents in `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS`.
   - **Universe Coverage Guard Integration (`#313`)**: Wired `MarketBreadthService.checkUniverseCoverage` into `/api/cron/fno-universe-check` and EOD precompute to proactively alert on bhavcopy symbol dropouts.
   - **Dead Route & Static Badge Pruning (`#313`)**: Cleaned up unroutable stubs (`/market-tools`, `/market-tools/heatmap`) and removed hardcoded `NEW`/`HOT` badges from navigation.
 
