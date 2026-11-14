@@ -185,13 +185,13 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
       const { TelegramService } = await import('@/services/alert/telegram.service');
       const msg =
         `⚠️ <b>FYERS SESSION CHECK ERROR</b>\n\n` +
-        `Fyers session check could not run due to a database error: ${dbErr?.message || String(dbErr)}.\n` +
+        `Fyers session check could not run due to an internal system error.\n` +
         `Broker session status is unverified for today's trading.`;
       await TelegramService.sendMessage(msg);
       return { status: 'DB_ERROR', alertSent: true, message: msg };
     } catch (alertErr) {
       console.error('[MarketCronScheduler] Failed to dispatch DB error alert to Telegram:', alertErr);
-      return { status: 'DB_ERROR', alertSent: false, message: dbErr?.message || String(dbErr) };
+      return { status: 'DB_ERROR', alertSent: false };
     }
   }
 }

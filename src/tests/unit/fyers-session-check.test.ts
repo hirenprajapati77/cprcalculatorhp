@@ -88,9 +88,9 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     assert.ok(sentMessages[0].includes('could not be decrypted'));
   });
 
-  it('5. database error: returns DB_ERROR and sends distinct non-silent warning alert', async () => {
+  it('5. database error: returns DB_ERROR and sends distinct sanitised warning alert', async () => {
     prisma.brokerToken.findUnique = (async () => {
-      throw new Error('Connection pool exhausted');
+      throw new Error('Connection pool exhausted: sensitive_host_user_string');
     }) as any;
 
     const res = await checkFyersSession(new Date());
@@ -98,6 +98,8 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     assert.equal(res.alertSent, true);
     assert.equal(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes('FYERS SESSION CHECK ERROR'));
-    assert.ok(sentMessages[0].includes('Connection pool exhausted'));
+    assert.ok(sentMessages[0].includes('internal system error'));
+    assert.equal(sentMessages[0].includes('Connection pool exhausted'), false, 'DB error message must not be leaked');
+    assert.equal(sentMessages[0].includes('sensitive_host_user_string'), false, 'DB details must not be leaked');
   });
 });
