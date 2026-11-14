@@ -26,7 +26,7 @@ Previously, this formula used `500_000 / strike`.
 
 - **Exchange Authority:** Actual contract lot sizes are determined and published exclusively by the respective exchanges (NSE/BSE) via periodic circulars.
 - **Heuristic Only:** The formula `Math.round(1_500_000 / strike)` is purely an internal fallback heuristic to prevent division-by-zero or single-share distortion in simulated friction and P&L calculations when a newly added or unmapped derivative contract lacks an entry in `FALLBACK_LOT_SIZES`.
-- **Regulatory Sizing Baseline:** The formula aligns with the derivative contract value calibration band (referenced in SEBI Circular `SEBI/HO/MRD/MRD-PoD-2/P/CIR/2024/132` establishing a ₹15 Lakhs minimum contract value floor for derivatives at the time of introduction). Exchange lot sizes are calibrated periodically such that notional contract values fall within authorized regulatory bands.
+- **Contract Value Baseline:** The formula aligns with the ₹15 Lakhs minimum contract value baseline for equity and index derivatives. Exchange lot sizes are calibrated periodically such that notional contract values fall within regulatory bands.
 
 ---
 
