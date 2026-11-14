@@ -391,8 +391,8 @@ export class MarketBreadthService {
     // 3. Compute Universe Metrics (ALL NSE, NIFTY 50, NSE FNO)
     const allNse = computeUniverseBreadth('ALL_NSE', operatingStockStats);
 
-    // Mock/Filter Nifty 50 and FNO symbol subsets if present
-    const nifty50Stats = operatingStockStats.filter((s) => isNifty50Symbol(s.symbol));
+    // Filter Nifty 50 and FNO symbol subsets
+    const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
     if (nifty50Stats.length === 0) {
       console.warn('[MarketBreadth] NIFTY50_SYMBOLS filter matched 0 stocks - falling back to slice(0,50). Check DailyOhlcv data coverage.');
     } else if (nifty50Stats.length < 45) {

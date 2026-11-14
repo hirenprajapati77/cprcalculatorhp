@@ -92,9 +92,27 @@ test('NIFTY50_SYMBOLS coverage (Fix 3a)', async (t) => {
     assert.ok(!NIFTY50_SYMBOLS.has('DIVISLAB'), 'DIVISLAB must NOT be in active NIFTY50_SYMBOLS');
   });
 
-  await t.test('NIFTY50_SYMBOLS has exactly 50 symbols', () => {
+  await t.test('NIFTY50_SYMBOLS has exactly 50 symbols and excludes exited constituents', () => {
     assert.ok(NIFTY50_SYMBOLS instanceof Set, 'NIFTY50_SYMBOLS should be a Set');
     assert.equal(NIFTY50_SYMBOLS.size, 50, `NIFTY50_SYMBOLS size (${NIFTY50_SYMBOLS.size}) must be exactly 50`);
+    // Exited constituents must not be present in active NIFTY50_SYMBOLS
+    assert.ok(!NIFTY50_SYMBOLS.has('WIPRO'), 'WIPRO must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('BPCL'), 'BPCL must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('BRITANNIA'), 'BRITANNIA must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('DIVISLAB'), 'DIVISLAB must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('HEROMOTOCO'), 'HEROMOTOCO must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('INDUSINDBK'), 'INDUSINDBK must not be in active NIFTY50_SYMBOLS');
+    assert.ok(!NIFTY50_SYMBOLS.has('LTM'), 'LTM must not be in active NIFTY50_SYMBOLS');
+  });
+
+  await t.test('breadth universe filter strictly matches active NIFTY50_SYMBOLS (50)', () => {
+    const mockOperatingStats = [
+      { symbol: 'RELIANCE' }, { symbol: 'TCS' }, { symbol: 'HDFCBANK' },
+      { symbol: 'WIPRO' }, { symbol: 'BPCL' }, { symbol: 'DIVISLAB' }
+    ];
+    const filtered = mockOperatingStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
+    assert.equal(filtered.length, 3, 'Only active members match; exited members (WIPRO, BPCL, DIVISLAB) excluded');
+    assert.deepEqual(filtered.map(s => s.symbol), ['RELIANCE', 'TCS', 'HDFCBANK']);
   });
 
   await t.test('historical aliases are recognized by isNifty50Symbol', () => {
