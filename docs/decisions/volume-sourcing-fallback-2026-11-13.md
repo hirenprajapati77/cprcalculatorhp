@@ -1,8 +1,9 @@
 # Decision Memo: Session-Volume Sourcing and Yahoo-Fallback Hardening
 
 **Date:** 2026-11-13  
-**Covers:** PRs #301–#308  
-**Status:** Pending Owner Review / Sign-Off; Live on Production (BUILD_ID: `70c93adedaa7`)  
+**Covers:** PRs #301–#306 (+#307 memo); #308 is a separate correctness change  
+**Status:** Deployed before sign-off; pending owner review. Current live build: `df5ef053169b` (Commit `df5ef053`, PR #313; previously `70c93adedaa7`, PR #308).  
+**Governance Note:** The policy requirement ("memo before deploy") was not met prior to deploying the current live build.
 
 ---
 
@@ -12,9 +13,18 @@
 |---|---|---|
 | No 13 Nov breakout alert | Score 45–55 vs `MIN_BREAKOUT_ALERT_SCORE = 75`; price gate never the blocker | Verified |
 | No 12 Nov BTST | Logged `volume 28644 < 100000` (frozen snapshot); true ratio 706,846 / 882,211 = 0.80 < 1.5, so rejected anyway | Log verified; 20D vs 50D window unreconciled |
-| Universe-wide freeze | Median stored volume / EOD volume was 0.006–0.036 across 130–185 symbols | Verified via 30-day SQL baseline query on production `cpr_pro` DB |
+| Universe-wide freeze | Median stored volume / EOD volume was 0.006–0.036 across 130–185 symbols | NOT VERIFIED (OWNER-TO-RUN SQL query required on production DB) |
 | Mechanism | Yahoo fallback read `bundle.lastCandle.volume` from an 8h cache written ~09:16 IST; 15m fetch updated LTP only | Verified (code + Redis key) |
-| Why Yahoo fallback | Fyers 429 rate limits (59 events recorded in rotated log `cpr-platform-error.log.1`) trigger automatic 60s cooldown | Verified from `/home/ubuntu/.pm2/logs/cpr-platform-error.log*` |
+| Why Yahoo fallback | 59 events recorded in rotated log `cpr-platform-error.log.1` trigger automatic 60s cooldown | Contributing; cause of persistent fallback unconfirmed (59 events in one rotated log of unstated date range cannot explain all-morning Yahoo use; alternatives include token expiry/decrypt failure, symbol-format failures e.g. '&' symbols, or Fyers outage) |
+
+### 1.1 Unconfirmed Fallback Root Cause & Competing Hypotheses
+
+The 59 rate-limit events observed in rotated log `cpr-platform-error.log.1` occurred over an unstated date range and triggered 60-second cooldown windows. Because GVT&D LTP continued updating every 5 minutes while volume stayed frozen, a 60-second rate-limit cooldown alone does not explain persistent morning-long fallback. Competing alternatives requiring server-side log verification:
+1. **Broker token expiration or decryption failure:** If the stored Fyers access token expired or failed AES decryption, all Fyers calls fail fast and fall back to Yahoo indefinitely.
+2. **Symbol-format encoding failure:** Symbols containing special characters (e.g., `&` in `GVT&D`, `M&M`, `M&MFIN`) failing endpoint parsing.
+3. **Fyers API outage or connectivity degradation:** Extended gateway unavailability forcing secondary provider routing.
+
+Raw server-side logs and SQL queries must be executed by the owner (`OWNER-TO-RUN`) to verify exact counts and date bounds.
 
 The freeze did not cause the GVT&D misses. It is a real universe-wide defect, fixed on its own merits.
 
