@@ -63,6 +63,12 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (November 2026):**
+- **14 Nov — Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (`df5ef053`, PR #313)**:
+  - **Sector Heatmap Precedence & As-Of Date (`#313`)**: Prioritizes `getSymbolSector()` over snapshot `"Other"` bucket, returns `asOfDate` telemetry, and surfaces an amber stale-data warning badge when displaying fallback scans. Moved `heatmap-helpers.ts` under `src/services/market-tools/`.
+  - **Active Constituents & Alias Hygiene (`#313`)**: Preserves both `TATASTEEL` and `ETERNAL` (Zomato) as active `isNifty50: true` constituents in `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS`; separated historical aliases (`LICI`, `LTIM`, `SIEMENS`, `TATAMOTORS`) into `NIFTY50_HISTORICAL_ALIASES`.
+  - **Universe Coverage Guard Integration (`#313`)**: Wired `MarketBreadthService.checkUniverseCoverage` into `/api/cron/fno-universe-check` and EOD precompute to proactively alert on bhavcopy symbol dropouts.
+  - **Dead Route & Static Badge Pruning (`#313`)**: Cleaned up unroutable stubs (`/market-tools`, `/market-tools/heatmap`) and removed hardcoded `NEW`/`HOT` badges from navigation.
+
 - **13 Nov — Volume Sourcing Alignment, Fyers 429 Protection, ETERNAL Ticker Restoration & UI Polish (PRs #301–#311)**:
   - **Scanner UI Preset Exclusivity & Defaults (`#311`)**: Mutually exclusive filter presets, canonical `NIFTY_FNO` baseline reset for "Clear all" and "Default", generalized empty-state candidate copy, and stable toast reference outside context providers.
   - **Canonical BTST API Default (`#310`)**: Aligned `GET /api/btst` default universe parameter to `NIFTY_FNO`, matching `/api/scanner` and `/api/scanner/refresh`.
