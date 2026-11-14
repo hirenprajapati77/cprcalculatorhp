@@ -4,6 +4,7 @@ import type { AdvancedScoreBreakdown } from './btst-ranking.service';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
 import { isVpaEnabled } from '@/config/vpa.config';
 import type { VpaConfirmationResult } from '@/services/vpa';
+import { VolumeShadowMonitorService } from '../monitor/volume-shadow-monitor.service';
 
 export interface StbtScoringInputs {
   volume: number;
@@ -24,6 +25,7 @@ export interface StbtScoringInputs {
   hasConfirmationCandles: boolean;
   rsi14: number | null | undefined;
   emaCross: { cross: 'BULLISH' | 'BEARISH' | 'NONE'; isBullishAlignment: boolean } | null | undefined;
+  symbol?: string;
 }
 
 export interface StbtScoreDetails {
@@ -64,6 +66,20 @@ export class StbtRankingService {
       inputs.intradayVolume,
       inputs.hasConfirmationCandles
     );
+
+    try {
+      VolumeShadowMonitorService.recordBtstVolumeShadow(
+        inputs.symbol || 'UNKNOWN',
+        inputs.volume,
+        inputs.intradayVolume || 0,
+        sessionVolume,
+        inputs.avgVolume,
+        undefined,
+        'STBT'
+      );
+    } catch (err: any) {
+      VolumeShadowMonitorService.warnOnce('stbt-volume-record-err', `Failed to record STBT volume shadow: ${err?.message}`);
+    }
 
     // Rule 1: Strong VDU — score only at SPIKE_RATIO (2.0×).
     // Eligibility already gates at BREAKOUT_RATIO (1.5×); scoring at 2.0×

@@ -566,6 +566,7 @@ export class OvernightService {
           const details = mockStock.longScoreOverride !== undefined
             ? { score: mockStock.longScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : BtstRankingService.calculateScoreDetails({
+                symbol: fullStock.symbol,
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 open: fullStock.open,
                 tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',
@@ -589,6 +590,7 @@ export class OvernightService {
           const details = mockStock.shortScoreOverride !== undefined
             ? { score: mockStock.shortScoreOverride, breakdown: null as import('./btst-ranking.service').AdvancedScoreBreakdown | null }
             : StbtRankingService.calculateScoreDetails({
+                symbol: fullStock.symbol,
                 volume: fullStock.volume, avgVolume: fullStock.avgVolume,
                 open: fullStock.open,
                 tomorrowCprNarrow: tomorrowCpr.classification === 'NARROW',

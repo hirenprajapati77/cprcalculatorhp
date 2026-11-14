@@ -14,6 +14,7 @@ import {
   type FyersQuotesApiResponse,
 } from './fyers-quotes-batch';
 import { parseFyers15mVwapAndCandle } from './overnight/fyers-intraday.util';
+import { VolumeShadowMonitorService } from './monitor/volume-shadow-monitor.service';
 
 export interface HistoricalCandle {
   date: string;
@@ -567,9 +568,10 @@ export class MarketService {
     if (!hit) return false;
     this.fyersRateLimitedUntilMs = Date.now() + 60_000;
     try {
-      const { VolumeShadowMonitorService } = require('./monitor/volume-shadow-monitor.service');
       VolumeShadowMonitorService.recordFyersCooldown();
-    } catch {}
+    } catch (err: any) {
+      VolumeShadowMonitorService.warnOnce('fyers-cooldown-record-err', `Failed to record Fyers cooldown: ${err?.message}`);
+    }
     if (this.shouldLogProviderError('fyers-rate-limit-cooldown')) {
       console.warn(
         `[LiveFeed] Fyers rate limited (${message ?? `HTTP ${status}`}). Skipping Fyers for 60s; Yahoo fallback active.`
@@ -1425,9 +1427,10 @@ export class MarketService {
 
         if (!hasAggregatedIntraday) {
           try {
-            const { VolumeShadowMonitorService } = require('./monitor/volume-shadow-monitor.service');
             VolumeShadowMonitorService.recordAggregationFailure(cleanSymbol);
-          } catch {}
+          } catch (err: any) {
+            VolumeShadowMonitorService.warnOnce('agg-failure-record-err', `Failed to record aggregation failure: ${err?.message}`);
+          }
           if (this.shouldLogProviderError(`yahoo-15m-aggregation-skipped:${ticker}`)) {
             console.warn(
               `[LiveFeed] Yahoo 15m session aggregation skipped for ${ticker}: using daily candle snapshot (sessionAggregated=false)`
