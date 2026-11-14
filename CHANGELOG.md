@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 14 Nov: Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (PR #313)
+
+- **PR #313 (`df5ef053`) — Market Tools Heatmap Sector Precedence, As-Of Date, Breadth Universes, and Route Cleanup**:
+  - **Sector Precedence (`src/app/api/scanner/heatmap/route.ts`)**: Resolved sector mappings by prioritizing `getSymbolSector()` (from `nse-sector-map.ts`) over the snapshot's potentially unclassified `"Other"` bucket, ensuring consistent sector categorization across Breadth, Scanner, and Heatmap.
+  - **Heatmap As-Of Telemetry & Warning Badge (`src/app/api/scanner/heatmap/route.ts`, `src/app/heatmap/page.tsx`, `src/services/market-tools/heatmap-helpers.ts`)**: API returns `asOfDate` indicating data date. UI surfaces an amber warning badge when displaying stale fallback scans instead of current session data. Layered `heatmap-helpers.ts` cleanly under `src/services/market-tools/`.
+  - **Active Constituents & Alias Hygiene (`src/services/market.service.ts`, `src/services/market-tools/market-breadth.service.ts`)**: Preserved both `TATASTEEL` and `ETERNAL` (Zomato) as active `isNifty50: true` constituents in `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS`. Separated historical ticker renames into `NIFTY50_HISTORICAL_ALIASES` (`LICI`, `LTIM`, `SIEMENS`, `TATAMOTORS`) and `HISTORICAL_ALIASES` so active constituents are continuously validated against daily bhavcopy data.
+  - **Universe Coverage Guard Integration (`src/services/market-tools/market-breadth.service.ts`, `src/app/api/cron/fno-universe-check/route.ts`, `src/jobs/market-tools-precompute.job.ts`)**: Wired `MarketBreadthService.checkUniverseCoverage` into `/api/cron/fno-universe-check` and the daily precompute job to detect ticker renames and bhavcopy dropouts automatically.
+  - **Dead Route & Static Badge Pruning (`src/components/layout/Sidebar.tsx`, `src/app/market-tools/`)**: Removed unroutable dead page stubs (`src/app/market-tools/page.tsx`, `src/app/market-tools/heatmap/page.tsx`) and eliminated hardcoded `NEW` and `HOT` badges from the navigation sidebar.
+
 ### Fixed & Hardened — 13 Nov: Scanner UI Preset Exclusivity, Default F&O Reset, Empty-State Text & Toast Hygiene (PR #311)
 
 - **PR #311 (`d6c3ac2b`) — Scanner Filter Presets, Clear-All Defaults, Empty-State Copy, and Toast Stability**:
