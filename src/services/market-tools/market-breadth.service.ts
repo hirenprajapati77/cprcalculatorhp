@@ -777,16 +777,20 @@ export function getSymbolSector(symbol: string): string {
 }
 
 /**
- * Active NIFTY 50 constituents.
- * Aligned with STOCK_UNIVERSE (isNifty50: true) including both TATASTEEL and ETERNAL.
+ * Active NIFTY 50 constituents (50 constituents).
+ * Aligned with official NSE Indices constituent factsheet (ind_nifty50list.csv).
  */
 export const NIFTY50_SYMBOLS = new Set([
-  'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'BHARTIARTL', 'ITC', 'SBIN', 'LTM', 'SHRIRAMFIN',
-  'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TMPV', 'AXISBANK',
-  'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'JSWSTEEL', 'ADANIPORTS',
-  'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE', 'DIVISLAB',
-  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'TATASTEEL',
-  'ETERNAL'
+  'ADANIENT', 'ADANIPORTS', 'APOLLOHOSP', 'ASIANPAINT', 'AXISBANK',
+  'BAJAJ-AUTO', 'BAJAJFINSV', 'BAJFINANCE', 'BEL', 'BHARTIARTL',
+  'BSE', 'CIPLA', 'COALINDIA', 'DRREDDY', 'EICHERMOT',
+  'ETERNAL', 'GRASIM', 'HCLTECH', 'HDFCBANK', 'HDFCLIFE',
+  'HINDALCO', 'HINDUNILVR', 'ICICIBANK', 'INDIGO', 'INFY',
+  'ITC', 'JIOFIN', 'JSWSTEEL', 'KOTAKBANK', 'LT',
+  'M&M', 'MARUTI', 'MAXHEALTH', 'NESTLEIND', 'NTPC',
+  'ONGC', 'POWERGRID', 'RELIANCE', 'SBILIFE', 'SBIN',
+  'SHRIRAMFIN', 'SUNPHARMA', 'TATACONSUM', 'TATASTEEL', 'TCS',
+  'TECHM', 'TITAN', 'TMPV', 'TRENT', 'ULTRACEMCO'
 ]);
 
 /**
@@ -795,9 +799,16 @@ export const NIFTY50_SYMBOLS = new Set([
  */
 export const NIFTY50_HISTORICAL_ALIASES = new Set([
   'TATAMOTORS', // Renamed to TMPV
-  'LTIM',       // Renamed to LTM
+  'LTIM',       // Historical alias for LTM
+  'LTM',        // Exited index (historical lookback)
   'LICI',       // Legacy list alias (Nifty Next 50)
   'SIEMENS',    // Legacy list alias (Nifty Next 50)
+  'WIPRO',      // Replaced by BSE (Sep 2026)
+  'DIVISLAB',   // Exited index (historical lookback)
+  'BPCL',       // Exited index (historical lookback)
+  'BRITANNIA',  // Exited index (historical lookback)
+  'HEROMOTOCO', // Exited index (historical lookback)
+  'INDUSINDBK', // Exited index (historical lookback)
 ]);
 
 /**
