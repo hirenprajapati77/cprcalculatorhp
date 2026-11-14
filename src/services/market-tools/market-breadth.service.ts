@@ -392,7 +392,7 @@ export class MarketBreadthService {
     const allNse = computeUniverseBreadth('ALL_NSE', operatingStockStats);
 
     // Filter Nifty 50 and FNO symbol subsets
-    const nifty50Stats = operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
+    const nifty50Stats = filterNifty50Stats(operatingStockStats);
     if (nifty50Stats.length === 0) {
       console.warn('[MarketBreadth] NIFTY50_SYMBOLS filter matched 0 stocks - falling back to slice(0,50). Check DailyOhlcv data coverage.');
     } else if (nifty50Stats.length < 45) {
@@ -403,7 +403,7 @@ export class MarketBreadthService {
       nifty50Stats.length > 0 ? nifty50Stats : operatingStockStats.slice(0, 50)
     );
 
-    const fnoStats = operatingStockStats.filter((s) => FNO_SYMBOLS.has(s.symbol));
+    const fnoStats = operatingStockStats.filter((s) => FNO_SYMBOLS.has(s.symbol.trim()));
     if (fnoStats.length === 0) {
       console.warn('[MarketBreadth] FNO_SYMBOLS filter matched 0 stocks - falling back to slice(0,180). Check DailyOhlcv data coverage.');
     }
@@ -794,28 +794,11 @@ export const NIFTY50_SYMBOLS = new Set([
 ]);
 
 /**
- * Historical / Bhavcopy aliases and legacy index constituents recognized for lookback.
- * Allows backwards compatibility with historical DailyOhlcv records without bloating NIFTY50_SYMBOLS.size.
+ * Filters operating stock stats to active NIFTY 50 constituents.
+ * Uses trimmed symbol matching against NIFTY50_SYMBOLS (exactly 50 active members).
  */
-export const NIFTY50_HISTORICAL_ALIASES = new Set([
-  'TATAMOTORS', // Renamed to TMPV
-  'LTIM',       // Historical alias for LTM
-  'LTM',        // Exited index (historical lookback)
-  'LICI',       // Legacy list alias (Nifty Next 50)
-  'SIEMENS',    // Legacy list alias (Nifty Next 50)
-  'WIPRO',      // Replaced by BSE (Sep 2026)
-  'DIVISLAB',   // Exited index (historical lookback)
-  'BPCL',       // Exited index (historical lookback)
-  'BRITANNIA',  // Exited index (historical lookback)
-  'HEROMOTOCO', // Exited index (historical lookback)
-  'INDUSINDBK', // Exited index (historical lookback)
-]);
-
-/**
- * Returns true if a symbol is either a canonical NIFTY 50 constituent or a known historical alias.
- */
-export function isNifty50Symbol(symbol: string): boolean {
-  return NIFTY50_SYMBOLS.has(symbol) || NIFTY50_HISTORICAL_ALIASES.has(symbol);
+export function filterNifty50Stats<T extends { symbol: string }>(operatingStockStats: T[]): T[] {
+  return operatingStockStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol.trim()));
 }
 
 export const FNO_SYMBOLS = new Set([

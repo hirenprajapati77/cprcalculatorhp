@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {
   FNO_SYMBOLS,
   NIFTY50_SYMBOLS,
-  NIFTY50_HISTORICAL_ALIASES,
-  isNifty50Symbol,
+  filterNifty50Stats,
 } from '../../services/market-tools/market-breadth.service';
 
 /**
@@ -105,31 +104,18 @@ test('NIFTY50_SYMBOLS coverage (Fix 3a)', async (t) => {
     assert.ok(!NIFTY50_SYMBOLS.has('LTM'), 'LTM must not be in active NIFTY50_SYMBOLS');
   });
 
-  await t.test('breadth universe filter strictly matches active NIFTY50_SYMBOLS (50)', () => {
+  await t.test('filterNifty50Stats helper strictly filters to active 50 and handles space-padding', () => {
     const mockOperatingStats = [
-      { symbol: 'RELIANCE' }, { symbol: 'TCS' }, { symbol: 'HDFCBANK' },
-      { symbol: 'WIPRO' }, { symbol: 'BPCL' }, { symbol: 'DIVISLAB' }
+      { symbol: 'RELIANCE' },
+      { symbol: 'TCS   ' }, // space-padded
+      { symbol: 'HDFCBANK' },
+      { symbol: 'WIPRO' },     // exited constituent
+      { symbol: 'BPCL' },      // exited constituent
+      { symbol: 'DIVISLAB' },  // exited constituent
+      { symbol: 'TATAMOTORS' } // historical alias for TMPV
     ];
-    const filtered = mockOperatingStats.filter((s) => NIFTY50_SYMBOLS.has(s.symbol));
-    assert.equal(filtered.length, 3, 'Only active members match; exited members (WIPRO, BPCL, DIVISLAB) excluded');
-    assert.deepEqual(filtered.map(s => s.symbol), ['RELIANCE', 'TCS', 'HDFCBANK']);
-  });
-
-  await t.test('historical aliases are recognized by isNifty50Symbol', () => {
-    assert.ok(isNifty50Symbol('TATAMOTORS'), 'TATAMOTORS should be recognized as Nifty 50 historical alias');
-    assert.ok(isNifty50Symbol('LTIM'), 'LTIM should be recognized as Nifty 50 historical alias');
-    assert.ok(isNifty50Symbol('WIPRO'), 'WIPRO should be recognized as Nifty 50 historical alias');
-    assert.ok(isNifty50Symbol('LTM'), 'LTM should be recognized as Nifty 50 historical alias');
-    assert.ok(isNifty50Symbol('DIVISLAB'), 'DIVISLAB should be recognized as Nifty 50 historical alias');
-    assert.ok(isNifty50Symbol('TMPV'), 'TMPV should be recognized as active Nifty 50 constituent');
-    assert.ok(isNifty50Symbol('TATASTEEL'), 'TATASTEEL should be recognized as active Nifty 50 constituent');
-    assert.ok(isNifty50Symbol('ETERNAL'), 'ETERNAL should be recognized as active Nifty 50 constituent');
-    assert.ok(isNifty50Symbol('BSE'), 'BSE should be recognized as active Nifty 50 constituent');
-    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('TATAMOTORS'), 'TATAMOTORS in NIFTY50_HISTORICAL_ALIASES');
-    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('LTIM'), 'LTIM in NIFTY50_HISTORICAL_ALIASES');
-    assert.ok(NIFTY50_HISTORICAL_ALIASES.has('WIPRO'), 'WIPRO in NIFTY50_HISTORICAL_ALIASES');
-    assert.ok(!NIFTY50_HISTORICAL_ALIASES.has('TATASTEEL'), 'TATASTEEL must NOT be in historical aliases');
-    assert.ok(!NIFTY50_HISTORICAL_ALIASES.has('ETERNAL'), 'ETERNAL must NOT be in historical aliases');
-    assert.ok(!NIFTY50_HISTORICAL_ALIASES.has('BSE'), 'BSE must NOT be in historical aliases');
+    const filtered = filterNifty50Stats(mockOperatingStats);
+    assert.equal(filtered.length, 3, 'Only active members match; exited and alias members excluded');
+    assert.deepEqual(filtered.map(s => s.symbol.trim()), ['RELIANCE', 'TCS', 'HDFCBANK']);
   });
 });
