@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed & Hardened — 14 Nov: NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)
+
+- **PR #324 (`edeafac5`) — Align NIFTY 50 Constituents with Official NSE List & Enforce Exact 50 Cap**:
+  - **Constituent Alignment (`src/services/market.service.ts`, `src/services/market-tools/market-breadth.service.ts`)**: Reconciled `STOCK_UNIVERSE` (`isNifty50`) and `NIFTY50_SYMBOLS` against the official NSE Indices factsheet (`ind_nifty50list.csv`). Set active constituents to exactly 50 members.
+  - **Exited Constituents Preservation (`src/services/market-tools/market-breadth.service.ts`)**: Moved 7 exited constituents (`BPCL`, `BRITANNIA`, `DIVISLAB`, `HEROMOTOCO`, `INDUSINDBK`, `LTM`, and `WIPRO` replaced by `BSE` effective 30 Sep 2026) to `NIFTY50_HISTORICAL_ALIASES` to ensure multi-month historical lookback and market breadth calculations remain uninterrupted.
+  - **Active Additions Enabled (`src/services/market.service.ts`)**: Activated `isNifty50: true` for 6 confirmed active constituents present in `STOCK_UNIVERSE`: `BEL`, `BSE`, `HINDALCO`, `INDIGO`, `JIOFIN`, and `MAXHEALTH`.
+  - **Strict Set Invariant (`src/tests/unit/market-breadth-alias.test.ts`)**: Enforced `NIFTY50_SYMBOLS.size === 50` strict assertion in unit tests, verifying active constituents and confirming zero overlap between active and historical alias sets.
+
+
 ### Fixed & Hardened — 14 Nov: Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (PR #313)
 
 - **PR #313 (`df5ef053`) — Market Tools Heatmap Sector Precedence, As-Of Date, Breadth Universes, and Route Cleanup**:
