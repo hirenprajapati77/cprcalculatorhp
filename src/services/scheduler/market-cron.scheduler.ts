@@ -129,6 +129,73 @@ export async function runMarketToolsWatchJob(dateKey?: string | null): Promise<v
   );
 }
 
+export interface FyersSessionCheckResult {
+  status: 'VALID' | 'EXPIRED' | 'MISSING' | 'DECRYPT_FAILED' | 'DB_ERROR';
+  alertSent: boolean;
+  message?: string;
+}
+
+export async function checkFyersSession(now: Date = new Date()): Promise<FyersSessionCheckResult> {
+  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
+  try {
+    const { prisma } = await import('@/lib/db');
+    const { FyersAuthService } = await import('@/services/fyers-auth.service');
+    const { TelegramService } = await import('@/services/alert/telegram.service');
+
+    const tokenRecord = await prisma.brokerToken.findUnique({
+      where: { broker: 'fyers' },
+    });
+
+    if (!tokenRecord) {
+      const msg =
+        `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
+        `The daily Fyers broker token has expired.\n` +
+        `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      await TelegramService.sendMessage(msg);
+      console.log('[MarketCronScheduler] Dispatched Fyers session missing alert to Telegram.');
+      return { status: 'MISSING', alertSent: true, message: msg };
+    }
+
+    if (tokenRecord.expiresAt <= now) {
+      const msg =
+        `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
+        `The daily Fyers broker token has expired.\n` +
+        `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      await TelegramService.sendMessage(msg);
+      console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
+      return { status: 'EXPIRED', alertSent: true, message: msg };
+    }
+
+    // Record exists and date is valid; test decrypt success via FyersAuthService.getAccessToken()
+    const validToken = await FyersAuthService.getAccessToken();
+    if (!validToken) {
+      const msg =
+        `⚠️ <b>FYERS SESSION INVALID</b>\n\n` +
+        `The daily Fyers broker token could not be decrypted.\n` +
+        `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to re-authenticate for today's 15:20 scan.`;
+      await TelegramService.sendMessage(msg);
+      console.log('[MarketCronScheduler] Dispatched Fyers token decrypt failure alert to Telegram.');
+      return { status: 'DECRYPT_FAILED', alertSent: true, message: msg };
+    }
+
+    return { status: 'VALID', alertSent: false };
+  } catch (dbErr: any) {
+    console.error('[MarketCronScheduler] Fyers session check could not run due to database error:', dbErr);
+    try {
+      const { TelegramService } = await import('@/services/alert/telegram.service');
+      const msg =
+        `⚠️ <b>FYERS SESSION CHECK ERROR</b>\n\n` +
+        `Fyers session check could not run due to a database error: ${dbErr?.message || String(dbErr)}.\n` +
+        `Broker session status is unverified for today's trading.`;
+      await TelegramService.sendMessage(msg);
+      return { status: 'DB_ERROR', alertSent: true, message: msg };
+    } catch (alertErr) {
+      console.error('[MarketCronScheduler] Failed to dispatch DB error alert to Telegram:', alertErr);
+      return { status: 'DB_ERROR', alertSent: false, message: dbErr?.message || String(dbErr) };
+    }
+  }
+}
+
 
 async function runClaimedJob<T>(
   claimKey: string,
@@ -269,27 +336,7 @@ export function startMarketCronScheduler(): void {
       if (istTime.hour === 9 && istTime.minute >= 0 && istTime.minute <= 5) {
         await runClaimedJob(
           `fyers-session-check:${dateKey}`,
-          async () => {
-            try {
-              const { prisma } = await import('@/lib/db');
-              const tokenRecord = await prisma.brokerToken.findUnique({
-                where: { broker: 'fyers' },
-              });
-              const isExpired = !tokenRecord || tokenRecord.expiresAt <= new Date();
-              if (isExpired) {
-                const { TelegramService } = await import('@/services/alert/telegram.service');
-                const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
-                const msg =
-                  `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
-                  `The daily Fyers broker token has expired.\n` +
-                  `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
-                await TelegramService.sendMessage(msg);
-                console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
-              }
-            } catch (dbErr) {
-              console.error('[MarketCronScheduler] Skipped Fyers session check due to database error:', dbErr);
-            }
-          },
+          () => checkFyersSession(now),
           'fyers-session-check'
         );
       }
