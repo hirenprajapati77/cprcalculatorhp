@@ -470,9 +470,12 @@ export class ScannerController {
 
       const topSymbols = filtered.slice(0, 20).map(s => s.symbol).join(',');
       const filtersPayload: Record<string, any> = { universe: universeName, market, scanId };
-      if (args.providerMix) {
-        filtersPayload.providerMix = args.providerMix;
-      }
+      try {
+        const { VolumeShadowMonitorService } = await import('@/services/monitor/volume-shadow-monitor.service');
+        if (args.providerMix && VolumeShadowMonitorService.isFlagEnabled()) {
+          filtersPayload.providerMix = args.providerMix;
+        }
+      } catch {}
       await prisma.scanHistory.create({
         data: {
           filtersJson: JSON.stringify(filtersPayload),
