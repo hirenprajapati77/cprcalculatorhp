@@ -2,19 +2,22 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkFyersSession } from '@/services/scheduler/market-cron.scheduler';
 import { prisma } from '@/lib/db';
-import { FyersAuthService } from '@/services/fyers-auth.service';
+import { encrypt } from '@/lib/crypto';
+import { env } from '@/config/env';
 import { TelegramService } from '@/services/alert/telegram.service';
 
 describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
   let origFindUnique: any;
-  let origGetAccessToken: any;
   let origSendMessage: any;
+  let origKey: any;
   let sentMessages: string[] = [];
 
   beforeEach(() => {
     origFindUnique = prisma.brokerToken.findUnique;
-    origGetAccessToken = FyersAuthService.getAccessToken;
     origSendMessage = TelegramService.sendMessage;
+    origKey = (env as any).TOKEN_ENCRYPTION_KEY;
+    (env as any).TOKEN_ENCRYPTION_KEY = 'test-token-encryption-key-secret';
+    process.env.TOKEN_ENCRYPTION_KEY = 'test-token-encryption-key-secret';
     sentMessages = [];
 
     TelegramService.sendMessage = async (msg: string) => {
@@ -25,18 +28,19 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
 
   afterEach(() => {
     prisma.brokerToken.findUnique = origFindUnique;
-    FyersAuthService.getAccessToken = origGetAccessToken;
     TelegramService.sendMessage = origSendMessage;
+    (env as any).TOKEN_ENCRYPTION_KEY = origKey;
+    process.env.TOKEN_ENCRYPTION_KEY = origKey;
   });
 
   it('1. valid token + decrypt success: returns VALID and sends no alert', async () => {
     const future = new Date(Date.now() + 3600_000);
+    const validCiphertext = encrypt('valid_fyers_access_token_123');
     prisma.brokerToken.findUnique = (async () => ({
       broker: 'fyers',
-      accessToken: 'encrypted_valid_token',
+      accessToken: validCiphertext,
       expiresAt: future,
     })) as any;
-    FyersAuthService.getAccessToken = async () => 'decrypted_fyers_token_123';
 
     const res = await checkFyersSession(new Date());
     assert.equal(res.status, 'VALID');
@@ -51,7 +55,6 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
       accessToken: 'encrypted_expired_token',
       expiresAt: past,
     })) as any;
-    FyersAuthService.getAccessToken = async () => null;
 
     const res = await checkFyersSession(new Date());
     assert.equal(res.status, 'EXPIRED');
@@ -74,11 +77,9 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     const future = new Date(Date.now() + 3600_000);
     prisma.brokerToken.findUnique = (async () => ({
       broker: 'fyers',
-      accessToken: 'corrupted_token',
+      accessToken: 'corrupted_token_not_valid_hex',
       expiresAt: future,
     })) as any;
-    // FyersAuthService returns null on decryption error
-    FyersAuthService.getAccessToken = async () => null;
 
     const res = await checkFyersSession(new Date());
     assert.equal(res.status, 'DECRYPT_FAILED');
@@ -101,5 +102,22 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     assert.ok(sentMessages[0].includes('internal system error'));
     assert.equal(sentMessages[0].includes('Connection pool exhausted'), false, 'DB error message must not be leaked');
     assert.equal(sentMessages[0].includes('sensitive_host_user_string'), false, 'DB details must not be leaked');
+  });
+
+  it('6. telegram send failure does not corrupt status into DB_ERROR', async () => {
+    const past = new Date(Date.now() - 3600_000);
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: 'encrypted_expired_token',
+      expiresAt: past,
+    })) as any;
+
+    TelegramService.sendMessage = async () => {
+      throw new Error('Telegram network gateway timeout');
+    };
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'EXPIRED', 'Status must remain EXPIRED even if Telegram fails');
+    assert.equal(res.alertSent, false);
   });
 });
