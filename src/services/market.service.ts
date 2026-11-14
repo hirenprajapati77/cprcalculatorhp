@@ -282,7 +282,7 @@ const STOCK_UNIVERSE: {
   { symbol: 'CYIENT      ', name: 'CYIENT                             ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'DALBHARAT   ', name: 'DALBHARAT                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'ENDURANCE   ', name: 'ENDURANCE                          ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
-  { symbol: 'ETERNAL     ', name: 'Eternal (Zomato)                   ', sector: 'Services                 ', marketCap: 190000, isNifty50: false, isNifty200: true , isFnO: true  },
+  { symbol: 'ETERNAL     ', name: 'Eternal (Zomato)                   ', sector: 'Services                 ', marketCap: 190000, isNifty50: true , isNifty200: true , isFnO: true  },
   { symbol: 'EXIDEIND    ', name: 'EXIDEIND                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },
   { symbol: 'FSL         ', name: 'FSL                                ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: false },
   { symbol: 'GLENMARK    ', name: 'GLENMARK                           ', sector: 'Other                    ', marketCap: 20000 , isNifty50: false, isNifty200: false, isFnO: true  },

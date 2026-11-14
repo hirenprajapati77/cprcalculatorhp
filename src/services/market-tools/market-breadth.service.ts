@@ -777,15 +777,16 @@ export function getSymbolSector(symbol: string): string {
 }
 
 /**
- * Canonical 50 active NIFTY 50 constituents.
- * Exactly 50 constituents aligned with STOCK_UNIVERSE (isNifty50: true).
+ * Active NIFTY 50 constituents.
+ * Aligned with STOCK_UNIVERSE (isNifty50: true) including both TATASTEEL and ETERNAL.
  */
 export const NIFTY50_SYMBOLS = new Set([
   'RELIANCE', 'TCS', 'HDFCBANK', 'ICICIBANK', 'INFY', 'BHARTIARTL', 'ITC', 'SBIN', 'LTM', 'SHRIRAMFIN',
   'HINDUNILVR', 'LT', 'BAJFINANCE', 'HCLTECH', 'MARUTI', 'SUNPHARMA', 'ADANIENT', 'KOTAKBANK', 'TMPV', 'AXISBANK',
   'TITAN', 'ULTRACEMCO', 'NTPC', 'ONGC', 'ASIANPAINT', 'POWERGRID', 'M&M', 'BAJAJFINSV', 'JSWSTEEL', 'ADANIPORTS',
   'COALINDIA', 'TRENT', 'DRREDDY', 'GRASIM', 'TECHM', 'BRITANNIA', 'CIPLA', 'INDUSINDBK', 'HDFCLIFE', 'DIVISLAB',
-  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'TATASTEEL'
+  'EICHERMOT', 'SBILIFE', 'BPCL', 'TATACONSUM', 'HEROMOTOCO', 'APOLLOHOSP', 'BAJAJ-AUTO', 'WIPRO', 'NESTLEIND', 'TATASTEEL',
+  'ETERNAL'
 ]);
 
 /**
