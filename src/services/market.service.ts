@@ -1750,12 +1750,22 @@ export class MarketService {
               candle15m = parsed15.candle15m;
             }
           } else {
-            this.markFyersRateLimited(res15.status, data15.message, data15.code);
-            this.markPermissionCooldown(res15.status, data15.message);
+            // Soft-fail: non-critical enrichment field with typical-price VWAP fallback.
+            // Do not trip global circuit breakers (rate-limit / permission) from 15m.
+            if (this.shouldLogProviderError(`fyers-15m-non-ok:${fyersSymbol}`)) {
+              console.warn(
+                `[LiveFeed] Fyers 15m non-OK response for ${fyersSymbol} (status=${res15.status}, code=${data15.code ?? 'na'}, msg=${data15.message ?? ''}): keeping typical-price VWAP`
+              );
+            }
           }
         } else {
-          this.markFyersRateLimited(res15.status, undefined, undefined);
-          this.markPermissionCooldown(res15.status, undefined);
+          // Soft-fail: non-critical enrichment field with typical-price VWAP fallback.
+          // Do not trip global circuit breakers (rate-limit / permission) from 15m.
+          if (this.shouldLogProviderError(`fyers-15m-http-fail:${fyersSymbol}`)) {
+            console.warn(
+              `[LiveFeed] Fyers 15m HTTP failure for ${fyersSymbol} (HTTP ${res15.status}): keeping typical-price VWAP`
+            );
+          }
         }
       } catch (err15) {
         if (this.shouldLogProviderError(`fyers-15m:${fyersSymbol}`)) {
