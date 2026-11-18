@@ -12,6 +12,7 @@ import { getAtrPct } from '@/lib/atr';
 import { calculateRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
 import { MarketService, MarketStockData } from '../market.service';
+import { toFyersEquitySymbol } from '../fyers-quotes-batch';
 import { BtstRankingService } from './btst-ranking.service';
 import { StbtRankingService } from './stbt-ranking.service';
 import { GapProbabilityService } from './gap-probability.service';
@@ -224,7 +225,7 @@ export class OvernightService {
       const { appId } = FyersAuthService.getCredentials();
       const market = stock.market === 'BSE' ? 'BSE' : 'NSE';
       const clean = stock.symbol.split(':')[0].trim();
-      const fyersSymbol = market === 'NSE' ? `NSE:${clean}-EQ` : `BSE:${clean}-EQ`;
+      const fyersSymbol = toFyersEquitySymbol(clean, market);
       const rangeDay = getISTDateString(currentTime);
 
       const historyUrl =

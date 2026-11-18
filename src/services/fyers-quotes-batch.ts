@@ -36,6 +36,27 @@ export type FyersQuotesApiResponse = {
   d?: FyersQuotesApiRow[];
 };
 
+export const FYERS_SYMBOL_ALIASES: Record<string, string> = {
+  ICICIPRULI: 'ICICILIFE',
+};
+
+export const FYERS_REVERSE_SYMBOL_ALIASES: Record<string, string> = Object.entries(
+  FYERS_SYMBOL_ALIASES
+).reduce<Record<string, string>>((acc, [canonical, fyers]) => {
+  acc[fyers.toUpperCase()] = canonical.toUpperCase();
+  return acc;
+}, {});
+
+export function toFyersUnderlyingSymbol(cleanSymbol: string): string {
+  const sym = cleanSymbol.trim().toUpperCase().replace('-EQ', '');
+  return FYERS_SYMBOL_ALIASES[sym] || sym;
+}
+
+export function fromFyersUnderlyingSymbol(fyersUnderlying: string): string {
+  const sym = fyersUnderlying.trim().toUpperCase().replace('-EQ', '');
+  return FYERS_REVERSE_SYMBOL_ALIASES[sym] || sym;
+}
+
 export function toFyersEquitySymbol(cleanSymbol: string, market: 'NSE' | 'BSE' = 'NSE'): string {
   const sym = cleanSymbol.trim().toUpperCase();
   if (sym === 'NIFTY' || sym === 'NIFTY50' || sym === 'NIFTY 50') return 'NSE:NIFTY50-INDEX';
@@ -43,7 +64,8 @@ export function toFyersEquitySymbol(cleanSymbol: string, market: 'NSE' | 'BSE' =
   if (sym === 'SENSEX') return 'BSE:SENSEX-INDEX';
   if (sym === 'FINNIFTY') return 'NSE:FINNIFTY-INDEX';
   if (sym === 'MIDCPNIFTY') return 'NSE:MIDCPNIFTY-INDEX';
-  return market === 'NSE' ? `NSE:${sym}-EQ` : `BSE:${sym}-EQ`;
+  const mapped = FYERS_SYMBOL_ALIASES[sym] || sym;
+  return market === 'NSE' ? `NSE:${mapped}-EQ` : `BSE:${mapped}-EQ`;
 }
 
 /** Strip `NSE:RELIANCE-EQ` / `BSE:FOO-EQ` / `NSE:NIFTY50-INDEX` → `RELIANCE` / `FOO` / `NIFTY`. */
@@ -55,7 +77,9 @@ export function fromFyersEquitySymbol(fyersSymbol: string): string | null {
   if (trimmed === 'NSE:FINNIFTY-INDEX') return 'FINNIFTY';
   if (trimmed === 'NSE:MIDCPNIFTY-INDEX') return 'MIDCPNIFTY';
   const m = /^[A-Z]+:([A-Z0-9&.-]+)-EQ$/i.exec(trimmed);
-  return m ? m[1]!.toUpperCase() : null;
+  if (!m) return null;
+  const raw = m[1]!.toUpperCase();
+  return FYERS_REVERSE_SYMBOL_ALIASES[raw] || raw;
 }
 
 export function chunkSymbols<T>(items: T[], chunkSize: number): T[][] {
