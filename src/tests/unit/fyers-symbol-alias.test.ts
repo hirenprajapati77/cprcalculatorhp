@@ -67,7 +67,8 @@ test('Fyers Symbol Alias & Translation Architecture', async (t) => {
   await t.test('5. OptionChainService requests NSE:ICICILIFE-EQ for ICICIPRULI underlying', async () => {
     const origGetAccessToken = FyersAuthService.getAccessToken;
     const origGetCredentials = FyersAuthService.getCredentials;
-    const origFetchWithRetry = OptionChainService.fetchWithRetry;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origFetchWithRetry = (OptionChainService as any).fetchWithRetry;
     const origCacheGet = CacheService.get;
     const origCacheSet = CacheService.set;
 
@@ -81,7 +82,8 @@ test('Fyers Symbol Alias & Translation Architecture', async (t) => {
         secretId: 'test_secret',
         redirectUrl: 'http://localhost',
       });
-      OptionChainService.fetchWithRetry = async (url: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (OptionChainService as any).fetchWithRetry = async (url: string) => {
         requestedUrl = url;
         return {
           ok: true,
@@ -104,7 +106,8 @@ test('Fyers Symbol Alias & Translation Architecture', async (t) => {
     } finally {
       FyersAuthService.getAccessToken = origGetAccessToken;
       FyersAuthService.getCredentials = origGetCredentials;
-      OptionChainService.fetchWithRetry = origFetchWithRetry;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (OptionChainService as any).fetchWithRetry = origFetchWithRetry;
       CacheService.get = origCacheGet;
       CacheService.set = origCacheSet;
     }
@@ -141,21 +144,17 @@ test('Fyers Symbol Alias & Translation Architecture', async (t) => {
 
       const mockStock: MarketStockData = {
         symbol: 'ICICIPRULI',
-        name: 'ICICI Life Insurance',
+        market: 'NSE',
         sector: 'Financial Services',
-        marketCap: 20000,
-        currentPrice: 453.2,
-        change: 0,
-        changePercent: 0,
         open: 450,
         high: 455,
         low: 449,
+        close: 453.2,
         previousClose: 450,
         volume: 50000,
-        cpr: { pivot: 450, tc: 452, bc: 448 },
-        cprWidth: 'NARROW',
-        cprWidthPercent: 0.8,
-        market: 'NSE',
+        avgVolume: 50000,
+        marketCap: 20000,
+        ltp: 453.2,
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
