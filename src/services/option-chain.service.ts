@@ -3,6 +3,7 @@ import { MarketSessionResolver, getActiveMarketProfile } from '@/config/market-p
 import { FyersAuthService } from './fyers-auth.service';
 import { CacheService } from './cache.service';
 import { getSessionState } from '@/lib/market-hours';
+import { toFyersEquitySymbol } from './fyers-quotes-batch';
 
 export interface OptionChainResult {
   optionsChain: Array<{
@@ -112,15 +113,10 @@ export class OptionChainService {
       return { error: 'CREDENTIALS_MISSING' };
     }
 
-    const isIndex = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY'].some(idx => cleanSym.includes(idx));
-    const suffix = isIndex ? 'INDEX' : 'EQ';
     const exchange = cleanSym.includes('SENSEX') ? 'BSE' : 'NSE';
+    const fyersInstrument = toFyersEquitySymbol(cleanSym, exchange);
     
-    let fyersSym = cleanSym;
-    if (fyersSym === 'NIFTY') fyersSym = 'NIFTY50';
-    if (fyersSym === 'BANKNIFTY') fyersSym = 'NIFTYBANK';
-    
-    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(`${exchange}:${fyersSym}-${suffix}`)}&strikecount=30`;
+    const directUrl = `https://api-t1.fyers.in/data/options-chain-v3?symbol=${encodeURIComponent(fyersInstrument)}&strikecount=30`;
 
     try {
       // 1. Attempt DIRECT call first
@@ -209,7 +205,7 @@ export class OptionChainService {
         return { error: 'PROXY_NOT_CONFIGURED' };
       }
       console.log(`[OptionChain] Attempting proxy fetch for ${cleanSym} via ${proxyUrl}...`);
-      const proxySymbol = encodeURIComponent(`${exchange}:${fyersSym}-${suffix}`);
+      const proxySymbol = encodeURIComponent(fyersInstrument);
       // H-12 fix: add 6000ms AbortSignal timeout to proxy fetch to prevent indefinite hangs
       const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/data/options-chain-v3?symbol=${proxySymbol}&strikecount=30`, {
         headers: {

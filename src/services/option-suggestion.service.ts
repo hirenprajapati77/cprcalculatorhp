@@ -4,6 +4,7 @@ import { getISTDateString, isNseTradingDay } from '@/lib/market-hours';
 import { safeRatio } from '@/lib/math';
 import { EventCalendarService } from './overnight/event.service';
 import { OPTION_PCR } from '@/config/trading-constants';
+import { toFyersUnderlyingSymbol } from './fyers-quotes-batch';
 
 export interface OptionSuggestion {
   symbol?: string;
@@ -163,7 +164,11 @@ export class OptionSuggestionService {
     optionType: 'CE' | 'PE'
   ): string {
     const cleanUnderlying = underlying.toUpperCase().trim().replace('-EQ', '');
-    const prefixes = [`NSE:${cleanUnderlying}`, `BSE:${cleanUnderlying}`];
+    const fyersUnderlying = toFyersUnderlyingSymbol(cleanUnderlying);
+    const candidateUnderlyings = cleanUnderlying === fyersUnderlying
+      ? [cleanUnderlying]
+      : [cleanUnderlying, fyersUnderlying];
+    const prefixes = candidateUnderlyings.flatMap(u => [`NSE:${u}`, `BSE:${u}`]);
     const suffix = `${strikePrice}${optionType}`;
 
     for (const prefix of prefixes) {
@@ -212,7 +217,11 @@ export class OptionSuggestionService {
   ): number | null {
     try {
       const cleanUnderlying = underlying.toUpperCase().trim().replace('-EQ', '');
-      const prefixes = [`NSE:${cleanUnderlying}`, `BSE:${cleanUnderlying}`];
+      const fyersUnderlying = toFyersUnderlyingSymbol(cleanUnderlying);
+      const candidateUnderlyings = cleanUnderlying === fyersUnderlying
+        ? [cleanUnderlying]
+        : [cleanUnderlying, fyersUnderlying];
+      const prefixes = candidateUnderlyings.flatMap(u => [`NSE:${u}`, `BSE:${u}`]);
       const monthMap: Record<string, number> = {
         JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
         JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
