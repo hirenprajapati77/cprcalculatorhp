@@ -1696,14 +1696,19 @@ export class MarketService {
       const sma50Slope = bundle.sma50Slope;
 
       // Prefer quote session fields when valid; else last daily bar.
-      const open = MarketService.isPositivePrice(qv.open_price) ? qv.open_price : last.open;
-      const high = MarketService.isPositivePrice(qv.high_price) ? qv.high_price : last.high;
-      const low = MarketService.isPositivePrice(qv.low_price) ? qv.low_price : last.low;
-      const close = MarketService.isPositivePrice(qv.lp) ? qv.lp : last.close;
-      const volume =
+      const quoteHigh = MarketService.isPositivePrice(qv.high_price) ? qv.high_price : null;
+      const quoteLow = MarketService.isPositivePrice(qv.low_price) ? qv.low_price : null;
+      const quoteVol =
         typeof qv.volume === 'number' && Number.isFinite(qv.volume) && qv.volume >= 0
           ? qv.volume
-          : last.volume;
+          : null;
+      const quoteOk = quoteHigh !== null && quoteLow !== null && quoteVol !== null;
+
+      const open = MarketService.isPositivePrice(qv.open_price) ? qv.open_price : last.open;
+      const high = quoteHigh ?? last.high;
+      const low = quoteLow ?? last.low;
+      const close = MarketService.isPositivePrice(qv.lp) ? qv.lp : last.close;
+      const volume = quoteVol ?? last.volume;
 
       // Prior completed session: quote prev_close when valid, else bundle previousClose.
       const previousClose = MarketService.isPositivePrice(qv.prev_close_price)
@@ -1802,9 +1807,7 @@ export class MarketService {
         sma20Slope,
         sma50Slope,
         rangeProvenance: resolveRangeProvenance({
-          hasLiveQuotePrice:
-            MarketService.isPositivePrice(qv.high_price) &&
-            MarketService.isPositivePrice(qv.low_price),
+          hasLiveQuotePrice: quoteOk,
           isTodayBar: last?.date === todayStr,
         }),
       };
