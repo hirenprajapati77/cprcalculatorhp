@@ -451,3 +451,20 @@ model DailyOhlcv {
   @@index([date, symbol])
 }
 
+// ─── Volume Telemetry for Intraday Normalization Curve ────────────────────────
+model VolumeTelemetry {
+  id              Int      @id @default(autoincrement())
+  symbol          String
+  date            String   // YYYY-MM-DD
+  minuteOfDay     Int      // 555 (09:15) to 930 (15:30)
+  sessionVolume   BigInt
+  avgVolume       BigInt
+  rawRatio        Float
+  rangeProvenance String   // FYERS_QUOTE | INTRADAY_TODAY_BAR | STALE_PREV_DAY
+  createdAt       DateTime @default(now())
+
+  @@index([minuteOfDay])
+  @@index([date, minuteOfDay])
+}
+
+

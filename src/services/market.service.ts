@@ -15,6 +15,7 @@ import {
 } from './fyers-quotes-batch';
 import { parseFyers15mVwapAndCandle } from './overnight/fyers-intraday.util';
 import { VolumeShadowMonitorService } from './monitor/volume-shadow-monitor.service';
+import { resolveRangeProvenance, type RangeProvenance } from '@/lib/range-provenance';
 
 export interface HistoricalCandle {
   date: string;
@@ -67,6 +68,7 @@ export interface MarketStockData {
   sma50Slope?: number;
   sma200?: number;
   sessionAggregated?: boolean;
+  rangeProvenance?: RangeProvenance | undefined;
 }
 
 export interface LiveStatus {
@@ -1279,6 +1281,7 @@ export class MarketService {
           throw new Error(`Failed to acquire daily candle bundle for ${cleanSymbol}`);
         }
 
+        const todayStr = getISTDateString();
         const prevOpen = bundle.lastCandle.open;
         const prevHigh = bundle.lastCandle.high;
         const prevLow = bundle.lastCandle.low;
@@ -1459,6 +1462,11 @@ export class MarketService {
           sma20Slope,
           sma50Slope,
           sessionAggregated: hasAggregatedIntraday,
+          rangeProvenance: resolveRangeProvenance({
+            hasLiveQuotePrice: false,
+            hasAggregatedIntraday,
+            isTodayBar: bundle.lastCandle?.date === todayStr,
+          }),
         };
         if (sma200 !== undefined) {
           resultData.sma200 = sma200;
@@ -1793,6 +1801,10 @@ export class MarketService {
         candle15m,
         sma20Slope,
         sma50Slope,
+        rangeProvenance: resolveRangeProvenance({
+          hasLiveQuotePrice: MarketService.isPositivePrice(qv.high_price),
+          isTodayBar: last?.date === todayStr,
+        }),
       };
       if (sma200 !== undefined) {
         resultData.sma200 = sma200;

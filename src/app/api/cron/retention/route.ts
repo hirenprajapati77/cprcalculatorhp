@@ -1,6 +1,7 @@
 import { env } from '@/config/env';
 import { NextRequest, NextResponse } from 'next/server';
 import { RetentionService } from '@/services/retention/retention.service';
+import { VolumeTelemetryService } from '@/services/retention/volume-telemetry.service';
 import { isValidCronSecret } from '@/lib/crypto';
 
 export async function GET(request: NextRequest) {
@@ -25,6 +26,12 @@ export async function GET(request: NextRequest) {
     // Step 2: Purge expired (older than 7 days since soft delete)
     const purgeResult = await RetentionService.purgeExpired(limit, dryRun);
 
+    // Step 3: Purge volume telemetry older than 30 days
+    const telemetryCutoff = VolumeTelemetryService.cutoffDate(30);
+    const telemetryPurge = dryRun
+      ? { deleted: 0, batches: 0, capped: false }
+      : await VolumeTelemetryService.purge(telemetryCutoff);
+
     const duration = Date.now() - startTime;
 
     return NextResponse.json({
@@ -33,6 +40,9 @@ export async function GET(request: NextRequest) {
       wouldDelete: purgeResult.wouldDelete,
       softDeleted,
       hardDeleted: purgeResult.hardDeleted,
+      telemetryDeleted: telemetryPurge.deleted,
+      telemetryBatches: telemetryPurge.batches,
+      telemetryCapped: telemetryPurge.capped,
       duration
     });
   } catch (error: unknown) {

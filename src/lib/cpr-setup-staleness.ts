@@ -7,8 +7,8 @@
  *  Deliberately tighter than the shared BTST EXTENSION_LIMITS.MAX_DAY_RETURN_PCT
  *  (3.5%) -- verified live that a 2.66% gap between alert-delivery-time LTP and
  *  the CPR entry level still produced an unfillable "stale" alert (AMBER,
- *  27 Aug 2026). Tightened from 3.5 -> 1.5. Revisit after a week of live
- *  observation if this suppresses too many legitimate signals. */
+ *  27 Aug 2026). Set to 2.5% (aligned with ATR-scaled cap bounds 1.0-3.5%).
+ *  Revisit after live observation if this suppresses too many legitimate signals. */
 export const CPR_ENTRY_EXTENSION_PCT = 2.5;
 
 /** Buffer so tick noise at the day extreme does not false-trigger gap invalidation. */
@@ -65,7 +65,7 @@ export function isBreakoutEntryGapInvalidated(args: {
 
 /**
  * LTP already chased past entry by more than the extension cap
- * (default CPR_ENTRY_EXTENSION_PCT, 1.5%, or ATR-scaled if atrPct provided).
+ * (default CPR_ENTRY_EXTENSION_PCT, 2.5%, or ATR-scaled if atrPct provided).
  */
 export function isBreakoutEntryExtended(args: {
   entry: number;
@@ -168,7 +168,7 @@ export interface SetupTradeabilityResult {
  * Pure evaluation of CPR Trade Setup executable tradeability.
  * Bridges theoretical Model R:R (from pivot entry) with real-time actionable status.
  *
- * When price has chased past the extension cap (default 1.5%), the theoretical Model R:R
+ * When price has chased past the extension cap (default 2.5%), the theoretical Model R:R
  * is NOT currently executable without taking uncalibrated chase risk.
  */
 export function evaluateSetupTradeability(args: {
