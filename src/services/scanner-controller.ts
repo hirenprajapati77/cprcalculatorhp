@@ -8,6 +8,7 @@ import { SectorRegimeService } from './sector-regime.service';
 import { getISTDateString } from '@/lib/market-hours';
 import { EventCalendarService } from './overnight/event.service';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
+import { VolumeTelemetryService } from './retention/volume-telemetry.service';
 
 // Removed module-level PERSISTENT_FAILURES Map, using CacheService instead
 
@@ -224,6 +225,18 @@ export class ScannerController {
       if (batchDelay > 0 && i + batchSize < stocks.length) {
         await new Promise((resolve) => setTimeout(resolve, batchDelay));
       }
+    }
+
+    // Fire-and-forget volume telemetry recording before ranking
+    try {
+      const telemetryRows = VolumeTelemetryService.buildRows(rawResults, new Date(), today);
+      if (telemetryRows.length > 0) {
+        void VolumeTelemetryService.record(telemetryRows).catch((err) => {
+          console.warn('[ScannerController] Volume telemetry record failed:', err);
+        });
+      }
+    } catch (err) {
+      console.warn('[ScannerController] Volume telemetry build failed:', err);
     }
 
     // Rank the stocks using the RankingService

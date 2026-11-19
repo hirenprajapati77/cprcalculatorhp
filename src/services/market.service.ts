@@ -15,6 +15,11 @@ import {
 } from './fyers-quotes-batch';
 import { parseFyers15mVwapAndCandle } from './overnight/fyers-intraday.util';
 import { VolumeShadowMonitorService } from './monitor/volume-shadow-monitor.service';
+import {
+  resolveRangeProvenance,
+  quoteSessionFields,
+  type RangeProvenance,
+} from '@/lib/range-provenance';
 
 export interface HistoricalCandle {
   date: string;
@@ -67,6 +72,7 @@ export interface MarketStockData {
   sma50Slope?: number;
   sma200?: number;
   sessionAggregated?: boolean;
+  rangeProvenance?: RangeProvenance | undefined;
 }
 
 export interface LiveStatus {
@@ -586,6 +592,10 @@ export class MarketService {
     if (this.markFyersRateLimited(status, message, code)) return;
   }
 
+  /**
+   * Helper to ensure price is positive and finite.
+   * Semantic twin of pure isPositivePrice in @/lib/range-provenance.
+   */
   static isPositivePrice(n: unknown): n is number {
     return typeof n === 'number' && Number.isFinite(n) && n > 0;
   }
@@ -1279,6 +1289,7 @@ export class MarketService {
           throw new Error(`Failed to acquire daily candle bundle for ${cleanSymbol}`);
         }
 
+        const todayStr = getISTDateString();
         const prevOpen = bundle.lastCandle.open;
         const prevHigh = bundle.lastCandle.high;
         const prevLow = bundle.lastCandle.low;
@@ -1459,6 +1470,11 @@ export class MarketService {
           sma20Slope,
           sma50Slope,
           sessionAggregated: hasAggregatedIntraday,
+          rangeProvenance: resolveRangeProvenance({
+            hasLiveQuotePrice: false,
+            hasAggregatedIntraday,
+            isTodayBar: bundle.lastCandle?.date === todayStr,
+          }),
         };
         if (sma200 !== undefined) {
           resultData.sma200 = sma200;
@@ -1688,14 +1704,17 @@ export class MarketService {
       const sma50Slope = bundle.sma50Slope;
 
       // Prefer quote session fields when valid; else last daily bar.
+      const quoteFields = quoteSessionFields({
+        high_price: qv.high_price,
+        low_price: qv.low_price,
+        volume: qv.volume,
+      });
+
       const open = MarketService.isPositivePrice(qv.open_price) ? qv.open_price : last.open;
-      const high = MarketService.isPositivePrice(qv.high_price) ? qv.high_price : last.high;
-      const low = MarketService.isPositivePrice(qv.low_price) ? qv.low_price : last.low;
+      const high = quoteFields.high ?? last.high;
+      const low = quoteFields.low ?? last.low;
       const close = MarketService.isPositivePrice(qv.lp) ? qv.lp : last.close;
-      const volume =
-        typeof qv.volume === 'number' && Number.isFinite(qv.volume) && qv.volume >= 0
-          ? qv.volume
-          : last.volume;
+      const volume = quoteFields.volume ?? last.volume;
 
       // Prior completed session: quote prev_close when valid, else bundle previousClose.
       const previousClose = MarketService.isPositivePrice(qv.prev_close_price)
@@ -1793,6 +1812,10 @@ export class MarketService {
         candle15m,
         sma20Slope,
         sma50Slope,
+        rangeProvenance: resolveRangeProvenance({
+          hasLiveQuotePrice: quoteFields.hasLiveQuotePrice,
+          isTodayBar: last?.date === todayStr,
+        }),
       };
       if (sma200 !== undefined) {
         resultData.sma200 = sma200;
