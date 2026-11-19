@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRangeProvenance } from '@/lib/range-provenance';
+import { resolveRangeProvenance, quoteSessionFields } from '@/lib/range-provenance';
 import {
   VolumeTelemetryService,
   type VolumeTelemetryRow,
@@ -54,6 +54,61 @@ describe('resolveRangeProvenance', () => {
 
   it('correctly handles partial inputs without falling back open', () => {
     assert.equal(resolveRangeProvenance({ hasLiveQuotePrice: false }), 'STALE_PREV_DAY');
+  });
+});
+
+describe('quoteSessionFields', () => {
+  it('returns all fields and hasLiveQuotePrice=true when high, low, and volume are all valid', () => {
+    const res = quoteSessionFields({
+      high_price: 105.5,
+      low_price: 98.2,
+      volume: 500000,
+    });
+    assert.equal(res.high, 105.5);
+    assert.equal(res.low, 98.2);
+    assert.equal(res.volume, 500000);
+    assert.equal(res.hasLiveQuotePrice, true);
+  });
+
+  it('sets hasLiveQuotePrice=false when volume is missing, NaN, negative, or not a number', () => {
+    assert.equal(quoteSessionFields({ high_price: 105, low_price: 98 }).hasLiveQuotePrice, false);
+    assert.equal(quoteSessionFields({ high_price: 105, low_price: 98, volume: NaN }).hasLiveQuotePrice, false);
+    assert.equal(quoteSessionFields({ high_price: 105, low_price: 98, volume: -1 }).hasLiveQuotePrice, false);
+    assert.equal(quoteSessionFields({ high_price: 105, low_price: 98, volume: '500' as any }).hasLiveQuotePrice, false);
+  });
+
+  it('sets hasLiveQuotePrice=false when low is missing or non-positive (round-1 regression)', () => {
+    const noLow = quoteSessionFields({ high_price: 105, volume: 500000 });
+    assert.equal(noLow.low, null);
+    assert.equal(noLow.hasLiveQuotePrice, false);
+
+    const zeroLow = quoteSessionFields({ high_price: 105, low_price: 0, volume: 500000 });
+    assert.equal(zeroLow.low, null);
+    assert.equal(zeroLow.hasLiveQuotePrice, false);
+  });
+
+  it('preserves volume=0 as valid reading and sets hasLiveQuotePrice=true (zero volume case)', () => {
+    const res = quoteSessionFields({
+      high_price: 105,
+      low_price: 98,
+      volume: 0,
+    });
+    assert.equal(res.volume, 0);
+    assert.equal(res.hasLiveQuotePrice, true);
+  });
+
+  it('allows per-field null fallback independently when some fields are invalid', () => {
+    const last = { high: 100, low: 95, volume: 20000 };
+    // high valid, low invalid, volume valid
+    const partial = quoteSessionFields({ high_price: 105, low_price: 0, volume: 30000 });
+    const resolvedHigh = partial.high ?? last.high;
+    const resolvedLow = partial.low ?? last.low;
+    const resolvedVol = partial.volume ?? last.volume;
+
+    assert.equal(resolvedHigh, 105);
+    assert.equal(resolvedLow, 95); // fell back to last
+    assert.equal(resolvedVol, 30000);
+    assert.equal(partial.hasLiveQuotePrice, false); // correctly flagged false because low fell back
   });
 });
 

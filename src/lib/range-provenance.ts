@@ -6,6 +6,50 @@ export interface RangeProvenanceInput {
   hasAggregatedIntraday?: boolean;
 }
 
+export interface QuoteSessionFieldsInput {
+  high_price?: unknown;
+  low_price?: unknown;
+  volume?: unknown;
+}
+
+export interface QuoteSessionFields {
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  hasLiveQuotePrice: boolean;
+}
+
+/**
+ * Validates price is positive and finite.
+ */
+function isPositivePrice(val: unknown): val is number {
+  return typeof val === 'number' && Number.isFinite(val) && val > 0;
+}
+
+/**
+ * Validates volume is non-negative and finite (0 is valid for untraded session).
+ */
+function isValidSessionVolume(val: unknown): val is number {
+  return typeof val === 'number' && Number.isFinite(val) && val >= 0;
+}
+
+/**
+ * Structurally extracts session range fields (high, low, volume) from a quote packet.
+ * Guarantees that hasLiveQuotePrice is true ONLY when all 3 fields are valid live readings.
+ */
+export function quoteSessionFields(qv: QuoteSessionFieldsInput): QuoteSessionFields {
+  const high = isPositivePrice(qv.high_price) ? qv.high_price : null;
+  const low = isPositivePrice(qv.low_price) ? qv.low_price : null;
+  const volume = isValidSessionVolume(qv.volume) ? qv.volume : null;
+
+  return {
+    high,
+    low,
+    volume,
+    hasLiveQuotePrice: high !== null && low !== null && volume !== null,
+  };
+}
+
 /**
  * Resolves the 3-state data provenance for high/low/volume.
  * - FYERS_QUOTE: Sourced from live quote packet (e.g. qv.high_price)
