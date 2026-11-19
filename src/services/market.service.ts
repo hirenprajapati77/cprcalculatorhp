@@ -592,6 +592,10 @@ export class MarketService {
     if (this.markFyersRateLimited(status, message, code)) return;
   }
 
+  /**
+   * Helper to ensure price is positive and finite.
+   * Semantic twin of pure isPositivePrice in @/lib/range-provenance.
+   */
   static isPositivePrice(n: unknown): n is number {
     return typeof n === 'number' && Number.isFinite(n) && n > 0;
   }

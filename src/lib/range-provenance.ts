@@ -21,6 +21,7 @@ export interface QuoteSessionFields {
 
 /**
  * Validates price is positive and finite.
+ * Kept pure without Node/MarketService dependencies; semantic duplicate of MarketService.isPositivePrice.
  */
 function isPositivePrice(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val) && val > 0;
