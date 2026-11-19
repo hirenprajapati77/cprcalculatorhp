@@ -1802,7 +1802,9 @@ export class MarketService {
         sma20Slope,
         sma50Slope,
         rangeProvenance: resolveRangeProvenance({
-          hasLiveQuotePrice: MarketService.isPositivePrice(qv.high_price),
+          hasLiveQuotePrice:
+            MarketService.isPositivePrice(qv.high_price) &&
+            MarketService.isPositivePrice(qv.low_price),
           isTodayBar: last?.date === todayStr,
         }),
       };

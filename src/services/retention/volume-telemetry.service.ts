@@ -100,7 +100,7 @@ export class VolumeTelemetryService {
     options?: { batchSize?: number; maxRows?: number }
   ): Promise<{ deleted: number; batches: number; capped: boolean }> {
     const batchSize = Math.min(Math.max(1, options?.batchSize ?? 500), 1000);
-    const maxRows = options?.maxRows ?? 10000;
+    const maxRows = options?.maxRows ?? 25000;
 
     let deleted = 0;
     let batches = 0;

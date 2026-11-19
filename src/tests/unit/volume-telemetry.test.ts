@@ -318,6 +318,29 @@ describe('VolumeTelemetryService.purge', () => {
     assert.equal(capturedTake, 500);
   });
 
+  it('defaults maxRows to 25000 allowing deletion of full daily volume backlog (>10000 rows)', async () => {
+    let loopCount = 0;
+    const mockClient: VolumeTelemetryPrismaClient = {
+      volumeTelemetry: {
+        createMany: async () => ({ count: 0 }),
+        findMany: async (args) => {
+          loopCount++;
+          // Simulate 30 batches of 500 = 15,000 rows (exceeds previous 10k ceiling)
+          if (loopCount <= 30) {
+            return Array.from({ length: args.take }, (_, idx) => ({ id: (loopCount - 1) * 500 + idx + 1 }));
+          }
+          return [];
+        },
+        deleteMany: async (args) => ({ count: args.where.id.in.length }),
+      },
+    };
+
+    const res = await VolumeTelemetryService.purge('2026-10-20', mockClient);
+    assert.equal(res.deleted, 15000);
+    assert.equal(res.batches, 30);
+    assert.equal(res.capped, false);
+  });
+
   it('prunes multiple batches incrementally and accumulates total count', async () => {
     let callCount = 0;
     const mockClient: VolumeTelemetryPrismaClient = {
