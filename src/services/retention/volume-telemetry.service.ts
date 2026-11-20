@@ -42,10 +42,16 @@ export class VolumeTelemetryService {
     const rows: VolumeTelemetryRow[] = [];
     for (const stock of stocks) {
       if (!stock.symbol) continue;
-      const avgVol = stock.avgVolume || 0;
-      if (avgVol <= 0) continue; // Skip zero avgVolume (prevents invalid / infinite ratio)
-      const sessionVol = Math.max(0, Math.floor(stock.volume || 0));
-      const rawRatio = avgVol > 0 ? Number((sessionVol / avgVol).toFixed(4)) : 0;
+      const rawAvg = typeof stock.avgVolume === 'number' && Number.isFinite(stock.avgVolume)
+        ? stock.avgVolume : 0;
+      if (rawAvg <= 0) continue; // Skip zero / missing avgVolume (prevents invalid / infinite ratio)
+      const avgVol = Math.max(0, Math.round(rawAvg));
+      if (avgVol <= 0) continue;
+
+      const rawSession = typeof stock.volume === 'number' && Number.isFinite(stock.volume)
+        ? stock.volume : 0;
+      const sessionVol = Math.max(0, Math.round(rawSession));
+      const rawRatio = avgVol > 0 ? Number((sessionVol / rawAvg).toFixed(4)) : 0;
       const provenance: RangeProvenance = stock.rangeProvenance ?? 'STALE_PREV_DAY';
 
       rows.push({
