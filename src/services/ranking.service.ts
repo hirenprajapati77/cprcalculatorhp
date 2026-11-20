@@ -51,8 +51,8 @@ export class RankingService {
    * Conflict penalties: -10 each for ASC_CPR+BEARISH, DESC_CPR+BULLISH, HP_OUTSIDE_CPR
    */
   static calculateScore(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
-    const { signals, volume, avgVolume } = result;
-    const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+    const { signals, volumeRatio } = result;
+    // volumeRatio is pace-normalised (rawVolumeRatio / expectedVolumeFraction) from SignalService.
 
     // Category A: CPR Structure (Max 45)
     let catASum = 0;

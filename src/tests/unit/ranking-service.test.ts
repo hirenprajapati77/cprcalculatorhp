@@ -12,6 +12,8 @@ function base(signals: string[]) {
     close: 100,
     volume: 200_000,
     avgVolume: 100_000,
+    rawVolumeRatio: 2,
+    volumeRatio: 2,
     width: 0.2,
     tc: 101,
     bc: 99,

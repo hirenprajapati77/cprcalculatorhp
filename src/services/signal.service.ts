@@ -4,7 +4,14 @@ import { compareCpr } from '@/lib/cpr-relationship';
 import { MarketStockData } from './market.service';
 import { calculateATR } from '@/lib/atr';
 import { safeRatio } from '@/lib/math';
-import { getISTDateString, isTodayCandleClosed, getISTTime, getCompletedHistory } from '@/lib/market-hours';
+import {
+  getISTDateString,
+  isTodayCandleClosed,
+  getISTTime,
+  getCompletedHistory,
+  sessionProgress,
+  expectedVolumeFraction,
+} from '@/lib/market-hours';
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
 import { applyBreakoutSignals } from '@/lib/breakout-confirm';
@@ -17,6 +24,10 @@ export interface SignalResult {
   overlappingValue: boolean;
   virginCPR: boolean;
   hotZone: boolean;
+  /** Raw volume ratio = stock.volume / stock.avgVolume (unadjusted for audit/telemetry). */
+  rawVolumeRatio: number;
+  /** Pace-normalised volume ratio = rawVolumeRatio / expectedVolumeFraction(minuteOfDay). */
+  volumeRatio: number;
   /**
    * NOTE: this is a range-based proxy (pivot ± range*0.25), not a true Market Profile
    * Value Area derived from volume distribution. Do not treat vah/val/poc here as
@@ -156,10 +167,19 @@ export class SignalService {
     const bc = cprToday.bc;
     const pivot = cprToday.pivot;
 
-    // volumeRatio = 1 when avgVolume is unavailable — intentionally neutral:
-    // 1 < 1.5 so all volume-gated signals (BREAKOUT, BREAKDOWN, VOLUME_SPIKE,
-    // BUILD_UP) are suppressed for new listings or data-incomplete symbols.
-    const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
+    // ── Volume Ratio: Pace-Normalised vs Raw ──────────────────────────────────
+    // Step 2: During live trading (no asOfDate), normalise volume by expected
+    // session progress so morning breakouts are not penalised against full-day avgVolume.
+    // In backtests (asOfDate present) or outside market hours, expectedFraction = 1.0.
+    const rawVolumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
+    let volumeRatio = rawVolumeRatio;
+    if (!normalizedAsOfDate && stock.avgVolume > 0) {
+      const minuteOfDay = getISTTime().totalMinutes;
+      const expectedFraction = expectedVolumeFraction(minuteOfDay);
+      if (expectedFraction > 0) {
+        volumeRatio = rawVolumeRatio / expectedFraction;
+      }
+    }
 
     // ── Value Relationships ───────────────────────────────────────────────────
     const rel = compareCpr(cprToday, cprTomorrow);
@@ -413,6 +433,8 @@ export class SignalService {
       overlappingValue,
       virginCPR,
       hotZone,
+      rawVolumeRatio,
+      volumeRatio,
       moneyZone: { vah, val, poc },
     };
   }

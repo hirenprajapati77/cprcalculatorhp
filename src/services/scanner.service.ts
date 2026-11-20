@@ -46,6 +46,10 @@ export interface ScannerSignalResult extends MarketStockData {
   crossAgeMinutes?: number;
   /** Freshness classification of the current setup. */
   setupFreshness?: 'FRESH' | 'MATURE' | 'STALE';
+  /** Session volume ÷ full-day average volume (raw, unadjusted — for audit & telemetry). */
+  rawVolumeRatio: number;
+  /** Pace-normalised volume ratio = rawVolumeRatio / expectedVolumeFraction(minuteOfDay). */
+  volumeRatio: number;
   /** Shadow VPA confirmation — does not affect score unless VPA_LIVE_CONFIDENCE=true. */
   vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult;
   eventRiskScore?: number;
@@ -298,7 +302,7 @@ export class ScannerService {
 
     // 2. Fetch Advanced Signals
     const signalData = SignalService.getSignals(stock, asOfDate);
-    const signals = signalData.signals;
+    const { signals, rawVolumeRatio, volumeRatio: signalVolumeRatio } = signalData;
 
     // ── Cross-Age / Setup Freshness Tracking ─────────────────────────────────
     // Records the FIRST TIME the stock entered this directional state today.
@@ -331,7 +335,7 @@ export class ScannerService {
     // asOfDate (historical): grant reclaim-hold minutes so same-day structure can confirm;
     // gap continuation still needs the longer HOLD_MINUTES (not granted here).
     if (!degenerateData) {
-      const volumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
+      const volumeRatio = signalVolumeRatio;
       const holdForBreakout = asOfDate
         ? BREAKOUT_CONFIRM.RECLAIM_HOLD_MINUTES
         : (crossAgeMinutes ?? 0);
@@ -389,6 +393,8 @@ export class ScannerService {
       width: cprToday.width,
       classification: cprToday.classification,
       signals,
+      rawVolumeRatio,
+      volumeRatio: signalVolumeRatio,
       entry: computedEntry,
       sl: computedSl,
       target: computedTarget,
@@ -455,8 +461,8 @@ export class ScannerService {
   }
 
   private static calculateConfidence(result: Omit<ScannerSignalResult, 'score' | 'confidence'>): number {
-    const { signals, volume, avgVolume, width } = result;
-    const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+    const { signals, volumeRatio, width } = result;
+    // volumeRatio is pace-normalised (rawVolumeRatio / expectedVolumeFraction) from SignalService.
 
     let confidence = 50; // base
 
