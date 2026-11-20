@@ -47,6 +47,13 @@ echo "=== Running Database Migrations ==="
 cd $APP
 npx prisma migrate deploy
 
+# Keep root node_modules/@prisma/client in sync with standalone bundle (prevents stale CLI/scripts)
+if [ -d "$APP/.next/standalone/node_modules/.prisma/client" ] && [ -d "$APP/node_modules/.prisma/client" ]; then
+    echo "=== Syncing Prisma client to root node_modules ==="
+    cp -r $APP/.next/standalone/node_modules/.prisma/client/* $APP/node_modules/.prisma/client/ 2>/dev/null || true
+    cp -r $APP/.next/standalone/node_modules/@prisma/client/* $APP/node_modules/@prisma/client/ 2>/dev/null || true
+fi
+
 echo "=== Recording post-deploy migration state ==="
 POST_DEPLOY_MIGRATIONS=$(psql "$DATABASE_URL" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at;" 2>/dev/null | sed '/^\s*$/d')
 NEW_MIGRATIONS=$(comm -13 <(echo "$PRE_DEPLOY_MIGRATIONS" | sort) <(echo "$POST_DEPLOY_MIGRATIONS" | sort))

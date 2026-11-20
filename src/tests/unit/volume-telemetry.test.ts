@@ -165,6 +165,34 @@ describe('VolumeTelemetryService.buildRows', () => {
     assert.equal(rows[0].sessionVolume, BigInt(0));
     assert.equal(rows[0].rawRatio, 0);
   });
+
+  it('handles fractional avgVolume and volume without throwing (moving-average case)', () => {
+    const stock = createMockStock({
+      volume: 36967521.38095238,
+      avgVolume: 36967521.38095238,
+    });
+
+    const rows = VolumeTelemetryService.buildRows([stock]);
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].sessionVolume, BigInt(Math.round(36967521.38095238)));
+    assert.equal(rows[0].avgVolume, BigInt(Math.round(36967521.38095238)));
+    assert.equal(rows[0].rawRatio, 1);
+  });
+
+  it('rounds fractional avgVolume to integer for BigInt storage', () => {
+    const stock = createMockStock({
+      volume: 500000,
+      avgVolume: 1000000.7,
+    });
+
+    const rows = VolumeTelemetryService.buildRows([stock]);
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].avgVolume, BigInt(1000001));
+    assert.equal(rows[0].sessionVolume, BigInt(500000));
+    assert.equal(rows[0].rawRatio, 0.5);
+  });
 });
 
 describe('VolumeTelemetryService.cutoffDate', () => {
