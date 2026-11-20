@@ -24,6 +24,8 @@ function makeRow(symbol: string): RankedRow {
     close: 100,
     volume: 1_000_000,
     avgVolume: 900_000,
+    rawVolumeRatio: 2,
+    volumeRatio: 2,
     previousClose: 99,
     marketCap: 5000,
     sector: 'Test',

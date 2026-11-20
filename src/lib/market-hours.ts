@@ -407,6 +407,62 @@ export function isBtstJournalWindowOpen(date: Date = new Date()): boolean {
   return totalMinutes >= JOURNAL_START_MIN && totalMinutes <= JOURNAL_END_MIN;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Step 2: Pace-Normalised Volume — session progress & expected-volume curve
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** NSE equity cash session: 09:15–15:30 IST = minuteOfDay 555–930 = 375 minutes. */
+export const EQUITY_SESSION_START_MIN = 555;
+export const EQUITY_SESSION_END_MIN = 930;
+export const EQUITY_SESSION_MINUTES = EQUITY_SESSION_END_MIN - EQUITY_SESSION_START_MIN; // 375
+
+/** Opening range completes at 09:30 IST = minuteOfDay 570. Before this, pace adjustment is bypassed. */
+export const OPENING_RANGE_COMPLETE_MIN = 570;
+
+/**
+ * Fraction of the NSE equity session elapsed at a given minute-of-day.
+ * Returns null outside market hours; clamped to [0, 1] within.
+ */
+export function sessionProgress(minuteOfDay: number): number | null {
+  if (minuteOfDay < EQUITY_SESSION_START_MIN || minuteOfDay > EQUITY_SESSION_END_MIN) return null;
+  return (minuteOfDay - EQUITY_SESSION_START_MIN) / EQUITY_SESSION_MINUTES;
+}
+
+/**
+ * Expected fraction of full-day volume consumed by a given minute-of-day.
+ * Placeholder U-curve fitted to typical NSE intraday seasonality:
+ *   - Before 09:30: returns 1.0 (raw volume = pace volume; no pace adjustment during opening spike).
+ *   - 09:30–12:22 (first half): linear from 0.08 floor to 0.40.
+ *   - 12:22–15:30 (second half): linear from 0.40 to 1.00.
+ *   - Outside session: returns 1.0 (raw volume).
+ *
+ * REPLACE coefficients with telemetry-fitted values after >= 2 trading days of
+ * VolumeTelemetry data:
+ *   SELECT minuteOfDay, avg(rawRatio), count(*)
+ *   FROM VolumeTelemetry
+ *   WHERE rangeProvenance = 'FYERS_QUOTE'
+ *   GROUP BY minuteOfDay ORDER BY minuteOfDay;
+ */
+export function expectedVolumeFraction(minuteOfDay: number): number {
+  const progress = sessionProgress(minuteOfDay);
+  if (progress === null) return 1.0;
+
+  // Opening spike guard: before 09:30 IST, use raw volume directly.
+  if (minuteOfDay < OPENING_RANGE_COMPLETE_MIN) return 1.0;
+
+  const floor = 0.08;
+  const middayFraction = 0.40;
+  const middayProgress = 0.50;
+
+  if (progress <= middayProgress) {
+    return Math.max(floor, middayFraction * (progress / middayProgress));
+  }
+  return Math.min(
+    1.0,
+    middayFraction + (1.0 - middayFraction) * ((progress - middayProgress) / (1.0 - middayProgress)),
+  );
+}
+
 /**
  * Returns history with the in-progress IST daily candle removed when the session
  * is still open. Completed-session ATR/CPR classification must not use today's

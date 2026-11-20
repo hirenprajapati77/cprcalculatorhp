@@ -16,6 +16,12 @@ import {
   BTST_WINDOW_MINUTES,
   BTST_CLOCK,
   getRecentNseTradingDays,
+  EQUITY_SESSION_START_MIN,
+  EQUITY_SESSION_END_MIN,
+  EQUITY_SESSION_MINUTES,
+  OPENING_RANGE_COMPLETE_MIN,
+  sessionProgress,
+  expectedVolumeFraction,
 } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
@@ -414,6 +420,57 @@ describe('Market Hours Utilities', () => {
           `${ymd} (${weekday}) is a weekend and must not be in the weekday holiday table`
         );
       }
+    });
+  });
+
+  describe('Step 2: Pace-Normalised Volume', () => {
+    it('exports expected session boundary constants', () => {
+      assert.strictEqual(EQUITY_SESSION_START_MIN, 555); // 09:15 IST
+      assert.strictEqual(EQUITY_SESSION_END_MIN, 930);   // 15:30 IST
+      assert.strictEqual(EQUITY_SESSION_MINUTES, 375);
+      assert.strictEqual(OPENING_RANGE_COMPLETE_MIN, 570); // 09:30 IST
+    });
+
+    it('sessionProgress returns null outside market hours', () => {
+      assert.strictEqual(sessionProgress(554), null); // 09:14 IST
+      assert.strictEqual(sessionProgress(931), null); // 15:31 IST
+      assert.strictEqual(sessionProgress(0), null);
+    });
+
+    it('sessionProgress scales from 0 to 1 across session', () => {
+      assert.strictEqual(sessionProgress(555), 0);
+      assert.strictEqual(sessionProgress(930), 1);
+      // Midday at ~12:22 IST (minute 742.5): progress ~0.5
+      const mid = sessionProgress(555 + 187.5)!;
+      assert.ok(Math.abs(mid - 0.5) < 0.01);
+    });
+
+    it('expectedVolumeFraction returns 1.0 before 09:30 (opening spike guard)', () => {
+      assert.strictEqual(expectedVolumeFraction(555), 1.0); // 09:15
+      assert.strictEqual(expectedVolumeFraction(569), 1.0); // 09:29
+    });
+
+    it('expectedVolumeFraction respects floor of 0.08 at 09:30', () => {
+      // minute 570 = 15 min into 375 min session = progress 0.04
+      // 0.40 * (0.04 / 0.50) = 0.032 -> floored at 0.08
+      const fraction = expectedVolumeFraction(570);
+      assert.strictEqual(fraction, 0.08);
+    });
+
+    it('expectedVolumeFraction matches midday anchor (0.40 at progress 0.50)', () => {
+      // progress 0.50 = minute 555 + 187.5 = 742.5 (12:22 IST)
+      // at minute 742: progress = 187/375 = 0.49866
+      const fraction742 = expectedVolumeFraction(742);
+      assert.ok(fraction742 >= 0.39 && fraction742 <= 0.40);
+    });
+
+    it('expectedVolumeFraction reaches 1.0 at market close', () => {
+      assert.strictEqual(expectedVolumeFraction(930), 1.0);
+    });
+
+    it('expectedVolumeFraction returns 1.0 outside session', () => {
+      assert.strictEqual(expectedVolumeFraction(500), 1.0);
+      assert.strictEqual(expectedVolumeFraction(1000), 1.0);
     });
   });
 });
