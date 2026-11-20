@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 20 Nov: Step 2: Pace-Normalised Volume for Category B Scoring (PR #329)
+
+- **PR #329 (`2c66850f`) — Pace-Normalised Volume for Category B Scoring & Breakout Timing**:
+  - **Session Progress & Expected-Volume Seasonality (`src/lib/market-hours.ts`)**: Added `sessionProgress(minuteOfDay)` and `expectedVolumeFraction(minuteOfDay)` modeling the 375-minute NSE cash session (09:15–15:30 IST, minutes 555–930). Implemented an opening-spike guard returning 1.0 before 09:30 IST (`OPENING_RANGE_COMPLETE_MIN = 570`), followed by a piecewise linear baseline from a 0.08 floor up to 0.40 at midday (`progress = 0.50`), and scaling to 1.0 at session close.
+  - **Live Signal Volume Normalisation (`src/services/signal.service.ts`)**: Replaced raw daily volume ratio during live trading sessions with pace-normalised ratio: `volumeRatio = rawVolumeRatio / expectedFraction`. Preserves `rawVolumeRatio` alongside `volumeRatio` on `SignalResult` for telemetry and auditability, while bypassing pace adjustment in historical backtests (`asOfDate` present) and outside market hours.
+  - **Scoring & Breakout Wiring (`src/services/ranking.service.ts`, `src/services/scanner.service.ts`)**: Sourced pace-adjusted `volumeRatio` directly into `RankingService.calculateScore()` (Category B max 25 points) and `ScannerService.calculateConfidence()` / `applyBreakoutSignals()`, allowing genuine morning breakouts to achieve fair Category B points without being penalized against full-day 20D average volume.
+  - **Unit Test Coverage (`src/tests/unit/market-hours.test.ts`, `src/tests/unit/ranking-service.test.ts`, `src/tests/unit/scanner-controller-persist.test.ts`, `src/tests/unit/scanner.test.ts`)**: Added 8 unit tests validating session boundaries, opening guard, floor, and midday anchor, alongside updated mock fixtures across scanner and ranking test suites.
+
+### Fixed & Hardened — 20 Nov: Hotfix: Fractional Moving-Average Volume BigInt Rounding (PR #328)
+
+- **PR #328 (`2aad5bd6`) — Fractional `avgVolume` BigInt Conversion Fix & CI Security Check Isolation**:
+  - **BigInt RangeError Fix (`src/services/retention/volume-telemetry.service.ts`)**: Applied `Math.round()` on `rawAvg` and `rawSession` prior to `BigInt()` conversion in `VolumeTelemetryService.buildRows()`, eliminating production crash `RangeError: Cannot convert non-integer to BigInt` on fractional 20/50D moving average volumes. Added 2 regression unit tests.
+  - **CI Security Audit Isolation (`package.json`)**: Added `--omit=optional` to `security:check` script (`npm audit --omit=dev --omit=optional --audit-level=high`) to prevent non-production `@prisma/config` transitive optional dependencies from failing CI verification.
+  - **Production Client Sync (`ops/deploy_extract.sh`)**: Enhanced server deploy script to sync generated Prisma client from `.next/standalone` to root `node_modules`, preventing client staleness on PM2 restarts.
+
+### Added & Hardened — 19 Nov: Step 1: Volume Telemetry & Range Provenance Foundation (PR #327)
+
+- **PR #327 (`1673620bb0`) — Volume Telemetry Ingestion, Range Provenance & Retention Cron**:
+  - **Database Migration (`prisma/schema.prisma`, `20261119000000_volume_telemetry`)**: Created `VolumeTelemetry` model storing `symbol`, `minuteOfDay`, `sessionVolume`, `avgVolume`, `rawRatio`, `rangeProvenance`, `date`, and timestamp for empirical volume curve modeling.
+  - **Range Provenance Tracking (`src/services/market.service.ts`, `src/services/live-feed/`)**: Tagged quote origins explicitly as `FYERS_QUOTE` (live real-time quote), `INTRADAY_TODAY_BAR` (15m bar accumulation fallback), or `STALE_PREV_DAY`.
+  - **Non-Blocking Telemetry Ingestion (`src/services/retention/volume-telemetry.service.ts`, `src/jobs/cpr-scan.job.ts`)**: Wired asynchronous batched recording into scanner sweeps with fire-and-forget error handling to prevent telemetry failures from degrading scanner uptime.
+  - **Automated Rolling Retention (`src/app/api/cron/retention-volume-telemetry/route.ts`)**: Installed retention cron running daily at 13:45 UTC (19:15 IST) pruning telemetry older than 7 rolling trading days.
+
 ### Fixed & Hardened — 14 Nov: NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)
 
 - **PR #324 — Align NIFTY 50 Constituents with Official NSE List, Enforce Exact 50 Cap & Export Breadth Filter Helper**:
