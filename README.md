@@ -23,6 +23,8 @@ A production-grade algorithmic validation engine built with Next.js 15, TypeScri
 - **Deterministic Build Identity & Deploy Visibility:** Bounded 12-character git commit SHA build ID (`scripts/generate-build-id.js`) exposed via `/api/build-id` and verified during deployments.
 - **Production Smoke Verification:** Standalone smoke verification script (`scripts/smoke-verify.ts` / `npm run smoke`) with default TLS enforcement verifying health, build ID, security headers, and authenticated endpoints.
 - **Scoped Database Query Protection:** Strict transaction-scoped statement timeouts and application-level deadlines (`executeGuardedQuery` in `src/lib/db-query-guard.ts`) preventing runaway queries and dangling Prisma transaction slots.
+- **Pace-Normalised Intraday Volume (Step 2)**: Dynamically scales live volume ratios by expected session progress (`expectedVolumeFraction`) across the 375-minute NSE session (09:15–15:30 IST) with opening-spike protection (< 09:30 IST), eliminating artificial score penalties on early-morning breakout candidates against 20-day full-day averages.
+- **Volume Telemetry & Range Provenance (Step 1)**: Asynchronous non-blocking telemetry engine recording quote source provenance (`FYERS_QUOTE`, `INTRADAY_TODAY_BAR`, `STALE_PREV_DAY`) and minute-of-day ratios into `VolumeTelemetry` with automated 7-day rolling retention cron pruning (`/api/cron/retention-volume-telemetry` at 13:45 UTC).
 - **Redis First Caching:** All module-level maps replaced with TTL-managed Redis caches for horizontal scalability.
 
 ---
@@ -63,6 +65,12 @@ For a detailed version history and architectural changes, please see the **[CHAN
 Release `v2.0.0-production` marks the formal transition from a technical terminal into a fully observability-layered overnight execution engine.
 
 **Recent Updates (November 2026):**
+- **20 Nov — Step 2: Pace-Normalised Volume for Category B Scoring (PR #329 / `2c66850f`)**:
+  - **Pace Normalization (`#329`)**: Added `sessionProgress()` and `expectedVolumeFraction()` in `src/lib/market-hours.ts` (09:15–15:30 IST; opening spike guard before 09:30). Sourced pace-adjusted `volumeRatio` into `SignalService.getSignals()`, `RankingService.calculateScore()` (Category B max 25), and `ScannerService.calculateConfidence()`, while preserving `rawVolumeRatio` for telemetry. Added 8 unit tests in `market-hours.test.ts`.
+- **20 Nov — Hotfix: Fractional Moving-Average Volume BigInt Rounding (PR #328 / `2aad5bd6`)**:
+  - **BigInt Rounding Fix (`#328`)**: Applied `Math.round()` on fractional 20/50D volume inputs before `BigInt()` in `VolumeTelemetryService.buildRows()`, fixing production RangeError; isolated CI `security:check` with `--omit=optional`; enhanced `deploy_extract.sh` to sync generated Prisma client to root `node_modules`.
+- **19 Nov — Step 1: Volume Telemetry & Range Provenance Foundation (PR #327 / `1673620bb0`)**:
+  - **Volume Telemetry Pipeline (`#327`)**: Added `VolumeTelemetry` model (`20261119000000_volume_telemetry`), `rangeProvenance` quote tracking (`FYERS_QUOTE`, `INTRADAY_TODAY_BAR`, `STALE_PREV_DAY`), batched non-blocking sweep ingestion, and automated daily retention cron at 13:45 UTC.
 - **14 Nov — NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)**:
   - **Constituent Alignment & Exact 50 Cap (`#324`)**: Aligned `STOCK_UNIVERSE` and `NIFTY50_SYMBOLS` to official NSE CSV (50 active members); activated confirmed additions (`BEL`, `BSE`, `HINDALCO`, `INDIGO`, `JIOFIN`, `MAXHEALTH`) and deactivated exited members. Exported `filterNifty50Stats` with trimmed matching and removed dead alias exports.
 - **14 Nov — Market Tools Heatmap Sector Precedence, As-Of Telemetry, Universe Coverage Guard & Route Cleanup (`df5ef053`, PR #313)**:
