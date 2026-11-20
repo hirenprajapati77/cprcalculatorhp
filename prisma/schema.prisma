@@ -456,13 +456,14 @@ model VolumeTelemetry {
   id              Int      @id @default(autoincrement())
   symbol          String
   date            String   // YYYY-MM-DD
-  minuteOfDay     Int      // 555 (09:15) to 930 (15:30)
+  minuteOfDay     Int      // 555 (09:15) to 930 (15:30), clamped to session bounds
   sessionVolume   BigInt
   avgVolume       BigInt
   rawRatio        Float
   rangeProvenance String   // FYERS_QUOTE | INTRADAY_TODAY_BAR | STALE_PREV_DAY
   createdAt       DateTime @default(now())
 
+  @@unique([symbol, date, minuteOfDay])
   @@index([minuteOfDay])
   @@index([date, minuteOfDay])
 }

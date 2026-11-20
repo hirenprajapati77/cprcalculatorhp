@@ -132,16 +132,25 @@ export async function runMarketToolsWatchJob(dateKey?: string | null): Promise<v
 export interface FyersSessionCheckResult {
   status: 'VALID' | 'EXPIRED' | 'MISSING' | 'DECRYPT_FAILED' | 'DB_ERROR';
   alertSent: boolean;
+  sent?: boolean;
+  success?: boolean;
   message?: string;
 }
 
 export async function checkFyersSession(now: Date = new Date()): Promise<FyersSessionCheckResult> {
-  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '');
+  if (!baseUrl) {
+    console.error('[MarketCronScheduler] NEXT_PUBLIC_BASE_URL is not set; Fyers session alert link will be broken.');
+  }
 
   const sendAlertSafely = async (msg: string): Promise<boolean> => {
     try {
       const { TelegramService } = await import('@/services/alert/telegram.service');
-      await TelegramService.sendMessage(msg);
+      const res = await TelegramService.sendMessage(msg);
+      if (!res.ok) {
+        console.error('[MarketCronScheduler] Telegram rejected Fyers session alert:', res.reason);
+        return false;
+      }
       return true;
     } catch (alertErr) {
       console.error('[MarketCronScheduler] Failed to dispatch Fyers session alert to Telegram:', alertErr);
@@ -162,27 +171,27 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
       `Fyers session check could not run due to an internal system error.\n` +
       `Broker session status is unverified for today's trading.`;
     const sent = await sendAlertSafely(msg);
-    return { status: 'DB_ERROR', alertSent: sent, message: msg };
+    return { status: 'DB_ERROR', alertSent: sent, sent, success: false, message: msg };
   }
 
   if (!tokenRecord) {
     const msg =
       `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
       `The daily Fyers broker token has expired.\n` +
-      `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers session missing alert to Telegram.');
-    return { status: 'MISSING', alertSent: sent, message: msg };
+    return { status: 'MISSING', alertSent: sent, sent, success: sent, message: msg };
   }
 
   if (tokenRecord.expiresAt <= now) {
     const msg =
       `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
       `The daily Fyers broker token has expired.\n` +
-      `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
-    return { status: 'EXPIRED', alertSent: sent, message: msg };
+    return { status: 'EXPIRED', alertSent: sent, sent, success: sent, message: msg };
   }
 
   // Record exists and date is valid; decrypt the already-loaded tokenRecord directly
@@ -198,13 +207,13 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
     const msg =
       `⚠️ <b>FYERS SESSION INVALID</b>\n\n` +
       `The daily Fyers broker token could not be decrypted.\n` +
-      `Please visit <a href="${baseUrl}/settings">Settings</a> and click <b>Connect Fyers</b> to re-authenticate for today's 15:20 scan.`;
+      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to re-authenticate for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers token decrypt failure alert to Telegram.');
-    return { status: 'DECRYPT_FAILED', alertSent: sent, message: msg };
+    return { status: 'DECRYPT_FAILED', alertSent: sent, sent, success: sent, message: msg };
   }
 
-  return { status: 'VALID', alertSent: false };
+  return { status: 'VALID', alertSent: false, success: true };
 }
 
 
