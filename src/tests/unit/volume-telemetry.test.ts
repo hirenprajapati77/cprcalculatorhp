@@ -140,6 +140,18 @@ describe('VolumeTelemetryService.buildRows', () => {
     assert.equal(rows[0].date, '2026-10-15');
   });
 
+  it('clamps minuteOfDay to [555, 930] for off-session scans', () => {
+    const stock = createMockStock();
+    const earlyNow = new Date('2026-11-19T02:00:00.000Z'); // 07:30 IST = minute 450
+    const lateNow = new Date('2026-11-19T11:00:00.000Z');  // 16:30 IST = minute 990
+
+    const earlyRows = VolumeTelemetryService.buildRows([stock], earlyNow);
+    assert.equal(earlyRows[0].minuteOfDay, 555);
+
+    const lateRows = VolumeTelemetryService.buildRows([stock], lateNow);
+    assert.equal(lateRows[0].minuteOfDay, 930);
+  });
+
   it('skips stocks without symbol or with empty symbol', () => {
     const stockNoSym = createMockStock({ symbol: '' });
     const rows = VolumeTelemetryService.buildRows([stockNoSym]);

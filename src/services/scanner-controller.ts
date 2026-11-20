@@ -564,18 +564,36 @@ export class ScannerController {
       }
 
       // Send ops Telegram alert for DB persistence failure (with cooldown)
+      const cooldownKey = `ops:alert:db_persist_failed:${universeName}:${market}:${today}`;
+      const cooldownTtlMs = 30 * 60 * 1000;
+      let cooldownActive = false;
       try {
-        const { TelegramService, escapeTelegramHtml } = await import('@/services/alert/telegram.service');
-        const alertMsg =
-          `🚨 <b>SCANNER DB PERSISTENCE FAILED</b>\n\n` +
-          `• Universe: <code>${escapeTelegramHtml(universeName)}</code>\n` +
-          `• Market: <code>${escapeTelegramHtml(market)}</code>\n` +
-          `• Date: <code>${escapeTelegramHtml(today)}</code>\n` +
-          `• Error: <code>${escapeTelegramHtml(errMsg.slice(0, 200))}</code>\n\n` +
-          `<i>Scanner results served from memory/cache fallback.</i>`;
-        await TelegramService.sendMessage(alertMsg);
-      } catch (tgErr) {
-        console.error('[SCAN] Failed to dispatch Telegram alert for scan persist failure:', tgErr);
+        const existing = await CacheService.get(cooldownKey);
+        cooldownActive = existing !== null && existing !== undefined;
+      } catch (cacheErr) {
+        console.error('[SCAN] Failed to read scan persist alert cooldown from Redis:', cacheErr);
+      }
+
+      if (!cooldownActive) {
+        try {
+          await CacheService.set(cooldownKey, '1', cooldownTtlMs / 1000);
+        } catch (cacheErr) {
+          console.error('[SCAN] Failed to write scan persist alert cooldown to Redis:', cacheErr);
+        }
+
+        try {
+          const { TelegramService, escapeTelegramHtml } = await import('@/services/alert/telegram.service');
+          const alertMsg =
+            `🚨 <b>SCANNER DB PERSISTENCE FAILED</b>\n\n` +
+            `• Universe: <code>${escapeTelegramHtml(universeName)}</code>\n` +
+            `• Market: <code>${escapeTelegramHtml(market)}</code>\n` +
+            `• Date: <code>${escapeTelegramHtml(today)}</code>\n` +
+            `• Error: <code>${escapeTelegramHtml(errMsg.slice(0, 200))}</code>\n\n` +
+            `<i>Scanner results served from memory/cache fallback.</i>`;
+          await TelegramService.sendMessage(alertMsg);
+        } catch (tgErr) {
+          console.error('[SCAN] Failed to dispatch Telegram alert for scan persist failure:', tgErr);
+        }
       }
     }
   }

@@ -9,7 +9,6 @@ import {
   isTodayCandleClosed,
   getISTTime,
   getCompletedHistory,
-  sessionProgress,
   expectedVolumeFraction,
 } from '@/lib/market-hours';
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
@@ -170,10 +169,19 @@ export class SignalService {
     // ── Volume Ratio: Pace-Normalised vs Raw ──────────────────────────────────
     // Step 2: During live trading (no asOfDate), normalise volume by expected
     // session progress so morning breakouts are not penalised against full-day avgVolume.
+    // Gated behind FEATURE_PACE_VOLUME (default false) until the curve is fitted
+    // to empirical VolumeTelemetry data. Skipped for STALE_PREV_DAY provenance
+    // (yesterday's full-day volume divided by a small fraction would explode).
     // In backtests (asOfDate present) or outside market hours, expectedFraction = 1.0.
     const rawVolumeRatio = stock.avgVolume > 0 ? stock.volume / stock.avgVolume : 1;
     let volumeRatio = rawVolumeRatio;
-    if (!normalizedAsOfDate && stock.avgVolume > 0) {
+    const isPaceVolumeEnabled = process.env.FEATURE_PACE_VOLUME === 'true';
+    if (
+      !normalizedAsOfDate &&
+      isPaceVolumeEnabled &&
+      stock.avgVolume > 0 &&
+      stock.rangeProvenance !== 'STALE_PREV_DAY'
+    ) {
       const minuteOfDay = getISTTime().totalMinutes;
       const expectedFraction = expectedVolumeFraction(minuteOfDay);
       if (expectedFraction > 0) {

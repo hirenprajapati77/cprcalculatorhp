@@ -54,10 +54,14 @@ export class VolumeTelemetryService {
       const rawRatio = avgVol > 0 ? Number((sessionVol / rawAvg).toFixed(4)) : 0;
       const provenance: RangeProvenance = stock.rangeProvenance ?? 'STALE_PREV_DAY';
 
+      // Clamp minuteOfDay to session bounds (555–930) to satisfy the unique
+      // constraint and prevent off-session scans from writing out-of-range keys.
+      const clampedMinute = Math.min(930, Math.max(555, totalMinutes));
+
       rows.push({
         symbol: stock.symbol,
         date,
-        minuteOfDay: totalMinutes,
+        minuteOfDay: clampedMinute,
         sessionVolume: BigInt(sessionVol),
         avgVolume: BigInt(avgVol),
         rawRatio,

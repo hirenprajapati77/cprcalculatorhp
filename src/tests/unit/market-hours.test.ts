@@ -445,23 +445,33 @@ describe('Market Hours Utilities', () => {
       assert.ok(Math.abs(mid - 0.5) < 0.01);
     });
 
-    it('expectedVolumeFraction returns 1.0 before 09:30 (opening spike guard)', () => {
-      assert.strictEqual(expectedVolumeFraction(555), 1.0); // 09:15
-      assert.strictEqual(expectedVolumeFraction(569), 1.0); // 09:29
+    it('expectedVolumeFraction is continuous from session start (no step jump at 09:30)', () => {
+      // 09:15 (session open): starts at floor 0.10
+      const f555 = expectedVolumeFraction(555);
+      assert.ok(f555 >= 0.09 && f555 <= 0.11, `09:15 fraction ${f555} should be ~0.10`);
+
+      // 09:30: continuous with 09:29, no step jump
+      const f569 = expectedVolumeFraction(569);
+      const f570 = expectedVolumeFraction(570);
+      assert.ok(Math.abs(f570 - f569) < 0.01, `09:30 fraction ${f570} should equal 09:29 fraction ${f569}`);
+
+      // Curve rises through the morning
+      const f630 = expectedVolumeFraction(630); // 10:30 IST
+      assert.ok(f630 > f570, `10:30 fraction ${f630} should exceed 09:30 fraction ${f570}`);
     });
 
-    it('expectedVolumeFraction respects floor of 0.08 at 09:30', () => {
+    it('expectedVolumeFraction respects floor of 0.10 at session open', () => {
       // minute 570 = 15 min into 375 min session = progress 0.04
-      // 0.40 * (0.04 / 0.50) = 0.032 -> floored at 0.08
+      // 0.45 * (0.04 / 0.50) = 0.036 -> floored at 0.10
       const fraction = expectedVolumeFraction(570);
-      assert.strictEqual(fraction, 0.08);
+      assert.strictEqual(fraction, 0.10);
     });
 
-    it('expectedVolumeFraction matches midday anchor (0.40 at progress 0.50)', () => {
+    it('expectedVolumeFraction matches midday anchor (0.45 at progress 0.50)', () => {
       // progress 0.50 = minute 555 + 187.5 = 742.5 (12:22 IST)
       // at minute 742: progress = 187/375 = 0.49866
       const fraction742 = expectedVolumeFraction(742);
-      assert.ok(fraction742 >= 0.39 && fraction742 <= 0.40);
+      assert.ok(fraction742 >= 0.44 && fraction742 <= 0.46, `midday fraction ${fraction742} should be ~0.45`);
     });
 
     it('expectedVolumeFraction reaches 1.0 at market close', () => {

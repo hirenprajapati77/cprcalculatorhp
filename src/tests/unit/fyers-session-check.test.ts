@@ -120,4 +120,20 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     assert.equal(res.status, 'EXPIRED', 'Status must remain EXPIRED even if Telegram fails');
     assert.equal(res.alertSent, false);
   });
+
+  it('7. telegram rejection ({ ok: false }) sets alertSent: false and sent: false so job can retry', async () => {
+    const past = new Date(Date.now() - 3600_000);
+    prisma.brokerToken.findUnique = (async () => ({
+      broker: 'fyers',
+      accessToken: 'encrypted_expired_token',
+      expiresAt: past,
+    })) as any;
+
+    TelegramService.sendMessage = async () => ({ ok: false, reason: 'chat_not_found' });
+
+    const res = await checkFyersSession(new Date());
+    assert.equal(res.status, 'EXPIRED');
+    assert.equal(res.alertSent, false);
+    assert.equal(res.sent, false);
+  });
 });
