@@ -448,8 +448,8 @@ export function expectedVolumeFraction(minuteOfDay: number): number {
   if (progress === null) return 1.0;
 
   // Smooth U-curve: continuous from 09:15, no step discontinuity at 09:30.
-  const floor = 0.10;          // expected fraction at session open (09:15 IST)
-  const middayFraction = 0.45; // expected fraction at session midpoint (~12:22 IST)
+  const floor = 0.05;          // expected fraction at session open (09:15 IST)
+  const middayFraction = 0.48; // expected fraction at session midpoint (~12:22 IST)
   const middayProgress = 0.50; // progress at midpoint
 
   if (progress <= middayProgress) {
