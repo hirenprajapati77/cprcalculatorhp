@@ -469,7 +469,6 @@ export class ScannerService {
         candle15m: stock.candle15m,
         holdMinutes: holdForBreakout,
         allowSessionReclaim: true,
-        rawVolumeRatio,
       });
     }
 
