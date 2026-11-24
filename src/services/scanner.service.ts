@@ -136,14 +136,9 @@ export class ScannerService {
     // ── ORB Entry Logic ───────────────────────────────────────────────────────
     // When an opening range exists and volume confirms, prefer ORB entry
     // anchored to OR boundary rather than CPR TC/BC.
-    const orbDirection =
-      openingRange && volumeRatio >= minVolumeRatio
-        ? ltp > openingRange.orHigh
-          ? 'LONG'
-          : ltp < openingRange.orLow
-            ? 'SHORT'
-            : null
-        : null;
+    const orbDirection = openingRange
+      ? isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio, minVolumeRatio)
+      : null;
 
     // Narrow openingRange to non-null when orbDirection is set
     const or = openingRange;
@@ -151,7 +146,12 @@ export class ScannerService {
     if (orbDirection === 'LONG' && or) {
       // LONG ORB: entry at OR High, SL at OR Midpoint (conservative)
       entry = or.orHigh;
-      sl = or.orMidpoint;
+      // Cap ORB SL to MAX_SL_PCT (3.0%) below entry to guard against massive flash wicks,
+      // and ensure minimum 0.5% buffer so risk > 0 even on flat/narrow opening ranges.
+      const midpointSL = or.orMidpoint;
+      const minSL = entry * 0.995;
+      const maxDistanceSL = entry * (1 - MAX_SL_PCT);
+      sl = Math.max(Math.min(midpointSL, minSL), maxDistanceSL);
       setupType = 'ORB_BREAKOUT';
       bias = 'BULLISH';
       const risk = entry - sl;
@@ -181,7 +181,12 @@ export class ScannerService {
     } else if (orbDirection === 'SHORT' && or) {
       // SHORT ORB: entry at OR Low, SL at OR Midpoint (conservative)
       entry = or.orLow;
-      sl = or.orMidpoint;
+      // Cap ORB SL to MAX_SL_PCT (3.0%) above entry to guard against massive flash wicks,
+      // and ensure minimum 0.5% buffer so risk > 0 even on flat/narrow opening ranges.
+      const midpointSL = or.orMidpoint;
+      const maxSL = entry * 1.005;
+      const maxDistanceSL = entry * (1 + MAX_SL_PCT);
+      sl = Math.min(Math.max(midpointSL, maxSL), maxDistanceSL);
       setupType = 'ORB_BREAKOUT';
       bias = 'BEARISH';
       const risk = sl - entry;
@@ -470,9 +475,9 @@ export class ScannerService {
     // Do NOT revert to cprTomorrow.* without explicit owner approval —
     // see docs/decisions/cpr-entry-basis-2026-08-10.md (PR #98 / 9395ef5).
     const openingRange = getOpeningRange(
-      stock.candle15m ?? null,
-      stock.high,
-      stock.low
+      stock.openingCandle15m ?? stock.candle15m ?? null,
+      new Date(),
+      asOfDate
     );
     const {
       entry,

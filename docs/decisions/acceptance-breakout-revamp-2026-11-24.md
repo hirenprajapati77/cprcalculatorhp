@@ -40,7 +40,7 @@
 - **Resolution:**
   - Added `VolumeTelemetry` table storing `symbol`, `date`, `minuteOfDay`, `sessionVolume`, `avgVolume`, `rawRatio`, `rangeProvenance`.
   - Tagged quote origins explicitly (`FYERS_QUOTE`, `INTRADAY_TODAY_BAR`, `STALE_PREV_DAY`).
-  - Implemented 7-day rolling retention cron (`/api/cron/retention-volume-telemetry`).
+  - Integrated 30-day rolling retention cron into `/api/cron/retention`.
   - Added `Math.round()` prior to `BigInt` conversions for fractional 20D/50D volumes.
   - Added unique constraint `@@unique([symbol, date, minuteOfDay])` and upsert deduplication.
 

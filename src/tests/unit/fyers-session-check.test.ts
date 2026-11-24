@@ -136,4 +136,20 @@ describe('checkFyersSession (09:00 AM IST Regression Guard)', () => {
     assert.equal(res.alertSent, false);
     assert.equal(res.sent, false);
   });
+
+  it('8. falls back to default baseUrl when NEXT_PUBLIC_BASE_URL is not set so Telegram relative URL error is prevented', async () => {
+    const origBaseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    delete process.env.NEXT_PUBLIC_BASE_URL;
+    prisma.brokerToken.findUnique = (async () => null) as any;
+
+    try {
+      const res = await checkFyersSession(new Date());
+      assert.equal(res.status, 'MISSING');
+      assert.equal(res.alertSent, true);
+      assert.ok(sentMessages[0].includes('https://129-159-230-41.nip.io/settings'));
+      assert.equal(sentMessages[0].includes('href="/settings"'), false);
+    } finally {
+      process.env.NEXT_PUBLIC_BASE_URL = origBaseUrl;
+    }
+  });
 });

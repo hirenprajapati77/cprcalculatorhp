@@ -68,6 +68,7 @@ export interface MarketStockData {
   history?: HistoricalCandle[];
   vwap?: number;
   candle15m?: { open: number; high: number; low: number; close: number; volume: number } | null;
+  openingCandle15m?: { open: number; high: number; low: number; close: number; volume?: number } | null;
   sma20Slope?: number;
   sma50Slope?: number;
   sma200?: number;
@@ -1301,9 +1302,10 @@ export class MarketService {
         const sma20Slope = bundle.sma20Slope;
         const sma50Slope = bundle.sma50Slope;
 
-        // -- Fetch 15m intraday data for VWAP, candle15m, session OHLCV aggregation, and live price --
+        // -- Fetch 15m intraday data for VWAP, candle15m, openingCandle15m, session OHLCV aggregation, and live price --
         let vwap = (prevHigh + prevLow + prevClose) / 3;
         let candle15m: MarketStockData['candle15m'] = null;
+        let openingCandle15m: MarketStockData['openingCandle15m'] = null;
         let ltp = bundle.regularMarketPrice ?? prevClose;
 
         // Session OHLCV tracking for today's live activity
@@ -1431,6 +1433,36 @@ export class MarketService {
                   }
                 }
               }
+
+              // First valid 15m candle of the session = 09:15–09:30 Opening Range Candle
+              let firstValidIdx = 0;
+              while (
+                firstValidIdx < len15 &&
+                (quotes15.close[firstValidIdx] === null ||
+                  quotes15.close[firstValidIdx] === undefined ||
+                  !Number.isFinite(quotes15.close[firstValidIdx] as number))
+              ) {
+                firstValidIdx++;
+              }
+              if (firstValidIdx < len15) {
+                const c15First = quotes15.close[firstValidIdx] as number;
+                const h15First = quotes15.high[firstValidIdx];
+                const l15First = quotes15.low[firstValidIdx];
+                const o15First = quotes15.open?.[firstValidIdx];
+                const v15First = quotes15.volume?.[firstValidIdx];
+                if (
+                  typeof h15First === 'number' && Number.isFinite(h15First) &&
+                  typeof l15First === 'number' && Number.isFinite(l15First)
+                ) {
+                  openingCandle15m = {
+                    open: typeof o15First === 'number' && Number.isFinite(o15First) ? o15First : c15First,
+                    high: h15First,
+                    low: l15First,
+                    close: c15First,
+                    volume: typeof v15First === 'number' && Number.isFinite(v15First) && v15First >= 0 ? v15First : 0,
+                  };
+                }
+              }
             }
           }
         } catch (_err) {
@@ -1467,6 +1499,7 @@ export class MarketService {
           history,
           vwap,
           candle15m,
+          openingCandle15m,
           sma20Slope,
           sma50Slope,
           sessionAggregated: hasAggregatedIntraday,
@@ -1726,6 +1759,7 @@ export class MarketService {
       const typical = (high + low + close) / 3;
       let vwap = MarketService.isPositivePrice(qv.atp) ? qv.atp : typical;
       let candle15m: MarketStockData['candle15m'] = null;
+      let openingCandle15m: MarketStockData['openingCandle15m'] = null;
 
       // ── 15m history: VWAP + candle15m (parity with Yahoo fallback path) ──
       // Soft-fail: daily quotes+history already succeeded; missing 15m must not
@@ -1767,6 +1801,9 @@ export class MarketService {
             }
             if (parsed15.candle15m) {
               candle15m = parsed15.candle15m;
+            }
+            if (parsed15.openingCandle15m) {
+              openingCandle15m = parsed15.openingCandle15m;
             }
           } else {
             // Soft-fail: non-critical enrichment field with typical-price VWAP fallback.
@@ -1810,6 +1847,7 @@ export class MarketService {
         history,
         vwap,
         candle15m,
+        openingCandle15m,
         sma20Slope,
         sma50Slope,
         rangeProvenance: resolveRangeProvenance({

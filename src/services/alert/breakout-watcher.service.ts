@@ -41,6 +41,8 @@ export interface BreakoutScanResult {
   orLow?: number;
   /** Step 3: ORB entry level (orHigh for LONG, orLow for SHORT) — used by OR-aware price gate. */
   orEntry?: number;
+  /** Step 3: Setup type (CPR_PULLBACK or ORB_BREAKOUT) — ensures only ORB setups use OR-aware price gate. */
+  setupType?: 'CPR_PULLBACK' | 'ORB_BREAKOUT';
   /** Which signal triggered this alert row (set by detectNewBreakouts). */
   alertKind?: BreakoutAlertKind;
   /** Pre-fetched by breakout-alert.pipeline before Telegram send (optional). */

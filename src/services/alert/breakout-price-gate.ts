@@ -61,6 +61,8 @@ export function evaluateCprSetupPriceStaleness(args: {
   orLow?: number;
   /** Step 3: ORB entry level (orHigh for LONG, orLow for SHORT). Defaults to entry when not provided. */
   orEntry?: number;
+  /** Step 3: Setup type. When ORB_BREAKOUT, routes to evaluateOrbSetupStaleness. */
+  setupType?: 'CPR_PULLBACK' | 'ORB_BREAKOUT';
 }): { stale: true; reason: BreakoutPriceGateReason; detail: string } | { stale: false } {
   const {
     entry,
@@ -77,11 +79,14 @@ export function evaluateCprSetupPriceStaleness(args: {
     orHigh,
     orLow,
     orEntry,
+    setupType,
   } = args;
 
-  // Step 3: When opening range is provided, use OR-aware staleness checks
+  // Step 3: When setup is ORB_BREAKOUT (or opted in) and opening range is provided, use OR-aware staleness checks
   // (gap vs OR boundary, extension from OR entry) instead of CPR-based checks.
-  if (orHigh != null && orLow != null && todayHigh > 0 && todayLow > 0) {
+  // CPR_PULLBACK setups continue through standard CPR gap/extension checks.
+  const isOrb = setupType === 'ORB_BREAKOUT' || (setupType === undefined && orEntry != null);
+  if (isOrb && orHigh != null && orLow != null && todayHigh > 0 && todayLow > 0) {
     const orbEntry = orEntry ?? entry;
     return evaluateOrbSetupStaleness({
       orEntry: orbEntry,
@@ -201,6 +206,7 @@ export function filterBreakoutsForPriceActionability(
       ...(b.orHigh != null ? { orHigh: b.orHigh } : {}),
       ...(b.orLow != null ? { orLow: b.orLow } : {}),
       ...(b.orEntry != null ? { orEntry: b.orEntry } : {}),
+      ...(b.setupType != null ? { setupType: b.setupType } : {}),
       symbol: b.symbol,
       sector: b.sector,
       ...(entryExtensionPct != null ? { entryExtensionPct } : {}),

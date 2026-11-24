@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Database Migration (`prisma/schema.prisma`, `20261119000000_volume_telemetry`)**: Created `VolumeTelemetry` model storing `symbol`, `minuteOfDay`, `sessionVolume`, `avgVolume`, `rawRatio`, `rangeProvenance`, `date`, and timestamp for empirical volume curve modeling.
   - **Range Provenance Tracking (`src/services/market.service.ts`, `src/services/live-feed/`)**: Tagged quote origins explicitly as `FYERS_QUOTE` (live real-time quote), `INTRADAY_TODAY_BAR` (15m bar accumulation fallback), or `STALE_PREV_DAY`.
   - **Non-Blocking Telemetry Ingestion (`src/services/retention/volume-telemetry.service.ts`, `src/jobs/cpr-scan.job.ts`)**: Wired asynchronous batched recording into scanner sweeps with fire-and-forget error handling to prevent telemetry failures from degrading scanner uptime.
-  - **Automated Rolling Retention (`src/app/api/cron/retention-volume-telemetry/route.ts`)**: Installed retention cron running daily at 13:45 UTC (19:15 IST) pruning telemetry older than 7 rolling trading days.
+  - **Automated Rolling Retention (`src/app/api/cron/retention/route.ts`)**: Integrated retention cron pruning telemetry older than 30 rolling calendar days.
 
 ### Fixed & Hardened — 14 Nov: NIFTY 50 Universe Alignment with Official NSE Indices List (PR #324)
 

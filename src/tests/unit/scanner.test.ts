@@ -1446,6 +1446,60 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
       assert.strictEqual(bear.entry, 95); // BC
       assert.ok(bear.target < 94, `BEARISH target must be < ltp (got ${bear.target})`);
     });
+
+    await t2.test('ORB Breakout: triggers ORB_BREAKOUT when volume confirms, anchors to orHigh/orLow with SL buffer & cap', () => {
+      // 1. Long breakout with normal OR
+      const orbLong = ScannerService.computeTradeSetup({
+        ltp: 105,
+        cprToday: baseCpr,
+        dayHigh: 106,
+        dayLow: 98,
+        volumeRatio: 2.0,
+        openingRange: { orHigh: 104, orLow: 100, orMidpoint: 102, orRange: 4 },
+      });
+      assert.strictEqual(orbLong.setupType, 'ORB_BREAKOUT');
+      assert.strictEqual(orbLong.entry, 104);
+      assert.strictEqual(orbLong.sl, 102); // midpoint is between minSL (103.48) and maxDistanceSL (100.88)
+      assert.strictEqual(orbLong.bias, 'BULLISH');
+
+      // 2. Long breakout with flat OR (orHigh == orLow) enforces 0.5% minSL buffer
+      const orbFlat = ScannerService.computeTradeSetup({
+        ltp: 105,
+        cprToday: baseCpr,
+        dayHigh: 106,
+        dayLow: 98,
+        volumeRatio: 2.0,
+        openingRange: { orHigh: 100, orLow: 100, orMidpoint: 100, orRange: 0 },
+      });
+      assert.strictEqual(orbFlat.setupType, 'ORB_BREAKOUT');
+      assert.strictEqual(orbFlat.entry, 100);
+      assert.strictEqual(orbFlat.sl, 99.5); // 0.5% buffer below entry prevents 0 risk
+      assert.ok(orbFlat.entry > orbFlat.sl, 'Entry must be strictly greater than SL');
+
+      // 3. Wide OR (e.g. 20% range) caps SL to MAX_SL_PCT (3.0%) below entry
+      const orbWide = ScannerService.computeTradeSetup({
+        ltp: 105,
+        cprToday: baseCpr,
+        dayHigh: 106,
+        dayLow: 75,
+        volumeRatio: 2.0,
+        openingRange: { orHigh: 100, orLow: 80, orMidpoint: 90, orRange: 20 },
+      });
+      assert.strictEqual(orbWide.setupType, 'ORB_BREAKOUT');
+      assert.strictEqual(orbWide.entry, 100);
+      assert.strictEqual(orbWide.sl, 97); // 3% max SL cap applied (90 capped to 97)
+
+      // 4. Degenerate zero orHigh does not trigger ORB breakout
+      const orbZero = ScannerService.computeTradeSetup({
+        ltp: 105,
+        cprToday: baseCpr,
+        dayHigh: 106,
+        dayLow: 98,
+        volumeRatio: 2.0,
+        openingRange: { orHigh: 0, orLow: 0, orMidpoint: 0, orRange: 0 },
+      });
+      assert.strictEqual(orbZero.setupType, 'CPR_PULLBACK');
+    });
   });
 });
 

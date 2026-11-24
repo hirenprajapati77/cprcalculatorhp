@@ -388,9 +388,15 @@ export class SignalService {
 
     // ── Opening Range Breakout (Step 3) ──────────────────────────────────────
     // Detect ORB when price crosses OR high/low with pace-normalised volume.
-    // Uses 15m candle (09:15–09:30) as opening range, falls back to session H/L.
-    const openingRange = getOpeningRange(stock.candle15m ?? null, stock.high, stock.low);
-    const orbDirection = isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio);
+    // Uses 15m candle (09:15–09:30) as opening range. Incomplete before 09:30 IST.
+    const openingRange = getOpeningRange(
+      stock.openingCandle15m ?? stock.candle15m ?? null,
+      new Date(),
+      normalizedAsOfDate
+    );
+    const orbDirection = openingRange
+      ? isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio)
+      : null;
     if (orbDirection === 'LONG' && !signals.includes('ORB_LONG')) {
       signals.push('ORB_LONG');
     } else if (orbDirection === 'SHORT' && !signals.includes('ORB_SHORT')) {
