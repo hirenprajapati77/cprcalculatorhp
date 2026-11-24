@@ -384,7 +384,6 @@ export class SignalService {
       candle15m: stock.candle15m,
       holdMinutes: null,
       allowSessionReclaim: false,
-      rawVolumeRatio,
     });
 
     // ── Opening Range Breakout (Step 3) ──────────────────────────────────────

@@ -34,17 +34,14 @@ export interface BreakoutConfirmInput {
   allowSessionReclaim?: boolean;
 }
 
-/** Volume + LTP cross candidate (unconfirmed). Dual volume confirmation when rawVolumeRatio provided. */
+/** Volume + LTP cross candidate (unconfirmed). */
 export function getBreakoutCandidate(
   volumeRatio: number,
   ltp: number,
   tc: number,
-  bc: number,
-  rawVolumeRatio?: number,
-  minRawVolumeRatio: number = 0.08
+  bc: number
 ): BreakoutDirection | null {
   if (volumeRatio < VOLUME_THRESHOLDS.BREAKOUT_RATIO) return null;
-  if (rawVolumeRatio !== undefined && rawVolumeRatio < minRawVolumeRatio) return null;
   if (ltp > tc) return 'UP';
   if (ltp < bc) return 'DOWN';
   return null;
@@ -147,10 +144,9 @@ export function applyBreakoutSignals(
     candle15m?: BreakoutConfirmInput['candle15m'];
     holdMinutes?: number | null;
     allowSessionReclaim?: boolean;
-    rawVolumeRatio?: number;
   }
 ): void {
-  const candidate = getBreakoutCandidate(volumeRatio, ltp, tc, bc, session.rawVolumeRatio);
+  const candidate = getBreakoutCandidate(volumeRatio, ltp, tc, bc);
   if (!candidate) return;
 
   const confirmInput: BreakoutConfirmInput = {

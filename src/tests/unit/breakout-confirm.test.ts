@@ -23,16 +23,6 @@ describe('breakout-confirm', () => {
       getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 99.5, 100, 99),
       null
     );
-    // Dual volume condition: passes when rawVolumeRatio >= 0.08
-    assert.equal(
-      getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 110, 100, 99, 0.12),
-      'UP'
-    );
-    // Dual volume condition: fails when rawVolumeRatio < 0.08
-    assert.equal(
-      getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 110, 100, 99, 0.04),
-      null
-    );
   });
 
   it('rejects session reclaim until RECLAIM_HOLD_MINUTES', () => {
@@ -200,6 +190,20 @@ describe('breakout-confirm', () => {
       low: 98,
       holdMinutes: BREAKOUT_CONFIRM.RECLAIM_HOLD_MINUTES,
     });
+    assert.equal(signals.includes('BREAKOUT'), true);
+  });
+
+  it('confirms CPR breakout on valid 15m candle without requiring rawVolumeRatio input (unconstrained by ORB volume floor)', () => {
+    const signals: string[] = [];
+    applyBreakoutSignals(signals, VOLUME_THRESHOLDS.BREAKOUT_RATIO, 101, 100, 99, {
+      open: 99,
+      high: 102,
+      low: 98,
+      candle15m: { open: 99, high: 102, low: 98, close: 101 },
+      holdMinutes: 0,
+      allowSessionReclaim: false,
+    });
+    // CPR breakout confirmation depends on candle hold/close beyond TC, with no raw volume floor constraint
     assert.equal(signals.includes('BREAKOUT'), true);
   });
 });
