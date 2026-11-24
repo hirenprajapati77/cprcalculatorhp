@@ -36,6 +36,11 @@ function base(signals: string[]) {
     target: 110,
     rr: '1:2.0',
     confidence: 70,
+    orHigh: null,
+    orLow: null,
+    orMidpoint: null,
+    orRange: null,
+    setupType: 'CPR_PULLBACK' as const,
   };
 }
 

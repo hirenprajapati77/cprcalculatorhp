@@ -4,6 +4,7 @@ import type { MarketStockData } from '@/services/market.service';
 import {
   evaluateCprSetupPriceStalenessBasic,
   isBreakoutEntryExtended,
+  evaluateOrbSetupStaleness,
   atrScaledExtensionCap,
   CPR_ENTRY_EXTENSION_PCT,
   type CprSetupStaleReason,
@@ -54,6 +55,12 @@ export function evaluateCprSetupPriceStaleness(args: {
   entryExtensionPct?: number;
   /** ATR as percent (2.5 = 2.5%). Used by L3 chase cap when no explicit override. */
   atrPct?: number;
+  /** Step 3: Opening range high (from 15m candle). When provided with orLow, uses OR-aware staleness. */
+  orHigh?: number;
+  /** Step 3: Opening range low (from 15m candle). When provided with orHigh, uses OR-aware staleness. */
+  orLow?: number;
+  /** Step 3: ORB entry level (orHigh for LONG, orLow for SHORT). Defaults to entry when not provided. */
+  orEntry?: number;
 }): { stale: true; reason: BreakoutPriceGateReason; detail: string } | { stale: false } {
   const {
     entry,
@@ -67,7 +74,28 @@ export function evaluateCprSetupPriceStaleness(args: {
     sector = 'Other',
     entryExtensionPct,
     atrPct,
+    orHigh,
+    orLow,
+    orEntry,
   } = args;
+
+  // Step 3: When opening range is provided, use OR-aware staleness checks
+  // (gap vs OR boundary, extension from OR entry) instead of CPR-based checks.
+  if (orHigh != null && orLow != null && todayHigh > 0 && todayLow > 0) {
+    const orbEntry = orEntry ?? entry;
+    return evaluateOrbSetupStaleness({
+      orEntry: orbEntry,
+      orHigh,
+      orLow,
+      ltp,
+      direction,
+      todayHigh,
+      todayLow,
+      previousClose,
+      maxExtensionPct: entryExtensionPct,
+      atrPct,
+    });
+  }
 
   const basic = evaluateCprSetupPriceStalenessBasic({
     entry,
@@ -170,6 +198,9 @@ export function filterBreakoutsForPriceActionability(
       ...(b.low != null ? { todayLow: b.low } : {}),
       ...(b.previousClose != null ? { previousClose: b.previousClose } : {}),
       ...(b.open != null ? { open: b.open } : {}),
+      ...(b.orHigh != null ? { orHigh: b.orHigh } : {}),
+      ...(b.orLow != null ? { orLow: b.orLow } : {}),
+      ...(b.orEntry != null ? { orEntry: b.orEntry } : {}),
       symbol: b.symbol,
       sector: b.sector,
       ...(entryExtensionPct != null ? { entryExtensionPct } : {}),

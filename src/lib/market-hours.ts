@@ -1,4 +1,4 @@
-import { BTST_WINDOWS, MARKET_SESSION } from '@/config/trading-constants';
+import { BTST_WINDOWS, MARKET_SESSION, VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import {
   clocksForContext,
   toProfileTotalMinutes,
@@ -485,4 +485,59 @@ export function getCompletedHistory<T extends { date: string }>(
     return history.slice(0, -1);
   }
   return history;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Step 3: Opening Range Breakout (ORB) Helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface OpeningRange {
+  orHigh: number;
+  orLow: number;
+  orMidpoint: number;
+  orRange: number;
+}
+
+/**
+ * Derives Opening Range from 15m candle (09:15–09:30 IST) with session H/L fallback.
+ */
+export function getOpeningRange(
+  candle15m?: { open: number; high: number; low: number; close: number } | null,
+  dayHigh?: number,
+  dayLow?: number
+): OpeningRange {
+  if (candle15m && candle15m.high > 0 && candle15m.low > 0 && candle15m.high >= candle15m.low) {
+    const orHigh = candle15m.high;
+    const orLow = candle15m.low;
+    return {
+      orHigh,
+      orLow,
+      orMidpoint: Number(((orHigh + orLow) / 2).toFixed(2)),
+      orRange: Number((orHigh - orLow).toFixed(2)),
+    };
+  }
+  const h = dayHigh ?? 0;
+  const l = dayLow ?? 0;
+  return {
+    orHigh: h,
+    orLow: l,
+    orMidpoint: h > 0 && l > 0 ? Number(((h + l) / 2).toFixed(2)) : 0,
+    orRange: h > 0 && l > 0 ? Number((h - l).toFixed(2)) : 0,
+  };
+}
+
+/**
+ * Checks whether price has broken out of the Opening Range with volume confirmation.
+ */
+export function isOrbBreakout(
+  ltp: number,
+  orHigh: number,
+  orLow: number,
+  volumeRatio: number,
+  minVolumeRatio: number = VOLUME_THRESHOLDS.BREAKOUT_RATIO
+): 'LONG' | 'SHORT' | null {
+  if (volumeRatio < minVolumeRatio) return null;
+  if (orHigh > 0 && ltp > orHigh) return 'LONG';
+  if (orLow > 0 && ltp < orLow) return 'SHORT';
+  return null;
 }

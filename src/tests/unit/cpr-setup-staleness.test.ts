@@ -8,6 +8,9 @@ import {
   evaluateCprSetupPriceStalenessBasic,
   evaluateSetupTradeability,
   CPR_ENTRY_EXTENSION_PCT,
+  isBreakoutEntryGapInvalidatedOrb,
+  isBreakoutEntryExtendedOrb,
+  evaluateOrbSetupStaleness,
 } from '../../lib/cpr-setup-staleness';
 
 describe('cpr-setup-staleness (Tier 1 coverage)', () => {
@@ -332,6 +335,256 @@ describe('cpr-setup-staleness (Tier 1 coverage)', () => {
       assert.equal(res.modelRr, '1:2.5');
       assert.equal(res.executableRr, '—');
       assert.equal(res.detail, 'NIFTY IT is down 2%');
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Step 3: Opening Range Breakout (ORB) staleness tests
+  // ──────────────────────────────────────────────────────────────────────────
+  describe('isBreakoutEntryGapInvalidatedOrb', () => {
+    it('returns false when any input is non-positive', () => {
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 0,
+          orLow: 90,
+          todayHigh: 100,
+          todayLow: 90,
+          direction: 'LONG',
+        }),
+        false
+      );
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 100,
+          orLow: 0,
+          todayHigh: 100,
+          todayLow: 90,
+          direction: 'LONG',
+        }),
+        false
+      );
+    });
+
+    it('LONG ORB: gap-invalidated when todayLow > orHigh * (1 + buffer)', () => {
+      // orHigh = 100, todayLow = 101 > 100.2
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 100,
+          orLow: 90,
+          todayHigh: 110,
+          todayLow: 101,
+          direction: 'LONG',
+        }),
+        true
+      );
+      // todayLow = 99 <= 100.2 → not invalidated
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 100,
+          orLow: 90,
+          todayHigh: 110,
+          todayLow: 99,
+          direction: 'LONG',
+        }),
+        false
+      );
+    });
+
+    it('SHORT ORB: gap-invalidated when todayHigh < orLow * (1 - buffer)', () => {
+      // orLow = 100, todayHigh = 98 < 99.8
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 110,
+          orLow: 100,
+          todayHigh: 98,
+          todayLow: 90,
+          direction: 'SHORT',
+        }),
+        true
+      );
+      // todayHigh = 102 >= 99.8 → not invalidated
+      assert.equal(
+        isBreakoutEntryGapInvalidatedOrb({
+          orHigh: 110,
+          orLow: 100,
+          todayHigh: 102,
+          todayLow: 90,
+          direction: 'SHORT',
+        }),
+        false
+      );
+    });
+  });
+
+  describe('isBreakoutEntryExtendedOrb', () => {
+    it('returns false when orEntry or ltp is non-positive', () => {
+      assert.equal(
+        isBreakoutEntryExtendedOrb({ orEntry: 0, ltp: 105, direction: 'LONG' }),
+        false
+      );
+      assert.equal(
+        isBreakoutEntryExtendedOrb({ orEntry: 100, ltp: 0, direction: 'LONG' }),
+        false
+      );
+    });
+
+    it('LONG ORB: extended when ltp >= orEntry * (1 + cap)', () => {
+      // orEntry = 100, ltp = 103, cap = 2.5% → 3% >= 2.5% → extended
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 103,
+          direction: 'LONG',
+        }),
+        true
+      );
+      // orEntry = 100, ltp = 102, cap = 2.5% → 2% < 2.5% → not extended
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 102,
+          direction: 'LONG',
+        }),
+        false
+      );
+    });
+
+    it('SHORT ORB: extended when ltp <= orEntry * (1 - cap)', () => {
+      // orEntry = 100, ltp = 97, cap = 2.5% → -3% <= -2.5% → extended
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 97,
+          direction: 'SHORT',
+        }),
+        true
+      );
+      // orEntry = 100, ltp = 98, cap = 2.5% → -2% > -2.5% → not extended
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 98,
+          direction: 'SHORT',
+        }),
+        false
+      );
+    });
+
+    it('uses custom maxExtensionPct when provided', () => {
+      // cap = 1% instead of default 2.5%
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 101.5,
+          direction: 'LONG',
+          maxExtensionPct: 1,
+        }),
+        true
+      );
+      assert.equal(
+        isBreakoutEntryExtendedOrb({
+          orEntry: 100,
+          ltp: 100.5,
+          direction: 'LONG',
+          maxExtensionPct: 1,
+        }),
+        false
+      );
+    });
+  });
+
+  describe('evaluateOrbSetupStaleness', () => {
+    it('returns not-stale for a healthy LONG ORB setup', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 100,
+        orLow: 95,
+        ltp: 101,
+        direction: 'LONG',
+        todayHigh: 105,
+        todayLow: 95,
+      });
+      assert.equal(res.stale, false);
+    });
+
+    it('returns not-stale for a healthy SHORT ORB setup', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 105,
+        orLow: 100,
+        ltp: 99,
+        direction: 'SHORT',
+        todayHigh: 105,
+        todayLow: 95,
+      });
+      assert.equal(res.stale, false);
+    });
+
+    it('flags GAP_INVALIDATED for LONG ORB when entry outside today range', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 100,
+        orLow: 90,
+        ltp: 105,
+        direction: 'LONG',
+        todayHigh: 110,
+        todayLow: 101,
+      });
+      assert.equal(res.stale, true);
+      assert.equal(res.reason, 'GAP_INVALIDATED');
+      assert.ok(res.detail.includes('100'));
+    });
+
+    it('flags GAP_INVALIDATED for SHORT ORB when entry outside today range', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 110,
+        orLow: 100,
+        ltp: 95,
+        direction: 'SHORT',
+        todayHigh: 98,
+        todayLow: 90,
+      });
+      assert.equal(res.stale, true);
+      assert.equal(res.reason, 'GAP_INVALIDATED');
+    });
+
+    it('flags EXTENDED for LONG ORB when LTP chased past cap', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 100,
+        orLow: 90,
+        ltp: 103,
+        direction: 'LONG',
+        todayHigh: 105,
+        todayLow: 95,
+      });
+      assert.equal(res.stale, true);
+      assert.equal(res.reason, 'EXTENDED');
+    });
+
+    it('flags AGAINST_PRIOR_CLOSE for LONG ORB when LTP below prior close', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 100,
+        orLow: 90,
+        ltp: 99,
+        direction: 'LONG',
+        previousClose: 100,
+      });
+      assert.equal(res.stale, true);
+      assert.equal(res.reason, 'AGAINST_PRIOR_CLOSE');
+    });
+
+    it('skips gap check when todayHigh/todayLow are missing', () => {
+      const res = evaluateOrbSetupStaleness({
+        orEntry: 100,
+        orHigh: 100,
+        orLow: 90,
+        ltp: 101,
+        direction: 'LONG',
+      });
+      assert.equal(res.stale, false);
     });
   });
 });
