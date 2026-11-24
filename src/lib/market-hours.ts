@@ -430,16 +430,15 @@ export function sessionProgress(minuteOfDay: number): number | null {
 
 /**
  * Expected fraction of full-day volume consumed by a given minute-of-day.
- * Placeholder U-curve fitted to typical NSE intraday seasonality:
- *   - Before 09:30: returns 1.0 (raw volume = pace volume; no pace adjustment during opening spike).
- *   - 09:30–12:22 (first half): linear from 0.08 floor to 0.40.
- *   - 12:22–15:30 (second half): linear from 0.40 to 1.00.
+ * Continuous piecewise-linear curve fitted to typical NSE intraday seasonality:
+ *   - Progress <= 0.50 (09:15–12:22 IST): linear from floor (0.05) to middayFraction (0.48).
+ *   - Progress > 0.50 (12:22–15:30 IST): linear from middayFraction (0.48) to 1.00.
  *   - Outside session: returns 1.0 (raw volume).
  *
- * REPLACE coefficients with telemetry-fitted values after >= 2 trading days of
+ * Refit coefficients with telemetry-fitted values after >= 2 trading days of
  * VolumeTelemetry data:
  *   SELECT minuteOfDay, avg(rawRatio), count(*)
- *   FROM VolumeTelemetry
+ *   FROM "VolumeTelemetry"
  *   WHERE rangeProvenance = 'FYERS_QUOTE'
  *   GROUP BY minuteOfDay ORDER BY minuteOfDay;
  */
@@ -499,16 +498,33 @@ export interface OpeningRange {
 }
 
 /**
- * Derives Opening Range from 15m candle (09:15–09:30 IST) with session H/L fallback.
+ * Derives Opening Range from the first 15m candle of the session (09:15–09:30 IST).
+ * - Returns null before 09:30 IST during a live trading day (range not complete yet).
+ * - Returns null if the opening candle is missing or invalid (no session H/L fallback, preventing masking missing OR data).
  */
 export function getOpeningRange(
-  candle15m?: { open: number; high: number; low: number; close: number } | null,
-  dayHigh?: number,
-  dayLow?: number
-): OpeningRange {
-  if (candle15m && candle15m.high > 0 && candle15m.low > 0 && candle15m.high >= candle15m.low) {
-    const orHigh = candle15m.high;
-    const orLow = candle15m.low;
+  openingCandle15m?: { open: number; high: number; low: number; close: number } | null,
+  now?: Date,
+  asOfDate?: string
+): OpeningRange | null {
+  // Before 09:30 IST on a live trading day, the 15-minute Opening Range is not complete yet.
+  if (!asOfDate && now) {
+    const { isTradingDay, totalMinutes } = getISTTime(now);
+    if (isTradingDay && totalMinutes < OPENING_RANGE_COMPLETE_MIN) {
+      return null;
+    }
+  }
+
+  if (
+    openingCandle15m &&
+    typeof openingCandle15m.high === 'number' &&
+    typeof openingCandle15m.low === 'number' &&
+    openingCandle15m.high > 0 &&
+    openingCandle15m.low > 0 &&
+    openingCandle15m.high >= openingCandle15m.low
+  ) {
+    const orHigh = openingCandle15m.high;
+    const orLow = openingCandle15m.low;
     return {
       orHigh,
       orLow,
@@ -516,14 +532,8 @@ export function getOpeningRange(
       orRange: Number((orHigh - orLow).toFixed(2)),
     };
   }
-  const h = dayHigh ?? 0;
-  const l = dayLow ?? 0;
-  return {
-    orHigh: h,
-    orLow: l,
-    orMidpoint: h > 0 && l > 0 ? Number(((h + l) / 2).toFixed(2)) : 0,
-    orRange: h > 0 && l > 0 ? Number((h - l).toFixed(2)) : 0,
-  };
+
+  return null;
 }
 
 /**
@@ -537,7 +547,8 @@ export function isOrbBreakout(
   minVolumeRatio: number = VOLUME_THRESHOLDS.BREAKOUT_RATIO
 ): 'LONG' | 'SHORT' | null {
   if (volumeRatio < minVolumeRatio) return null;
-  if (orHigh > 0 && ltp > orHigh) return 'LONG';
-  if (orLow > 0 && ltp < orLow) return 'SHORT';
+  if (orHigh <= 0 || orLow <= 0 || orHigh < orLow) return null;
+  if (ltp > orHigh) return 'LONG';
+  if (ltp < orLow) return 'SHORT';
   return null;
 }

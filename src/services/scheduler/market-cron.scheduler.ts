@@ -138,9 +138,9 @@ export interface FyersSessionCheckResult {
 }
 
 export async function checkFyersSession(now: Date = new Date()): Promise<FyersSessionCheckResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '');
-  if (!baseUrl) {
-    console.error('[MarketCronScheduler] NEXT_PUBLIC_BASE_URL is not set; Fyers session alert link will be broken.');
+  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
+  if (!process.env.NEXT_PUBLIC_BASE_URL) {
+    console.warn('[MarketCronScheduler] NEXT_PUBLIC_BASE_URL is not set; falling back to default production URL.');
   }
 
   const sendAlertSafely = async (msg: string): Promise<boolean> => {

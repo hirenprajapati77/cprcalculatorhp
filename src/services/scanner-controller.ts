@@ -5,7 +5,7 @@ import { MarketService } from './market.service';
 import { ScannerService, ScannerSignalResult } from './scanner.service';
 import { RankingService } from './ranking.service';
 import { SectorRegimeService } from './sector-regime.service';
-import { getISTDateString } from '@/lib/market-hours';
+import { getISTDateString, getISTTime } from '@/lib/market-hours';
 import { EventCalendarService } from './overnight/event.service';
 import { DatabaseCircuitBreaker } from '@/lib/circuit-breaker';
 import { VolumeTelemetryService } from './retention/volume-telemetry.service';
@@ -227,16 +227,20 @@ export class ScannerController {
       }
     }
 
-    // Fire-and-forget volume telemetry recording before ranking
-    try {
-      const telemetryRows = VolumeTelemetryService.buildRows(rawResults, new Date(), today);
-      if (telemetryRows.length > 0) {
-        void VolumeTelemetryService.record(telemetryRows).catch((err) => {
-          console.warn('[ScannerController] Volume telemetry record failed:', err);
-        });
+    // Fire-and-forget volume telemetry recording before ranking (market hours 09:15–15:30 IST only)
+    // Prevents pre-market/off-session scans from writing clamped minute=555 rows that block the genuine 09:15 open slot.
+    const currentMin = getISTTime(new Date()).totalMinutes;
+    if (currentMin >= 555 && currentMin <= 930) {
+      try {
+        const telemetryRows = VolumeTelemetryService.buildRows(rawResults, new Date(), today);
+        if (telemetryRows.length > 0) {
+          void VolumeTelemetryService.record(telemetryRows).catch((err) => {
+            console.warn('[ScannerController] Volume telemetry record failed:', err);
+          });
+        }
+      } catch (err) {
+        console.warn('[ScannerController] Volume telemetry build failed:', err);
       }
-    } catch (err) {
-      console.warn('[ScannerController] Volume telemetry build failed:', err);
     }
 
     // Rank the stocks using the RankingService

@@ -22,6 +22,8 @@ import {
   OPENING_RANGE_COMPLETE_MIN,
   sessionProgress,
   expectedVolumeFraction,
+  getOpeningRange,
+  isOrbBreakout,
 } from '../../lib/market-hours';
 
 describe('Market Hours Utilities', () => {
@@ -481,6 +483,68 @@ describe('Market Hours Utilities', () => {
     it('expectedVolumeFraction returns 1.0 outside session', () => {
       assert.strictEqual(expectedVolumeFraction(500), 1.0);
       assert.strictEqual(expectedVolumeFraction(1000), 1.0);
+    });
+  });
+
+  describe('getOpeningRange & isOrbBreakout (Step 3)', () => {
+    it('getOpeningRange returns null before 09:30 IST on a live trading day', () => {
+      // 09:25 IST on a Wednesday (2026-11-25 03:55 UTC)
+      const now = new Date('2026-11-25T03:55:00.000Z');
+      const candle = { open: 100, high: 105, low: 98, close: 104 };
+      const res = getOpeningRange(candle, now);
+      assert.strictEqual(res, null);
+    });
+
+    it('getOpeningRange returns OpeningRange at or after 09:30 IST on a live trading day', () => {
+      // 09:35 IST on a Wednesday (2026-11-25 04:05 UTC)
+      const now = new Date('2026-11-25T04:05:00.000Z');
+      const candle = { open: 100, high: 105, low: 98, close: 104 };
+      const res = getOpeningRange(candle, now);
+      assert.notStrictEqual(res, null);
+      assert.strictEqual(res!.orHigh, 105);
+      assert.strictEqual(res!.orLow, 98);
+      assert.strictEqual(res!.orMidpoint, 101.5);
+      assert.strictEqual(res!.orRange, 7);
+    });
+
+    it('getOpeningRange returns OpeningRange when asOfDate is provided (backtest/replay mode)', () => {
+      // Even if clock is 09:15, historical replay uses completed bar
+      const now = new Date('2026-11-25T03:45:00.000Z');
+      const candle = { open: 100, high: 105, low: 98, close: 104 };
+      const res = getOpeningRange(candle, now, '2026-11-20');
+      assert.notStrictEqual(res, null);
+      assert.strictEqual(res!.orHigh, 105);
+      assert.strictEqual(res!.orLow, 98);
+      assert.strictEqual(res!.orMidpoint, 101.5);
+    });
+
+    it('getOpeningRange returns null for missing or invalid candle', () => {
+      assert.strictEqual(getOpeningRange(null), null);
+      assert.strictEqual(getOpeningRange(undefined), null);
+      assert.strictEqual(getOpeningRange({ open: 0, high: 0, low: 0, close: 0 }), null);
+      assert.strictEqual(getOpeningRange({ open: 100, high: 90, low: 100, close: 95 }), null); // high < low
+    });
+
+    it('isOrbBreakout detects LONG breakout with volume confirmation', () => {
+      assert.strictEqual(isOrbBreakout(106, 105, 95, 1.6), 'LONG');
+      // Fails if volume ratio < 1.5
+      assert.strictEqual(isOrbBreakout(106, 105, 95, 1.4), null);
+      // Fails if price not above orHigh
+      assert.strictEqual(isOrbBreakout(105, 105, 95, 2.0), null);
+    });
+
+    it('isOrbBreakout detects SHORT breakdown with volume confirmation', () => {
+      assert.strictEqual(isOrbBreakout(94, 105, 95, 1.8), 'SHORT');
+      // Fails if volume ratio < 1.5
+      assert.strictEqual(isOrbBreakout(94, 105, 95, 1.2), null);
+      // Fails if price not below orLow
+      assert.strictEqual(isOrbBreakout(95, 105, 95, 2.0), null);
+    });
+
+    it('isOrbBreakout returns null for invalid levels', () => {
+      assert.strictEqual(isOrbBreakout(106, 0, 95, 2.0), null);
+      assert.strictEqual(isOrbBreakout(94, 105, 0, 2.0), null);
+      assert.strictEqual(isOrbBreakout(106, 90, 100, 2.0), null); // orHigh < orLow
     });
   });
 });

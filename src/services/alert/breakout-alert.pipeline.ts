@@ -1,10 +1,11 @@
 import { BreakoutWatcherService, type BreakoutScanResult, breakoutAlertClaimKey } from '@/services/alert/breakout-watcher.service';
 import { TelegramService } from '@/services/alert/telegram.service';
 import { MarketSessionResolver } from '@/config/market-profile';
-import { getISTDateString, shouldFreezeBreakouts, getCompletedHistory } from '@/lib/market-hours';
+import { getISTDateString, shouldFreezeBreakouts, getCompletedHistory, type OpeningRange } from '@/lib/market-hours';
 import { getAtrPct } from '@/lib/atr';
 import { MarketService } from '@/services/market.service';
 import type { OptionSuggestion } from '@/services/option-suggestion.service';
+import type { SetupType } from '@/services/scanner.service';
 import { filterBreakoutsForPriceActionability } from '@/services/alert/breakout-price-gate';
 import { filterBreakoutsForVixRegime } from '@/services/alert/breakout-vix-gate';
 import { filterBreakoutsForPcrAlignment } from '@/services/alert/breakout-pcr-gate';
@@ -53,6 +54,11 @@ export type ScanResultForBreakoutAlert = {
   previousClose?: number | null;
   classification?: string | null;
   history?: Array<{ date: string; high: number; low: number; close: number }> | null;
+  openingRange?: OpeningRange | null;
+  setupType?: SetupType | null;
+  orHigh?: number | null;
+  orLow?: number | null;
+  orEntry?: number | null;
 };
 
 export function mapScanResultsForBreakoutAlert(
@@ -69,6 +75,13 @@ export function mapScanResultsForBreakoutAlert(
       r.history && r.history.length > 0
         ? getAtrPct(getCompletedHistory(r.history), r.ltp) * 100
         : undefined;
+
+    const isOrb = r.setupType === 'ORB_BREAKOUT' || signals.includes('ORB_LONG') || signals.includes('ORB_SHORT');
+    const orHigh = r.orHigh ?? (r.openingRange && r.openingRange.orHigh > 0 ? r.openingRange.orHigh : undefined);
+    const orLow = r.orLow ?? (r.openingRange && r.openingRange.orLow > 0 ? r.openingRange.orLow : undefined);
+    const orEntry = r.orEntry ?? (isOrb ? (isBreakdown ? orLow : orHigh) : undefined);
+    const setupType = r.setupType ?? (isOrb ? 'ORB_BREAKOUT' : 'CPR_PULLBACK');
+
     return {
       symbol: r.symbol,
       signals,
@@ -88,6 +101,10 @@ export function mapScanResultsForBreakoutAlert(
       ...(r.open != null ? { open: r.open } : {}),
       ...(r.previousClose != null ? { previousClose: r.previousClose } : {}),
       ...(atrPct != null && Number.isFinite(atrPct) && atrPct > 0 ? { atrPct } : {}),
+      ...(orHigh != null && Number.isFinite(orHigh) && orHigh > 0 ? { orHigh } : {}),
+      ...(orLow != null && Number.isFinite(orLow) && orLow > 0 ? { orLow } : {}),
+      ...(orEntry != null && Number.isFinite(orEntry) && orEntry > 0 ? { orEntry } : {}),
+      ...(setupType != null ? { setupType } : {}),
     };
   });
 }

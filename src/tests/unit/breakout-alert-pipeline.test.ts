@@ -55,6 +55,28 @@ describe('mapScanResultsForBreakoutAlert', () => {
     assert.ok(mapped.atrPct < 5, 'ITC-like range should be a small percent, not a 0–1 fraction');
   });
 
+  it('maps openingRange and setupType to orHigh, orLow, orEntry for ORB price gate', () => {
+    const [mapped] = mapScanResultsForBreakoutAlert([
+      {
+        symbol: 'TATASTEEL',
+        ltp: 175,
+        entry: 174,
+        signals: ['BREAKOUT', 'ORB_LONG'],
+        setupType: 'ORB_BREAKOUT',
+        openingRange: {
+          orHigh: 174,
+          orLow: 170,
+          orMidpoint: 172,
+          orRange: 4,
+        },
+      },
+    ]);
+    assert.equal(mapped.orHigh, 174);
+    assert.equal(mapped.orLow, 170);
+    assert.equal(mapped.orEntry, 174);
+    assert.equal(mapped.setupType, 'ORB_BREAKOUT');
+  });
+
   it('handles empty breakouts array in enrichBreakoutsWithOptionSuggestions', async () => {
     const { enrichBreakoutsWithOptionSuggestions } = await import('@/services/alert/breakout-alert.pipeline');
     const enriched = await enrichBreakoutsWithOptionSuggestions([]);

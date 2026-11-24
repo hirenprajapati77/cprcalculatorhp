@@ -99,14 +99,15 @@ export type Fyers15mCandle = {
 export function parseFyers15mVwapAndCandle(
   candles: FyersHistoryCandle[] | null | undefined,
   asOfTime: Date = new Date()
-): { vwap: number | null; candle15m: Fyers15mCandle | null } {
+): { vwap: number | null; candle15m: Fyers15mCandle | null; openingCandle15m: Fyers15mCandle | null } {
   if (!candles || candles.length === 0) {
-    return { vwap: null, candle15m: null };
+    return { vwap: null, candle15m: null, openingCandle15m: null };
   }
 
   const currentTimestampSec = Math.floor(asOfTime.getTime() / 1000);
   let sumPriceVol = 0;
   let sumVol = 0;
+  let firstValid: Fyers15mCandle | null = null;
   let lastValid: Fyers15mCandle | null = null;
 
   for (const row of candles) {
@@ -122,13 +123,18 @@ export function parseFyers15mVwapAndCandle(
     sumPriceVol += typical * vol;
     sumVol += vol;
 
-    lastValid = {
+    const candle = {
       open,
       high,
       low,
       close,
       volume: typeof volume === 'number' && Number.isFinite(volume) && volume >= 0 ? volume : 0,
     };
+
+    if (!firstValid) {
+      firstValid = candle;
+    }
+    lastValid = candle;
   }
 
   let vwap: number | null = sumVol > 0 ? sumPriceVol / sumVol : null;
@@ -147,5 +153,5 @@ export function parseFyers15mVwapAndCandle(
     vwap = count > 0 ? sumClose / count : null;
   }
 
-  return { vwap, candle15m: lastValid };
+  return { vwap, candle15m: lastValid, openingCandle15m: firstValid };
 }
