@@ -23,6 +23,16 @@ describe('breakout-confirm', () => {
       getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 99.5, 100, 99),
       null
     );
+    // Dual volume condition: passes when rawVolumeRatio >= 0.08
+    assert.equal(
+      getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 110, 100, 99, 0.12),
+      'UP'
+    );
+    // Dual volume condition: fails when rawVolumeRatio < 0.08
+    assert.equal(
+      getBreakoutCandidate(VOLUME_THRESHOLDS.BREAKOUT_RATIO, 110, 100, 99, 0.04),
+      null
+    );
   });
 
   it('rejects session reclaim until RECLAIM_HOLD_MINUTES', () => {

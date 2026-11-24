@@ -537,16 +537,22 @@ export function getOpeningRange(
 }
 
 /**
- * Checks whether price has broken out of the Opening Range with volume confirmation.
+ * Checks whether price has broken out of the Opening Range with dual volume confirmation:
+ * 1. Pace-normalised volumeRatio >= minVolumeRatio (default BREAKOUT_RATIO = 1.5)
+ * 2. Absolute sanity floor rawVolumeRatio >= minRawVolumeRatio (default 0.08, ~8% of 20D volume)
+ *    to prevent low-liquidity stocks from triggering on 20x morning pace amplification.
  */
 export function isOrbBreakout(
   ltp: number,
   orHigh: number,
   orLow: number,
   volumeRatio: number,
-  minVolumeRatio: number = VOLUME_THRESHOLDS.BREAKOUT_RATIO
+  minVolumeRatio: number = VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+  rawVolumeRatio?: number,
+  minRawVolumeRatio: number = 0.08
 ): 'LONG' | 'SHORT' | null {
   if (volumeRatio < minVolumeRatio) return null;
+  if (rawVolumeRatio !== undefined && rawVolumeRatio < minRawVolumeRatio) return null;
   if (orHigh <= 0 || orLow <= 0 || orHigh < orLow) return null;
   if (ltp > orHigh) return 'LONG';
   if (ltp < orLow) return 'SHORT';

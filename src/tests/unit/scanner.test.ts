@@ -1499,6 +1499,17 @@ test('Scanner Service Target 2 Evaluation', async (t) => {
         openingRange: { orHigh: 0, orLow: 0, orMidpoint: 0, orRange: 0 },
       });
       assert.strictEqual(orbZero.setupType, 'CPR_PULLBACK');
+
+      // 5. Missing opening range (openingCandle15m is null, even if candle15m exists) defaults to CPR_PULLBACK
+      const orbNull = ScannerService.computeTradeSetup({
+        ltp: 105,
+        cprToday: baseCpr,
+        dayHigh: 106,
+        dayLow: 98,
+        volumeRatio: 2.0,
+        openingRange: null,
+      });
+      assert.strictEqual(orbNull.setupType, 'CPR_PULLBACK');
     });
   });
 });

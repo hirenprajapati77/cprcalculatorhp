@@ -107,6 +107,8 @@ export class ScannerService {
     openingRange?: OpeningRange | null;
     /** Pace-normalised volume ratio (required for ORB confirmation). */
     volumeRatio?: number;
+    /** Raw volume ratio (session volume / 20D average). Dual-condition sanity floor (default 0.08). */
+    rawVolumeRatio?: number;
     /** Minimum volume ratio for ORB confirmation (default BREAKOUT_RATIO = 1.5). */
     minVolumeRatio?: number;
   }): TradeSetupResult {
@@ -117,6 +119,7 @@ export class ScannerService {
       dayLow,
       openingRange = null,
       volumeRatio = 1,
+      rawVolumeRatio,
       minVolumeRatio = VOLUME_THRESHOLDS.BREAKOUT_RATIO,
     } = params;
     let entry = 0;
@@ -134,10 +137,10 @@ export class ScannerService {
     let isLongRange = false;
 
     // ── ORB Entry Logic ───────────────────────────────────────────────────────
-    // When an opening range exists and volume confirms, prefer ORB entry
-    // anchored to OR boundary rather than CPR TC/BC.
+    // When an opening range exists and volume confirms (dual volume check),
+    // prefer ORB entry anchored to OR boundary rather than CPR TC/BC.
     const orbDirection = openingRange
-      ? isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio, minVolumeRatio)
+      ? isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio, minVolumeRatio, rawVolumeRatio)
       : null;
 
     // Narrow openingRange to non-null when orbDirection is set
@@ -466,6 +469,7 @@ export class ScannerService {
         candle15m: stock.candle15m,
         holdMinutes: holdForBreakout,
         allowSessionReclaim: true,
+        rawVolumeRatio,
       });
     }
 
@@ -475,7 +479,7 @@ export class ScannerService {
     // Do NOT revert to cprTomorrow.* without explicit owner approval —
     // see docs/decisions/cpr-entry-basis-2026-08-10.md (PR #98 / 9395ef5).
     const openingRange = getOpeningRange(
-      stock.openingCandle15m ?? stock.candle15m ?? null,
+      stock.openingCandle15m ?? null,
       new Date(),
       asOfDate
     );
@@ -497,6 +501,7 @@ export class ScannerService {
       dayLow: stock.low,
       openingRange,
       volumeRatio: signalVolumeRatio,
+      rawVolumeRatio,
     });
 
     const computedEntry = Number(entry.toFixed(2));

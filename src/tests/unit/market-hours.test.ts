@@ -531,6 +531,10 @@ describe('Market Hours Utilities', () => {
       assert.strictEqual(isOrbBreakout(106, 105, 95, 1.4), null);
       // Fails if price not above orHigh
       assert.strictEqual(isOrbBreakout(105, 105, 95, 2.0), null);
+      // Dual-condition: passes when rawVolumeRatio >= 0.08
+      assert.strictEqual(isOrbBreakout(106, 105, 95, 1.8, 1.5, 0.12), 'LONG');
+      // Dual-condition: fails when rawVolumeRatio < 0.08 (low-liquidity fake breakout guard)
+      assert.strictEqual(isOrbBreakout(106, 105, 95, 1.8, 1.5, 0.03), null);
     });
 
     it('isOrbBreakout detects SHORT breakdown with volume confirmation', () => {
