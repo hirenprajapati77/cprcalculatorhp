@@ -1,6 +1,7 @@
 import {
   isInClosingLiquidityWindow,
   istMinuteOfDayFromUnixSec,
+  getISTTime,
 } from '@/lib/market-hours';
 import type { StockIntradayMetrics } from './stock-intraday.util';
 
@@ -105,6 +106,8 @@ export function parseFyers15mVwapAndCandle(
   }
 
   const currentTimestampSec = Math.floor(asOfTime.getTime() / 1000);
+  const asOfIST = getISTTime(asOfTime);
+  const targetDateStr = asOfIST.dateString;
   let sumPriceVol = 0;
   let sumVol = 0;
   let firstValid: Fyers15mCandle | null = null;
@@ -131,7 +134,13 @@ export function parseFyers15mVwapAndCandle(
       volume: typeof volume === 'number' && Number.isFinite(volume) && volume >= 0 ? volume : 0,
     };
 
-    if (!firstValid) {
+    const candleTime = getISTTime(new Date(ts * 1000));
+    if (
+      !firstValid &&
+      candleTime.dateString === targetDateStr &&
+      candleTime.totalMinutes >= 555 &&
+      candleTime.totalMinutes < 570
+    ) {
       firstValid = candle;
     }
     lastValid = candle;

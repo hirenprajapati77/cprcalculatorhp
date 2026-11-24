@@ -1,6 +1,6 @@
 import { env } from '@/config/env';
 import { CacheService } from './cache.service';
-import { getISTDateString, isTodayCandleClosed, getRecentNseTradingDays } from '@/lib/market-hours';
+import { getISTDateString, getISTTime, isTodayCandleClosed, getRecentNseTradingDays } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { toYahooTicker } from './stock-candle.service';
 import { FyersAuthService } from './fyers-auth.service';
@@ -1435,21 +1435,35 @@ export class MarketService {
               }
 
               // First valid 15m candle of the session = 09:15–09:30 Opening Range Candle
-              let firstValidIdx = 0;
-              while (
-                firstValidIdx < len15 &&
-                (quotes15.close[firstValidIdx] === null ||
-                  quotes15.close[firstValidIdx] === undefined ||
-                  !Number.isFinite(quotes15.close[firstValidIdx] as number))
-              ) {
-                firstValidIdx++;
+              let openingIdx = -1;
+              for (let i = 0; i < len15; i++) {
+                if (
+                  quotes15.close[i] === null ||
+                  quotes15.close[i] === undefined ||
+                  !Number.isFinite(quotes15.close[i] as number)
+                ) {
+                  continue;
+                }
+                const rawTs = rawTs15?.[i];
+                if (typeof rawTs === 'number' && rawTs > 0) {
+                  const barIST = getISTTime(new Date(rawTs * 1000));
+                  if (
+                    barIST.dateString === todayStr &&
+                    barIST.totalMinutes >= 555 &&
+                    barIST.totalMinutes < 570
+                  ) {
+                    openingIdx = i;
+                    break;
+                  }
+                }
               }
-              if (firstValidIdx < len15) {
-                const c15First = quotes15.close[firstValidIdx] as number;
-                const h15First = quotes15.high[firstValidIdx];
-                const l15First = quotes15.low[firstValidIdx];
-                const o15First = quotes15.open?.[firstValidIdx];
-                const v15First = quotes15.volume?.[firstValidIdx];
+
+              if (openingIdx >= 0) {
+                const c15First = quotes15.close[openingIdx] as number;
+                const h15First = quotes15.high[openingIdx];
+                const l15First = quotes15.low[openingIdx];
+                const o15First = quotes15.open?.[openingIdx];
+                const v15First = quotes15.volume?.[openingIdx];
                 if (
                   typeof h15First === 'number' && Number.isFinite(h15First) &&
                   typeof l15First === 'number' && Number.isFinite(l15First)
