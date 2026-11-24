@@ -10,6 +10,8 @@ import {
   getISTTime,
   getCompletedHistory,
   expectedVolumeFraction,
+  getOpeningRange,
+  isOrbBreakout,
 } from '@/lib/market-hours';
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
@@ -383,6 +385,17 @@ export class SignalService {
       holdMinutes: null,
       allowSessionReclaim: false,
     });
+
+    // ── Opening Range Breakout (Step 3) ──────────────────────────────────────
+    // Detect ORB when price crosses OR high/low with pace-normalised volume.
+    // Uses 15m candle (09:15–09:30) as opening range, falls back to session H/L.
+    const openingRange = getOpeningRange(stock.candle15m ?? null, stock.high, stock.low);
+    const orbDirection = isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio);
+    if (orbDirection === 'LONG' && !signals.includes('ORB_LONG')) {
+      signals.push('ORB_LONG');
+    } else if (orbDirection === 'SHORT' && !signals.includes('ORB_SHORT')) {
+      signals.push('ORB_SHORT');
+    }
 
     // ── Momentum ──────────────────────────────────────────────────────────────
     if (ltp > cprToday.r1 || ltp < cprToday.s1) signals.push('MOMENTUM');

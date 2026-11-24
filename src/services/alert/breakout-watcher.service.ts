@@ -35,6 +35,12 @@ export interface BreakoutScanResult {
   previousClose?: number;
   /** ATR as percent (2.5 = 2.5%) from scan history — L3 chase cap. */
   atrPct?: number;
+  /** Step 3: Opening range high (from 15m candle) — used by OR-aware price gate. */
+  orHigh?: number;
+  /** Step 3: Opening range low (from 15m candle) — used by OR-aware price gate. */
+  orLow?: number;
+  /** Step 3: ORB entry level (orHigh for LONG, orLow for SHORT) — used by OR-aware price gate. */
+  orEntry?: number;
   /** Which signal triggered this alert row (set by detectNewBreakouts). */
   alertKind?: BreakoutAlertKind;
   /** Pre-fetched by breakout-alert.pipeline before Telegram send (optional). */

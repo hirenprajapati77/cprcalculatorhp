@@ -6,7 +6,15 @@ import { VOLUME_THRESHOLDS } from '../config/trading-constants';
 import { MarketStockData } from './market.service';
 import { SignalService } from './signal.service';
 import { RankingService } from './ranking.service';
-import { isTodayCandleClosed, getISTDateString, getISTTime, getCompletedHistory } from '@/lib/market-hours';
+import {
+  isTodayCandleClosed,
+  getISTDateString,
+  getISTTime,
+  getCompletedHistory,
+  getOpeningRange,
+  isOrbBreakout,
+  type OpeningRange,
+} from '@/lib/market-hours';
 import { CprCompressionService, CprCompressionStats } from './cpr-compression.service';
 import { BullishStateService } from './bullish-state.service';
 import { VpaConfirmationService, buildVpaInputs } from '@/services/vpa';
@@ -54,8 +62,19 @@ export interface ScannerSignalResult extends MarketStockData {
   vpaBreakdown?: import('@/services/vpa').VpaConfirmationResult;
   eventRiskScore?: number;
   eventRiskReason?: string | null;
+  /** Opening range high (from 15m candle or session fallback). null when CPR_PULLBACK. */
+  orHigh?: number | null;
+  /** Opening range low (from 15m candle or session fallback). null when CPR_PULLBACK. */
+  orLow?: number | null;
+  /** Opening range midpoint ((orHigh + orLow) / 2). null when CPR_PULLBACK. */
+  orMidpoint?: number | null;
+  /** Opening range width (orHigh - orLow). null when CPR_PULLBACK. */
+  orRange?: number | null;
+  /** Setup type: CPR_PULLBACK or ORB_BREAKOUT. */
+  setupType?: SetupType;
 }
 
+export type SetupType = 'CPR_PULLBACK' | 'ORB_BREAKOUT';
 
 export interface TradeSetupResult {
   entry: number;
@@ -66,6 +85,10 @@ export interface TradeSetupResult {
   rr2: string | null;
   bias: 'BULLISH' | 'BEARISH' | 'RANGE';
   isLongRange: boolean;
+  /** Setup type: CPR_PULLBACK (entry at CPR TC/BC) or ORB_BREAKOUT (entry at OR boundary). */
+  setupType: SetupType;
+  /** Opening range used for the setup (null when CPR_PULLBACK). */
+  openingRange: OpeningRange | null;
 }
 
 /** Maximum allowable stop-loss risk as a percentage of entry (guards against flash wicks). */
@@ -80,14 +103,29 @@ export class ScannerService {
     cprToday: Pick<CPRResult, 'pivot' | 'bc' | 'tc' | 'r1' | 'r2' | 'r3' | 'r4' | 's1' | 's2' | 's3' | 's4'>;
     dayHigh: number;
     dayLow: number;
+    /** Opening range from 15m candle (null = CPR-only setup). */
+    openingRange?: OpeningRange | null;
+    /** Pace-normalised volume ratio (required for ORB confirmation). */
+    volumeRatio?: number;
+    /** Minimum volume ratio for ORB confirmation (default BREAKOUT_RATIO = 1.5). */
+    minVolumeRatio?: number;
   }): TradeSetupResult {
-    const { ltp, cprToday, dayHigh, dayLow } = params;
+    const {
+      ltp,
+      cprToday,
+      dayHigh,
+      dayLow,
+      openingRange = null,
+      volumeRatio = 1,
+      minVolumeRatio = VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+    } = params;
     let entry = 0;
     let sl = 0;
     let target = 0;
     let rr = '1:2.0';
     let target2: number | null = null;
     let rr2: string | null = null;
+    let setupType: SetupType = 'CPR_PULLBACK';
 
     // Determine bias from LTP vs TODAY's CPR band
     let bias: 'BULLISH' | 'BEARISH' | 'RANGE' = 'RANGE';
@@ -95,7 +133,82 @@ export class ScannerService {
     else if (ltp < cprToday.bc) bias = 'BEARISH';
     let isLongRange = false;
 
-    if (bias === 'BULLISH') {
+    // ── ORB Entry Logic ───────────────────────────────────────────────────────
+    // When an opening range exists and volume confirms, prefer ORB entry
+    // anchored to OR boundary rather than CPR TC/BC.
+    const orbDirection =
+      openingRange && volumeRatio >= minVolumeRatio
+        ? ltp > openingRange.orHigh
+          ? 'LONG'
+          : ltp < openingRange.orLow
+            ? 'SHORT'
+            : null
+        : null;
+
+    // Narrow openingRange to non-null when orbDirection is set
+    const or = openingRange;
+
+    if (orbDirection === 'LONG' && or) {
+      // LONG ORB: entry at OR High, SL at OR Midpoint (conservative)
+      entry = or.orHigh;
+      sl = or.orMidpoint;
+      setupType = 'ORB_BREAKOUT';
+      bias = 'BULLISH';
+      const risk = entry - sl;
+
+      if (risk > 0) {
+        // T1: 1.0R or next resistance; T2: 2.0R
+        const targets = [cprToday.r1, cprToday.r2, cprToday.r3, cprToday.r4];
+        let chosenTarget = Math.max(entry + risk * 1.0, ltp * 1.005); // fallback: 1:1 RR
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t > entry && t > ltp && (t - entry) / risk >= 1.0) {
+            chosenTarget = t;
+            if (i + 1 < targets.length) {
+              const nextTarget = targets[i + 1];
+              target2 = nextTarget;
+              rr2 = `1:${((nextTarget - entry) / risk).toFixed(1)}`;
+            }
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((target - entry) / risk).toFixed(1)}`;
+      } else {
+        target = Math.max(entry * 1.01, ltp * 1.005);
+        rr = '1:2.0';
+      }
+    } else if (orbDirection === 'SHORT' && or) {
+      // SHORT ORB: entry at OR Low, SL at OR Midpoint (conservative)
+      entry = or.orLow;
+      sl = or.orMidpoint;
+      setupType = 'ORB_BREAKOUT';
+      bias = 'BEARISH';
+      const risk = sl - entry;
+
+      if (risk > 0) {
+        // T1: 1.0R or next support; T2: 2.0R
+        const targets = [cprToday.s1, cprToday.s2, cprToday.s3, cprToday.s4];
+        let chosenTarget = Math.min(entry - risk * 1.0, ltp * 0.995); // fallback: 1:1 RR
+        for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t < entry && t < ltp && (entry - t) / risk >= 1.0) {
+            chosenTarget = t;
+            if (i + 1 < targets.length) {
+              const nextTarget = targets[i + 1];
+              target2 = nextTarget;
+              rr2 = `1:${((entry - nextTarget) / risk).toFixed(1)}`;
+            }
+            break;
+          }
+        }
+        target = chosenTarget;
+        rr = `1:${((entry - target) / risk).toFixed(1)}`;
+      } else {
+        target = Math.min(entry * 0.99, ltp * 0.995);
+        rr = '1:2.0';
+      }
+    } else if (bias === 'BULLISH') {
       // LONG SETUP: pullback/hold entry at today's TC
       entry = cprToday.tc;
       // SL = day low OR minimum 0.5% below entry (whichever is lower)
@@ -227,6 +340,8 @@ export class ScannerService {
       rr2,
       bias,
       isLongRange,
+      setupType,
+      openingRange: openingRange ?? null,
     };
   }
 
@@ -350,11 +465,15 @@ export class ScannerService {
     }
 
     // 3. Trade Setup V3 — Entry, SL, Target, RR (bias/entry/sl/target/rr)
+    // Step 3: Dual entry anchoring — CPR pullback (tc/bc) or ORB breakout (OR high/low).
     // INTENTIONALLY uses cprToday.* for entry/sl/target/rr — not cprTomorrow.*.
-    // 3. Trade Setup & Bias Calculation
-    // Bias is LTP vs today's band; trade levels must match the same session's CPR.
     // Do NOT revert to cprTomorrow.* without explicit owner approval —
     // see docs/decisions/cpr-entry-basis-2026-08-10.md (PR #98 / 9395ef5).
+    const openingRange = getOpeningRange(
+      stock.candle15m ?? null,
+      stock.high,
+      stock.low
+    );
     const {
       entry,
       sl,
@@ -364,11 +483,15 @@ export class ScannerService {
       rr2,
       bias,
       isLongRange,
+      setupType,
+      openingRange: computedOpeningRange,
     } = ScannerService.computeTradeSetup({
       ltp,
       cprToday,
       dayHigh: stock.high,
       dayLow: stock.low,
+      openingRange,
+      volumeRatio: signalVolumeRatio,
     });
 
     const computedEntry = Number(entry.toFixed(2));
@@ -395,6 +518,11 @@ export class ScannerService {
       signals,
       rawVolumeRatio,
       volumeRatio: signalVolumeRatio,
+      orHigh: computedOpeningRange?.orHigh ?? null,
+      orLow: computedOpeningRange?.orLow ?? null,
+      orMidpoint: computedOpeningRange?.orMidpoint ?? null,
+      orRange: computedOpeningRange?.orRange ?? null,
+      setupType,
       entry: computedEntry,
       sl: computedSl,
       target: computedTarget,

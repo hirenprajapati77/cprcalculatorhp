@@ -278,6 +278,132 @@ export interface ActionableScannerTopCandidate {
   signals?: string[] | null | undefined;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Step 3: Opening Range Breakout (ORB) staleness checks
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Entry unreachable given today's observed range, using OR boundary instead of CPR entry.
+ * For ORB setups, the "entry" is the OR high/low, and today's range should contain it.
+ *
+ * True when ORB entry sits outside [todayLow×(1−buffer), todayHigh×(1+buffer)].
+ */
+export function isBreakoutEntryGapInvalidatedOrb(args: {
+  orHigh: number;
+  orLow: number;
+  todayHigh: number;
+  todayLow: number;
+  direction: 'LONG' | 'SHORT';
+  buffer?: number;
+}): boolean {
+  const { orHigh, orLow, todayHigh, todayLow, direction } = args;
+  const buffer = args.buffer ?? BREAKOUT_GAP_BUFFER;
+  if (!(orHigh > 0 && orLow > 0 && todayHigh > 0 && todayLow > 0)) return false;
+
+  if (direction === 'LONG') {
+    // LONG ORB: entry = orHigh. Gap-invalidated if today's low is above orHigh
+    return todayLow > orHigh * (1 + buffer);
+  } else {
+    // SHORT ORB: entry = orLow. Gap-invalidated if today's high is below orLow
+    return todayHigh < orLow * (1 - buffer);
+  }
+}
+
+/**
+ * LTP already chased past ORB entry by more than the extension cap.
+ * For ORB setups, entry is OR high/low (not CPR tc/bc).
+ */
+export function isBreakoutEntryExtendedOrb(args: {
+  orEntry: number;
+  ltp: number;
+  direction: 'LONG' | 'SHORT';
+  maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
+}): boolean {
+  const { orEntry, ltp, direction, atrPct } = args;
+  const dynamicCap = atrScaledExtensionCap(atrPct);
+  const cap = args.maxExtensionPct ?? dynamicCap;
+  if (!(orEntry > 0 && ltp > 0)) return false;
+  const pctPastEntry = ((ltp - orEntry) / orEntry) * 100;
+  if (direction === 'LONG') {
+    return pctPastEntry >= cap;
+  }
+  return pctPastEntry <= -cap;
+}
+
+/**
+ * OR-aware staleness check for Opening Range Breakout setups.
+ * Uses OR boundary for gap invalidation and OR entry for extension check,
+ * instead of CPR entry levels.
+ *
+ * Returns stale=true with reason if the ORB setup should be suppressed.
+ */
+export function evaluateOrbSetupStaleness(args: {
+  orEntry: number;
+  orHigh: number;
+  orLow: number;
+  ltp: number;
+  direction: 'LONG' | 'SHORT';
+  todayHigh?: number | undefined;
+  todayLow?: number | undefined;
+  previousClose?: number | undefined;
+  maxExtensionPct?: number | undefined;
+  atrPct?: number | undefined;
+}): { stale: true; reason: CprSetupStaleReason; detail: string } | { stale: false } {
+  const {
+    orEntry,
+    orHigh,
+    orLow,
+    ltp,
+    direction,
+    todayHigh = 0,
+    todayLow = 0,
+    previousClose,
+    maxExtensionPct,
+    atrPct,
+  } = args;
+
+  // 1. Gap check: OR entry must be within today's observed range
+  if (
+    todayHigh > 0 &&
+    todayLow > 0 &&
+    isBreakoutEntryGapInvalidatedOrb({ orHigh, orLow, todayHigh, todayLow, direction })
+  ) {
+    return {
+      stale: true,
+      reason: 'GAP_INVALIDATED',
+      detail: `OR entry ${orEntry} outside today range [${todayLow}, ${todayHigh}]`,
+    };
+  }
+
+  // 2. Against prior close check (same as CPR)
+  if (
+    previousClose != null &&
+    previousClose > 0 &&
+    isBreakoutAgainstPriorClose({ ltp, previousClose, direction })
+  ) {
+    const side = direction === 'LONG' ? 'below' : 'above';
+    return {
+      stale: true,
+      reason: 'AGAINST_PRIOR_CLOSE',
+      detail: `ltp ${ltp} is ${side} prior close ${previousClose} (${direction})`,
+    };
+  }
+
+  // 3. Extension check: LTP not chased past OR entry by more than cap
+  if (isBreakoutEntryExtendedOrb({ orEntry, ltp, direction, maxExtensionPct, atrPct })) {
+    const pct = (((ltp - orEntry) / orEntry) * 100).toFixed(2);
+    const cap = maxExtensionPct ?? atrScaledExtensionCap(atrPct);
+    return {
+      stale: true,
+      reason: 'EXTENDED',
+      detail: `ltp ${ltp} is ${pct}% from OR entry ${orEntry} (limit ±${cap.toFixed(1)}%)`,
+    };
+  }
+
+  return { stale: false };
+}
+
 /**
  * Filter out setups that are non-actionable / dead from Top Algo Setups ranking.
  * Excludes:

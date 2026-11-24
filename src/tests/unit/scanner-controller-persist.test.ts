@@ -49,6 +49,11 @@ function makeRow(symbol: string): RankedRow {
     target: 102,
     rr: '1:1.5',
     confidence: 70,
+    orHigh: null,
+    orLow: null,
+    orMidpoint: null,
+    orRange: null,
+    setupType: 'CPR_PULLBACK' as const,
   };
 }
 

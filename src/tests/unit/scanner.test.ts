@@ -296,6 +296,11 @@ test('Ranking Service V2 Scoring & Classifications', async (t) => {
       sl: 0,
       target: 0,
       rr: '1:1',
+      orHigh: null,
+      orLow: null,
+      orMidpoint: null,
+      orRange: null,
+      setupType: 'CPR_PULLBACK' as const,
     };
 
     const score = RankingService.calculateScore(result);
@@ -728,6 +733,7 @@ test('KGS CPR Theory Signal and Scoring Tests', async (t) => {
       width: 0, classification: 'NARROW' as const,
       signals: ['NARROW', 'BULLISH', 'MOMENTUM'],
       entry: 0, sl: 0, target: 0, rr: '1:1',
+      orHigh: null, orLow: null, orMidpoint: null, orRange: null, setupType: 'CPR_PULLBACK' as const,
     };
     const withoutDirect = RankingService.calculateScore(baseResult);
     const withDirect = RankingService.calculateScore({
