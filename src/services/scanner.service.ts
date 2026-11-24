@@ -147,7 +147,7 @@ export class ScannerService {
       // LONG ORB: entry at OR High, SL at OR Midpoint (conservative)
       entry = or.orHigh;
       // Cap ORB SL to MAX_SL_PCT (3.0%) below entry to guard against massive flash wicks,
-      // and ensure minimum 0.5% buffer so risk > 0 even on flat/narrow opening ranges.
+      // and ensure minimum 0.5% buffer so risk > 0 even on flat/narrow opening ranges (see docs/decisions/orb-risk-buffer-memo.md).
       const midpointSL = or.orMidpoint;
       const minSL = entry * 0.995;
       const maxDistanceSL = entry * (1 - MAX_SL_PCT);

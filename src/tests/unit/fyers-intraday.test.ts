@@ -51,6 +51,28 @@ test('parseFyers15mVwapAndCandle computes session VWAP and last candle', () => {
   assert.ok(m.candle15m);
   assert.equal(m.candle15m!.close, 215);
   assert.equal(m.candle15m!.high, 216);
+  assert.ok(m.openingCandle15m);
+  assert.equal(m.openingCandle15m!.close, 211);
+  assert.equal(m.openingCandle15m!.high, 212);
+});
+
+test('parseFyers15mVwapAndCandle requires opening bar to match session date and 09:15–09:30 slot', () => {
+  const asOf = new Date(Date.UTC(2026, 7, 10, 5, 0));
+  // 1. Candles starting late (e.g. 10:00 IST = 04:30 UTC)
+  const tLate = Math.floor(Date.UTC(2026, 7, 10, 4, 30) / 1000);
+  const lateCandles: [number, number, number, number, number, number][] = [
+    [tLate, 210, 212, 209, 211, 1000],
+  ];
+  const mLate = parseFyers15mVwapAndCandle(lateCandles, asOf);
+  assert.equal(mLate.openingCandle15m, null, 'Bar at 10:00 must not be accepted as opening candle');
+
+  // 2. Candles from yesterday (2026-08-09 at 09:15 IST)
+  const tPrevDay = Math.floor(Date.UTC(2026, 7, 9, 3, 45) / 1000);
+  const prevDayCandles: [number, number, number, number, number, number][] = [
+    [tPrevDay, 210, 212, 209, 211, 1000],
+  ];
+  const mPrev = parseFyers15mVwapAndCandle(prevDayCandles, asOf);
+  assert.equal(mPrev.openingCandle15m, null, 'Previous day bar must not be accepted as today opening candle');
 });
 
 test('parseFyers15mVwapAndCandle returns nulls for empty input', () => {
