@@ -1,6 +1,6 @@
 import { env } from '@/config/env';
 import { CacheService } from './cache.service';
-import { getISTDateString, getISTTime, isTodayCandleClosed, getRecentNseTradingDays } from '@/lib/market-hours';
+import { getISTDateString, getISTTime, isTodayCandleClosed, getRecentNseTradingDays, OPENING_RANGE_COMPLETE_MIN } from '@/lib/market-hours';
 import { alignedYahooSeriesLength } from '@/lib/yahoo-quote';
 import { toYahooTicker } from './stock-candle.service';
 import { FyersAuthService } from './fyers-auth.service';
@@ -1435,8 +1435,12 @@ export class MarketService {
               }
 
               // First valid 15m candle of the session = 09:15–09:30 Opening Range Candle
+              // Guard: Only capture once the 15-minute Opening Range candle has actually closed (>= 09:30 IST),
+              // preventing partial/in-progress candles from being cached in Redis or evaluated as the complete range.
+              const isOrClosed = getISTTime(new Date()).totalMinutes >= OPENING_RANGE_COMPLETE_MIN;
               let openingIdx = -1;
-              for (let i = 0; i < len15; i++) {
+              if (isOrClosed) {
+                for (let i = 0; i < len15; i++) {
                 if (
                   quotes15.close[i] === null ||
                   quotes15.close[i] === undefined ||
@@ -1477,6 +1481,7 @@ export class MarketService {
                   };
                 }
               }
+            }
             }
           }
         } catch (_err) {
@@ -1816,7 +1821,8 @@ export class MarketService {
             if (parsed15.candle15m) {
               candle15m = parsed15.candle15m;
             }
-            if (parsed15.openingCandle15m) {
+            const isOrClosed = getISTTime(new Date()).totalMinutes >= OPENING_RANGE_COMPLETE_MIN;
+            if (isOrClosed && parsed15.openingCandle15m) {
               openingCandle15m = parsed15.openingCandle15m;
             }
           } else {

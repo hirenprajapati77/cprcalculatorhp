@@ -138,10 +138,13 @@ export interface FyersSessionCheckResult {
 }
 
 export async function checkFyersSession(now: Date = new Date()): Promise<FyersSessionCheckResult> {
-  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'https://129-159-230-41.nip.io').replace(/\/+$/, '');
-  if (!process.env.NEXT_PUBLIC_BASE_URL) {
-    console.warn('[MarketCronScheduler] NEXT_PUBLIC_BASE_URL is not set; falling back to default production URL.');
+  const rawBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '');
+  if (!rawBaseUrl) {
+    console.error('[MarketCronScheduler] NEXT_PUBLIC_BASE_URL is not set; clickable link will be omitted from Telegram alert.');
   }
+  const settingsLink = rawBaseUrl
+    ? `<a href="${rawBaseUrl}/settings">Settings</a>`
+    : '<b>Settings</b>';
 
   const sendAlertSafely = async (msg: string): Promise<boolean> => {
     try {
@@ -178,7 +181,7 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
     const msg =
       `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
       `The daily Fyers broker token has expired.\n` +
-      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      `Please visit ${settingsLink} and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers session missing alert to Telegram.');
     return { status: 'MISSING', alertSent: sent, sent, success: sent, message: msg };
@@ -188,7 +191,7 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
     const msg =
       `⚠️ <b>FYERS SESSION EXPIRED</b>\n\n` +
       `The daily Fyers broker token has expired.\n` +
-      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
+      `Please visit ${settingsLink} and click <b>Connect Fyers</b> to enable real-time option chains for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers session expiry alert to Telegram.');
     return { status: 'EXPIRED', alertSent: sent, sent, success: sent, message: msg };
@@ -207,7 +210,7 @@ export async function checkFyersSession(now: Date = new Date()): Promise<FyersSe
     const msg =
       `⚠️ <b>FYERS SESSION INVALID</b>\n\n` +
       `The daily Fyers broker token could not be decrypted.\n` +
-      `Please visit <a href="${baseUrl || ''}/settings">Settings</a> and click <b>Connect Fyers</b> to re-authenticate for today's 15:20 scan.`;
+      `Please visit ${settingsLink} and click <b>Connect Fyers</b> to re-authenticate for today's 15:20 scan.`;
     const sent = await sendAlertSafely(msg);
     if (sent) console.log('[MarketCronScheduler] Dispatched Fyers token decrypt failure alert to Telegram.');
     return { status: 'DECRYPT_FAILED', alertSent: sent, sent, success: sent, message: msg };
