@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added & Hardened — 24 Nov: Step 3: ORB Entry & Stop Re-anchoring (PR #333)
+
+- **PR #333 (`63313a5b`) — Opening Range Breakout (ORB) Entry & Stop Re-anchoring**:
+  - **Opening Range Helpers (`src/lib/market-hours.ts`)**: Added `OpeningRange` interface (`orHigh`, `orLow`, `orMidpoint`, `orRange`), `getOpeningRange(intraday15m)` deriving the first 15-minute bar (09:15–09:30 IST), and `isOrbBreakout(price, openingRange)` evaluating bullish/bearish boundary breaches.
+  - **ORB Staleness & Price Gating (`src/lib/cpr-setup-staleness.ts`, `src/services/alert/breakout-price-gate.ts`, `src/services/alert/breakout-watcher.service.ts`)**: Implemented `evaluateOrbSetupStaleness()`, `isBreakoutEntryGapInvalidatedOrb()`, and `isBreakoutEntryExtendedOrb()`. Re-anchors extension distance against the actual OR breakout level instead of the CPR boundary, eliminating false `GAP_INVALIDATED` and `EXTENDED` rejections on high-momentum trend days (e.g. `TATASTEEL`).
+  - **Dual Setup Anchoring (`src/services/scanner.service.ts`, `src/services/signal.service.ts`)**: Extended `TradeSetupResult` and `ScannerSignalResult` with `setupType` (`'CPR_PULLBACK' | 'ORB_BREAKOUT'`) and `openingRange`. When volume confirms (`volumeRatio >= 1.5`) and price crosses the 15m range, entry anchors to OR High/Low with Stop Loss placed at OR Midpoint and targets at 1.0R / 1.5R / 2.0R. Preserves classical CPR pullback logic when inside the opening range.
+  - **Unit Test Coverage (`src/tests/unit/cpr-setup-staleness.test.ts`)**: Added 14 comprehensive unit tests verifying ORB gap validation, extension boundaries, bidirectional breakout triggers, and price gate routing.
+
+### Added & Hardened — 23 Nov: Step 2 Calibration & Activation (PR #332)
+
+- **PR #332 (`d6dcc1ca`) — Empirical Calibration of Pace-Volume Curve & Production Feature Flag Activation**:
+  - **Empirical Curve Calibration (`src/lib/market-hours.ts`)**: Fitted `expectedVolumeFraction()` to 3,000+ empirical ticks collected via Step 1 telemetry: lowered opening floor to 0.05 (`progress = 0.04`, 09:30 IST) and calibrated midday anchor to 0.48 (`progress = 0.50`, 12:22 IST) with quadratic taper into close.
+  - **Production Activation (`.env.example`, production `.env`)**: Documented and activated `FEATURE_PACE_VOLUME="true"`, ensuring high-conviction morning breakouts (e.g., `APOLLOHOSP`, `INDUSINDBK`) score 75–80 instead of 10–15 during peak morning breakout momentum (09:30–10:00 IST).
+  - **Regression Test Parity (`src/tests/unit/market-hours.test.ts`)**: Updated unit tests to lock in calibrated 0.05 floor and 0.48 midday coefficients.
+
+### Fixed & Hardened — 20 Nov: Reviewer Findings on Curve Continuity, Dedupe & Session Check (PR #331)
+
+- **PR #331 (`6abd0781`) — Reviewer Findings on Curve Continuity, Telemetry Dedupe, Alert Cooldown & Session Check**:
+  - **Smooth Curve Continuity (`src/lib/market-hours.ts`, `src/services/signal.service.ts`)**: Fixed step discontinuity at 09:30 IST opening range boundary, ensuring smooth monotonic progression from pre-09:30 guard into intraday pace curve.
+  - **Telemetry Deduplication (`prisma/schema.prisma`, `src/services/retention/volume-telemetry.service.ts`)**: Added unique constraint `@@unique([symbol, date, minuteOfDay])` and upsert deduplication to prevent duplicate tick rows during concurrent scanner runs.
+  - **Alert Cooldown & Safe Dispatch (`src/services/scanner-controller.ts`)**: Hardened Telegram alert dispatch with `sendAlertSafely` and per-symbol cooldown tracking to eliminate notification flooding during high-volatility sweeps.
+  - **Dynamic Base URL (`src/services/scheduler/market-cron.scheduler.ts`)**: Sourced `NEXT_PUBLIC_BASE_URL` dynamically from environment for broker session check links, eliminating hardcoded host assumptions.
+
 ### Added & Hardened — 20 Nov: Step 2: Pace-Normalised Volume for Category B Scoring (PR #329)
 
 - **PR #329 (`2c66850f`) — Pace-Normalised Volume for Category B Scoring & Breakout Timing**:
