@@ -16,7 +16,9 @@ import {
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
 import { applyBreakoutSignals } from '@/lib/breakout-confirm';
-import { evaluatePaceShadow } from '@/lib/pace-shadow';
+import { evaluatePaceShadow, createShadowLogThrottle, gainedSignals } from '@/lib/pace-shadow';
+
+const paceShadowThrottle = createShadowLogThrottle(15);
 
 export interface SignalResult {
   signals: string[];
@@ -189,39 +191,6 @@ export class SignalService {
       const expectedFraction = expectedVolumeFraction(minuteOfDay);
       if (expectedFraction > 0) {
         volumeRatio = rawVolumeRatio / expectedFraction;
-      }
-    }
-
-    // ── Pace shadow (observability only) ─────────────────────────────────────
-    // While FEATURE_PACE_VOLUME is off, record what pace normalisation WOULD have
-    // decided. Never alters volumeRatio or any signal. Only divergent cases are logged
-    // (pace >= bar but raw < bar) to keep volume low. Grep logs for "[PaceShadow]".
-    // See docs/decisions/pace-volume-flag-off-2026-11-24.md.
-    if (!isPaceVolumeEnabled) {
-      const minuteOfDay = getISTTime().totalMinutes;
-      const shadow = evaluatePaceShadow({
-        rawVolumeRatio,
-        avgVolume: stock.avgVolume,
-        minuteOfDay,
-        rangeProvenance: stock.rangeProvenance,
-        isReplay: Boolean(normalizedAsOfDate),
-      });
-      if (shadow?.divergent) {
-        console.info(
-          '[PaceShadow] ' +
-            JSON.stringify({
-              symbol: stock.symbol,
-              date: getISTTime().dateString,
-              minuteOfDay,
-              raw: Number(rawVolumeRatio.toFixed(4)),
-              pace: Number(shadow.paceVolumeRatio.toFixed(3)),
-              expected: Number(shadow.expectedFraction.toFixed(4)),
-              ltp,
-              tc,
-              bc,
-              provenance: stock.rangeProvenance ?? null,
-            })
-        );
       }
     }
 
@@ -443,6 +412,72 @@ export class SignalService {
       signals.push('ORB_LONG');
     } else if (orbDirection === 'SHORT' && !signals.includes('ORB_SHORT')) {
       signals.push('ORB_SHORT');
+    }
+
+    // ── Pace shadow (observability only) ─────────────────────────────────────
+    // While FEATURE_PACE_VOLUME is off, re-run the breakout / ORB decisions with the pace
+    // ratio on scratch arrays and log ONLY signals pace would have added that raw volume
+    // did not (BREAKOUT, BREAKDOWN, ORB_LONG, ORB_SHORT), at most once per symbol+signal
+    // per 15 minutes. Never alters volumeRatio or live signals. grep "[PaceShadow]".
+    // See docs/decisions/pace-volume-flag-off-2026-11-24.md.
+    if (!isPaceVolumeEnabled) {
+      const minuteOfDay = getISTTime().totalMinutes;
+      const shadow = evaluatePaceShadow({
+        rawVolumeRatio,
+        avgVolume: stock.avgVolume,
+        minuteOfDay,
+        rangeProvenance: stock.rangeProvenance,
+        isReplay: Boolean(normalizedAsOfDate),
+      });
+      if (shadow?.divergent) {
+        const shadowSignals: string[] = [];
+        applyBreakoutSignals(shadowSignals, shadow.paceVolumeRatio, ltp, tc, bc, {
+          open: stock.open,
+          high: stock.high,
+          low: stock.low,
+          candle15m: stock.candle15m,
+          holdMinutes: null,
+          allowSessionReclaim: false,
+        });
+        const shadowOrb = openingRange
+          ? isOrbBreakout(
+              ltp,
+              openingRange.orHigh,
+              openingRange.orLow,
+              shadow.paceVolumeRatio,
+              VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+              rawVolumeRatio
+            )
+          : null;
+        if (shadowOrb === 'LONG') shadowSignals.push('ORB_LONG');
+        else if (shadowOrb === 'SHORT') shadowSignals.push('ORB_SHORT');
+
+        const dateString = getISTTime().dateString;
+        const gained = gainedSignals(signals, shadowSignals, [
+          'BREAKOUT',
+          'BREAKDOWN',
+          'ORB_LONG',
+          'ORB_SHORT',
+        ]).filter((sig) => paceShadowThrottle(`${stock.symbol}:${sig}`, dateString, minuteOfDay));
+        if (gained.length > 0) {
+          console.info(
+            '[PaceShadow] ' +
+              JSON.stringify({
+                symbol: stock.symbol,
+                date: dateString,
+                minuteOfDay,
+                gained,
+                raw: Number(rawVolumeRatio.toFixed(4)),
+                pace: Number(shadow.paceVolumeRatio.toFixed(3)),
+                expected: Number(shadow.expectedFraction.toFixed(4)),
+                ltp,
+                tc,
+                bc,
+                provenance: stock.rangeProvenance ?? null,
+              })
+          );
+        }
+      }
     }
 
     // ── Momentum ──────────────────────────────────────────────────────────────

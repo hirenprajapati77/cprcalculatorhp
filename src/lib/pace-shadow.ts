@@ -48,3 +48,28 @@ export function evaluatePaceShadow(input: PaceShadowInput): PaceShadowResult | n
     divergent: paceVolumeRatio >= minVolumeRatio && rawVolumeRatio < minVolumeRatio,
   };
 }
+
+/**
+ * Per-key log throttle so a stock hovering past a level does not emit on every scan.
+ * State is in-memory per process and resets on a new trading date.
+ */
+export function createShadowLogThrottle(cooldownMinutes = 15, maxKeys = 2000) {
+  let currentDate = '';
+  const last = new Map<string, number>();
+  return function shouldLog(key: string, dateString: string, minuteOfDay: number): boolean {
+    if (dateString !== currentDate) {
+      currentDate = dateString;
+      last.clear();
+    }
+    const prev = last.get(key);
+    if (prev !== undefined && minuteOfDay - prev < cooldownMinutes) return false;
+    if (last.size >= maxKeys) last.clear();
+    last.set(key, minuteOfDay);
+    return true;
+  };
+}
+
+/** Returns the signals present in `shadow` but not in `live`, limited to `watch`. */
+export function gainedSignals(live: string[], shadow: string[], watch: string[]): string[] {
+  return shadow.filter((s) => watch.includes(s) && !live.includes(s));
+}
