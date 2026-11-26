@@ -12,6 +12,7 @@ import {
   expectedVolumeFraction,
   getOpeningRange,
   isOrbBreakout,
+  isOrbWindowOpen,
 } from '@/lib/market-hours';
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
@@ -398,7 +399,8 @@ export class SignalService {
       new Date(),
       normalizedAsOfDate
     );
-    const orbDirection = openingRange
+    const orbWindowOpen = isOrbWindowOpen(new Date(), normalizedAsOfDate);
+    const orbDirection = openingRange && orbWindowOpen
       ? isOrbBreakout(
           ltp,
           openingRange.orHigh,
@@ -439,7 +441,7 @@ export class SignalService {
           holdMinutes: null,
           allowSessionReclaim: false,
         });
-        const shadowOrb = openingRange
+        const shadowOrb = openingRange && orbWindowOpen
           ? isOrbBreakout(
               ltp,
               openingRange.orHigh,

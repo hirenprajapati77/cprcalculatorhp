@@ -13,6 +13,7 @@ import {
   getCompletedHistory,
   getOpeningRange,
   isOrbBreakout,
+  isOrbWindowOpen,
   type OpeningRange,
 } from '@/lib/market-hours';
 import { CprCompressionService, CprCompressionStats } from './cpr-compression.service';
@@ -111,6 +112,8 @@ export class ScannerService {
     rawVolumeRatio?: number;
     /** Minimum volume ratio for ORB confirmation (default BREAKOUT_RATIO = 1.5). */
     minVolumeRatio?: number;
+    /** False after the ORB cut-off (11:30 IST live): no new ORB_BREAKOUT setup. Default true. */
+    orbWindowOpen?: boolean;
   }): TradeSetupResult {
     const {
       ltp,
@@ -121,6 +124,7 @@ export class ScannerService {
       volumeRatio = 1,
       rawVolumeRatio,
       minVolumeRatio = VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+      orbWindowOpen = true,
     } = params;
     let entry = 0;
     let sl = 0;
@@ -139,7 +143,7 @@ export class ScannerService {
     // ── ORB Entry Logic ───────────────────────────────────────────────────────
     // When an opening range exists and volume confirms (dual volume check),
     // prefer ORB entry anchored to OR boundary rather than CPR TC/BC.
-    const orbDirection = openingRange
+    const orbDirection = openingRange && orbWindowOpen
       ? isOrbBreakout(ltp, openingRange.orHigh, openingRange.orLow, volumeRatio, minVolumeRatio, rawVolumeRatio)
       : null;
 
@@ -501,6 +505,7 @@ export class ScannerService {
       openingRange,
       volumeRatio: signalVolumeRatio,
       rawVolumeRatio,
+      orbWindowOpen: isOrbWindowOpen(new Date(), asOfDate),
     });
 
     const computedEntry = Number(entry.toFixed(2));

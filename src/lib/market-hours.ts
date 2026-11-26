@@ -1,4 +1,4 @@
-import { BTST_WINDOWS, MARKET_SESSION, VOLUME_THRESHOLDS } from '@/config/trading-constants';
+import { BTST_WINDOWS, MARKET_SESSION, ORB_CUTOFF_MINUTE, VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import {
   clocksForContext,
   toProfileTotalMinutes,
@@ -534,6 +534,20 @@ export function getOpeningRange(
   }
 
   return null;
+}
+
+/**
+ * True while NEW ORB signals/setups may be generated. On a live trading day the window closes at
+ * ORB_CUTOFF_MINUTE (11:30 IST): true for minutes < cut-off, false from 11:30 onward.
+ * Replay (asOfDate set) and calls without a clock bypass the cut-off, matching getOpeningRange's convention.
+ * This gates signal GENERATION only; ORB alerts sent earlier stay tracked by the staleness gate, and
+ * opening-range levels (orHigh/orLow) are still populated on results.
+ */
+export function isOrbWindowOpen(now?: Date, asOfDate?: string): boolean {
+  if (asOfDate || !now) return true;
+  const { isTradingDay, totalMinutes } = getISTTime(now);
+  if (!isTradingDay) return true;
+  return totalMinutes < ORB_CUTOFF_MINUTE;
 }
 
 /**

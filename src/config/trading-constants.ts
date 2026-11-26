@@ -18,6 +18,13 @@ export const VOLUME_THRESHOLDS = {
   STRONG_RATIO: 1.2,
 };
 
+/**
+ * ORB signals/setups are generated only BEFORE this minute-of-day (IST). 690 = 11:30.
+ * Later "price above the morning high" is a session breakout, not an opening-range breakout.
+ * Owner-approved in docs/decisions/orb-time-cutoff-2026-11-26.md.
+ */
+export const ORB_CUTOFF_MINUTE = 690;
+
 /** Intraday BREAKOUT/BREAKDOWN confirmation (see src/lib/breakout-confirm.ts). */
 export const BREAKOUT_CONFIRMATION = {
   /** Gap continuation (never traded TC/BC) must hold this long. */
