@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — 24 Nov: Pace-volume flag held OFF, shadow logging added
+
+- `FEATURE_PACE_VOLUME` is `"false"` in production (server `.env`); the "activated in production" notes under #332 are superseded.
+  See `docs/decisions/pace-volume-flag-off-2026-11-24.md` for rationale and re-enable criteria.
+- Added `[PaceShadow]` observability log (`src/lib/pace-shadow.ts`, `SignalService`) recording symbols where pace-normalised
+  volume would have confirmed a breakout but raw volume did not. No effect on signals.
+- Added `ops/crontab.example.txt` documenting the retention cron.
+
 ### Added & Hardened — 24 Nov: Step 3: ORB Entry & Stop Re-anchoring (PR #333)
 
 - **PR #333 (`63313a5b`) — Opening Range Breakout (ORB) Entry & Stop Re-anchoring**:
