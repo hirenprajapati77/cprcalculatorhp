@@ -126,3 +126,42 @@ test('evaluateOrbSetupStaleness continues to evaluate pre-cutoff ORB alert level
   });
   assert.equal(extendedCheck.stale, true);
 });
+
+function captureInfo<T>(fn: () => T): { result: T; logs: string[] } {
+  const original = console.info;
+  const logs: string[] = [];
+  console.info = (...a: unknown[]) => {
+    logs.push(a.map(String).join(' '));
+  };
+  try {
+    return { result: fn(), logs };
+  } finally {
+    console.info = original;
+  }
+}
+
+test('[OrbEvent] logs the first ORB hit per symbol/direction/day, tagged windowOpen, even after the cut-off', () => {
+  const s1 = { ...stock(), symbol: 'ORB_EVT_EARLY' };
+  const early = withMockedNow(istDate(9, 40), () => captureInfo(() => SignalService.getSignals(s1)));
+  const e1 = early.logs.find((l) => l.startsWith('[OrbEvent]'));
+  assert.ok(e1, 'event logged in the morning window');
+  const p1 = JSON.parse(e1!.replace('[OrbEvent] ', ''));
+  assert.equal(p1.windowOpen, true);
+  assert.equal(p1.direction, 'LONG');
+
+  const s2 = { ...stock(), symbol: 'ORB_EVT_LATE' };
+  const late = withMockedNow(istDate(12, 40), () => captureInfo(() => SignalService.getSignals(s2)));
+  assert.ok(!late.result.signals.includes('ORB_LONG'), 'signal still suppressed after cut-off');
+  const e2 = late.logs.find((l) => l.startsWith('[OrbEvent]'));
+  assert.ok(e2, 'late event still logged for analysis');
+  assert.equal(JSON.parse(e2!.replace('[OrbEvent] ', '')).windowOpen, false);
+
+  const again = withMockedNow(istDate(12, 45), () => captureInfo(() => SignalService.getSignals(s2)));
+  assert.ok(!again.logs.some((l) => l.startsWith('[OrbEvent]')), 'no duplicate for same symbol/direction/day');
+});
+
+test('[OrbEvent] is not logged outside the session or in replay', () => {
+  const s3 = { ...stock(), symbol: 'ORB_EVT_AFTER' };
+  const after = withMockedNow(istDate(17, 30), () => captureInfo(() => SignalService.getSignals(s3)));
+  assert.ok(!after.logs.some((l) => l.startsWith('[OrbEvent]')));
+});
