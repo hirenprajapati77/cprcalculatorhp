@@ -28,15 +28,24 @@ export function orbBucket(minuteOfDay: number): OrbBucket {
   return '>=11:30';
 }
 
-function isOrbEvent(x: any): x is OrbEvent {
-  return (
-    x &&
-    typeof x.symbol === 'string' &&
-    typeof x.date === 'string' &&
-    Number.isFinite(x.minuteOfDay) &&
-    (x.direction === 'LONG' || x.direction === 'SHORT') &&
-    Number.isFinite(x.ltp) && x.ltp > 0 &&
-    Number.isFinite(x.orHigh) && Number.isFinite(x.orLow) && Number.isFinite(x.orMidpoint)
+function isOrbEvent(x: unknown): x is OrbEvent {
+  const r = x as Record<string, unknown> | null | undefined;
+  return Boolean(
+    r &&
+    typeof r.symbol === 'string' &&
+    typeof r.date === 'string' &&
+    typeof r.minuteOfDay === 'number' &&
+    Number.isFinite(r.minuteOfDay) &&
+    (r.direction === 'LONG' || r.direction === 'SHORT') &&
+    typeof r.ltp === 'number' &&
+    Number.isFinite(r.ltp) &&
+    r.ltp > 0 &&
+    typeof r.orHigh === 'number' &&
+    Number.isFinite(r.orHigh) &&
+    typeof r.orLow === 'number' &&
+    Number.isFinite(r.orLow) &&
+    typeof r.orMidpoint === 'number' &&
+    Number.isFinite(r.orMidpoint)
   );
 }
 
