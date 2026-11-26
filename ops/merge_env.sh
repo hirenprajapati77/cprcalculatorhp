@@ -18,6 +18,12 @@ if [ ! -f "$INCOMING" ]; then
   exit 1
 fi
 
+# Sanitize CRLF line terminators from incoming and existing env files
+sed -i 's/\r$//' "$INCOMING"
+if [ -f "$SERVER_ENV" ]; then
+  sed -i 's/\r$//' "$SERVER_ENV"
+fi
+
 if [ -f "$SERVER_ENV" ]; then
   cp "$SERVER_ENV" "$BACKUP"
   cp "$SERVER_ENV" "$MERGED"
