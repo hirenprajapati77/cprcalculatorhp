@@ -15,10 +15,10 @@ async function runRegressionLock() {
   // 1. CONSTANTS LOCK
   const constantsString = JSON.stringify(Constants);
   const constantsHash = crypto.createHash('sha256').update(constantsString).digest('hex');
-  // Baseline updated in ISSUE-007 (PR #186):
-  // Incorporates intentional trading constant additions:
-  // - MARKET_TOOLS_QUERY_TIMEOUTS: Database statement & query execution budgets for market tools (ISSUE-007)
-  const EXPECTED_HASH = '2ef002db620a9545a601fb2fb23c92e1a6219ae5012ba4bc977e686e9a2072f5'; 
+  // Baseline updated in PR #343:
+  // Incorporates intentional trading constant addition:
+  // - ORB_CUTOFF_MINUTE: 11:30 IST cut-off for new ORB setups/signals (docs/decisions/orb-time-cutoff-2026-11-26.md)
+  const EXPECTED_HASH = 'af04917532de95e8a6c0a445c4adfec9a0e0317c4840fa33f7d9ca4ef2c2bb4d'; 
   
   if (constantsHash !== EXPECTED_HASH) {
      console.error(`❌ Constants Regression! Trading constants have mutated.\nExpected: ${EXPECTED_HASH}\nGot: ${constantsHash}`);
