@@ -37,3 +37,7 @@
 
 # Retention cleanup (daily 19:15 IST = 13:45 UTC). `-sfS` exits non-zero on HTTP 500 error
 45 13 * * * curl -sfS -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/retention >> /var/log/cpr-cron/retention.log 2>&1
+
+# Archive [OrbEvent] log lines past pm2-logrotate (16:00 IST = 10:30 UTC, Mon-Fri). Idempotent: re-reading
+# rotated/gzipped logs and sort -u keeps ~/orb-events.log de-duplicated. See ops/ORB_EVENT_ARCHIVE.md.
+30 10 * * 1-5 ( { cat /home/ubuntu/orb-events.log 2>/dev/null; zgrep -h '\[OrbEvent\]' /home/ubuntu/.pm2/logs/cpr-platform-out*.log*; } | sort -u > /home/ubuntu/orb-events.tmp && mv /home/ubuntu/orb-events.tmp /home/ubuntu/orb-events.log ) >> /var/log/cpr-cron/orb-archive.log 2>&1
