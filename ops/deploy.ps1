@@ -130,7 +130,7 @@ Log "Merging .env.server into production .env (keeps server-only keys)..."
 scp -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY .env.server "${SERVER}:/home/ubuntu/cpr.env.server"
 if ($LASTEXITCODE -ne 0) { Err "SCP env upload failed" }
 
-ssh -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY $SERVER "sed -i 's/\r$//' /home/ubuntu/merge_env.sh && bash /home/ubuntu/merge_env.sh"
+ssh -i $SSH_KEY -o StrictHostKeyChecking=$STRICT_HOST_KEY $SERVER "sed -i 's/\r$//' /home/ubuntu/merge_env.sh /home/ubuntu/cpr.env.server && bash /home/ubuntu/merge_env.sh"
 if ($LASTEXITCODE -ne 0) { Err "Server .env merge failed" }
 
 Ok "Upload complete"

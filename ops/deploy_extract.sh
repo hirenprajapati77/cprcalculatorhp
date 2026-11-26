@@ -29,14 +29,16 @@ echo "=== Extracting Prisma bundle ==="
 tar -xzf /home/ubuntu/deploy_prisma.tar.gz -C $APP/
 
 echo "=== Copying .env into standalone ==="
+# Sanitize CRLF before copying into standalone
+sed -i 's/\r$//' $APP/.env 2>/dev/null || true
 cp $APP/.env $APP/.next/standalone/.env
 
 # Source DATABASE_URL and FEATURE_PACE_VOLUME if not present
 if [ -z "$DATABASE_URL" ] && [ -f "$APP/.env" ]; then
-    export DATABASE_URL=$(grep '^DATABASE_URL=' $APP/.env | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
+    export DATABASE_URL=$(grep '^DATABASE_URL=' $APP/.env | tr -d '\r' | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
 fi
 if [ -f "$APP/.env" ]; then
-    export FEATURE_PACE_VOLUME=$(grep '^FEATURE_PACE_VOLUME=' $APP/.env | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
+    export FEATURE_PACE_VOLUME=$(grep '^FEATURE_PACE_VOLUME=' $APP/.env | tr -d '\r' | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
 fi
 
 echo "=== Recording pre-deploy migration state ==="
