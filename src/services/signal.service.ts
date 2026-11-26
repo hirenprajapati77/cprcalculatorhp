@@ -16,6 +16,7 @@ import {
 import { calculateRSI, classifyRSI } from '@/lib/rsi';
 import { detectEmaCross } from '@/lib/ema';
 import { applyBreakoutSignals } from '@/lib/breakout-confirm';
+import { evaluatePaceShadow } from '@/lib/pace-shadow';
 
 export interface SignalResult {
   signals: string[];
@@ -188,6 +189,39 @@ export class SignalService {
       const expectedFraction = expectedVolumeFraction(minuteOfDay);
       if (expectedFraction > 0) {
         volumeRatio = rawVolumeRatio / expectedFraction;
+      }
+    }
+
+    // ── Pace shadow (observability only) ─────────────────────────────────────
+    // While FEATURE_PACE_VOLUME is off, record what pace normalisation WOULD have
+    // decided. Never alters volumeRatio or any signal. Only divergent cases are logged
+    // (pace >= bar but raw < bar) to keep volume low. Grep logs for "[PaceShadow]".
+    // See docs/decisions/pace-volume-flag-off-2026-11-24.md.
+    if (!isPaceVolumeEnabled) {
+      const minuteOfDay = getISTTime().totalMinutes;
+      const shadow = evaluatePaceShadow({
+        rawVolumeRatio,
+        avgVolume: stock.avgVolume,
+        minuteOfDay,
+        rangeProvenance: stock.rangeProvenance,
+        isReplay: Boolean(normalizedAsOfDate),
+      });
+      if (shadow?.divergent) {
+        console.info(
+          '[PaceShadow] ' +
+            JSON.stringify({
+              symbol: stock.symbol,
+              date: getISTTime().dateString,
+              minuteOfDay,
+              raw: Number(rawVolumeRatio.toFixed(4)),
+              pace: Number(shadow.paceVolumeRatio.toFixed(3)),
+              expected: Number(shadow.expectedFraction.toFixed(4)),
+              ltp,
+              tc,
+              bc,
+              provenance: stock.rangeProvenance ?? null,
+            })
+        );
       }
     }
 

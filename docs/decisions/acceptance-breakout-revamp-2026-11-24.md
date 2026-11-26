@@ -25,7 +25,7 @@
 | **G-03** | **Unit & Integration Suite** | All unit and integration test suites pass | ✅ **PASSED** | `npm test`: **1,649 passed · 0 failed · 2 skipped · 320 suites** (including 14 new ORB unit tests) |
 | **G-04** | **CI Gate** | Blocking GitHub Actions CI verification workflow | ✅ **PASSED** | GitHub Actions CI run on PR #333 passed all checks in 3m 19s |
 | **G-05** | **Step 1: Telemetry Ingestion (PR #327, #328, #331)** | VolumeTelemetry records tick data with provenance & deduplication | ✅ **PASSED** | Migration `20261119000000_volume_telemetry` + unique constraint active; 3,000+ rows ingested cleanly; 91.7% `FYERS_QUOTE` |
-| **G-06** | **Step 2: Pace Normalisation (PR #329, #331, #332)** | Calibrated intraday volume curve with opening guard | ✅ **PASSED** | Floor 0.05, midday anchor 0.48, `FEATURE_PACE_VOLUME="true"` active in production `.env`; morning breakouts score 75–80 instead of 10–15 |
+| **G-06** | **Step 2: Pace Normalisation (PR #329, #331, #332)** | Calibrated intraday volume curve with opening guard | ⚠️ **SUPERSEDED** | Code present; `FEATURE_PACE_VOLUME` is OFF in production (see `pace-volume-flag-off-2026-11-24.md`). The "opening guard" was removed in #331. Earlier claim that morning breakouts score 75–80 applied only while the flag was on |
 | **G-07** | **Step 3: Dual Entry Anchoring (PR #333)** | ORB High/Low entry + Midpoint SL when OR is broken with volume | ✅ **PASSED** | `computeTradeSetup` dynamically sets `setupType: 'ORB_BREAKOUT'`, `entry: orHigh`/`orLow`, `stopLoss: orMidpoint`, targets at 1.0R / 1.5R / 2.0R |
 | **G-08** | **Step 3: ORB Price Staleness Gating (PR #333)** | Eliminate false `GAP_INVALIDATED` and `EXTENDED` rejections | ✅ **PASSED** | `evaluateOrbSetupStaleness` evaluates boundary breach and extension against OR levels; 14/14 unit tests pass |
 | **G-09** | **Alert Deduplication & Cooldown (PR #331)** | Telegram notifications protected by per-symbol cooldown & safe dispatch | ✅ **PASSED** | `sendAlertSafely` wraps alert calls with symbol cooldown; eliminates spam during high-volatility sweeps |
@@ -51,7 +51,7 @@
   - Pre-09:30 guard returns 1.0; post-09:30 scales from empirical 0.05 floor to 0.48 midday anchor.
   - Resolved boundary step discontinuity for smooth monotonic continuity.
   - Sourced pace-adjusted ratio `volumeRatio = rawVolumeRatio / expectedFraction` into `RankingService` and `ScannerService`.
-  - Activated in production via `FEATURE_PACE_VOLUME="true"`.
+  - Was activated via `FEATURE_PACE_VOLUME="true"` in #332; later set back to `"false"` (see `pace-volume-flag-off-2026-11-24.md`).
 
 ### Step 3: ORB Entry & Stop Re-anchoring (`PR #333`)
 - **Problem:** Stocks gapping significantly past CPR boundaries (e.g., `TATASTEEL` gapping down past BC `176.48` into `[169.1, 173.8]`) were falsely rejected by price gating as `GAP_INVALIDATED` or `EXTENDED` because entry was anchored to the distant CPR line.
@@ -75,7 +75,7 @@
   ```
 - **Environment Flags:**
   ```bash
-  FEATURE_PACE_VOLUME="true"
+  FEATURE_PACE_VOLUME="true"   # as of release 63313a5ba166; later set to "false", see pace-volume-flag-off memo
   NEXT_PUBLIC_BASE_URL="https://129-159-230-41.nip.io"
   ```
 - **Market State:** Quiet (Guru Nanak Jayanti market holiday), schedulers initialized, armed for Wednesday Nov 25 opening bell.

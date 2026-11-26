@@ -1,0 +1,39 @@
+# Example crontab for the production VM (user: ubuntu). Times are server UTC unless noted.
+# IMPORTANT: this file is documentation and template for server deployment.
+# Never commit the real secret. Set CRON_SECRET in the crontab environment or inline from a root-only file.
+
+# Daily CPR Journal processing (15:20 IST = 09:50 UTC, Mon-Fri)
+50 9 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/cpr-journal >> /var/log/cpr-cron/cpr-cron.log 2>&1
+
+# Daily BTST Journal processing (15:25 IST = 09:55 UTC, Mon-Fri)
+55 9 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/btst-journal >> /var/log/cpr-cron/btst-cron.log 2>&1
+
+# Daily BTST Alert generation (15:20 IST = 09:50 UTC, Mon-Fri)
+50 9 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/btst-alert >> /var/log/cpr-cron/btst-alert.log 2>&1
+
+# Journal intraday snapshots (09:16, 09:30, 09:45, 10:00 IST = 03:46, 04:00, 04:15, 04:30 UTC, Mon-Fri)
+46 3 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/journal-snapshot >> /var/log/cpr-cron/snap-cron.log 2>&1
+0 4 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/journal-snapshot >> /var/log/cpr-cron/snap-cron.log 2>&1
+15 4 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/journal-snapshot >> /var/log/cpr-cron/snap-cron.log 2>&1
+30 4 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/journal-snapshot >> /var/log/cpr-cron/snap-cron.log 2>&1
+
+# F&O monthly universe drift check (1st of month at 15:30 IST = 10:00 UTC)
+0 10 1 * * curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/fno-universe-check >> /var/log/cpr-cron/fno-check.log 2>&1
+
+# Intraday auto-scan every 5 min during market hours (09:15–15:30 IST = 03:45–10:00 UTC, Mon-Fri)
+*/5 9-15 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" "http://localhost:3000/api/cron/auto-scan?universe=NIFTY_FNO" >> /var/log/cpr-cron/auto-scan.log 2>&1
+
+# Earnings calendar populate (14:15 IST = 08:45 UTC, Mon-Fri)
+45 8 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/earnings-populate >> /var/log/cpr-cron/earnings-populate.log 2>&1
+
+# Memory watchdog (runs every 5 minutes 24/7)
+*/5 * * * * /home/ubuntu/mem_watchdog.sh
+
+# Daily health check (08:30 IST = 03:00 UTC, Mon-Fri)
+0 3 * * 1-5 curl -s -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/daily-health >> /var/log/cpr-cron/daily-health.log 2>&1
+
+# Post-market Bhavcopy ingestion (18:30 IST = 13:00 UTC, Mon-Fri)
+0 13 * * 1-5 cd /home/ubuntu/cpr-calculator-platform && npx tsx scripts/market-tools/bhavcopy-ingest.ts >> /home/ubuntu/bhavcopy_cron.log 2>&1
+
+# Retention cleanup (daily 19:15 IST = 13:45 UTC). `-sfS` exits non-zero on HTTP 500 error
+45 13 * * * curl -sfS -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3000/api/cron/retention >> /var/log/cpr-cron/retention.log 2>&1
