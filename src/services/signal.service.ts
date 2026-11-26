@@ -20,6 +20,8 @@ import { applyBreakoutSignals } from '@/lib/breakout-confirm';
 import { evaluatePaceShadow, createShadowLogThrottle, gainedSignals } from '@/lib/pace-shadow';
 
 const paceShadowThrottle = createShadowLogThrottle(15);
+// One [OrbEvent] per symbol+direction per day (cooldown longer than a session).
+const orbEventThrottle = createShadowLogThrottle(24 * 60);
 
 export interface SignalResult {
   signals: string[];
@@ -414,6 +416,42 @@ export class SignalService {
       signals.push('ORB_LONG');
     } else if (orbDirection === 'SHORT' && !signals.includes('ORB_SHORT')) {
       signals.push('ORB_SHORT');
+    }
+
+    // ── ORB event log (observability only) ───────────────────────────────────
+    // First time per symbol+direction per day that the ORB condition holds, logged REGARDLESS of the
+    // 11:30 cut-off (tagged windowOpen) so late-ORB follow-through can still be measured.
+    // Live trading days, in-session only. Never alters signals. Analysis: scripts/analysis/orb-outcomes.ts.
+    if (!normalizedAsOfDate && openingRange) {
+      const ist = getISTTime();
+      if (ist.isTradingDay && ist.totalMinutes >= 555 && ist.totalMinutes <= 930) {
+        const eventDir = isOrbBreakout(
+          ltp,
+          openingRange.orHigh,
+          openingRange.orLow,
+          volumeRatio,
+          VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+          rawVolumeRatio
+        );
+        if (eventDir && orbEventThrottle(`${stock.symbol}:${eventDir}`, ist.dateString, ist.totalMinutes)) {
+          console.info(
+            '[OrbEvent] ' +
+              JSON.stringify({
+                symbol: stock.symbol,
+                date: ist.dateString,
+                minuteOfDay: ist.totalMinutes,
+                direction: eventDir,
+                ltp,
+                orHigh: openingRange.orHigh,
+                orLow: openingRange.orLow,
+                orMidpoint: openingRange.orMidpoint,
+                raw: Number(rawVolumeRatio.toFixed(4)),
+                volumeRatio: Number(volumeRatio.toFixed(3)),
+                windowOpen: orbWindowOpen,
+              })
+          );
+        }
+      }
     }
 
     // ── Pace shadow (observability only) ─────────────────────────────────────

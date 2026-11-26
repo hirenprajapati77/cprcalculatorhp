@@ -7,9 +7,9 @@ test('End-to-end Breakout vs ORB Volume Floor Isolation', async (t) => {
   const originalPaceFlag = process.env.FEATURE_PACE_VOLUME;
   const RealDate = globalThis.Date;
 
-  // Mock wall-clock at 09:35 IST on Tuesday 2026-11-24 (09:35 session time, progress fraction ~0.0512)
+  // Mock wall-clock at 09:35 IST on Thursday 2026-11-26 (09:35 session time, progress fraction ~0.0512)
   // 09:35 IST = 04:05 UTC
-  const mockNow = new RealDate('2026-11-24T04:05:00.000Z');
+  const mockNow = new RealDate('2026-11-26T04:05:00.000Z');
 
   function installMockDate() {
     // @ts-expect-error Mocking global Date constructor for session simulation

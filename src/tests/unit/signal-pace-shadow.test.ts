@@ -7,7 +7,7 @@ test('Pace shadow logs divergent symbols but never changes live volumeRatio when
   const originalFlag = process.env.FEATURE_PACE_VOLUME;
   const originalInfo = console.info;
   const RealDate = globalThis.Date;
-  const mockNow = new RealDate('2026-11-24T04:05:00.000Z'); // 09:35 IST, Tuesday
+  const mockNow = new RealDate('2026-11-26T04:05:00.000Z'); // 09:35 IST, Thursday
   const logs: string[] = [];
 
   // @ts-expect-error mocking Date for session simulation
@@ -62,7 +62,7 @@ test('Pace shadow stays silent when volume diverges but no breakout/ORB would be
   const originalFlag = process.env.FEATURE_PACE_VOLUME;
   const originalInfo = console.info;
   const RealDate = globalThis.Date;
-  const mockNow = new RealDate('2026-11-24T04:05:00.000Z');
+  const mockNow = new RealDate('2026-11-26T04:05:00.000Z');
   const logs: string[] = [];
 
   // @ts-expect-error mocking Date for session simulation
