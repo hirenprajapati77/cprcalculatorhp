@@ -1,7 +1,7 @@
 # Decision Memo: `FEATURE_PACE_VOLUME` held OFF; shadow logging until recalibrated
 
 **Date:** 2026-11-24
-**Status:** Approved
+**Status:** Proposed (Held OFF in production pending recalibration)
 **Scope:** `src/lib/market-hours.ts` (`expectedVolumeFraction`), `src/services/signal.service.ts`, production `.env`
 
 ## 1. Context
@@ -9,7 +9,7 @@ PR #329/#331/#332 added pace-normalised volume (`volumeRatio = rawVolumeRatio / 
 behind `FEATURE_PACE_VOLUME`, and #332 documented activating it in production.
 Production was later set back to `FEATURE_PACE_VOLUME="false"` via the server `.env`
 (PR #339 only exports the flag to PM2 and logs it at boot; it does not change its value).
-Date and operator of the flip: **2026-11-24 by repository owner (deploy `aee7df6fbd27`)**. Boot line confirming it:
+Date and release of the flag state: **2026-11-24 (enforced in production build `aee7df6fbd27`)**. Boot line confirming it:
 `[FEATURE_PACE_VOLUME: false]`.
 
 ## 2. Why it stays off (review findings, not new measurements)
