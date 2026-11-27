@@ -33,12 +33,13 @@ echo "=== Copying .env into standalone ==="
 sed -i 's/\r$//' $APP/.env 2>/dev/null || true
 cp $APP/.env $APP/.next/standalone/.env
 
-# Source DATABASE_URL and FEATURE_PACE_VOLUME if not present
+# Source DATABASE_URL, FEATURE_PACE_VOLUME and BREAKOUT_TARGET_GATE_MODE if not present
 if [ -z "$DATABASE_URL" ] && [ -f "$APP/.env" ]; then
     export DATABASE_URL=$(grep '^DATABASE_URL=' $APP/.env | tr -d '\r' | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
 fi
 if [ -f "$APP/.env" ]; then
     export FEATURE_PACE_VOLUME=$(grep '^FEATURE_PACE_VOLUME=' $APP/.env | tr -d '\r' | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
+    export BREAKOUT_TARGET_GATE_MODE=$(grep '^BREAKOUT_TARGET_GATE_MODE=' $APP/.env | tr -d '\r' | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//')
 fi
 
 echo "=== Recording pre-deploy migration state ==="

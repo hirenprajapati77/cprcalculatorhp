@@ -81,7 +81,7 @@ app.prepare().then(() => {
   // M-02: listen() callback does not receive an error argument in Node.js 14+;
   // errors are emitted on the 'error' event above — removed dead `if (err) throw err`.
   server.listen(port, bindHost, () => {
-    console.log(`> CPR PRO Platform ready on http://${bindHost}:${port} [Build: ${buildId}] [FEATURE_PACE_VOLUME: ${process.env.FEATURE_PACE_VOLUME}]`);
+    console.log(`> CPR PRO Platform ready on http://${bindHost}:${port} [Build: ${buildId}] [FEATURE_PACE_VOLUME: ${process.env.FEATURE_PACE_VOLUME}] [BREAKOUT_TARGET_GATE_MODE: ${process.env.BREAKOUT_TARGET_GATE_MODE || 'shadow'}]`);
   });
 }).catch((err) => {
   console.error('Failed to start Next.js custom server:', err);
