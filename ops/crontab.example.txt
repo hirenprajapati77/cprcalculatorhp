@@ -41,3 +41,7 @@
 # Archive [OrbEvent] log lines past pm2-logrotate (16:00 IST = 10:30 UTC, Mon-Fri). Idempotent: re-reading
 # rotated/gzipped logs and sort -u keeps ~/orb-events.log de-duplicated. See ops/ORB_EVENT_ARCHIVE.md.
 30 10 * * 1-5 ( { cat /home/ubuntu/orb-events.log 2>/dev/null; zgrep -h '\[OrbEvent\]' /home/ubuntu/.pm2/logs/cpr-platform-out*.log*; } | sort -u > /home/ubuntu/orb-events.tmp && mv /home/ubuntu/orb-events.tmp /home/ubuntu/orb-events.log ) >> /var/log/cpr-cron/orb-archive.log 2>&1
+
+# Archive [PaceShadow] lines (same pattern, 16:05 IST = 10:35 UTC, Mon-Fri) into ~/pace-shadow.log. Pre-v2 lines (no gainedV2)
+# are kept but ignored by scripts/analysis/pace-shadow-outcomes.ts. See ops/ORB_EVENT_ARCHIVE.md.
+35 10 * * 1-5 ( { cat /home/ubuntu/pace-shadow.log 2>/dev/null; zgrep -h '\[PaceShadow\]' /home/ubuntu/.pm2/logs/cpr-platform-out*.log*; } | sort -u > /home/ubuntu/pace-shadow.tmp && mv /home/ubuntu/pace-shadow.tmp /home/ubuntu/pace-shadow.log ) >> /var/log/cpr-cron/pace-shadow-archive.log 2>&1
