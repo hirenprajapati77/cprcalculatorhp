@@ -2,6 +2,9 @@
 *.sh text eol=lf
 *.bash text eol=lf
 
+# Ops templates are consumed by cron/sh on Linux: never CRLF (a trailing \r breaks every cron command)
+ops/crontab.example.txt text eol=lf
+
 # Windows scripts use CRLF
 *.ps1 text eol=crlf
 *.bat text eol=crlf
