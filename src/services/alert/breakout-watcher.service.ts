@@ -67,7 +67,7 @@ export class BreakoutWatcherService {
    * Claim keys are `symbol:BREAKOUT` / `symbol:BREAKDOWN` so both directions can alert.
    *
    * Pass `{ deferClaim: true }` to identify new alerts without writing lastAlerted.
-   * The cron pipeline uses that so VIX/price gates can reject before a 4h cooldown starts;
+   * The cron pipeline uses that so VIX/price gates can reject before the per-symbol cooldown starts;
    * call `commitClaims` only for rows that will actually be sent.
    */
   static async detectNewBreakouts(
@@ -354,7 +354,7 @@ export class BreakoutWatcherService {
    * for as long as VIX is elevated — producing thousands of DB writes/day.
    *
    * After the cooldown expires, detectNewBreakouts will see lastAlerted is
-   * past the 4h window and allow the alert to be re-evaluated normally.
+   * past the cooldown window (BREAKOUT_ALERT_COOLDOWN_MS) and allow the alert to be re-evaluated normally.
    */
   static async suppressClaims(symbolsOrKeys: string[]): Promise<void> {
     if (symbolsOrKeys.length === 0) return;
@@ -451,7 +451,7 @@ export class BreakoutWatcherService {
 
   /**
    * Clear hadBreakout for already-delivered alerts whose entry is now
-   * gap-invalidated / extended, but keep lastAlerted so the 4h cooldown still
+   * gap-invalidated / extended, but keep lastAlerted so the cooldown (BREAKOUT_ALERT_COOLDOWN_MS, currently 1h) still
    * blocks an immediate re-spam. After cooldown, a pullback into the entry
    * zone can alert again; while still stale the pre-send gate suppresses.
    */

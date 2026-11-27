@@ -5,6 +5,7 @@ import {
   evaluateCprSetupPriceStalenessBasic,
   isBreakoutEntryExtended,
   evaluateOrbSetupStaleness,
+  evaluateTargetExhaustion,
   atrScaledExtensionCap,
   CPR_ENTRY_EXTENSION_PCT,
   type CprSetupStaleReason,
@@ -35,7 +36,19 @@ function alertDirection(b: BreakoutScanResult): 'LONG' | 'SHORT' {
 export type BreakoutPriceGateOptions = {
   /** Override entry-chase cap (%) — e.g. 2.0 when India VIX is in tighten band. */
   entryExtensionPct?: number;
+  /**
+   * Target-exhaustion gate mode. 'off' disables it; 'shadow' (default) suppresses only TARGET_REACHED and logs
+   * would-be TARGET_NEAR suppressions as [TargetGateShadow]; 'enforce' also suppresses TARGET_NEAR.
+   * Defaults to env BREAKOUT_TARGET_GATE_MODE. See docs/decisions/breakout-target-exhaustion-gate-2026-11-27.md.
+   */
+  targetGateMode?: 'off' | 'shadow' | 'enforce';
 };
+
+function resolveTargetGateMode(opts?: BreakoutPriceGateOptions): 'off' | 'shadow' | 'enforce' {
+  if (opts?.targetGateMode) return opts.targetGateMode;
+  const env = process.env.BREAKOUT_TARGET_GATE_MODE;
+  return env === 'off' || env === 'enforce' || env === 'shadow' ? env : 'shadow';
+}
 
 /**
  * Shared CPR/breakout price-staleness check (gap + extension/chase + ATR when available).
@@ -192,6 +205,7 @@ export function filterBreakoutsForPriceActionability(
   const actionable: BreakoutScanResult[] = [];
   const suppressed: BreakoutPriceGateResult['suppressed'] = [];
   const entryExtensionPct = opts?.entryExtensionPct;
+  const targetGateMode = resolveTargetGateMode(opts);
 
   for (const b of breakouts) {
     const direction = alertDirection(b);
@@ -218,6 +232,37 @@ export function filterBreakoutsForPriceActionability(
       );
       suppressed.push({ ...b, gateReason: verdict.reason, gateDetail: verdict.detail });
       continue;
+    }
+    // Target exhaustion: the entry-extension cap can be wider than target 1 on narrow-CPR days.
+    if (targetGateMode !== 'off' && b.target != null) {
+      const te = evaluateTargetExhaustion({
+        entry: b.entry,
+        ltp: b.ltp,
+        target: b.target,
+        direction,
+      });
+      const suppress =
+        te.kind === 'TARGET_REACHED' || (te.kind === 'TARGET_NEAR' && targetGateMode === 'enforce');
+      if (te.kind === 'TARGET_NEAR' && targetGateMode === 'shadow') {
+        console.info(
+          '[TargetGateShadow] ' +
+            JSON.stringify({
+              symbol: b.symbol,
+              direction,
+              entry: b.entry,
+              ltp: b.ltp,
+              target: b.target,
+              sl: b.sl,
+              progressPct: Number((te.progress * 100).toFixed(1)),
+              wouldSuppress: 'TARGET_NEAR',
+            })
+        );
+      }
+      if (suppress && (te.kind === 'TARGET_REACHED' || te.kind === 'TARGET_NEAR')) {
+        console.warn(`[BreakoutPriceGate] ${b.symbol} ${te.kind} — ${te.detail}; suppressing alert`);
+        suppressed.push({ ...b, gateReason: te.kind, gateDetail: te.detail });
+        continue;
+      }
     }
     actionable.push(b);
   }
