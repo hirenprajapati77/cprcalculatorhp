@@ -23,7 +23,12 @@ export function atrScaledExtensionCap(atrPct?: number): number {
   return Math.min(3.5, Math.max(1.0, atrPct * 1.5));
 }
 
-export type CprSetupStaleReason = 'GAP_INVALIDATED' | 'EXTENDED' | 'AGAINST_PRIOR_CLOSE';
+export type CprSetupStaleReason =
+  | 'GAP_INVALIDATED'
+  | 'EXTENDED'
+  | 'AGAINST_PRIOR_CLOSE'
+  | 'TARGET_REACHED'
+  | 'TARGET_NEAR';
 
 /**
  * LONG breakout while still red vs prior close, or SHORT breakdown while still green.
@@ -442,3 +447,64 @@ export function isActionableScannerTopResult(row: ActionableScannerTopCandidate)
   return true;
 }
 
+
+/**
+ * Fraction of the entry -> target move already travelled by `ltp` (0 at entry, 1 at target, negative if price moved
+ * against the setup, above 1 beyond the target). Null when entry/target are invalid or the target is on the wrong side.
+ */
+export function targetProgress(args: {
+  entry: number;
+  ltp: number;
+  target: number;
+  direction: 'LONG' | 'SHORT';
+}): number | null {
+  const { entry, ltp, target, direction } = args;
+  if (!(entry > 0 && ltp > 0 && target > 0)) return null;
+  if (direction === 'LONG') {
+    if (!(target > entry)) return null;
+    return (ltp - entry) / (target - entry);
+  }
+  if (!(target < entry)) return null;
+  return (entry - ltp) / (entry - target);
+}
+
+/** Proposed ceiling for target progress at alert time (owner decision: docs/decisions/breakout-target-exhaustion-gate-2026-11-27.md). */
+export const TARGET_PROGRESS_MAX = 0.5;
+
+export type TargetExhaustionVerdict =
+  | { kind: 'OK'; progress: number | null }
+  | { kind: 'TARGET_REACHED'; progress: number; detail: string }
+  | { kind: 'TARGET_NEAR'; progress: number; detail: string };
+
+/**
+ * TARGET_REACHED: price is already at or through target 1 (nothing left to take at the stated levels).
+ * TARGET_NEAR: price already covered at least `maxProgress` of the entry -> target move.
+ * The static entry-extension cap (2.5%) cannot catch either when target 1 is closer than the cap (narrow CPR).
+ */
+export function evaluateTargetExhaustion(args: {
+  entry: number;
+  ltp: number;
+  target: number;
+  direction: 'LONG' | 'SHORT';
+  maxProgress?: number;
+}): TargetExhaustionVerdict {
+  const progress = targetProgress(args);
+  if (progress === null) return { kind: 'OK', progress: null };
+  const pct = (progress * 100).toFixed(0);
+  if (progress >= 1) {
+    return {
+      kind: 'TARGET_REACHED',
+      progress,
+      detail: `ltp ${args.ltp} is already at/through target ${args.target} (${pct}% of entry ${args.entry} -> target)`,
+    };
+  }
+  const max = args.maxProgress ?? TARGET_PROGRESS_MAX;
+  if (progress >= max) {
+    return {
+      kind: 'TARGET_NEAR',
+      progress,
+      detail: `${pct}% of the move from entry ${args.entry} to target ${args.target} is already done (limit ${(max * 100).toFixed(0)}%)`,
+    };
+  }
+  return { kind: 'OK', progress };
+}
