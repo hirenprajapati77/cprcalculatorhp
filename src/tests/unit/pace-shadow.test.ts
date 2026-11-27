@@ -50,3 +50,27 @@ test('gainedSignals returns only watched signals pace adds over live', () => {
   assert.deepEqual(out, ['BREAKOUT']);
   assert.deepEqual(gainedSignals(['BREAKOUT'], ['BREAKOUT'], ['BREAKOUT']), []);
 });
+
+test('evaluatePaceShadow also reports curve v2 and flags v1-only divergence', () => {
+  // 09:35 IST (minute 575): v1 expected ~0.0512, v2 expected 0.1269.
+  const r = evaluatePaceShadow({ ...base, rawVolumeRatio: 0.15, minuteOfDay: 575 });
+  assert.ok(r);
+  assert.ok(r!.paceVolumeRatio >= 1.5, 'v1 would confirm');
+  assert.ok(r!.paceVolumeRatioV2 < 1.5, 'v2 would not (0.15 / 0.1269)');
+  assert.equal(r!.divergent, true);
+  assert.equal(r!.divergentV2, false);
+  assert.equal(r!.expectedFractionV2, 0.1269);
+});
+
+test('evaluatePaceShadow: both versions diverge when raw volume is high enough for the empirical curve too', () => {
+  const r = evaluatePaceShadow({ ...base, rawVolumeRatio: 0.26, minuteOfDay: 575 });
+  assert.ok(r);
+  assert.equal(r!.divergent, true);
+  assert.equal(r!.divergentV2, true); // 0.26 / 0.1269 ~ 2.05
+});
+
+test('evaluatePaceShadow: v2 neither diverges when raw already clears the bar', () => {
+  const r = evaluatePaceShadow({ ...base, rawVolumeRatio: 1.6, minuteOfDay: 575 });
+  assert.ok(r);
+  assert.equal(r!.divergentV2, false);
+});

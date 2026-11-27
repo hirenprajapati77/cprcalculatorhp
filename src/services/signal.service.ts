@@ -469,37 +469,43 @@ export class SignalService {
         rangeProvenance: stock.rangeProvenance,
         isReplay: Boolean(normalizedAsOfDate),
       });
-      if (shadow?.divergent) {
-        const shadowSignals: string[] = [];
-        applyBreakoutSignals(shadowSignals, shadow.paceVolumeRatio, ltp, tc, bc, {
-          open: stock.open,
-          high: stock.high,
-          low: stock.low,
-          candle15m: stock.candle15m,
-          holdMinutes: null,
-          allowSessionReclaim: false,
-        });
-        const shadowOrb = openingRange && orbWindowOpen
-          ? isOrbBreakout(
-              ltp,
-              openingRange.orHigh,
-              openingRange.orLow,
-              shadow.paceVolumeRatio,
-              VOLUME_THRESHOLDS.BREAKOUT_RATIO,
-              rawVolumeRatio
-            )
-          : null;
-        if (shadowOrb === 'LONG') shadowSignals.push('ORB_LONG');
-        else if (shadowOrb === 'SHORT') shadowSignals.push('ORB_SHORT');
-
+      if (shadow && (shadow.divergent || shadow.divergentV2)) {
         const dateString = getISTTime().dateString;
-        const gained = gainedSignals(signals, shadowSignals, [
-          'BREAKOUT',
-          'BREAKDOWN',
-          'ORB_LONG',
-          'ORB_SHORT',
-        ]).filter((sig) => paceShadowThrottle(`${stock.symbol}:${sig}`, dateString, minuteOfDay));
-        if (gained.length > 0) {
+        const WATCH = ['BREAKOUT', 'BREAKDOWN', 'ORB_LONG', 'ORB_SHORT'];
+        // Re-run breakout + ORB on scratch arrays with a hypothetical volume ratio.
+        const simulate = (ratio: number): string[] => {
+          const sim: string[] = [];
+          applyBreakoutSignals(sim, ratio, ltp, tc, bc, {
+            open: stock.open,
+            high: stock.high,
+            low: stock.low,
+            candle15m: stock.candle15m,
+            holdMinutes: null,
+            allowSessionReclaim: false,
+          });
+          const orb =
+            openingRange && orbWindowOpen
+              ? isOrbBreakout(
+                  ltp,
+                  openingRange.orHigh,
+                  openingRange.orLow,
+                  ratio,
+                  VOLUME_THRESHOLDS.BREAKOUT_RATIO,
+                  rawVolumeRatio
+                )
+              : null;
+          if (orb === 'LONG') sim.push('ORB_LONG');
+          else if (orb === 'SHORT') sim.push('ORB_SHORT');
+          return sim;
+        };
+        // v1 = current curve; v2 = empirical curve. Throttled separately so one cannot mask the other.
+        const gained = gainedSignals(signals, simulate(shadow.paceVolumeRatio), WATCH).filter((sig) =>
+          paceShadowThrottle(`${stock.symbol}:${sig}`, dateString, minuteOfDay)
+        );
+        const gainedV2 = gainedSignals(signals, simulate(shadow.paceVolumeRatioV2), WATCH).filter((sig) =>
+          paceShadowThrottle(`${stock.symbol}:v2:${sig}`, dateString, minuteOfDay)
+        );
+        if (gained.length > 0 || gainedV2.length > 0) {
           console.info(
             '[PaceShadow] ' +
               JSON.stringify({
@@ -507,9 +513,12 @@ export class SignalService {
                 date: dateString,
                 minuteOfDay,
                 gained,
+                gainedV2,
                 raw: Number(rawVolumeRatio.toFixed(4)),
                 pace: Number(shadow.paceVolumeRatio.toFixed(3)),
+                paceV2: Number(shadow.paceVolumeRatioV2.toFixed(3)),
                 expected: Number(shadow.expectedFraction.toFixed(4)),
+                expectedV2: Number(shadow.expectedFractionV2.toFixed(4)),
                 ltp,
                 tc,
                 bc,

@@ -47,3 +47,14 @@ Review with `pm2 logs | grep PaceShadow` or the PM2 log files.
 ## 6. Follow-ups
 - Decide whether to add end-of-day final volume to telemetry (additive migration).
 - Replace "active in production" statements in CHANGELOG and the acceptance doc (done in this change).
+
+## 7. Addendum 2026-11-26: Curve v2 (shadow only)
+Telemetry joined to bhavcopy volume (`scripts/pace-curve-fit.sql`, sessions 2026-11-23/25/26, F&O universe) shows the
+current curve understates expected volume by about 2.3x at 09:30, 1.8x at 10:00, 1.5x at 10:30 and 1.26x at 11:30,
+and is accurate from about 13:00. `src/lib/volume-curve-v2.ts` holds provisional empirical knots (bucket medians placed at
+bucket start + 5 min), used ONLY by `[PaceShadow]`, which now logs both versions (`gained`/`pace`/`expected` = v1;
+`gainedV2`/`paceV2`/`expectedV2` = v2). Live behavior and the flag are unchanged.
+- No separate early raw-volume floor is added to v2: with the empirical curve the pace bar already implies
+  raw >= 1.5 x F(t) (about 0.19 at 09:35), so a floor of the previous size (0.08) would never bind. The remaining
+  early-session uncertainty is the spread across stocks (p25-p75 about 0.08-0.16 at 09:30), which a floor cannot fix.
+- Re-enabling still requires the criteria in section 5; v2 knots must be regenerated from the full query-4 output.
