@@ -1,4 +1,5 @@
 import { expectedVolumeFraction } from '@/lib/market-hours';
+import { expectedVolumeFractionV2 } from '@/lib/volume-curve-v2';
 import { VOLUME_THRESHOLDS } from '@/config/trading-constants';
 import type { RangeProvenance } from '@/lib/range-provenance';
 
@@ -21,6 +22,10 @@ export interface PaceShadowResult {
    * These are exactly the signals the flag-off setting suppresses.
    */
   divergent: boolean;
+  /** Curve v2 (empirical, shadow only): expected fraction, pace ratio and divergence under that curve. */
+  expectedFractionV2: number;
+  paceVolumeRatioV2: number;
+  divergentV2: boolean;
 }
 
 /**
@@ -41,11 +46,18 @@ export function evaluatePaceShadow(input: PaceShadowInput): PaceShadowResult | n
   // Outside 09:15-15:30 the curve returns 1.0, so there is nothing to compare.
   if (!(expectedFraction > 0) || expectedFraction >= 1) return null;
 
+  const expectedFractionV2 = expectedVolumeFractionV2(minuteOfDay);
+  if (expectedFractionV2 === null || !(expectedFractionV2 > 0)) return null;
+
   const paceVolumeRatio = rawVolumeRatio / expectedFraction;
+  const paceVolumeRatioV2 = rawVolumeRatio / expectedFractionV2;
   return {
     paceVolumeRatio,
     expectedFraction,
     divergent: paceVolumeRatio >= minVolumeRatio && rawVolumeRatio < minVolumeRatio,
+    expectedFractionV2,
+    paceVolumeRatioV2,
+    divergentV2: paceVolumeRatioV2 >= minVolumeRatio && rawVolumeRatio < minVolumeRatio,
   };
 }
 
