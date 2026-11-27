@@ -1,7 +1,7 @@
 # Decision Memo: Target-exhaustion check in the breakout pre-send gate
 
 **Date:** 2026-11-27
-**Status:** Proposed (owner approval pending; do not enforce `TARGET_NEAR` before approval)
+**Status:** Decision 1 Approved (enforce TARGET_REACHED); Decisions 2–3 in observation (TARGET_NEAR in shadow mode)
 **Scope:** `src/lib/cpr-setup-staleness.ts`, `src/services/alert/breakout-price-gate.ts`, comments in
 `src/services/alert/breakout-watcher.service.ts`
 
@@ -33,18 +33,18 @@ review session; they were not independently re-queried when this memo was writte
 5. Comment-only cleanup of the stale "4h" wording. Cooldown value (1h) unchanged.
 
 ## 4. Decisions needed from the owner
-1. **Enforce `TARGET_REACHED` always (recommended: yes).** An alert for a setup whose target is already hit has no
-   reward left at the stated levels.
+1. **Enforce `TARGET_REACHED` always:** **APPROVED (2026-11-27).** An alert for a setup whose target is already hit has no
+   reward left at the stated levels and must be suppressed. Enforced under both `shadow` (default) and `enforce` modes.
 2. **`TARGET_PROGRESS_MAX`.** 0.5 is a proposal, not a measurement. Note the side effect: under 0.5 the original 09:40
-   ADANIPORTS alert (59%) would also have been suppressed. Decide whether alerts that late in the move are wanted.
-3. **When to move `TARGET_NEAR` to `enforce`.** Suggest reviewing `[TargetGateShadow]` volume and what price did next
-   over about 10 sessions first.
+   ADANIPORTS alert (59%) would also have been suppressed. In `shadow` mode, this only logs `[TargetGateShadow]` without suppressing.
+3. **When to move `TARGET_NEAR` to `enforce`.** Retain `shadow` mode for ~10 trading sessions to analyze `[TargetGateShadow]`
+   frequency and price outcomes before enforcing.
 4. **Re-entry gating** (re-alert only after price has moved away from entry and returned to the entry zone) is a
    separate, larger change. Not included.
 
 ## 5. Rollout notes
-- Default `shadow` needs no env change. To enforce later, the variable must reach PM2: `ops/deploy_extract.sh`
-  currently exports only `DATABASE_URL` and `FEATURE_PACE_VOLUME` from `.env`, so a mirrored export for
-  `BREAKOUT_TARGET_GATE_MODE` is required in that follow-up.
+- Default `shadow` needs no env change.
+- `ops/deploy_extract.sh` exports `BREAKOUT_TARGET_GATE_MODE` from `.env` to PM2 so operator can override mode (`off`, `shadow`, `enforce`) if ever required.
+- Boot banner in `server-starter.js` logs `[BREAKOUT_TARGET_GATE_MODE: ...]`.
 - Deploy after the 15:30 IST close. Verify with `grep -c TargetGateShadow` over a session, and confirm no
   `TARGET_REACHED` suppression on setups still below T1.
