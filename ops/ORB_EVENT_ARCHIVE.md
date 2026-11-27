@@ -32,3 +32,14 @@ It prints n, mean/median return, win rate and mean R per time bucket
 - If PM2 log timestamps are enabled, identical events can appear on two text lines; the analysis de-duplicates
   by symbol + date + direction, so that is harmless.
 - The archive is not backed up and is not pruned. Delete it deliberately when the evaluation is done.
+
+## PaceShadow archive (curve v1 vs v2)
+A second cron entry (16:05 IST, Mon–Fri) archives `[PaceShadow]` lines the same way into `/home/ubuntu/pace-shadow.log`
+(errors in `/var/log/cpr-cron/pace-shadow-archive.log`). Analysis (read-only, after bhavcopy for the days involved):
+
+    npx tsx scripts/analysis/pace-shadow-outcomes.ts /home/ubuntu/pace-shadow.log
+
+Cohorts per symbol + date + direction: `both`, `v1_only`, `v2_only`; outcomes are close-to-trigger and a false break is a
+close back inside the breakout level (LONG: close <= TC, SHORT: close >= BC). Every logged event is a signal the live
+system did not take. `v1_only` (current curve confirms, empirical curve does not) is the key row. Lines written before
+curve v2 shipped lack `gainedV2` and are ignored. Treat n < 30 as anecdotal and do not change the flag on < 10 sessions.
